@@ -1,8 +1,8 @@
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Smile, Zap, Search, ArrowRight } from "lucide-react";
+import { Smile, Zap, Search, ArrowRight, MapPin, ShoppingCart } from "lucide-react"; // Added MapPin, ShoppingCart
 import Link from "next/link";
 import Image from "next/image";
 
@@ -13,6 +13,8 @@ export const moodsData = [
   { name: "Weekend Adventure", slug: "weekend-adventure", description: "Plans, tips, and stories about getaways.", emoji: "🏕️", bgClass: "bg-yellow-100", textClass: "text-yellow-700", img: "https://placehold.co/300x200.png?text=Adventure", dataAiHint: "travel nature"  },
   { name: "Tech Talks", slug: "tech-talks", description: "Latest gadgets, coding, and AI discussions.", emoji: "🤖", bgClass: "bg-gray-100", textClass: "text-gray-700", img: "https://placehold.co/300x200.png?text=Tech" , dataAiHint: "technology code"  },
   { name: "Gaming Zone", slug: "gaming-zone", description: "Connect with fellow gamers, share tips & news.", emoji: "🎮", bgClass: "bg-red-100", textClass: "text-red-700", img: "https://placehold.co/300x200.png?text=Gaming" , dataAiHint: "games console" },
+  { name: "Local Streams", slug: "local-streams", description: "Discover local events, news, and community happenings.", emoji: "🏘️", bgClass: "bg-orange-100", textClass: "text-orange-700", img: "https://placehold.co/300x200.png?text=Local", dataAiHint: "community city" },
+  { name: "Shopping Finds", slug: "shopping-finds", description: "Share deals, new products, and shopping tips.", emoji: "🛍️", bgClass: "bg-pink-100", textClass: "text-pink-700", img: "https://placehold.co/300x200.png?text=Shopping", dataAiHint: "retail store" },
 ];
 
 export default function MoodsPage() {

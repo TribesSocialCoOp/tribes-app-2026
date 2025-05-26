@@ -41,6 +41,10 @@ const allMoodStreamPosts: MoodStreamPost[] = [
   { id: "msp6", content: "Just hit a new high score in 'Cyber Runner'! So stoked. #gaming-zone 🏆", author: "ProGamerX", moodTags: ["gaming-zone"], timestamp: new Date(Date.now() - 3600000 * 15), likes: 60, comments: 18, authorAvatarSrc: "https://placehold.co/40x40.png?text=PG", authorAvatarFallback: "PG", dataAiHintAvatar: "gamer person"},
   { id: "msp7", content: "Sunday morning coffee and a good book. Pure bliss. #chill-vibes", author: "ReaderLife", moodTags: ["chill-vibes", "reading"], timestamp: new Date(Date.now() - 3600000 * 2), imageUrl: "https://placehold.co/600x450.png", imageAlt: "Coffee and book", dataAiHintImage: "coffee book", dataAiHintAvatar: "reader person" },
   { id: "msp8", content: "My creative space setup. Where the magic happens! #creative-spark", author: "DesignerDesk", moodTags: ["creative-spark", "design"], timestamp: new Date(Date.now() - 3600000 * 8), imageUrl: "https://placehold.co/600x380.png", imageAlt: "Designer desk setup", dataAiHintImage: "desk workspace", dataAiHintAvatar: "designer person" },
+  { id: "msp9", title: "Farmers Market Haul!", content: "Fresh produce from today's market. So excited to cook with these! #local-streams", author: "LocalFoodie", moodTags: ["local-streams", "food"], timestamp: new Date(Date.now() - 3600000 * 2), imageUrl: "https://placehold.co/600x420.png", imageAlt: "Farmers market produce", likes: 28, comments: 5, authorAvatarSrc: "https://placehold.co/40x40.png?text=LF", authorAvatarFallback: "LF", dataAiHintAvatar: "foodie person", dataAiHintImage: "market food" },
+  { id: "msp10", content: "Community cleanup event this Saturday at 10 AM. Let's make our neighborhood shine! #local-streams", author: "NeighborhoodWatch", tribeName: "City Volunteers", moodTags: ["local-streams", "community"], timestamp: new Date(Date.now() - 3600000 * 24), likes: 55, comments: 10, dataAiHintAvatar: "community group" },
+  { id: "msp11", title: "Best 50% Off Deals This Week", content: "Found some amazing discounts on electronics and fashion. Check out the link in bio! #shopping-finds", author: "DealHunter", moodTags: ["shopping-finds", "deals"], timestamp: new Date(Date.now() - 3600000 * 4), likes: 88, comments: 22, authorAvatarSrc: "https://placehold.co/40x40.png?text=DH", authorAvatarFallback: "DH", dataAiHintAvatar: "shopper person" },
+  { id: "msp12", content: "New sneaker drop alert! These are going to sell out fast. 👟 #shopping-finds", author: "SneakerHead", moodTags: ["shopping-finds", "fashion"], timestamp: new Date(Date.now() - 3600000 * 6), imageUrl: "https://placehold.co/600x370.png", imageAlt: "New sneakers", likes: 115, comments: 30, authorAvatarSrc: "https://placehold.co/40x40.png?text=SH", authorAvatarFallback: "SH", dataAiHintAvatar: "fashion person", dataAiHintImage: "sneakers shoes" },
 ];
 
 const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
@@ -94,8 +98,8 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
             <Image 
               src={post.imageUrl} 
               alt={post.imageAlt || "Mood stream media"} 
-              fill // Changed from layout="fill" and objectFit="cover" to just fill for Next 13+
-              style={{ objectFit: 'cover' }} // Added style for objectFit
+              fill
+              style={{ objectFit: 'cover' }}
               data-ai-hint={post.dataAiHintImage || "media content"}
             />
           </div>
