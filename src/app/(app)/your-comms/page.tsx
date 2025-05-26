@@ -1,11 +1,11 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react'; // Added useState, useEffect
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquareText, Zap, Users, User, HeartHandshake, Rss } from "lucide-react"; // Added Rss for Mood Stream
+import { MessageSquareText, Zap, Users, User, HeartHandshake, Rss } from "lucide-react";
 import Image from 'next/image';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
@@ -45,20 +45,34 @@ const moodStreamItems: CommunicationItem[] = [
 const allComms = [...familyBondMessages, ...regularBondMessages, ...moodStreamItems].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
 const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
-  const timeSince = (date: Date) => {
-    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-    let interval = seconds / 31536000;
-    if (interval > 1) return Math.floor(interval) + "y ago";
-    interval = seconds / 2592000;
-    if (interval > 1) return Math.floor(interval) + "mo ago";
-    interval = seconds / 86400;
-    if (interval > 1) return Math.floor(interval) + "d ago";
-    interval = seconds / 3600;
-    if (interval > 1) return Math.floor(interval) + "h ago";
-    interval = seconds / 60;
-    if (interval > 1) return Math.floor(interval) + "m ago";
-    return Math.floor(seconds) + "s ago";
-  };
+  const [displayTime, setDisplayTime] = useState<string>(' '); // Initial placeholder
+
+  useEffect(() => {
+    const timeSince = (date: Date): string => {
+      const now = new Date(); // Get current time on client
+      const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+      
+      if (seconds < 5) return "just now";
+      if (seconds < 60) return `${Math.floor(seconds)}s ago`;
+      
+      let interval = Math.floor(seconds / 60); // minutes
+      if (interval < 60) return `${interval}m ago`;
+      
+      interval = Math.floor(seconds / 3600); // hours
+      if (interval < 24) return `${interval}h ago`;
+      
+      interval = Math.floor(seconds / 86400); // days
+      if (interval < 30) return `${interval}d ago`;
+      
+      interval = Math.floor(seconds / 2592000); // months
+      if (interval < 12) return `${interval}mo ago`;
+      
+      interval = Math.floor(seconds / 31536000); // years
+      return `${interval}y ago`;
+    };
+
+    setDisplayTime(timeSince(item.timestamp));
+  }, [item.timestamp]);
 
   let icon = <MessageSquareText className="h-5 w-5 text-primary" />;
   let title = "";
@@ -90,7 +104,7 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
           <div className="flex-1">
             <div className="flex justify-between items-center">
               <CardTitle className="text-base font-semibold">{title}</CardTitle>
-              <span className="text-xs text-muted-foreground">{timeSince(item.timestamp)}</span>
+              <span className="text-xs text-muted-foreground">{displayTime}</span>
             </div>
             <CardDescription className="text-xs">{subtitle}</CardDescription>
           </div>
@@ -178,3 +192,5 @@ export default function YourCommsPage() {
     </div>
   );
 }
+
+    
