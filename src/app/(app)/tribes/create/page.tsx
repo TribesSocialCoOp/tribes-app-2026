@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,14 +10,14 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Users, Image as ImageIcon, Globe, Lock } from "lucide-react";
+import { Users, Image as ImageIcon, Globe, Lock, Sparkles } from "lucide-react";
 import Image from "next/image";
 import { generateTribeDescription } from "@/ai/flows/tribe-description-generator";
 import React from "react";
 
 const createTribeFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
-  keywords: z.string().min(3, { message: "Please provide some keywords for your tribe."}),
+  moods: z.string().min(3, { message: "Please provide some moods for your tribe (e.g., Chill, Productive)."}),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
   isPublic: z.boolean().default(true),
   coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`),
@@ -32,7 +33,7 @@ export default function CreateTribePage() {
     resolver: zodResolver(createTribeFormSchema),
     defaultValues: {
       name: "",
-      keywords: "",
+      moods: "",
       description: "",
       isPublic: true,
     },
@@ -51,14 +52,14 @@ export default function CreateTribePage() {
   }
 
   async function handleGenerateDescription() {
-    const keywords = form.getValues("keywords");
-    if (!keywords) {
-      form.setError("keywords", { type: "manual", message: "Please enter keywords to generate a description." });
+    const moods = form.getValues("moods");
+    if (!moods) {
+      form.setError("moods", { type: "manual", message: "Please enter moods to generate a description." });
       return;
     }
     setIsLoading(true);
     try {
-      const result = await generateTribeDescription({ keywords });
+      const result = await generateTribeDescription({ moods }); // Pass moods to the AI flow
       form.setValue("description", result.description);
     } catch (error) {
       console.error("Failed to generate description:", error);
@@ -112,14 +113,14 @@ export default function CreateTribePage() {
 
               <FormField
                 control={form.control}
-                name="keywords"
+                name="moods"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-lg">Keywords</FormLabel>
+                    <FormLabel className="text-lg">Associated Moods</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., hiking, AI, book club, local events" {...field} className="text-base" />
+                      <Input placeholder="e.g., Chill Vibes, Focused Work, Creative Spark" {...field} className="text-base" />
                     </FormControl>
-                    <FormDescription>Comma-separated keywords that describe your tribe. Used for discovery and AI suggestions.</FormDescription>
+                    <FormDescription>Comma-separated moods that describe your tribe. Used for discovery and AI suggestions.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -139,7 +140,7 @@ export default function CreateTribePage() {
                       />
                     </FormControl>
                      <Button type="button" variant="outline" size="sm" onClick={handleGenerateDescription} disabled={isLoading} className="mt-2">
-                        {isLoading ? "Generating..." : "✨ Generate with AI"}
+                        <Sparkles className="mr-2 h-4 w-4" /> {isLoading ? "Generating..." : "Generate with AI"}
                     </Button>
                     <FormDescription>A compelling summary to attract new members.</FormDescription>
                     <FormMessage />
@@ -215,3 +216,5 @@ export default function CreateTribePage() {
     </div>
   );
 }
+
+    

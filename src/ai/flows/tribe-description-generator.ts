@@ -1,8 +1,9 @@
+
 // TribeDescriptionGenerator.ts
 'use server';
 
 /**
- * @fileOverview Generates a compelling description for a tribe based on keywords.
+ * @fileOverview Generates a compelling description for a tribe based on moods.
  *
  * - generateTribeDescription - A function that generates the tribe description.
  * - GenerateTribeDescriptionInput - The input type for the generateTribeDescription function.
@@ -13,9 +14,9 @@ import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
 const GenerateTribeDescriptionInputSchema = z.object({
-  keywords: z
+  moods: z // Renamed from keywords
     .string()
-    .describe('Comma separated keywords describing the tribe and its purpose.'),
+    .describe('Comma separated moods describing the tribe and its purpose (e.g., Chill Vibes, Productive Focus, Creative Spark).'),
 });
 export type GenerateTribeDescriptionInput = z.infer<
   typeof GenerateTribeDescriptionInputSchema
@@ -24,7 +25,7 @@ export type GenerateTribeDescriptionInput = z.infer<
 const GenerateTribeDescriptionOutputSchema = z.object({
   description: z
     .string()
-    .describe('A compelling description of the tribe based on the keywords.'),
+    .describe('A compelling description of the tribe based on the moods.'),
 });
 export type GenerateTribeDescriptionOutput = z.infer<
   typeof GenerateTribeDescriptionOutputSchema
@@ -40,7 +41,7 @@ const prompt = ai.definePrompt({
   name: 'generateTribeDescriptionPrompt',
   input: {schema: GenerateTribeDescriptionInputSchema},
   output: {schema: GenerateTribeDescriptionOutputSchema},
-  prompt: `You are a marketing expert. Generate a compelling description for a tribe based on the following keywords: {{{keywords}}}. The description should be engaging and attract new members.`,
+  prompt: `You are a marketing expert. Generate a compelling description for a tribe based on the following moods: {{{moods}}}. The description should be engaging, reflect the essence of these moods, and attract new members.`,
 });
 
 const generateTribeDescriptionFlow = ai.defineFlow(
@@ -54,3 +55,5 @@ const generateTribeDescriptionFlow = ai.defineFlow(
     return output!;
   }
 );
+
+    

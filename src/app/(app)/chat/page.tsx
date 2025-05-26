@@ -1,17 +1,19 @@
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MessageSquarePlus, Search, UserCircle } from "lucide-react";
+import { MessageSquarePlus, Search, MessageSquare } from "lucide-react"; // Added MessageSquare, removed UserCircle
 import Image from "next/image";
 
 export default function ChatPage() {
   const chats = [
-    { id: "1", name: "Design Team", lastMessage: "Let's review the new mockups.", time: "10:30 AM", unread: 2, avatar: "https://placehold.co/40x40.png?text=DT" },
-    { id: "2", name: "Alice Wonderland", lastMessage: "Sure, sounds good!", time: "9:15 AM", unread: 0, avatar: "https://placehold.co/40x40.png?text=AW" },
-    { id: "3", name: "Book Club Tribe", lastMessage: "Next meeting is on Friday.", time: "Yesterday", unread: 5, avatar: "https://placehold.co/40x40.png?text=BC" },
-    { id: "4", name: "Bob The Builder", lastMessage: "Can we fix it? Yes we can!", time: "Mon", unread: 0, avatar: "https://placehold.co/40x40.png?text=BB" },
+    { id: "1", name: "Design Team", lastMessage: "Let's review the new mockups.", time: "10:30 AM", unread: 2, avatar: "https://placehold.co/40x40.png?text=DT", dataAiHint: "avatar team" },
+    { id: "2", name: "Alice Wonderland", lastMessage: "Sure, sounds good!", time: "9:15 AM", unread: 0, avatar: "https://placehold.co/40x40.png?text=AW", dataAiHint: "avatar person" },
+    { id: "3", name: "Book Club Tribe", lastMessage: "Next meeting is on Friday.", time: "Yesterday", unread: 5, avatar: "https://placehold.co/40x40.png?text=BC", dataAiHint: "avatar group" },
+    { id: "4", name: "Bob The Builder", lastMessage: "Can we fix it? Yes we can!", time: "Mon", unread: 0, avatar: "https://placehold.co/40x40.png?text=BB", dataAiHint: "avatar character" },
   ];
 
+  // Added unique data-ai-hint for clarity
   return (
     <div className="flex h-[calc(100vh-var(--header-height,4rem)-2rem)]"> {/* Adjust height based on actual header height */}
       {/* Chat List Sidebar */}
@@ -32,7 +34,7 @@ export default function ChatPage() {
           <ul className="divide-y">
             {chats.map(chat => (
               <li key={chat.id} className="p-3 hover:bg-muted/50 cursor-pointer flex items-start space-x-3">
-                <Image src={chat.avatar} alt={chat.name} width={40} height={40} className="rounded-full" data-ai-hint="avatar user"/>
+                <Image src={chat.avatar} alt={chat.name} width={40} height={40} className="rounded-full" data-ai-hint={chat.dataAiHint}/>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-center">
                     <h3 className="font-semibold text-sm truncate">{chat.name}</h3>
@@ -65,3 +67,5 @@ export default function ChatPage() {
     </div>
   );
 }
+
+    
