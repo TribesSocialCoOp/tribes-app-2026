@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -21,7 +22,8 @@ import {
   Settings,
   Sparkles,
   FileText,
-  PlusCircle
+  PlusCircle,
+  Link2 // Added Link2 for Bonds
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,7 @@ const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard", tooltip: "Dashboard" },
   { href: "/chat", icon: MessageSquare, label: "Chats", tooltip: "Chats" },
   { href: "/tribes", icon: Users, label: "Tribes", tooltip: "Tribes" },
+  { href: "/bonds", icon: Link2, label: "Bonds", tooltip: "Manage Bonds" }, // Added Bonds
   { href: "/moods", icon: Smile, label: "Moods", tooltip: "Moods" },
   { href: "/files", icon: FileText, label: "Files", tooltip: "Files" },
   { href: "/ai-assistant", icon: Bot, label: "AI Assistant", tooltip: "AI Assistant" },
@@ -104,3 +107,5 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
+
+    
