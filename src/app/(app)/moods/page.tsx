@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -5,13 +6,13 @@ import { Smile, Zap, Search, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
-const moodsData = [
-  { name: "Chill Vibes", description: "Relaxed tunes and calming discussions.", emoji: "😌", bgClass: "bg-blue-100", textClass: "text-blue-700", img: "https://placehold.co/300x200.png?text=Chill" , dataAiHint: "relax meditation" },
-  { name: "Focused Work", description: "Productivity boosters and deep work threads.", emoji: "💻", bgClass: "bg-green-100", textClass: "text-green-700", img: "https://placehold.co/300x200.png?text=Focus" , dataAiHint: "work study" },
-  { name: "Creative Spark", description: "Inspiration, art, and innovative ideas.", emoji: "🎨", bgClass: "bg-purple-100", textClass: "text-purple-700", img: "https://placehold.co/300x200.png?text=Creative" , dataAiHint: "art design" },
-  { name: "Weekend Adventure", description: "Plans, tips, and stories about getaways.", emoji: "🏕️", bgClass: "bg-yellow-100", textClass: "text-yellow-700", img: "https://placehold.co/300x200.png?text=Adventure", dataAiHint: "travel nature"  },
-  { name: "Tech Talks", description: "Latest gadgets, coding, and AI discussions.", emoji: "🤖", bgClass: "bg-gray-100", textClass: "text-gray-700", img: "https://placehold.co/300x200.png?text=Tech" , dataAiHint: "technology code"  },
-  { name: "Gaming Zone", description: "Connect with fellow gamers, share tips & news.", emoji: "🎮", bgClass: "bg-red-100", textClass: "text-red-700", img: "https://placehold.co/300x200.png?text=Gaming" , dataAiHint: "games console" },
+export const moodsData = [
+  { name: "Chill Vibes", slug: "chill-vibes", description: "Relaxed tunes and calming discussions.", emoji: "😌", bgClass: "bg-blue-100", textClass: "text-blue-700", img: "https://placehold.co/300x200.png?text=Chill" , dataAiHint: "relax meditation" },
+  { name: "Focused Work", slug: "focused-work", description: "Productivity boosters and deep work threads.", emoji: "💻", bgClass: "bg-green-100", textClass: "text-green-700", img: "https://placehold.co/300x200.png?text=Focus" , dataAiHint: "work study" },
+  { name: "Creative Spark", slug: "creative-spark", description: "Inspiration, art, and innovative ideas.", emoji: "🎨", bgClass: "bg-purple-100", textClass: "text-purple-700", img: "https://placehold.co/300x200.png?text=Creative" , dataAiHint: "art design" },
+  { name: "Weekend Adventure", slug: "weekend-adventure", description: "Plans, tips, and stories about getaways.", emoji: "🏕️", bgClass: "bg-yellow-100", textClass: "text-yellow-700", img: "https://placehold.co/300x200.png?text=Adventure", dataAiHint: "travel nature"  },
+  { name: "Tech Talks", slug: "tech-talks", description: "Latest gadgets, coding, and AI discussions.", emoji: "🤖", bgClass: "bg-gray-100", textClass: "text-gray-700", img: "https://placehold.co/300x200.png?text=Tech" , dataAiHint: "technology code"  },
+  { name: "Gaming Zone", slug: "gaming-zone", description: "Connect with fellow gamers, share tips & news.", emoji: "🎮", bgClass: "bg-red-100", textClass: "text-red-700", img: "https://placehold.co/300x200.png?text=Gaming" , dataAiHint: "games console" },
 ];
 
 export default function MoodsPage() {
@@ -46,7 +47,7 @@ export default function MoodsPage() {
             </CardHeader>
             <CardContent className="flex-grow"></CardContent>
             <div className="p-4 border-t">
-              <Link href={`/moods/${mood.name.toLowerCase().replace(/\s+/g, '-')}`} passHref>
+              <Link href={`/moods/${mood.slug}`} passHref>
                 <Button variant="default" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   Explore Stream <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
