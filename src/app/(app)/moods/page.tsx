@@ -10,11 +10,11 @@ export const moodsData = [
   { name: "Chill Vibes", slug: "chill-vibes", description: "Relaxed tunes and calming discussions.", emoji: "😌", bgClass: "bg-blue-100", textClass: "text-blue-700", img: "https://placehold.co/300x200.png?text=Chill" , dataAiHint: "relax meditation" },
   { name: "Focused Work", slug: "focused-work", description: "Productivity boosters and deep work threads.", emoji: "💻", bgClass: "bg-green-100", textClass: "text-green-700", img: "https://placehold.co/300x200.png?text=Focus" , dataAiHint: "work study" },
   { name: "Creative Spark", slug: "creative-spark", description: "Inspiration, art, and innovative ideas.", emoji: "🎨", bgClass: "bg-purple-100", textClass: "text-purple-700", img: "https://placehold.co/300x200.png?text=Creative" , dataAiHint: "art design" },
+  { name: "Local Streams", slug: "local-streams", description: "Discover local events, news, and community happenings.", emoji: "🏘️", bgClass: "bg-orange-100", textClass: "text-orange-700", img: "https://placehold.co/300x200.png?text=Local", dataAiHint: "community city" },
+  { name: "Shopping Finds", slug: "shopping-finds", description: "Share deals, new products, and shopping tips.", emoji: "🛍️", bgClass: "bg-pink-100", textClass: "text-pink-700", img: "https://placehold.co/300x200.png?text=Shopping", dataAiHint: "retail store" },
   { name: "Weekend Adventure", slug: "weekend-adventure", description: "Plans, tips, and stories about getaways.", emoji: "🏕️", bgClass: "bg-yellow-100", textClass: "text-yellow-700", img: "https://placehold.co/300x200.png?text=Adventure", dataAiHint: "travel nature"  },
   { name: "Tech Talks", slug: "tech-talks", description: "Latest gadgets, coding, and AI discussions.", emoji: "🤖", bgClass: "bg-gray-100", textClass: "text-gray-700", img: "https://placehold.co/300x200.png?text=Tech" , dataAiHint: "technology code"  },
   { name: "Gaming Zone", slug: "gaming-zone", description: "Connect with fellow gamers, share tips & news.", emoji: "🎮", bgClass: "bg-red-100", textClass: "text-red-700", img: "https://placehold.co/300x200.png?text=Gaming" , dataAiHint: "games console" },
-  { name: "Local Streams", slug: "local-streams", description: "Discover local events, news, and community happenings.", emoji: "🏘️", bgClass: "bg-orange-100", textClass: "text-orange-700", img: "https://placehold.co/300x200.png?text=Local", dataAiHint: "community city" },
-  { name: "Shopping Finds", slug: "shopping-finds", description: "Share deals, new products, and shopping tips.", emoji: "🛍️", bgClass: "bg-pink-100", textClass: "text-pink-700", img: "https://placehold.co/300x200.png?text=Shopping", dataAiHint: "retail store" },
 ];
 
 export default function MoodsPage() {
