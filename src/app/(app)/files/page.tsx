@@ -25,7 +25,7 @@ export default function FilesPage() {
     <div className="space-y-8">
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight text-foreground font-mono">Shared Files</h1>
+          <h1 className="text-4xl font-bold tracking-normal text-foreground font-mono">Shared Files</h1>
           <p className="text-lg text-muted-foreground mt-1">
             Access and manage all files shared within your tribes.
           </p>

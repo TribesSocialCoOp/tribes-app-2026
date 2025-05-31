@@ -7,7 +7,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <header className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground font-mono">Welcome to Tribes.app</h1>
+        <h1 className="text-4xl font-bold tracking-normal text-foreground font-mono">Welcome to Tribes.app</h1>
         <p className="text-lg text-muted-foreground mt-2">
           Connect, communicate, and build with your communities.
         </p>

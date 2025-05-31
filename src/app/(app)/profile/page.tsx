@@ -10,7 +10,7 @@ export default function ProfilePage() {
   return (
     <div className="space-y-8 max-w-2xl mx-auto">
       <header className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground font-mono">Profile</h1>
+        <h1 className="text-4xl font-bold tracking-normal text-foreground font-mono">Profile</h1>
         <p className="text-lg text-muted-foreground mt-1">
           Manage your personal information.
         </p>
@@ -58,5 +58,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-
-    

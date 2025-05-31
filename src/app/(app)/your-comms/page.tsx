@@ -163,8 +163,8 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
             <Image 
               src={item.imageUrl} 
               alt={item.imageAlt || "Communication media"} 
-              layout="fill" 
-              objectFit="cover" 
+              fill
+              style={{ objectFit: 'cover' }}
               data-ai-hint={item.dataAiHintImage || "media content"}
             />
           </div>
@@ -184,8 +184,8 @@ export default function YourCommsPage() {
 
   return (
     <div className="space-y-6 md:space-y-8">
-      <header className="mb-4 md:mb-6"> {/* Adjusted margins */}
-        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground font-mono">Intercom</h1>
+      <header className="mb-4 md:mb-6"> 
+        <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Intercom</h1>
         <p className="text-md md:text-lg text-muted-foreground mt-1 md:mt-2">
           Catch up on messages from your bonds and the latest in your mood streams.
         </p>
@@ -194,7 +194,7 @@ export default function YourCommsPage() {
       <div className="grid grid-cols-1 gap-6">
         {familyComms.length > 0 && (
           <section>
-            <h2 className="text-xl md:text-2xl font-semibold text-foreground mb-3 flex items-center">
+            <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center">
               <HeartHandshake className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-pink-500" /> Family Bond Updates
             </h2>
             <div className="space-y-4">
@@ -203,7 +203,6 @@ export default function YourCommsPage() {
           </section>
         )}
 
-        {/* No Separator here */}
 
         {regularComms.length > 0 && (
           <section>
@@ -216,7 +215,6 @@ export default function YourCommsPage() {
           </section>
         )}
 
-        {/* No Separator here */}
         
         {moodItems.length > 0 && (
           <section>
@@ -249,5 +247,3 @@ export default function YourCommsPage() {
     </div>
   );
 }
-
-    

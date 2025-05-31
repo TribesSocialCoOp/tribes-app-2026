@@ -209,10 +209,10 @@ export default function MoodStreamPage() {
         </Card>
       )}
 
-      <header className={cn("mb-4 md:mb-6", isTunerVisible && "pt-4")}> {/* Add padding top if tuner is visible */}
+      <header className={cn("mb-4 md:mb-6", isTunerVisible && "pt-4")}> 
         <div className="flex items-center space-x-2 mb-1">
-            <VibeIcon className="h-7 w-7 md:h-8 md:w-8 text-primary" /> {/* Changed from Smile to VibeIcon */}
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-mono">
+            <VibeIcon className="h-7 w-7 md:h-8 md:w-8 text-primary" /> 
+            <h1 className="text-2xl md:text-3xl font-bold tracking-normal text-foreground font-mono">
              {currentMoodName} Stream
             </h1>
         </div>
@@ -230,7 +230,7 @@ export default function MoodStreamPage() {
       ) : (
         <Card className="text-center py-12 shadow-none sm:shadow-lg">
             <CardContent className="p-4 sm:p-6">
-                <VibeIcon className="mx-auto h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground opacity-50 mb-4 sm:mb-6" /> {/* Changed from Smile to VibeIcon */}
+                <VibeIcon className="mx-auto h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground opacity-50 mb-4 sm:mb-6" /> 
                 <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2">No posts for '{currentMoodName}' yet!</h3>
                 <p className="text-muted-foreground text-sm sm:text-base">
                     Try tuning to a different mood or check back later.
@@ -241,4 +241,3 @@ export default function MoodStreamPage() {
     </div>
   );
 }
-

@@ -24,7 +24,7 @@ export default function MoodsPage() {
         <div className="inline-block p-3 bg-primary/10 rounded-full mb-4">
           <Smile className="h-12 w-12 text-primary" />
         </div>
-        <h1 className="text-4xl font-bold tracking-tight text-foreground font-mono">Mood Streams</h1>
+        <h1 className="text-4xl font-bold tracking-normal text-foreground font-mono">Mood Streams</h1>
         <p className="text-lg text-muted-foreground mt-2 max-w-2xl mx-auto">
           Discover and subscribe to content streams tailored to your current mood and interests.
         </p>
