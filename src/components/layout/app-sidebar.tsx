@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/sidebar";
 import { AppLogo } from "@/components/icons/app-logo";
 import {
-  LayoutDashboard, // Keeping for "Your Comms" as a central hub icon
+  LayoutDashboard, 
   MessageSquare,
   Users,
   Smile,
@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 const navItems = [
-  { href: "/your-comms", icon: LayoutDashboard, label: "Your Comms", tooltip: "Your Communications" }, // Changed from Dashboard
+  { href: "/your-comms", icon: LayoutDashboard, label: "Intercom", tooltip: "Intercom" }, 
   { href: "/chat", icon: MessageSquare, label: "Chats", tooltip: "Chats" },
   { href: "/tribes", icon: Users, label: "Tribes", tooltip: "Tribes" },
   { href: "/bonds", icon: Link2, label: "Bonds", tooltip: "Manage Bonds" },
@@ -48,7 +48,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" variant="sidebar" side="left" className="border-r">
       <SidebarHeader className="flex items-center justify-between p-3 border-b">
-        <Link href="/your-comms" className="flex items-center gap-2"> {/* Changed from /dashboard */}
+        <Link href="/your-comms" className="flex items-center gap-2">
           <AppLogo className="w-8 h-8 text-sidebar-primary" />
           <span className="font-semibold text-lg font-mono text-sidebar-foreground group-data-[collapsible=icon]:hidden">
             Tribes.app

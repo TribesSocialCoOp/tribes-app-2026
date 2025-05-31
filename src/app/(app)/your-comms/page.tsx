@@ -185,7 +185,7 @@ export default function YourCommsPage() {
   return (
     <div className="space-y-6 md:space-y-8">
       <header className="mb-4 md:mb-6"> {/* Adjusted margins */}
-        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground font-mono">Your Comms</h1>
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground font-mono">Intercom</h1>
         <p className="text-md md:text-lg text-muted-foreground mt-1 md:mt-2">
           Catch up on messages from your bonds and the latest in your mood streams.
         </p>
