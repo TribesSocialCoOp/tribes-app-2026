@@ -40,7 +40,7 @@ const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean }> = ({ tribe, 
         </Link>
         <div className="flex items-center text-xs text-muted-foreground space-x-2">
           <span><Users className="h-3 w-3 inline mr-0.5" />{tribe.members}</span>
-          <Badge variant={tribe.isPublic ? "secondary" : "outline"} className={cn("text-xs px-1.5 py-0.5", !tribe.isPublic && "border-pink-500 text-pink-500")}>{tribe.isPublic ? "Public" : "Private"}</Badge>
+          <Badge variant={tribe.isPublic ? "secondary" : "outline"} className={cn("text-xs px-1.5 py-0.5", !tribe.isPublic && "border-pink-500 text-pink-500 bg-pink-500/10")}>{tribe.isPublic ? "Public" : "Private"}</Badge>
         </div>
       </div>
     </div>
@@ -61,11 +61,10 @@ const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean }> = ({ tribe, 
 export default function TribesPage() {
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
 
-  // Example filters for "My Tribes" and "Discover Tribes"
   // My Tribes: Private tribes OR tribes with > 100 members
-  const myTribes = tribesData.filter(t => !t.isPublic || t.members > 100).slice(0, 3);
+  const myTribes = tribesData.filter(t => !t.isPublic || t.members > 100);
   // Discover Tribes: Public tribes with <= 100 members
-  const discoverTribes = tribesData.filter(t => t.isPublic && t.members <= 100).slice(0, 3);
+  const discoverTribes = tribesData.filter(t => t.isPublic && t.members <= 100);
 
   const renderTribeList = (tribes: Tribe[], isMyTribeList: boolean) => (
     <Card className="shadow-lg">
@@ -96,7 +95,7 @@ export default function TribesPage() {
             <CardDescription className="text-sm h-16 overflow-hidden text-ellipsis leading-relaxed">{tribe.description}</CardDescription>
             <div className="flex items-center text-xs text-muted-foreground mt-2 space-x-3">
               <div className="flex items-center"><Users className="h-3.5 w-3.5 mr-1"/> {tribe.members} members</div>
-              <div className="flex items-center"><Smile className="h-3.5 w-3.5 mr-1"/> {Math.floor(Math.random()*500 + 50)} Good Vibes</div>
+              <div className="flex items-center"><Smile className="h-3.5 w-3.5 mr-1"/> {Math.floor(Math.random()*500 + 50)} Vibes</div>
               <div className="flex items-center"><MessageCircle className="h-3.5 w-3.5 mr-1"/> {Math.floor(Math.random()*100 + 20)} Posts</div>
             </div>
           </CardContent>
