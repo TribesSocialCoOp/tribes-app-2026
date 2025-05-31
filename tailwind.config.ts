@@ -9,6 +9,10 @@ export default {
   ],
   theme: {
   	extend: {
+      fontFamily: {
+        sans: ['var(--font-oxanium)', 'ui-sans-serif', 'system-ui'],
+        mono: ['var(--font-geist-mono)', 'ui-monospace', 'SFMono-Regular'],
+      },
   		colors: {
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
