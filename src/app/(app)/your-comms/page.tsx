@@ -1,14 +1,16 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { MessageSquareText, Zap, Users, User, HeartHandshake, Rss } from "lucide-react";
+import { MessageSquareText, Users, User, HeartHandshake, Rss } from "lucide-react";
 import Image from 'next/image';
-// Separator is no longer needed
 import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { moodsData, moodsData as allMoods } from '../moods/page'; // Renamed import for clarity
+import { allMoodStreamPosts as globalMoodPosts } from '../moods/[moodSlug]/page'; // To get raw posts
 
 interface CommunicationItem {
   id: string;
@@ -18,17 +20,17 @@ interface CommunicationItem {
   tribeName?: string; 
   message?: string; 
   content?: string; 
-  mood?: string; 
+  moodSlug?: string; // For filtering, e.g., "chill", "focus"
+  moodName?: string; // For display, e.g., "Chill", "Focus"
   avatarSrc?: string;
   avatarFallback?: string;
   timestamp: Date;
-  dataAiHint?: string; // For avatar
-  imageUrl?: string; // For main media content
-  imageAlt?: string; // Alt text for main media
-  dataAiHintImage?: string; // For main media
+  dataAiHint?: string; 
+  imageUrl?: string; 
+  imageAlt?: string; 
+  dataAiHintImage?: string; 
 }
 
-// Mock Data
 const familyBondMessages: CommunicationItem[] = [
   { id: "fb1", type: "family-bond", sender: "Mom", bondName: "Family Link", message: "Don't forget dinner on Sunday! Bringing your favorite pie. 🥧", avatarSrc: "https://placehold.co/40x40.png?text=M", avatarFallback: "M", timestamp: new Date(Date.now() - 3600000 * 1), dataAiHint: "mother family" },
   { 
@@ -67,25 +69,31 @@ const regularBondMessages: CommunicationItem[] = [
   { id: "rb2", type: "regular-bond", sender: "Sarah (Tech Meetup)", bondName: "Tech Connects", message: "Great talk last night! Here's the link to the slides I mentioned.", avatarSrc: "https://placehold.co/40x40.png?text=S", avatarFallback: "S", timestamp: new Date(Date.now() - 3600000 * 25), dataAiHint: "colleague professional" },
 ];
 
-const moodStreamItems: CommunicationItem[] = [
-  { id: "ms1", type: "mood-stream", tribeName: "Creative Corner", mood: "Inspired", content: "Just finished this new digital painting, what do you all think? #ArtOfTheDay", avatarSrc: "https://placehold.co/40x40.png?text=CC", avatarFallback: "CC", timestamp: new Date(Date.now() - 3600000 * 0.5), dataAiHint: "art design" },
-  { 
-    id: "ms4", 
-    type: "mood-stream", 
-    tribeName: "Photography Hub", 
-    mood: "Artistic", 
-    content: "Golden hour shot from downtown. The light was incredible!", 
-    imageUrl: "https://placehold.co/600x300.png", 
-    imageAlt: "Cityscape at golden hour", 
-    avatarSrc: "https://placehold.co/40x40.png?text=PH", 
-    avatarFallback: "PH", 
-    timestamp: new Date(Date.now() - 3600000 * 4.5), 
-    dataAiHint: "city photography",
-    dataAiHintImage: "city sunset"
-  },
-  { id: "ms2", type: "mood-stream", tribeName: "Weekend Warriors", mood: "Adventurous", content: "Epic hike to the summit today! Check out this view. ⛰️", avatarSrc: "https://placehold.co/40x40.png?text=WW", avatarFallback: "WW", timestamp: new Date(Date.now() - 3600000 * 12), dataAiHint: "nature travel" },
-  { id: "ms3", type: "mood-stream", tribeName: "Chill Zone", mood: "Relaxed", content: "Found this lofi playlist, perfect for unwinding. Highly recommend!", avatarSrc: "https://placehold.co/40x40.png?text=CZ", avatarFallback: "CZ", timestamp: new Date(Date.now() - 3600000 * 18), dataAiHint: "music calm" },
-];
+// Transform globalMoodPosts to CommunicationItem[]
+const moodStreamItems: CommunicationItem[] = globalMoodPosts.map(post => {
+  // For simplicity, we'll pick the first tag as the primary mood for this item.
+  // In a real app, this logic might be more complex.
+  const primaryMoodSlug = post.moodTags[0];
+  const moodDetails = allMoods.find(m => m.slug === primaryMoodSlug);
+
+  return {
+    id: post.id,
+    type: "mood-stream",
+    tribeName: post.tribeName,
+    content: post.content,
+    moodSlug: primaryMoodSlug,
+    moodName: moodDetails?.name || primaryMoodSlug, // Fallback to slug if name not found
+    avatarSrc: post.authorAvatarSrc,
+    avatarFallback: post.authorAvatarFallback || post.author?.substring(0,2),
+    timestamp: post.timestamp,
+    dataAiHint: post.dataAiHintAvatar,
+    imageUrl: post.imageUrl,
+    imageAlt: post.imageAlt,
+    dataAiHintImage: post.dataAiHintImage,
+    sender: post.author, // Using author as sender for mood stream items
+  };
+});
+
 
 const allComms = [...familyBondMessages, ...regularBondMessages, ...moodStreamItems].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
@@ -134,8 +142,8 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
     body = item.message || "";
   } else if (item.type === "mood-stream") {
     icon = <Rss className="h-5 w-5 text-accent" />;
-    title = `New in ${item.mood} Mood Stream`;
-    subtitle = `from ${item.tribeName || "Unknown Tribe"}`;
+    title = `New in ${item.moodName || "Mood"} Stream`;
+    subtitle = `from ${item.sender || item.tribeName || "Unknown Tribe"}`; // Display sender (author) for mood posts
     body = item.content || "";
   }
 
@@ -149,7 +157,7 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
           </Avatar>
           <div className="flex-1">
             <div className="flex justify-between items-center">
-              <CardTitle className="text-base font-semibold">{title}</CardTitle>
+              <CardTitle className="text-base font-semibold tracking-normal">{title}</CardTitle>
               <span className="text-xs text-muted-foreground whitespace-nowrap">{displayTime}</span>
             </div>
             <CardDescription className="text-xs">{subtitle}</CardDescription>
@@ -177,9 +185,14 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
 
 
 export default function YourCommsPage() {
+  const [selectedMoodSlug, setSelectedMoodSlug] = useState<string>(allMoods[0]?.slug || "");
+
   const familyComms = allComms.filter(c => c.type === 'family-bond');
   const regularComms = allComms.filter(c => c.type === 'regular-bond');
-  const moodItems = allComms.filter(c => c.type === 'mood-stream');
+  
+  const filteredMoodItems = useMemo(() => {
+    return allComms.filter(c => c.type === 'mood-stream' && c.moodSlug === selectedMoodSlug);
+  }, [selectedMoodSlug]);
 
 
   return (
@@ -194,7 +207,7 @@ export default function YourCommsPage() {
       <div className="grid grid-cols-1 gap-6">
         {familyComms.length > 0 && (
           <section>
-            <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center">
+            <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center tracking-normal">
               <HeartHandshake className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-pink-500" /> Family Bond Updates
             </h2>
             <div className="space-y-4">
@@ -206,7 +219,7 @@ export default function YourCommsPage() {
 
         {regularComms.length > 0 && (
           <section>
-            <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center">
+            <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center tracking-normal">
               <Users className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-primary" /> Other Bond Updates
             </h2>
             <div className="space-y-4">
@@ -216,27 +229,51 @@ export default function YourCommsPage() {
         )}
 
         
-        {moodItems.length > 0 && (
-          <section>
-            <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center">
-              <Rss className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-accent" /> Mood Stream Highlights
-            </h2>
-            <div className="space-y-4">
-              {moodItems.slice(0, 5).map(item => <YourCommsItem key={item.id} item={item} />)}
+        <section>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-6 mb-3 gap-2">
+                <h2 className="text-xl md:text-2xl font-semibold text-foreground flex items-center tracking-normal">
+                <Rss className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-accent" /> Mood Stream
+                </h2>
+                <div className="w-full sm:w-auto sm:min-w-[200px]">
+                <Select value={selectedMoodSlug} onValueChange={setSelectedMoodSlug}>
+                    <SelectTrigger className="w-full text-base">
+                    <SelectValue placeholder="Tune your mood..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                    {allMoods.map(mood => (
+                        <SelectItem key={mood.slug} value={mood.slug} className="text-base">
+                        <span className="mr-2">{mood.emoji}</span>{mood.name}
+                        </SelectItem>
+                    ))}
+                    </SelectContent>
+                </Select>
+                </div>
             </div>
-             {moodItems.length > 5 && (
-                <CardFooter className="pt-6 justify-center">
-                    <Button variant="link">View all Mood Stream activity</Button>
-                </CardFooter>
+            {filteredMoodItems.length > 0 ? (
+                <div className="space-y-4">
+                {filteredMoodItems.slice(0, 5).map(item => <YourCommsItem key={item.id} item={item} />)}
+                </div>
+            ) : (
+                 <Card className="text-center py-8 shadow-none border border-dashed">
+                    <CardContent className="p-4">
+                        <Rss className="mx-auto h-10 w-10 text-muted-foreground opacity-60 mb-3" />
+                        <p className="text-muted-foreground">No posts for this mood yet.</p>
+                        <p className="text-xs text-muted-foreground">Try tuning to a different mood!</p>
+                    </CardContent>
+                </Card>
             )}
-          </section>
-        )}
+            <CardFooter className="pt-6 justify-center">
+                <Link href="/moods" passHref>
+                    <Button variant="link">Explore All Mood Streams</Button>
+                </Link>
+            </CardFooter>
+        </section>
         
-        {allComms.length === 0 && (
+        {allComms.length === 0 && ( // This condition might need adjustment if sections are always shown
             <Card className="text-center py-12 shadow-none sm:shadow-lg">
                 <CardContent className="p-4 sm:p-6">
                     <MessageSquareText className="mx-auto h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground opacity-50 mb-4 sm:mb-6" />
-                    <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2">It's quiet in here...</h3>
+                    <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2 tracking-normal">It's quiet in here...</h3>
                     <p className="text-muted-foreground text-sm sm:text-base">
                         Your communications feed is empty. Connect with friends, join tribes, or explore mood streams to get started!
                     </p>

@@ -2,19 +2,18 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Smile, Zap, Search, ArrowRight, MapPin, ShoppingCart } from "lucide-react"; // Added MapPin, ShoppingCart
+import { Search, ArrowRight, Smile, Target, Sparkles, Map, ShoppingCart, BookOpen, Gamepad2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
 export const moodsData = [
-  { name: "Chill Vibes", slug: "chill-vibes", description: "Relaxed tunes and calming discussions.", emoji: "😌", bgClass: "bg-blue-100", textClass: "text-blue-700", img: "https://placehold.co/300x200.png?text=Chill" , dataAiHint: "relax meditation" },
-  { name: "Focused Work", slug: "focused-work", description: "Productivity boosters and deep work threads.", emoji: "💻", bgClass: "bg-green-100", textClass: "text-green-700", img: "https://placehold.co/300x200.png?text=Focus" , dataAiHint: "work study" },
-  { name: "Creative Spark", slug: "creative-spark", description: "Inspiration, art, and innovative ideas.", emoji: "🎨", bgClass: "bg-purple-100", textClass: "text-purple-700", img: "https://placehold.co/300x200.png?text=Creative" , dataAiHint: "art design" },
-  { name: "Local Streams", slug: "local-streams", description: "Discover local events, news, and community happenings.", emoji: "🏘️", bgClass: "bg-orange-100", textClass: "text-orange-700", img: "https://placehold.co/300x200.png?text=Local", dataAiHint: "community city" },
-  { name: "Shopping Finds", slug: "shopping-finds", description: "Share deals, new products, and shopping tips.", emoji: "🛍️", bgClass: "bg-pink-100", textClass: "text-pink-700", img: "https://placehold.co/300x200.png?text=Shopping", dataAiHint: "retail store" },
-  { name: "Weekend Adventure", slug: "weekend-adventure", description: "Plans, tips, and stories about getaways.", emoji: "🏕️", bgClass: "bg-yellow-100", textClass: "text-yellow-700", img: "https://placehold.co/300x200.png?text=Adventure", dataAiHint: "travel nature"  },
-  { name: "Tech Talks", slug: "tech-talks", description: "Latest gadgets, coding, and AI discussions.", emoji: "🤖", bgClass: "bg-gray-100", textClass: "text-gray-700", img: "https://placehold.co/300x200.png?text=Tech" , dataAiHint: "technology code"  },
-  { name: "Gaming Zone", slug: "gaming-zone", description: "Connect with fellow gamers, share tips & news.", emoji: "🎮", bgClass: "bg-red-100", textClass: "text-red-700", img: "https://placehold.co/300x200.png?text=Gaming" , dataAiHint: "games console" },
+  { name: "Chill", slug: "chill", description: "Relax, unwind, and find your calm.", emoji: "😌", bgClass: "bg-blue-100", textClass: "text-blue-700", img: "https://placehold.co/300x200.png?text=Chill" , dataAiHint: "relax meditation", icon: Smile },
+  { name: "Focus", slug: "focus", description: "Boost productivity and concentration.", emoji: "🎯", bgClass: "bg-green-100", textClass: "text-green-700", img: "https://placehold.co/300x200.png?text=Focus" , dataAiHint: "work study", icon: Target },
+  { name: "Create", slug: "create", description: "Ignite inspiration and artistic expression.", emoji: "✨", bgClass: "bg-purple-100", textClass: "text-purple-700", img: "https://placehold.co/300x200.png?text=Creative" , dataAiHint: "art design", icon: Sparkles },
+  { name: "Discover", slug: "discover", description: "Explore new ideas, places, and communities.", emoji: "🗺️", bgClass: "bg-yellow-100", textClass: "text-yellow-700", img: "https://placehold.co/300x200.png?text=Discover", dataAiHint: "travel nature community", icon: Map  },
+  { name: "Shop", slug: "shop", description: "Find deals, new products, and share tips.", emoji: "🛍️", bgClass: "bg-pink-100", textClass: "text-pink-700", img: "https://placehold.co/300x200.png?text=Shopping", dataAiHint: "retail store", icon: ShoppingCart },
+  { name: "Learn", slug: "learn", description: "Expand your knowledge and skills.", emoji: "📚", bgClass: "bg-teal-100", textClass: "text-teal-700", img: "https://placehold.co/300x200.png?text=Learn", dataAiHint: "education study", icon: BookOpen },
+  { name: "Game", slug: "game", description: "Connect with gamers and share experiences.", emoji: "🎮", bgClass: "bg-red-100", textClass: "text-red-700", img: "https://placehold.co/300x200.png?text=Gaming" , dataAiHint: "games console", icon: Gamepad2 },
 ];
 
 export default function MoodsPage() {
@@ -30,7 +29,7 @@ export default function MoodsPage() {
         </p>
         <div className="mt-6 max-w-lg mx-auto relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-          <Input placeholder="Search moods (e.g., 'Productivity', 'Relax')" className="pl-10 py-3 text-base rounded-full shadow-sm" />
+          <Input placeholder="Search moods (e.g., 'Focus', 'Chill')" className="pl-10 py-3 text-base rounded-full shadow-sm" />
         </div>
       </header>
 
@@ -44,7 +43,7 @@ export default function MoodsPage() {
               </div>
             </div>
             <CardHeader className="pt-4">
-              <CardTitle className={`text-xl font-semibold ${mood.textClass}`}>{mood.name}</CardTitle>
+              <CardTitle className={`text-xl font-semibold tracking-normal ${mood.textClass}`}>{mood.name}</CardTitle>
               <CardDescription className="text-sm h-12 overflow-hidden text-ellipsis">{mood.description}</CardDescription>
             </CardHeader>
             <CardContent className="flex-grow"></CardContent>
@@ -61,8 +60,8 @@ export default function MoodsPage() {
 
       <section className="text-center py-12">
         <Card className="inline-block p-8 shadow-xl bg-gradient-to-r from-primary/10 via-background to-accent/10">
-          <Zap className="h-10 w-10 text-primary mx-auto mb-4" />
-          <h2 className="text-2xl font-semibold text-foreground mb-3 font-mono">Boost Your Tribe's Content</h2>
+          <Sparkles className="h-10 w-10 text-primary mx-auto mb-4" />
+          <h2 className="text-2xl font-semibold text-foreground mb-3 font-mono tracking-normal">Boost Your Tribe's Content</h2>
           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
             Tribe founders can boost relevant threads to Mood Streams, increasing visibility and engagement.
           </p>
