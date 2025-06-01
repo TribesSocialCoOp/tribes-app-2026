@@ -25,13 +25,6 @@ export interface Bond {
   allowChatInitiation?: boolean;
 }
 
-interface BondSettingsDialogProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
-  bond: Bond | null;
-  onSave: (updatedBond: Bond) => void; // New prop
-}
-
 const getBondTypeDisplay = (bondType: BondType): string => {
   switch (bondType) {
     case "family": return "Family";
@@ -114,18 +107,18 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
           <legend className="text-base font-semibold text-foreground mb-3">Chat Settings</legend>
           <div className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
             <Label htmlFor={`allowChat-${bond.id}`} className="cursor-pointer flex-1 text-sm">
-              Allow this bond to initiate chat
+              Allow {bond.targetName} to initiate chat with you
             </Label>
             <Switch
               id={`allowChat-${bond.id}`}
               checked={allowChat}
               onCheckedChange={setAllowChat}
-              aria-label="Toggle allowing this bond to initiate chat"
-              disabled={bond.targetType === 'tribe'} // Disable if target is a tribe
+              aria-label={`Toggle allowing ${bond.targetName} to initiate chat with you`}
+              disabled={bond.targetType === 'tribe'}
             />
           </div>
           <p className="text-xs text-muted-foreground mt-1 px-1">
-            Controls if this {bond.targetType} can start new direct conversations with you. This setting only applies to user-to-user bonds.
+            Controls if {bond.targetName} ({bond.targetType}) can start new direct conversations with you. This setting only applies to user-to-user bonds.
           </p>
         </fieldset>
       </div>
