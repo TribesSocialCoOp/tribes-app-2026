@@ -15,17 +15,24 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
-export type BondType = "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";
+// Minimal Bond interface for this dialog
 export interface Bond {
   id: string;
   targetName: string;
   targetType: "user" | "tribe";
-  bondType: BondType;
+  bondType: "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";
   showInIntercom?: boolean;
   allowChatInitiation?: boolean;
 }
 
-const getBondTypeDisplay = (bondType: BondType): string => {
+interface BondSettingsDialogProps {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  bond: Bond | null;
+  onSave: (updatedBond: Bond) => void;
+}
+
+const getBondTypeDisplay = (bondType: Bond["bondType"]): string => {
   switch (bondType) {
     case "family": return "Family";
     case "friend": return "Friend";
@@ -76,9 +83,9 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
   const commonContent = (
     <>
       <DialogHeaderComponent>
-        <DialogTitleComponent>Bond Settings: {bond.targetName}</DialogTitleComponent>
+        <DialogTitleComponent>Bond Settings: <span className="italic font-semibold">{bond.targetName}</span></DialogTitleComponent>
         <DialogDescriptionComponent>
-          Manage preferences for your bond with {bond.targetName} ({bond.targetType === 'user' ? 'User' : 'Tribe'} - {getBondTypeDisplay(bond.bondType)}).
+          Manage preferences for your bond with <span className="italic font-semibold">{bond.targetName}</span> ({bond.targetType === 'user' ? 'User' : 'Tribe'} - {getBondTypeDisplay(bond.bondType)}).
         </DialogDescriptionComponent>
       </DialogHeaderComponent>
 
@@ -107,7 +114,7 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
           <legend className="text-base font-semibold text-foreground mb-3">Chat Settings</legend>
           <div className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
             <Label htmlFor={`allowChat-${bond.id}`} className="cursor-pointer flex-1 text-sm">
-              Allow {bond.targetName} to initiate chat with you
+              Allow <span className="italic font-semibold">{bond.targetName}</span> to initiate chat with you
             </Label>
             <Switch
               id={`allowChat-${bond.id}`}
@@ -118,7 +125,7 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
             />
           </div>
           <p className="text-xs text-muted-foreground mt-1 px-1">
-            Controls if {bond.targetName} ({bond.targetType}) can start new direct conversations with you. This setting only applies to user-to-user bonds.
+            Controls if <span className="italic font-semibold">{bond.targetName}</span> ({bond.targetType}) can start new direct conversations with you. This setting only applies to user-to-user bonds.
           </p>
         </fieldset>
       </div>
@@ -153,3 +160,4 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
     </RootComponent>
   );
 }
+
