@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus } from "lucide-react";
+import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, Handshake } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -19,15 +19,19 @@ interface Tribe {
   isPublic: boolean;
   cover: string;
   dataAiHint: string;
+  moods?: string[]; // Optional: to associate tribes with moods for discovery
 }
 
 const tribesData: Tribe[] = [
-  { id: "1", name: "AI Innovators", description: "Exploring the future of artificial intelligence and machine learning.", members: 128, isPublic: true, cover: "https://placehold.co/400x200.png?text=AI" , dataAiHint: "technology innovation" },
-  { id: "2", name: "Weekend Hikers Club", description: "Sharing trails, tips, and breathtaking views from our adventures.", members: 76, isPublic: true, cover: "https://placehold.co/400x200.png?text=Hiking" , dataAiHint: "nature mountain" },
-  { id: "3", name: "Indie Game Devs", description: "A community for indie game developers to collaborate and showcase.", members: 245, isPublic: false, cover: "https://placehold.co/400x200.png?text=Games" , dataAiHint: "gaming development" },
-  { id: "4", name: "Local Bookworms", description: "Discussing our favorite reads and discovering new authors together.", members: 55, isPublic: true, cover: "https://placehold.co/400x200.png?text=Books" , dataAiHint: "reading library" },
-  { id: "5", name: "Sustainable Living Hub", description: "Tips and discussions on eco-friendly practices and sustainability.", members: 92, isPublic: true, cover: "https://placehold.co/400x200.png?text=Eco" , dataAiHint: "nature environment" },
-  { id: "6", name: "Family Hub", description: "A private space for our family to connect, share updates, and plan events.", members: 15, isPublic: false, cover: "https://placehold.co/400x200.png?text=Family", dataAiHint: "family home" },
+  { id: "1", name: "AI Innovators", description: "Exploring the future of artificial intelligence and machine learning. Professional networking and project discussions.", members: 128, isPublic: true, cover: "https://placehold.co/400x200.png?text=AI" , dataAiHint: "technology innovation", moods: ["focus", "learn"] },
+  { id: "2", name: "Weekend Hikers Club", description: "Sharing trails, tips, and breathtaking views from our adventures in nature.", members: 76, isPublic: true, cover: "https://placehold.co/400x200.png?text=Hiking" , dataAiHint: "nature mountain", moods: ["discover", "connect"] },
+  { id: "3", name: "Indie Game Devs", description: "A community for indie game developers to collaborate, share projects, and find local playtesters.", members: 245, isPublic: false, cover: "https://placehold.co/400x200.png?text=Games" , dataAiHint: "gaming development", moods: ["create", "focus", "game"] },
+  { id: "4", name: "Local Bookworms", description: "Discussing our favorite reads and discovering new authors together. Regular meetups.", members: 55, isPublic: true, cover: "https://placehold.co/400x200.png?text=Books" , dataAiHint: "reading library", moods: ["learn", "chill", "connect"] },
+  { id: "5", name: "Sustainable Living Hub", description: "Tips and discussions on eco-friendly practices and sustainability projects.", members: 92, isPublic: true, cover: "https://placehold.co/400x200.png?text=Eco" , dataAiHint: "nature environment", moods: ["learn", "discover"] },
+  { id: "6", name: "Family Hub", description: "A private space for our family to connect, share updates, and plan events.", members: 15, isPublic: false, cover: "https://placehold.co/400x200.png?text=Family", dataAiHint: "family home", moods: ["connect"] },
+  { id: "7", name: "The Local Gig Circuit", description: "Discover and discuss live music, local bands, and upcoming shows in our city. Connect with fellow music lovers.", members: 88, isPublic: true, cover: "https://placehold.co/400x200.png?text=MusicShows", dataAiHint: "live music concert", moods: ["discover", "connect", "create"] },
+  { id: "8", name: "Artisan Alley Collective", description: "A space for creators, makers, and artists to share their work, find pop-up opportunities, and support each other.", members: 150, isPublic: true, cover: "https://placehold.co/400x200.png?text=Artisans", dataAiHint: "crafts art market", moods: ["create", "shop", "connect"] },
+  { id: "9", name: "Open Mic Night Crew", description: "For performers (comedy, poetry, music) and fans of open mic nights. Share your material, find venues, and connect.", members: 62, isPublic: true, cover: "https://placehold.co/400x200.png?text=OpenMic", dataAiHint: "performance comedy poetry", moods: ["create", "discover", "connect"] },
 ];
 
 const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean }> = ({ tribe, isMyTribe }) => (
@@ -179,4 +183,3 @@ export default function TribesPage() {
     </div>
   );
 }
-
