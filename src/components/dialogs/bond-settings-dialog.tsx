@@ -15,12 +15,15 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 
+type FormationMethod = "rfid_tap" | "digital_introduction" | "virtual_request";
+
 // Minimal Bond interface for this dialog
 export interface Bond {
   id: string;
   targetName: string;
   targetType: "user" | "tribe";
   bondType: "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";
+  formationMethod: FormationMethod;
   showInIntercom?: boolean;
   allowChatInitiation?: boolean;
 }
@@ -161,3 +164,4 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
   );
 }
 
+    
