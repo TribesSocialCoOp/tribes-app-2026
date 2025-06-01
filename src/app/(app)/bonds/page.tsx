@@ -36,18 +36,16 @@ export interface Bond {
   allowChatInitiation?: boolean;
 }
 
-const MAX_RECONNECTS_FOR_FULL_BAR = 10;
-
 const generateInitialBondsData = (): Bond[] => [
   { id: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "follower", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 30), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: false },
   { id: "2", targetName: "Alice Wonderland", targetType: "user", bondType: "friend", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 5), lastRefreshedAt: new Date(Date.now() - 86400000 * 25), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true },
   { id: "3", targetName: "Weekend Hikers", targetType: "tribe", bondType: "follower", passkeyStatus: "active", expiresAt: new Date(Date.now() + 86400000 * 80), lastRefreshedAt: new Date(Date.now() - 86400000 * 10), reconnectsCount: 0, showInIntercom: false, allowChatInitiation: false },
-  { id: "4", targetName: "Bob The Builder", targetType: "user", bondType: "professional", passkeyStatus: "expired", expiresAt: new Date(Date.now() - 86400000 * 2), lastRefreshedAt: new Date(Date.now() - 86400000 * 62), reconnectsCount: 3, showInIntercom: true, allowChatInitiation: true },
+  { id: "4", targetName: "Bob The Builder", targetType: "user", bondType: "professional", passkeyStatus: "expired", expiresAt: new Date(Date.now() - 86400000 * 2), lastRefreshedAt: new Date(Date.now() - 86400000 * 62), reconnectsCount: 3, showInIntercom: true, allowChatInitiation: false },
   { id: "5", targetName: "Mom", targetType: "user", bondType: "family", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 10), expiresAt: new Date(Date.now() + 365 * 86400000), reconnectsCount: 5, showInIntercom: true, allowChatInitiation: true },
   { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "professional", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 180), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: false },
-  { id: "7", targetName: "Project Collab", targetType: "tribe", bondType: "collaborator", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), expiresAt: new Date(Date.now() + 86400000 * 15), reconnectsCount: 7, showInIntercom: true, allowChatInitiation: true },
+  { id: "7", targetName: "Project Collab", targetType: "tribe", bondType: "collaborator", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), expiresAt: new Date(Date.now() + 86400000 * 15), reconnectsCount: 7, showInIntercom: true, allowChatInitiation: true }, // Tribe, allowChatInitiation true is fine, but button should be disabled
   { id: "8", targetName: "Art Patronage Inc.", targetType: "tribe", bondType: "supporter", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), expiresAt: new Date(Date.now() + 86400000 * (45)), reconnectsCount: 4, showInIntercom: true, allowChatInitiation: false },
-  { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 12), lastRefreshedAt: new Date(Date.now() - 86400000 * 18), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true },
+  { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 12), lastRefreshedAt: new Date(Date.now() - 86400000 * 18), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true }, // Tribe
   { id: "10", targetName: "John Doe (Dev)", targetType: "user", bondType: "collaborator", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 90), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 10, showInIntercom: false, allowChatInitiation: false },
 ];
 
@@ -232,6 +230,11 @@ export default function BondsPage() {
   const handleSaveBondSettings = (updatedBond: Bond) => {
     setBonds(prevBonds => prevBonds ? prevBonds.map(b => b.id === updatedBond.id ? updatedBond : b) : null);
   };
+  
+  const handleNotificationSettings = (bondId: string) => {
+    console.log("Notification settings clicked for bond:", bondId);
+    // Placeholder for actual notification settings logic
+  };
 
   const calculateTimeProgress = (bond: Bond): number => {
     if (bond.passkeyStatus === 'expired') return 0;
@@ -312,6 +315,15 @@ export default function BondsPage() {
                   const timeBasedProgress = calculateTimeProgress(bond);
                   const canUpgradeToFamily = bond.bondType !== "family" && bond.targetType === "user" && familyBondsCount < MAX_FAMILY_BONDS;
                   const canStartChat = bond.targetType === 'user' && bond.allowChatInitiation !== false;
+                  
+                  const startChatMenuItem = (
+                    <DropdownMenuItem
+                      onClick={() => handleStartChat(bond.id, bond.targetName)}
+                      disabled={!canStartChat}
+                    >
+                      <MessageSquare className="mr-2 h-4 w-4" /> Start Chat
+                    </DropdownMenuItem>
+                  );
 
                   return (
                   <TableRow key={bond.id} className="hover:bg-muted/50">
@@ -359,12 +371,32 @@ export default function BondsPage() {
                           >
                             <RefreshCw className="mr-2 h-4 w-4" /> Refresh
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                              onClick={() => handleStartChat(bond.id, bond.targetName)}
-                              disabled={!canStartChat}
-                          >
-                            <MessageSquare className="mr-2 h-4 w-4" /> Start Chat
-                          </DropdownMenuItem>
+                          
+                          {bond.targetType === 'tribe' ? (
+                            <TooltipProvider delayDuration={100}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  {/* Disabled DropdownMenuItem inside TooltipTrigger */}
+                                  {/* The div wrapper helps with tooltip on disabled items */}
+                                  <div> 
+                                    <DropdownMenuItem
+                                      onClick={() => handleStartChat(bond.id, bond.targetName)}
+                                      disabled={true} // Always disabled for tribes
+                                      className="cursor-not-allowed"
+                                    >
+                                      <MessageSquare className="mr-2 h-4 w-4" /> Start Chat
+                                    </DropdownMenuItem>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Tribes cannot be chatted with directly.</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            startChatMenuItem
+                          )}
+
                            <DropdownMenuItem onClick={() => handleOpenBondSettings(bond)}>
                               <Settings className="mr-2 h-4 w-4" /> Bond Settings
                           </DropdownMenuItem>
@@ -417,3 +449,4 @@ export default function BondsPage() {
     </div>
   );
 }
+
