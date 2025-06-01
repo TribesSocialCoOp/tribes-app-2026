@@ -2,14 +2,14 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, ArrowRight, Smile, Target, Sparkles, Map, ShoppingCart, BookOpen, Gamepad2 } from "lucide-react";
+import { Search, ArrowRight, Smile, Target, Sparkles as CreateIcon, Map, ShoppingCart, BookOpen, Gamepad2, Megaphone } from "lucide-react"; // Changed Sparkles to CreateIcon, Added Megaphone
 import Link from "next/link";
 import Image from "next/image";
 
 export const moodsData = [
   { name: "Chill", slug: "chill", description: "Relax, unwind, and find your calm.", emoji: "😌", bgClass: "bg-blue-100", textClass: "text-blue-700", img: "https://placehold.co/300x200.png?text=Chill" , dataAiHint: "relax meditation", icon: Smile },
   { name: "Focus", slug: "focus", description: "Boost productivity and concentration.", emoji: "🎯", bgClass: "bg-green-100", textClass: "text-green-700", img: "https://placehold.co/300x200.png?text=Focus" , dataAiHint: "work study", icon: Target },
-  { name: "Create", slug: "create", description: "Ignite inspiration and artistic expression.", emoji: "✨", bgClass: "bg-purple-100", textClass: "text-purple-700", img: "https://placehold.co/300x200.png?text=Creative" , dataAiHint: "art design", icon: Sparkles },
+  { name: "Create", slug: "create", description: "Ignite inspiration and artistic expression.", emoji: "✨", bgClass: "bg-purple-100", textClass: "text-purple-700", img: "https://placehold.co/300x200.png?text=Creative" , dataAiHint: "art design", icon: CreateIcon }, // Changed to CreateIcon
   { name: "Discover", slug: "discover", description: "Explore new ideas, places, and communities.", emoji: "🗺️", bgClass: "bg-yellow-100", textClass: "text-yellow-700", img: "https://placehold.co/300x200.png?text=Discover", dataAiHint: "travel nature community", icon: Map  },
   { name: "Shop", slug: "shop", description: "Find deals, new products, and share tips.", emoji: "🛍️", bgClass: "bg-pink-100", textClass: "text-pink-700", img: "https://placehold.co/300x200.png?text=Shopping", dataAiHint: "retail store", icon: ShoppingCart },
   { name: "Learn", slug: "learn", description: "Expand your knowledge and skills.", emoji: "📚", bgClass: "bg-teal-100", textClass: "text-teal-700", img: "https://placehold.co/300x200.png?text=Learn", dataAiHint: "education study", icon: BookOpen },
@@ -60,7 +60,7 @@ export default function MoodsPage() {
 
       <section className="text-center py-12">
         <Card className="inline-block p-8 shadow-xl bg-gradient-to-r from-primary/10 via-background to-accent/10">
-          <Sparkles className="h-10 w-10 text-primary mx-auto mb-4" />
+          <Megaphone className="h-10 w-10 text-primary mx-auto mb-4" />
           <h2 className="text-2xl font-semibold text-foreground mb-3 font-mono tracking-normal">Feature Your Tribe's Content</h2>
           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
             Tribe founders can feature relevant threads to Mood Streams, increasing visibility and engagement.
@@ -73,4 +73,3 @@ export default function MoodsPage() {
     </div>
   );
 }
-
