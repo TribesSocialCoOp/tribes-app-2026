@@ -9,8 +9,8 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { moodsData, moodsData as allMoods } from '../moods/page'; // Renamed import for clarity
-import { allMoodStreamPosts as globalMoodPosts } from '../moods/[moodSlug]/page'; // To get raw posts
+import { moodsData as allMoods } from '../moods/page'; 
+import { allMoodStreamPosts as globalMoodPosts } from '../moods/[moodSlug]/page'; 
 
 interface CommunicationItem {
   id: string;
@@ -20,8 +20,8 @@ interface CommunicationItem {
   tribeName?: string; 
   message?: string; 
   content?: string; 
-  moodSlug?: string; // For filtering, e.g., "chill", "focus"
-  moodName?: string; // For display, e.g., "Chill", "Focus"
+  moodSlug?: string; 
+  moodName?: string; 
   avatarSrc?: string;
   avatarFallback?: string;
   timestamp: Date;
@@ -69,10 +69,7 @@ const regularBondMessages: CommunicationItem[] = [
   { id: "rb2", type: "regular-bond", sender: "Sarah (Tech Meetup)", bondName: "Tech Connects", message: "Great talk last night! Here's the link to the slides I mentioned.", avatarSrc: "https://placehold.co/40x40.png?text=S", avatarFallback: "S", timestamp: new Date(Date.now() - 3600000 * 25), dataAiHint: "colleague professional" },
 ];
 
-// Transform globalMoodPosts to CommunicationItem[]
 const moodStreamItems: CommunicationItem[] = globalMoodPosts.map(post => {
-  // For simplicity, we'll pick the first tag as the primary mood for this item.
-  // In a real app, this logic might be more complex.
   const primaryMoodSlug = post.moodTags[0];
   const moodDetails = allMoods.find(m => m.slug === primaryMoodSlug);
 
@@ -82,7 +79,7 @@ const moodStreamItems: CommunicationItem[] = globalMoodPosts.map(post => {
     tribeName: post.tribeName,
     content: post.content,
     moodSlug: primaryMoodSlug,
-    moodName: moodDetails?.name || primaryMoodSlug, // Fallback to slug if name not found
+    moodName: moodDetails?.name || primaryMoodSlug,
     avatarSrc: post.authorAvatarSrc,
     avatarFallback: post.authorAvatarFallback || post.author?.substring(0,2),
     timestamp: post.timestamp,
@@ -90,7 +87,7 @@ const moodStreamItems: CommunicationItem[] = globalMoodPosts.map(post => {
     imageUrl: post.imageUrl,
     imageAlt: post.imageAlt,
     dataAiHintImage: post.dataAiHintImage,
-    sender: post.author, // Using author as sender for mood stream items
+    sender: post.author,
   };
 });
 
@@ -143,7 +140,7 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   } else if (item.type === "mood-stream") {
     icon = <Rss className="h-5 w-5 text-accent" />;
     title = `New in ${item.moodName || "Mood"} Stream`;
-    subtitle = `from ${item.sender || item.tribeName || "Unknown Tribe"}`; // Display sender (author) for mood posts
+    subtitle = `from ${item.sender || item.tribeName || "Unknown Tribe"}`;
     body = item.content || "";
   }
 
@@ -220,7 +217,7 @@ export default function YourCommsPage() {
         {regularComms.length > 0 && (
           <section>
             <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center tracking-normal">
-              <Users className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-primary" /> Other Bond Updates
+              <Users className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-primary" /> Your Bonds
             </h2>
             <div className="space-y-4">
               {regularComms.map(item => <YourCommsItem key={item.id} item={item} />)}
@@ -269,7 +266,7 @@ export default function YourCommsPage() {
             </CardFooter>
         </section>
         
-        {allComms.length === 0 && ( // This condition might need adjustment if sections are always shown
+        {allComms.length === 0 && ( 
             <Card className="text-center py-12 shadow-none sm:shadow-lg">
                 <CardContent className="p-4 sm:p-6">
                     <MessageSquareText className="mx-auto h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground opacity-50 mb-4 sm:mb-6" />
@@ -284,3 +281,4 @@ export default function YourCommsPage() {
     </div>
   );
 }
+
