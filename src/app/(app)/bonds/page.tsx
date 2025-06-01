@@ -19,28 +19,45 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical } from "lucide-react";
 
+type BondType = "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";
+
 interface Bond {
   id: string;
   targetName: string;
   targetType: "user" | "tribe";
-  bondType: "regular" | "family";
+  bondType: BondType;
   passkeyStatus: "active" | "expires_soon" | "expired" | "needs_refresh";
   expiresAt?: Date;
   lastRefreshedAt: Date;
   passkeyStrength: number; // 0-100 for progress bar
-  showInIntercom?: boolean; // New property
+  showInIntercom?: boolean;
 }
 
 const initialBondsData: Bond[] = [
-  { id: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "family", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 30), passkeyStrength: 95, expiresAt: new Date(Date.now() + 86400000 * 335), showInIntercom: true },
-  { id: "2", targetName: "Alice Wonderland", targetType: "user", bondType: "regular", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 5), lastRefreshedAt: new Date(Date.now() - 86400000 * 25), passkeyStrength: 20, showInIntercom: true },
-  { id: "3", targetName: "Weekend Hikers", targetType: "tribe", bondType: "regular", passkeyStatus: "active", expiresAt: new Date(Date.now() + 86400000 * 80), lastRefreshedAt: new Date(Date.now() - 86400000 * 10), passkeyStrength: 80, showInIntercom: false },
-  { id: "4", targetName: "Bob The Builder", targetType: "user", bondType: "regular", passkeyStatus: "expired", expiresAt: new Date(Date.now() - 86400000 * 2), lastRefreshedAt: new Date(Date.now() - 86400000 * 62), passkeyStrength: 0, showInIntercom: true },
+  { id: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "follower", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 30), passkeyStrength: 95, expiresAt: new Date(Date.now() + 86400000 * 335), showInIntercom: true },
+  { id: "2", targetName: "Alice Wonderland", targetType: "user", bondType: "friend", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 5), lastRefreshedAt: new Date(Date.now() - 86400000 * 25), passkeyStrength: 20, showInIntercom: true },
+  { id: "3", targetName: "Weekend Hikers", targetType: "tribe", bondType: "follower", passkeyStatus: "active", expiresAt: new Date(Date.now() + 86400000 * 80), lastRefreshedAt: new Date(Date.now() - 86400000 * 10), passkeyStrength: 80, showInIntercom: false },
+  { id: "4", targetName: "Bob The Builder", targetType: "user", bondType: "professional", passkeyStatus: "expired", expiresAt: new Date(Date.now() - 86400000 * 2), lastRefreshedAt: new Date(Date.now() - 86400000 * 62), passkeyStrength: 0, showInIntercom: true },
   { id: "5", targetName: "Mom", targetType: "user", bondType: "family", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 10), passkeyStrength: 100, expiresAt: new Date(Date.now() + 86400000 * 360), showInIntercom: true },
-  { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "regular", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 180), passkeyStrength: 10, expiresAt: new Date(Date.now() + 86400000 * 185), showInIntercom: true },
+  { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "professional", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 180), passkeyStrength: 10, expiresAt: new Date(Date.now() + 86400000 * 185), showInIntercom: true },
 ];
 
 const MAX_FAMILY_BONDS = 25;
+
+const getBondTypeDisplay = (bondType: BondType): string => {
+  switch (bondType) {
+    case "family": return "Family";
+    case "friend": return "Friend";
+    case "professional": return "Professional";
+    case "collaborator": return "Collaborator";
+    case "follower": return "Follower";
+    case "supporter": return "Supporter";
+    default:
+      // Fallback for any unexpected types, though TS should prevent this
+      const exhaustiveCheck: never = bondType;
+      return exhaustiveCheck;
+  }
+};
 
 export default function BondsPage() {
   const [bonds, setBonds] = useState<Bond[]>(initialBondsData);
@@ -74,7 +91,7 @@ export default function BondsPage() {
   
   const handleRefreshBond = (bondId: string) => {
     setBonds(prevBonds => prevBonds.map(bond => 
-      bond.id === bondId ? { ...bond, passkeyStatus: "active", lastRefreshedAt: new Date(), passkeyStrength: 100, expiresAt: bond.bondType === 'regular' ? new Date(Date.now() + 86400000 * 30) : new Date(Date.now() + 86400000 * 365) } : bond
+      bond.id === bondId ? { ...bond, passkeyStatus: "active", lastRefreshedAt: new Date(), passkeyStrength: 100, expiresAt: bond.bondType === 'family' ? new Date(Date.now() + 86400000 * 365) : new Date(Date.now() + 86400000 * 30) } : bond
     ));
   };
 
@@ -88,7 +105,7 @@ export default function BondsPage() {
       return;
     }
     setBonds(prevBonds => prevBonds.map(bond => 
-      bond.id === bondId ? { ...bond, bondType: "family", passkeyStatus: "active", lastRefreshedAt: new Date(), passkeyStrength: 100, expiresAt: new Date(Date.now() + 86400000 * 365) } : bond
+      (bond.id === bondId && bond.targetType === 'user') ? { ...bond, bondType: "family", passkeyStatus: "active", lastRefreshedAt: new Date(), passkeyStrength: 100, expiresAt: new Date(Date.now() + 86400000 * 365) } : bond
     ));
   };
 
@@ -117,7 +134,7 @@ export default function BondsPage() {
             <CardTitle>Family Bond Capacity</CardTitle>
           </div>
           <CardDescription>
-            You have {familyBondsCount} out of {MAX_FAMILY_BONDS} family bonds currently active.
+            You have {familyBondsCount} out of {MAX_FAMILY_BONDS} family bonds currently active. Family bonds are for user-to-user connections.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -152,8 +169,11 @@ export default function BondsPage() {
                   </TableCell>
                   <TableCell className="font-medium">{bond.targetName}</TableCell>
                   <TableCell>
-                    <Badge variant={bond.bondType === "family" ? "default" : "secondary"} className={bond.bondType === "family" ? "bg-pink-500 text-white hover:bg-pink-600" : ""}>
-                      {bond.bondType === "family" ? "Family" : "Regular"}
+                    <Badge 
+                      variant={bond.bondType === "family" ? "default" : "secondary"} 
+                      className={bond.bondType === "family" ? "bg-pink-500 text-white hover:bg-pink-600" : ""}
+                    >
+                      {getBondTypeDisplay(bond.bondType)}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -190,7 +210,7 @@ export default function BondsPage() {
                         <DropdownMenuItem onClick={() => handleRefreshBond(bond.id)} disabled={bond.passkeyStatus === 'active' && bond.passkeyStrength > 90}>
                           <RefreshCw className="mr-2 h-4 w-4" /> Refresh
                         </DropdownMenuItem>
-                        {bond.bondType === "regular" && familyBondsCount < MAX_FAMILY_BONDS && (
+                        {bond.bondType !== "family" && bond.targetType === "user" && familyBondsCount < MAX_FAMILY_BONDS && (
                           <DropdownMenuItem onClick={() => handleUpgradeToFamilyBond(bond.id)}>
                             <HeartHandshake className="mr-2 h-4 w-4 text-pink-500" /> Upgrade to Family
                           </DropdownMenuItem>
@@ -216,7 +236,7 @@ export default function BondsPage() {
         </CardContent>
          <CardFooter>
             <p className="text-xs text-muted-foreground">
-                Regular bonds typically require refreshing every 30 days. Family bonds offer extended validity and are limited. Use the <Rss className="inline h-3 w-3 text-accent"/> toggle to control which bond updates appear on your Intercom feed.
+                Non-family bonds typically require refreshing every 30 days. Family bonds offer extended validity, are limited, and are intended for user-to-user connections. Use the <Rss className="inline h-3 w-3 text-accent"/> toggle to control which bond updates appear on your Intercom feed.
             </p>
         </CardFooter>
       </Card>
