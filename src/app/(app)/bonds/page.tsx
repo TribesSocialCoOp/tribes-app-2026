@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical } from "lucide-react";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,15 +41,15 @@ const initialBondsData: Bond[] = [
   { id: "4", targetName: "Bob The Builder", targetType: "user", bondType: "professional", passkeyStatus: "expired", expiresAt: new Date(Date.now() - 86400000 * 2), lastRefreshedAt: new Date(Date.now() - 86400000 * 62), reconnectsCount: 3, showInIntercom: true },
   { id: "5", targetName: "Mom", targetType: "user", bondType: "family", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 10), expiresAt: new Date(Date.now() + 86400000 * (365-10)), reconnectsCount: 5, showInIntercom: true },
   { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "professional", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 180), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 1, showInIntercom: true },
-  { id: "7", targetName: "Project Collab", targetType: "tribe", bondType: "collaborator", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), expiresAt: new Date(Date.now() + 86400000 * 15), reconnectsCount: 0, showInIntercom: true },
+  { id: "7", targetName: "Project Collab", targetType: "tribe", bondType: "collaborator", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), expiresAt: new Date(Date.now() + 86400000 * 15), reconnectsCount: 7, showInIntercom: true },
   { id: "8", targetName: "Art Patronage Inc.", targetType: "tribe", bondType: "supporter", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), expiresAt: new Date(Date.now() + 86400000 * (45)), reconnectsCount: 4, showInIntercom: true },
   { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 12), lastRefreshedAt: new Date(Date.now() - 86400000 * 18), reconnectsCount: 1, showInIntercom: true },
-  { id: "10", targetName: "John Doe (Dev)", targetType: "user", bondType: "collaborator", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 90), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 2, showInIntercom: false },
+  { id: "10", targetName: "John Doe (Dev)", targetType: "user", bondType: "collaborator", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 90), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 10, showInIntercom: false },
 ];
 
 
 const MAX_FAMILY_BONDS = 25;
-const MAX_RECONNECTS_FOR_FULL_BAR = 10; // Max reconnections for non-family bar to be 100%
+const MAX_RECONNECTS_FOR_FULL_BAR = 10;
 
 const getBondTypeDisplay = (bondType: BondType): string => {
   switch (bondType) {
@@ -168,7 +168,6 @@ export default function BondsPage() {
     ));
   };
 
-  // This calculates progress for the "disable refresh button" logic (time-based)
   const calculateTimeProgress = (bond: Bond): number => {
     if (bond.passkeyStatus === 'expired') return 0;
     if (!(bond.expiresAt instanceof Date) || !(bond.lastRefreshedAt instanceof Date) || isNaN(bond.expiresAt.getTime()) || isNaN(bond.lastRefreshedAt.getTime())) {
@@ -195,7 +194,7 @@ export default function BondsPage() {
 
   const getReconnectsBarValue = (reconnectsCount: number): number => {
     const percentage = (reconnectsCount / MAX_RECONNECTS_FOR_FULL_BAR) * 100;
-    return Math.min(percentage, 100); // Cap at 100%
+    return Math.min(percentage, 100);
   };
 
 
@@ -266,7 +265,10 @@ export default function BondsPage() {
                   <TableCell className="hidden md:table-cell">
                      <div className="flex items-center space-x-2">
                         {bond.bondType === 'family' ? (
-                            <Progress value={100} className="h-2 w-16 bg-amber-400" />
+                             <>
+                                <Heart className="h-4 w-4 text-pink-500 fill-pink-500" />
+                                <Progress value={100} className="h-2 w-12 bg-amber-400" />
+                            </>
                         ) : (
                             <>
                                 <span className="text-sm font-medium text-muted-foreground w-4 text-right">{bond.reconnectsCount}</span>
@@ -330,7 +332,7 @@ export default function BondsPage() {
         </CardContent>
          <CardFooter>
             <p className="text-xs text-muted-foreground">
-                The "Re-Connects" column displays the number of times a bond has been refreshed, and a bar visualizing this count (up to {MAX_RECONNECTS_FOR_FULL_BAR} for a full bar for non-family bonds). Family bonds are always shown as full and golden. Hover over status icons for details. Use the <Rss className="inline h-3 w-3 text-accent"/> toggle to control which bond updates appear on your Intercom feed.
+                The "Re-Connects" column displays the number of times a bond has been refreshed (for non-family bonds) and a bar visualizing this count up to {MAX_RECONNECTS_FOR_FULL_BAR} reconnections for a full bar. Family bonds always show a <Heart className="inline h-3 w-3 text-pink-500 fill-pink-500" /> and a full golden bar. Hover over status icons for details. Use the <Rss className="inline h-3 w-3 text-accent"/> toggle to control which bond updates appear on your Intercom feed.
             </p>
         </CardFooter>
       </Card>
