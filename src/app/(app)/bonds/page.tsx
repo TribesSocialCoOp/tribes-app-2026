@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2, Search, ChevronLeft, ChevronRight, Filter as FilterIcon } from "lucide-react";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2, Search, ChevronLeft, ChevronRight, Filter as FilterIcon, X as XIcon } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -305,6 +305,11 @@ export default function BondsPage() {
     setSearchTerm(event.target.value);
     setCurrentPage(1); 
   };
+  
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setCurrentPage(1);
+  };
 
   const handleItemsPerPageChange = (value: string) => {
     setItemsPerPage(Number(value));
@@ -356,7 +361,7 @@ export default function BondsPage() {
             </div>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline">
+                <Button variant={searchTerm ? "secondary" : "outline"}>
                   <FilterIcon className="mr-2 h-4 w-4" /> Filter & View Options
                 </Button>
               </PopoverTrigger>
@@ -371,8 +376,18 @@ export default function BondsPage() {
                         placeholder="Search bonds..."
                         value={searchTerm}
                         onChange={handleSearchChange}
-                        className="pl-8 w-full"
+                        className="pl-8 w-full pr-8" // Added pr-8 for clear button
                     />
+                     {searchTerm && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                            onClick={handleClearSearch}
+                        >
+                            <XIcon className="h-4 w-4" />
+                        </Button>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -394,7 +409,17 @@ export default function BondsPage() {
             </Popover>
           </div>
         </CardHeader>
-        <CardContent>
+        {searchTerm && (
+          <div className="px-6 pt-0 pb-4">
+            <Badge variant="secondary" className="flex items-center justify-between max-w-max">
+              Search: "{searchTerm}"
+              <Button variant="ghost" size="icon" className="ml-1 h-5 w-5 hover:bg-transparent" onClick={handleClearSearch}>
+                <XIcon className="h-3 w-3" />
+              </Button>
+            </Badge>
+          </div>
+        )}
+        <CardContent className={cn(searchTerm && "pt-0")}>
           {!bonds ? (
             <p className="text-center text-muted-foreground py-8">Loading bonds...</p>
           ) : paginatedBonds.length === 0 ? (
@@ -582,6 +607,3 @@ export default function BondsPage() {
     </div>
   );
 }
-
-
-    
