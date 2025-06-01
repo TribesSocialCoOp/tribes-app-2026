@@ -22,13 +22,14 @@ export interface Bond {
   targetType: "user" | "tribe";
   bondType: BondType;
   showInIntercom?: boolean;
-  allowChatInitiation?: boolean; // New property
+  allowChatInitiation?: boolean;
 }
 
 interface BondSettingsDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   bond: Bond | null;
+  onSave: (updatedBond: Bond) => void; // New prop
 }
 
 const getBondTypeDisplay = (bondType: BondType): string => {
@@ -43,7 +44,7 @@ const getBondTypeDisplay = (bondType: BondType): string => {
   }
 };
 
-export function BondSettingsDialog({ isOpen, onOpenChange, bond }: BondSettingsDialogProps) {
+export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondSettingsDialogProps) {
   const isMobile = useIsMobile();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [allowChat, setAllowChat] = useState(true);
@@ -51,7 +52,7 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond }: BondSettingsD
   useEffect(() => {
     if (isOpen && bond) {
       setNotificationsEnabled(bond.showInIntercom ?? true);
-      setAllowChat(bond.allowChatInitiation ?? true); // Default to true if undefined
+      setAllowChat(bond.allowChatInitiation ?? true);
     }
   }, [isOpen, bond]);
 
@@ -61,9 +62,14 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond }: BondSettingsD
   }
 
   const handleSaveSettings = () => {
-    console.log(`Settings for bond '${bond.targetName}' (ID: ${bond.id}): Notifications ${notificationsEnabled ? 'ON' : 'OFF'}, Allow Chat ${allowChat ? 'ON' : 'OFF'}`);
-    // In a real app, you'd call an API here, e.g.:
-    // await updateBondSettings(bond.id, { ...bond, showInIntercom: notificationsEnabled, allowChatInitiation: allowChat });
+    if (bond) {
+        const updatedBond: Bond = {
+            ...bond,
+            showInIntercom: notificationsEnabled,
+            allowChatInitiation: allowChat,
+        };
+        onSave(updatedBond);
+    }
     onOpenChange(false);
   };
 
@@ -115,10 +121,11 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond }: BondSettingsD
               checked={allowChat}
               onCheckedChange={setAllowChat}
               aria-label="Toggle allowing this bond to initiate chat"
+              disabled={bond.targetType === 'tribe'} // Disable if target is a tribe
             />
           </div>
           <p className="text-xs text-muted-foreground mt-1 px-1">
-            Controls if this {bond.targetType} can start new direct conversations with you.
+            Controls if this {bond.targetType} can start new direct conversations with you. This setting only applies to user-to-user bonds.
           </p>
         </fieldset>
       </div>
