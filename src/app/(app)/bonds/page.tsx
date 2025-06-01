@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss } from "lucide-react";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from '@/lib/utils';
 
 type BondType = "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";
@@ -43,6 +43,8 @@ const initialBondsData: Bond[] = [
   { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "professional", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 180), passkeyStrength: 10, expiresAt: new Date(Date.now() + 86400000 * 185), showInIntercom: true },
   { id: "7", targetName: "Project Collab", targetType: "tribe", bondType: "collaborator", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 5), passkeyStrength: 90, expiresAt: new Date(Date.now() + 86400000 * 25), showInIntercom: true },
   { id: "8", targetName: "Art Patronage Inc.", targetType: "tribe", bondType: "supporter", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), passkeyStrength: 75, expiresAt: new Date(Date.now() + 86400000 * 350), showInIntercom: true },
+  { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 12), lastRefreshedAt: new Date(Date.now() - 86400000 * 18), passkeyStrength: 30, showInIntercom: true },
+  { id: "10", targetName: "John Doe (Dev)", targetType: "user", bondType: "collaborator", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 90), passkeyStrength: 5, expiresAt: new Date(Date.now() + 86400000 * 270), showInIntercom: false },
 ];
 
 const MAX_FAMILY_BONDS = 25;
@@ -70,11 +72,48 @@ const getBondTypeBadgeClasses = (bondType: BondType): string => {
     case "follower": return "border-transparent bg-teal-500 text-white hover:bg-teal-600";
     case "supporter": return "border-transparent bg-emerald-500 text-white hover:bg-emerald-600";
     default:
-      // This ensures exhaustiveness at compile time with the `never` type
       const _exhaustiveCheck: never = bondType;
-      // Fallback for safety, though should not be reached if types are correct
       return "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80";
   }
+};
+
+const PasskeyStatusIcon: React.FC<{ status: Bond["passkeyStatus"] }> = ({ status }) => {
+  let icon, tooltipText, iconColor;
+
+  switch (status) {
+    case "active":
+      icon = <CheckCircle2 className="h-5 w-5 text-accent" />;
+      tooltipText = "Passkey is active and secure.";
+      break;
+    case "expires_soon":
+      icon = <AlertTriangle className="h-5 w-5 text-yellow-500" />;
+      tooltipText = "Passkey is expiring soon. Consider refreshing.";
+      break;
+    case "expired":
+      icon = <XCircle className="h-5 w-5 text-destructive" />;
+      tooltipText = "Passkey has expired. Please refresh.";
+      break;
+    case "needs_refresh":
+      icon = <Info className="h-5 w-5 text-primary" />;
+      tooltipText = "Passkey needs to be refreshed for optimal security.";
+      break;
+    default:
+      icon = <Info className="h-5 w-5 text-muted-foreground" />;
+      tooltipText = "Unknown passkey status.";
+  }
+
+  return (
+    <TooltipProvider delayDuration={100}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="flex items-center justify-center">{icon}</span>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{tooltipText}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 };
 
 
@@ -82,26 +121,6 @@ export default function BondsPage() {
   const [bonds, setBonds] = useState<Bond[]>(initialBondsData);
 
   const familyBondsCount = bonds.filter(b => b.bondType === "family").length;
-
-  const getStatusBadgeVariant = (status: Bond["passkeyStatus"]) => {
-    switch (status) {
-      case "active": return "default";
-      case "expires_soon": return "secondary";
-      case "expired": return "destructive";
-      case "needs_refresh": return "outline";
-      default: return "default";
-    }
-  };
-
-  const getStatusText = (status: Bond["passkeyStatus"]) => {
-    switch (status) {
-      case "active": return "Active";
-      case "expires_soon": return "Expires Soon";
-      case "expired": return "Expired";
-      case "needs_refresh": return "Needs Refresh";
-      default: return "Unknown";
-    }
-  };
 
   const formatDate = (date?: Date) => {
     if (!date) return "N/A";
@@ -173,7 +192,7 @@ export default function BondsPage() {
                 <TableHead className="w-[50px] hidden sm:table-cell"></TableHead>
                 <TableHead>Target</TableHead>
                 <TableHead>Type</TableHead>
-                <TableHead>Passkey Status</TableHead>
+                <TableHead className="text-center">Passkey Status</TableHead>
                 <TableHead className="hidden md:table-cell">Strength</TableHead>
                 <TableHead className="hidden lg:table-cell">Expires / Refreshed</TableHead>
                 <TableHead>Intercom Feed</TableHead>
@@ -188,14 +207,12 @@ export default function BondsPage() {
                   </TableCell>
                   <TableCell className="font-medium">{bond.targetName}</TableCell>
                   <TableCell>
-                    <Badge className={getBondTypeBadgeClasses(bond.bondType)}>
+                    <Badge className={cn(getBondTypeBadgeClasses(bond.bondType), "whitespace-nowrap")}>
                       {getBondTypeDisplay(bond.bondType)}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <Badge variant={getStatusBadgeVariant(bond.passkeyStatus)}>
-                      {getStatusText(bond.passkeyStatus)}
-                    </Badge>
+                  <TableCell className="text-center">
+                    <PasskeyStatusIcon status={bond.passkeyStatus} />
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
                     <Progress value={bond.passkeyStrength} className="h-2 w-24" />
@@ -208,7 +225,7 @@ export default function BondsPage() {
                     <div className="flex items-center space-x-2">
                       <Switch
                         id={`intercom-switch-${bond.id}`}
-                        checked={bond.showInIntercom}
+                        checked={!!bond.showInIntercom}
                         onCheckedChange={(checked) => handleToggleShowInIntercom(bond.id, checked)}
                         aria-label="Show in Intercom feed"
                       />
@@ -252,10 +269,11 @@ export default function BondsPage() {
         </CardContent>
          <CardFooter>
             <p className="text-xs text-muted-foreground">
-                Non-family bonds typically require refreshing every 30 days. Family bonds offer extended validity, are limited, and are intended for user-to-user connections. Use the <Rss className="inline h-3 w-3 text-accent"/> toggle to control which bond updates appear on your Intercom feed.
+                Non-family bonds typically require refreshing every 30 days. Family bonds offer extended validity, are limited, and are intended for user-to-user connections. Use the <Rss className="inline h-3 w-3 text-accent"/> toggle to control which bond updates appear on your Intercom feed. Hover over status icons for details.
             </p>
         </CardFooter>
       </Card>
     </div>
   );
 }
+
