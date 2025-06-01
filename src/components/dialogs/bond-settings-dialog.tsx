@@ -13,17 +13,16 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
-// Minimal Bond type definition for this component.
-// In a real app, this should be imported from a shared types file.
 export type BondType = "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";
 export interface Bond {
   id: string;
   targetName: string;
   targetType: "user" | "tribe";
   bondType: BondType;
-  showInIntercom?: boolean; // Added for notification setting
-  // Other Bond properties are not strictly needed by this dialog for now.
+  showInIntercom?: boolean;
+  allowChatInitiation?: boolean; // New property
 }
 
 interface BondSettingsDialogProps {
@@ -32,7 +31,6 @@ interface BondSettingsDialogProps {
   bond: Bond | null;
 }
 
-// Helper to display bond type nicely, moved before usage
 const getBondTypeDisplay = (bondType: BondType): string => {
   switch (bondType) {
     case "family": return "Family";
@@ -48,11 +46,12 @@ const getBondTypeDisplay = (bondType: BondType): string => {
 export function BondSettingsDialog({ isOpen, onOpenChange, bond }: BondSettingsDialogProps) {
   const isMobile = useIsMobile();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [allowChat, setAllowChat] = useState(true);
 
   useEffect(() => {
-    // Sync switch state if bond changes or isOpen becomes true with a new bond
     if (isOpen && bond) {
       setNotificationsEnabled(bond.showInIntercom ?? true);
+      setAllowChat(bond.allowChatInitiation ?? true); // Default to true if undefined
     }
   }, [isOpen, bond]);
 
@@ -62,11 +61,10 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond }: BondSettingsD
   }
 
   const handleSaveSettings = () => {
-    console.log(`Settings for bond '${bond.targetName}' (ID: ${bond.id}): Notifications ${notificationsEnabled ? 'ON' : 'OFF'}`);
+    console.log(`Settings for bond '${bond.targetName}' (ID: ${bond.id}): Notifications ${notificationsEnabled ? 'ON' : 'OFF'}, Allow Chat ${allowChat ? 'ON' : 'OFF'}`);
     // In a real app, you'd call an API here, e.g.:
-    // await updateBondSettings(bond.id, { ...bond, showInIntercom: notificationsEnabled });
-    // And potentially update the local state on the BondsPage if the main bonds array needs to reflect this change immediately.
-    onOpenChange(false); // Close the dialog/sheet
+    // await updateBondSettings(bond.id, { ...bond, showInIntercom: notificationsEnabled, allowChatInitiation: allowChat });
+    onOpenChange(false);
   };
 
   const DialogContentComponent = isMobile ? ShadSheetContent : ShadDialogContent;
@@ -103,7 +101,26 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond }: BondSettingsD
             Controls if updates from this bond appear in your Intercom feed.
           </p>
         </fieldset>
-        {/* Future settings sections can be added here */}
+
+        <Separator />
+
+        <fieldset>
+          <legend className="text-base font-semibold text-foreground mb-3">Chat Settings</legend>
+          <div className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+            <Label htmlFor={`allowChat-${bond.id}`} className="cursor-pointer flex-1 text-sm">
+              Allow this bond to initiate chat
+            </Label>
+            <Switch
+              id={`allowChat-${bond.id}`}
+              checked={allowChat}
+              onCheckedChange={setAllowChat}
+              aria-label="Toggle allowing this bond to initiate chat"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1 px-1">
+            Controls if this {bond.targetType} can start new direct conversations with you.
+          </p>
+        </fieldset>
       </div>
 
       <DialogFooterComponent className="pt-2">
