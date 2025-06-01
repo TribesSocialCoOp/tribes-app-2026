@@ -107,7 +107,7 @@ export function IntroductionDialog({
                        {/* Using a generic User icon for now, ideally bond.targetAvatar or similar */}
                       <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
-                    <span className="font-medium text-xs">{bond.targetName}</span> {/* Changed from text-sm to text-xs */}
+                    <span className="font-medium text-xs">{bond.targetName}</span>
                   </Label>
                 ))}
               </div>
@@ -147,7 +147,7 @@ export function IntroductionDialog({
 
   return (
     <RootComponent open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContentComponent className="sm:max-w-lg p-6">
+      <DialogContentComponent className="sm:max-w-xl p-6">
         {commonContent}
       </DialogContentComponent>
     </RootComponent>
