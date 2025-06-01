@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Bell } from "lucide-react";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Bell, Ban } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -204,6 +204,15 @@ export default function BondsPage() {
     ));
   };
 
+  const handleBlockBond = (bondId: string, targetName: string) => {
+    console.log(`Block action initiated for bond ID: ${bondId}, Target: ${targetName}`);
+    // Here you would typically open a confirmation dialog and then
+    // call an API to block the user/tribe.
+    // For now, we'll just log it.
+    // You might want to remove the bond from the list or visually indicate it's blocked.
+    alert(`Simulating block for ${targetName}. In a real app, this bond might be hidden or marked as blocked.`);
+  };
+
   const calculateTimeProgress = (bond: Bond): number => {
     if (bond.passkeyStatus === 'expired') return 0;
     if (!(bond.expiresAt instanceof Date) || !(bond.lastRefreshedAt instanceof Date) || isNaN(bond.expiresAt.getTime()) || isNaN(bond.lastRefreshedAt.getTime())) {
@@ -335,6 +344,12 @@ export default function BondsPage() {
                             <HeartHandshake className="mr-2 h-4 w-4 text-pink-500" /> Upgrade to Family
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          onClick={() => handleBlockBond(bond.id, bond.targetName)} 
+                          className="text-destructive hover:!bg-destructive/10 hover:!text-destructive"
+                        >
+                          <Ban className="mr-2 h-4 w-4" /> Block
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleRevokeBond(bond.id)} className="text-destructive hover:!bg-destructive/10 hover:!text-destructive">
                           <Trash2 className="mr-2 h-4 w-4" /> Revoke Bond
                         </DropdownMenuItem>
@@ -363,3 +378,5 @@ export default function BondsPage() {
   );
 }
 
+
+    
