@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,12 +49,18 @@ const generateInitialBondsData = (): Bond[] => [
   { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 180), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: false },
   { id: "7", targetName: "Project Collab", targetType: "tribe", bondType: "collaborator", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), expiresAt: new Date(Date.now() + 86400000 * 15), reconnectsCount: 7, showInIntercom: true, allowChatInitiation: false },
   { id: "8", targetName: "Art Patronage Inc.", targetType: "tribe", bondType: "supporter", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), expiresAt: new Date(Date.now() + 86400000 * (45)), reconnectsCount: 4, showInIntercom: true, allowChatInitiation: false },
-  { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 12), lastRefreshedAt: new Date(Date.now() - 86400000 * 18), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true }, 
+  { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 12), lastRefreshedAt: new Date(Date.now() - 86400000 * 18), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true },
   { id: "10", targetName: "John Doe (Dev)", targetType: "user", bondType: "collaborator", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 90), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 10, showInIntercom: false, allowChatInitiation: false },
+  { id: "11", targetName: "Charlie Chaplin", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 5), expiresAt: new Date(Date.now() + 86400000 * (25)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: true },
+  { id: "12", targetName: "David Copperfield", targetType: "user", bondType: "collaborator", formationMethod: "digital_introduction", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 2), expiresAt: new Date(Date.now() + 86400000 * (28)), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: true },
+  { id: "13", targetName: "Emily Elephant", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 3), lastRefreshedAt: new Date(Date.now() - 86400000 * 27), reconnectsCount: 1, showInIntercom: false, allowChatInitiation: true },
+  { id: "14", targetName: "Fiona Fox", targetType: "user", bondType: "follower", formationMethod: "virtual_request", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 10), expiresAt: new Date(Date.now() + 86400000 * (20)), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: true },
+  { id: "15", targetName: "George Gorilla", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "expired", expiresAt: new Date(Date.now() - 86400000 * 5), lastRefreshedAt: new Date(Date.now() - 86400000 * 35), reconnectsCount: 5, showInIntercom: true, allowChatInitiation: false },
 ];
 
 
 const MAX_FAMILY_BONDS = 25;
+const ITEMS_PER_PAGE = 8;
 
 const getBondTypeDisplay = (bondType: BondType): string => {
   switch (bondType) {
@@ -166,6 +173,8 @@ export default function BondsPage() {
   const [selectedBondForSettings, setSelectedBondForSettings] = useState<Bond | null>(null);
   const [isIntroductionDialogOpen, setIsIntroductionDialogOpen] = useState(false);
   const [bondToIntroduceFrom, setBondToIntroduceFrom] = useState<Bond | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
 
   useEffect(() => {
@@ -236,7 +245,7 @@ export default function BondsPage() {
   const handleSaveBondSettings = (updatedBond: Bond) => {
     setBonds(prevBonds => prevBonds ? prevBonds.map(b => b.id === updatedBond.id ? updatedBond : b) : null);
   };
-  
+
   const handleInitiateIntroduction = (bond: Bond) => {
     setBondToIntroduceFrom(bond);
     setIsIntroductionDialogOpen(true);
@@ -275,6 +284,29 @@ export default function BondsPage() {
     return Math.max(0, Math.min(100, progressPercent));
   };
 
+  const filteredBonds = useMemo(() => {
+    if (!bonds) return [];
+    setCurrentPage(1); // Reset to first page on new search
+    return bonds.filter(bond =>
+      bond.targetName.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [bonds, searchTerm]);
+
+  const totalPages = Math.ceil(filteredBonds.length / ITEMS_PER_PAGE);
+  const paginatedBonds = filteredBonds.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value);
+  };
+
+  const handleNextPage = () => {
+    setCurrentPage(prev => Math.min(prev + 1, totalPages));
+  };
+
+  const handlePreviousPage = () => {
+    setCurrentPage(prev => Math.max(prev - 1, 1));
+  };
+
 
   return (
     <div className="space-y-8">
@@ -305,12 +337,30 @@ export default function BondsPage() {
 
       <Card className="shadow-xl">
         <CardHeader>
-          <CardTitle className="tracking-normal">Current Bonds</CardTitle>
-          <CardDescription>A list of your active and expired bonds. Toggle visibility in your Intercom feed.</CardDescription>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex-1">
+              <CardTitle className="tracking-normal">Current Bonds</CardTitle>
+              <CardDescription>A list of your active and expired bonds. Toggle visibility in your Intercom feed.</CardDescription>
+            </div>
+            <div className="relative w-full sm:w-auto sm:max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    type="search"
+                    placeholder="Search bonds by name..."
+                    value={searchTerm}
+                    onChange={handleSearchChange}
+                    className="pl-8 w-full"
+                />
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {!bonds ? (
             <p className="text-center text-muted-foreground py-8">Loading bonds...</p>
+          ) : paginatedBonds.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">
+              {searchTerm ? "No bonds match your search." : "You have no active bonds. Start connecting!"}
+            </p>
           ) : (
             <Table>
               <TableHeader>
@@ -326,11 +376,11 @@ export default function BondsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bonds.map((bond) => {
+                {paginatedBonds.map((bond) => {
                   const timeBasedProgress = calculateTimeProgress(bond);
                   const canUpgradeToFamily = bond.bondType !== "family" && bond.targetType === "user" && familyBondsCount < MAX_FAMILY_BONDS;
                   const canStartChat = bond.targetType === 'user' && bond.allowChatInitiation !== false;
-                  
+
                   return (
                   <TableRow key={bond.id} className="hover:bg-muted/50">
                     <TableCell className="hidden sm:table-cell">
@@ -377,15 +427,15 @@ export default function BondsPage() {
                           >
                             <RefreshCw className="mr-2 h-4 w-4" /> Refresh
                           </DropdownMenuItem>
-                          
+
                           {bond.targetType === 'tribe' ? (
                             <TooltipProvider delayDuration={100}>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <div> 
+                                  <div>
                                     <DropdownMenuItem
                                       onClick={() => { /* This onClick won't be called due to disabled */ }}
-                                      disabled={true} 
+                                      disabled={true}
                                       className="cursor-not-allowed"
                                     >
                                       <MessageSquare className="mr-2 h-4 w-4" /> Start Chat
@@ -412,7 +462,7 @@ export default function BondsPage() {
                           >
                             <Share2 className="mr-2 h-4 w-4" /> Introduce To...
                           </DropdownMenuItem>
-                          
+
                           <DropdownMenuItem
                               onClick={() => { if(canUpgradeToFamily) handleUpgradeToFamilyBond(bond.id);}}
                               disabled={!canUpgradeToFamily}
@@ -437,21 +487,39 @@ export default function BondsPage() {
                     </TableCell>
                   </TableRow>
                 )})}
-                {bonds.length === 0 && (
-                  <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
-                          You have no active bonds. Start connecting with users or tribes!
-                      </TableCell>
-                  </TableRow>
-                )}
               </TableBody>
             </Table>
           )}
         </CardContent>
-         <CardFooter>
-            <p className="text-xs text-muted-foreground">
-                The "Connect Vibe" column shows an icon representing the bond's current state: <GhostIcon className="inline h-3 w-3 text-muted-foreground" /> for expired, <Heart className="inline h-3 w-3 text-pink-500 fill-pink-500" /> for Family, or faces (<Meh className="inline h-3 w-3 text-muted-foreground"/>, <Smile className="inline h-3 w-3 text-primary"/>, <SmilePlus className="inline h-3 w-3 text-accent"/>) for other bonds based on reconnect counts. Hover over icons for details. Use the <Rss className="inline h-3 w-3 text-accent"/> toggle to control which bond updates appear on your Intercom feed.
+         <CardFooter className="flex flex-col sm:flex-row items-center justify-between pt-4 border-t">
+            <p className="text-xs text-muted-foreground flex-1 text-center sm:text-left mb-4 sm:mb-0">
+                The "Connect Vibe" column shows an icon representing the bond's current state. Hover for details. Use the <Rss className="inline h-3 w-3 text-accent"/> toggle to control Intercom feed updates.
             </p>
+            {totalPages > 1 && (
+                <div className="flex items-center space-x-2">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handlePreviousPage}
+                        disabled={currentPage === 1}
+                    >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                        Page {currentPage} of {totalPages}
+                    </span>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleNextPage}
+                        disabled={currentPage === totalPages}
+                    >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                </div>
+            )}
         </CardFooter>
       </Card>
       {selectedBondForSettings && (

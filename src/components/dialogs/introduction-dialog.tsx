@@ -10,12 +10,13 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { Bond } from '@/app/(app)/bonds/page'; // Using the main Bond type
+import type { Bond } from '@/app/(app)/bonds/page'; 
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { User } from 'lucide-react';
+import { User, Search } from 'lucide-react';
 
 interface IntroductionDialogProps {
   isOpen: boolean;
@@ -34,26 +35,30 @@ export function IntroductionDialog({
 }: IntroductionDialogProps) {
   const isMobile = useIsMobile();
   const [selectedBondId, setSelectedBondId] = useState<string | undefined>(undefined);
+  const [introSearchTerm, setIntroSearchTerm] = useState("");
 
   useEffect(() => {
     if (!isOpen) {
-      setSelectedBondId(undefined); // Reset selection when dialog closes
+      setSelectedBondId(undefined); 
+      setIntroSearchTerm(""); 
     }
   }, [isOpen]);
 
-  const eligibleBondsForIntroduction = useMemo(() => {
+  const displayableEligibleBonds = useMemo(() => {
     if (!introducingBond) return [];
     return allBonds.filter(
-      (bond) => bond.id !== introducingBond.id && bond.targetType === 'user'
+      (bond) => bond.id !== introducingBond.id && 
+                bond.targetType === 'user' &&
+                bond.targetName.toLowerCase().includes(introSearchTerm.toLowerCase())
     );
-  }, [allBonds, introducingBond]);
+  }, [allBonds, introducingBond, introSearchTerm]);
 
   if (!introducingBond) {
     return null;
   }
 
   const handleConfirm = () => {
-    const bondToIntroduceTo = eligibleBondsForIntroduction.find(b => b.id === selectedBondId);
+    const bondToIntroduceTo = displayableEligibleBonds.find(b => b.id === selectedBondId);
     if (bondToIntroduceTo) {
       onConfirmIntroduction(bondToIntroduceTo);
     }
@@ -75,12 +80,23 @@ export function IntroductionDialog({
         </DialogDescriptionComponent>
       </DialogHeaderComponent>
 
-      <div className="py-4">
-        {eligibleBondsForIntroduction.length > 0 ? (
+      <div className="py-4 space-y-4">
+        <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+                type="search"
+                placeholder="Search by name..."
+                value={introSearchTerm}
+                onChange={(e) => setIntroSearchTerm(e.target.value)}
+                className="pl-8 w-full"
+            />
+        </div>
+
+        {displayableEligibleBonds.length > 0 ? (
           <RadioGroup value={selectedBondId} onValueChange={setSelectedBondId}>
             <ScrollArea className="h-[200px] sm:h-[250px] pr-3">
               <div className="space-y-3">
-                {eligibleBondsForIntroduction.map((bond) => (
+                {displayableEligibleBonds.map((bond) => (
                   <Label
                     key={bond.id}
                     htmlFor={`bond-intro-${bond.id}`}
@@ -88,7 +104,7 @@ export function IntroductionDialog({
                   >
                     <RadioGroupItem value={bond.id} id={`bond-intro-${bond.id}`} className="sr-only" />
                     <Avatar className="h-8 w-8">
-                       {/* Placeholder, ideally bond.targetAvatar or similar */}
+                       {/* Using a generic User icon for now, ideally bond.targetAvatar or similar */}
                       <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
                     <span className="font-medium text-sm">{bond.targetName}</span>
@@ -99,7 +115,7 @@ export function IntroductionDialog({
           </RadioGroup>
         ) : (
           <p className="text-sm text-muted-foreground text-center py-4">
-            No other user bonds available for an introduction.
+            {introSearchTerm ? "No matching users found." : "No other user bonds available for an introduction."}
           </p>
         )}
       </div>
@@ -108,7 +124,7 @@ export function IntroductionDialog({
         <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
         <Button
           onClick={handleConfirm}
-          disabled={!selectedBondId || eligibleBondsForIntroduction.length === 0}
+          disabled={!selectedBondId || displayableEligibleBonds.length === 0}
           className="bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           Confirm Introduction
