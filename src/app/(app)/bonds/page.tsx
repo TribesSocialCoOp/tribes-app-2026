@@ -376,18 +376,8 @@ export default function BondsPage() {
                         placeholder="Search bonds..."
                         value={searchTerm}
                         onChange={handleSearchChange}
-                        className="pl-8 w-full pr-8" // Added pr-8 for clear button
+                        className="pl-8 w-full"
                     />
-                     {searchTerm && (
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                            onClick={handleClearSearch}
-                        >
-                            <XIcon className="h-4 w-4" />
-                        </Button>
-                    )}
                   </div>
                 </div>
                 <div className="space-y-2">
