@@ -49,6 +49,7 @@ const initialBondsData: Bond[] = [
 
 
 const MAX_FAMILY_BONDS = 25;
+const MAX_RECONNECTS_FOR_FULL_BAR = 10; // Max reconnections for non-family bar to be 100%
 
 const getBondTypeDisplay = (bondType: BondType): string => {
   switch (bondType) {
@@ -167,7 +168,8 @@ export default function BondsPage() {
     ));
   };
 
-  const calculateProgress = (bond: Bond): number => {
+  // This calculates progress for the "disable refresh button" logic (time-based)
+  const calculateTimeProgress = (bond: Bond): number => {
     if (bond.passkeyStatus === 'expired') return 0;
     if (!(bond.expiresAt instanceof Date) || !(bond.lastRefreshedAt instanceof Date) || isNaN(bond.expiresAt.getTime()) || isNaN(bond.lastRefreshedAt.getTime())) {
         return 0; 
@@ -189,6 +191,11 @@ export default function BondsPage() {
     const progressPercent = (timeLeft / totalPlannedDuration) * 100;
     
     return Math.max(0, Math.min(100, progressPercent));
+  };
+
+  const getReconnectsBarValue = (reconnectsCount: number): number => {
+    const percentage = (reconnectsCount / MAX_RECONNECTS_FOR_FULL_BAR) * 100;
+    return Math.min(percentage, 100); // Cap at 100%
   };
 
 
@@ -240,7 +247,8 @@ export default function BondsPage() {
             </TableHeader>
             <TableBody>
               {bonds.map((bond) => {
-                const calculatedProgress = calculateProgress(bond);
+                const timeBasedProgress = calculateTimeProgress(bond);
+                const reconnectsBarValue = getReconnectsBarValue(bond.reconnectsCount);
                 return (
                 <TableRow key={bond.id} className="hover:bg-muted/50">
                   <TableCell className="hidden sm:table-cell">
@@ -256,14 +264,16 @@ export default function BondsPage() {
                     <PasskeyStatusIcon status={bond.passkeyStatus} />
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
-                    {bond.bondType === 'family' ? (
-                        <Progress value={100} className="h-2 w-16 bg-amber-400" />
-                    ) : (
-                        <div className="flex items-center space-x-2">
-                            <span className="text-sm font-medium text-muted-foreground w-4 text-right">{bond.reconnectsCount}</span>
-                            <Progress value={calculatedProgress} className="h-2 w-12" />
-                        </div>
-                    )}
+                     <div className="flex items-center space-x-2">
+                        {bond.bondType === 'family' ? (
+                            <Progress value={100} className="h-2 w-16 bg-amber-400" />
+                        ) : (
+                            <>
+                                <span className="text-sm font-medium text-muted-foreground w-4 text-right">{bond.reconnectsCount}</span>
+                                <Progress value={reconnectsBarValue} className="h-2 w-12" />
+                            </>
+                        )}
+                    </div>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-muted-foreground">
                     {bond.passkeyStatus === "expired" ? `Expired: ${formatDate(bond.expiresAt)}` : 
@@ -290,7 +300,7 @@ export default function BondsPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem 
                             onClick={() => handleRefreshBond(bond.id)} 
-                            disabled={bond.bondType !== 'family' && bond.passkeyStatus === 'active' && calculatedProgress > 90}
+                            disabled={bond.bondType !== 'family' && bond.passkeyStatus === 'active' && timeBasedProgress > 90}
                         >
                           <RefreshCw className="mr-2 h-4 w-4" /> Refresh
                         </DropdownMenuItem>
@@ -320,10 +330,11 @@ export default function BondsPage() {
         </CardContent>
          <CardFooter>
             <p className="text-xs text-muted-foreground">
-                The "Re-Connects" column shows the number of times a bond has been refreshed and a bar visualizing the percentage of time remaining in its current term (Family bonds are always shown as full and golden). Hover over status icons for details. Use the <Rss className="inline h-3 w-3 text-accent"/> toggle to control which bond updates appear on your Intercom feed.
+                The "Re-Connects" column displays the number of times a bond has been refreshed, and a bar visualizing this count (up to {MAX_RECONNECTS_FOR_FULL_BAR} for a full bar for non-family bonds). Family bonds are always shown as full and golden. Hover over status icons for details. Use the <Rss className="inline h-3 w-3 text-accent"/> toggle to control which bond updates appear on your Intercom feed.
             </p>
         </CardFooter>
       </Card>
     </div>
   );
 }
+
