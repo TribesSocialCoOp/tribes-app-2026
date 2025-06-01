@@ -266,7 +266,7 @@ export default function BondsPage() {
                      <div className="flex items-center space-x-2">
                         {bond.bondType === 'family' ? (
                              <>
-                                <Heart className="h-4 w-4 text-pink-500 fill-pink-500" />
+                                <Heart className="h-3 w-3 text-pink-500 fill-pink-500" />
                                 <Progress value={100} className="h-2 w-12 bg-amber-400" />
                             </>
                         ) : (
