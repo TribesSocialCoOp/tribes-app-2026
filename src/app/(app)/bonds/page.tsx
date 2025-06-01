@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Bell } from "lucide-react";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -233,9 +233,9 @@ export default function BondsPage() {
     setBonds(prevBonds => prevBonds ? prevBonds.map(b => b.id === updatedBond.id ? updatedBond : b) : null);
   };
   
-  const handleNotificationSettings = (bondId: string) => {
-    console.log("Notification settings clicked for bond:", bondId);
-    // Placeholder for actual notification settings logic
+  const handleInitiateIntroduction = (bond: Bond) => {
+    console.log(`Introduction initiated for ${bond.targetName}. User needs to select another bond to introduce them to.`);
+    alert(`Simulating introduction for ${bond.targetName}. Next step would be to select another of your bonds.`);
   };
 
   const calculateTimeProgress = (bond: Bond): number => {
@@ -392,6 +392,13 @@ export default function BondsPage() {
                               <MessageSquare className="mr-2 h-4 w-4" /> Start Chat
                             </DropdownMenuItem>
                           )}
+
+                          <DropdownMenuItem
+                            onClick={() => handleInitiateIntroduction(bond)}
+                            disabled={bond.targetType !== 'user'}
+                          >
+                            <Share2 className="mr-2 h-4 w-4" /> Introduce To...
+                          </DropdownMenuItem>
                           
                           <DropdownMenuItem
                               onClick={() => { if(canUpgradeToFamily) handleUpgradeToFamilyBond(bond.id);}}
@@ -445,6 +452,3 @@ export default function BondsPage() {
     </div>
   );
 }
-
-
-    
