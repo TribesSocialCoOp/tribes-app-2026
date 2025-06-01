@@ -278,6 +278,7 @@ export default function BondsPage() {
             <TableBody>
               {bonds.map((bond) => {
                 const timeBasedProgress = calculateTimeProgress(bond);
+                const canUpgradeToFamily = bond.bondType !== "family" && bond.targetType === "user" && familyBondsCount < MAX_FAMILY_BONDS;
                 return (
                 <TableRow key={bond.id} className="hover:bg-muted/50">
                   <TableCell className="hidden sm:table-cell">
@@ -327,11 +328,12 @@ export default function BondsPage() {
                         <DropdownMenuItem onClick={() => console.log(`Notification settings for bond ${bond.id}`)}>
                             <Bell className="mr-2 h-4 w-4" /> Notification Settings
                         </DropdownMenuItem>
-                        {bond.bondType !== "family" && bond.targetType === "user" && familyBondsCount < MAX_FAMILY_BONDS && (
-                          <DropdownMenuItem onClick={() => handleUpgradeToFamilyBond(bond.id)}>
+                        <DropdownMenuItem 
+                            onClick={() => { if(canUpgradeToFamily) handleUpgradeToFamilyBond(bond.id);}}
+                            disabled={!canUpgradeToFamily}
+                        >
                             <HeartHandshake className="mr-2 h-4 w-4 text-pink-500" /> Upgrade to Family
-                          </DropdownMenuItem>
-                        )}
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => handleRevokeBond(bond.id)} className="text-destructive hover:!bg-destructive/10 hover:!text-destructive">
                           <Trash2 className="mr-2 h-4 w-4" /> Revoke Bond
