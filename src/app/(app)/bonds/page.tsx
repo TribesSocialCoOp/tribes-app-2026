@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon } from "lucide-react";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Bell } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -323,6 +323,9 @@ export default function BondsPage() {
                             disabled={bond.passkeyStatus === 'active' && timeBasedProgress > 90 && bond.bondType !== 'family'}
                         >
                           <RefreshCw className="mr-2 h-4 w-4" /> Refresh
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => console.log(`Notification settings for bond ${bond.id}`)}>
+                            <Bell className="mr-2 h-4 w-4" /> Notification Settings
                         </DropdownMenuItem>
                         {bond.bondType !== "family" && bond.targetType === "user" && familyBondsCount < MAX_FAMILY_BONDS && (
                           <DropdownMenuItem onClick={() => handleUpgradeToFamilyBond(bond.id)}>
