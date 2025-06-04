@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { X, MessageSquareText, Settings2, Smile } from 'lucide-react';
+import { MessageSquareText, Settings2, Smile } from 'lucide-react'; // Removed X
 import { moodsData } from '../page'; 
 import { cn } from '@/lib/utils';
 
@@ -168,8 +168,8 @@ export default function MoodStreamPage() {
   const params = useParams();
   const moodSlug = params.moodSlug as string;
 
-  const [isTunerVisible, setIsTunerVisible] = useState(true);
   const [currentMoodObject, setCurrentMoodObject] = useState(moodsData.find(m => m.slug === moodSlug) || moodsData[0]);
+  // selectedMoodForTuner controls the Select component's displayed value and is updated by useEffect
   const [selectedMoodForTuner, setSelectedMoodForTuner] = useState(moodSlug || moodsData[0].slug);
 
   const VibeIcon = currentMoodObject.icon || (() => <Smile className="h-7 w-7 md:h-8 md:w-8 text-primary" />);
@@ -179,9 +179,9 @@ export default function MoodStreamPage() {
     const moodObj = moodsData.find(m => m.slug === moodSlug);
     if (moodObj) {
       setCurrentMoodObject(moodObj);
-      setSelectedMoodForTuner(moodSlug); 
-    } else {
-      // Fallback to the first mood if slug is invalid
+      setSelectedMoodForTuner(moodSlug); // Ensure Select reflects the current URL's mood
+    } else if (moodSlug && moodsData.length > 0) { // Check if moodSlug is defined and moodsData is available
+      // Fallback to the first mood if slug is invalid but moodsData exists
       router.replace(`/moods/${moodsData[0].slug}`);
     }
   }, [moodSlug, router]);
@@ -192,9 +192,9 @@ export default function MoodStreamPage() {
       .sort((a,b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [moodSlug]);
 
-  const handleTuneMood = () => {
-    if (selectedMoodForTuner && selectedMoodForTuner !== moodSlug) {
-      router.push(`/moods/${selectedMoodForTuner}`);
+  const handleMoodSelectChange = (newSlug: string) => {
+    if (newSlug && newSlug !== moodSlug) {
+      router.push(`/moods/${newSlug}`);
     }
   };
   
@@ -203,38 +203,34 @@ export default function MoodStreamPage() {
 
   return (
     <div className="space-y-4 md:space-y-6 relative">
-      {isTunerVisible && (
-        <Card className="sticky top-2 sm:top-4 left-0 right-0 z-10 shadow-xl bg-background/90 backdrop-blur-sm border">
-          <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3 flex flex-row items-center justify-between">
-            <div className='flex items-center'>
-              <Settings2 className="h-5 w-5 mr-2 text-primary" />
-              <CardTitle className="text-md sm:text-lg font-semibold tracking-normal">Tune Your Mood</CardTitle>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setIsTunerVisible(false)} className="h-7 w-7 sm:h-8 sm:w-8">
-              <X className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-          </CardHeader>
-          <CardContent className="p-3 sm:p-4 pt-0 space-y-3">
-            <Select value={selectedMoodForTuner} onValueChange={setSelectedMoodForTuner}>
-              <SelectTrigger className="w-full text-base">
-                <SelectValue placeholder="Select a mood..." />
-              </SelectTrigger>
-              <SelectContent>
-                {moodsData.map(mood => (
-                  <SelectItem key={mood.slug} value={mood.slug} className="text-base">
-                    <span className="mr-2">{mood.emoji}</span>{mood.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={handleTuneMood} className="w-full bg-primary hover:bg-primary/90" disabled={selectedMoodForTuner === moodSlug}>
-              Tune to Selected Mood
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+      {/* Tuner Card - No longer dismissible */}
+      <Card className="sticky top-2 sm:top-4 left-0 right-0 z-10 shadow-xl bg-background/95 backdrop-blur-sm border">
+        <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3 flex flex-row items-center justify-between">
+          <div className='flex items-center'>
+            <Settings2 className="h-5 w-5 mr-2 text-primary" />
+            <CardTitle className="text-md sm:text-lg font-semibold tracking-normal">Tune Your Stream</CardTitle>
+          </div>
+          {/* Removed X (close) button */}
+        </CardHeader>
+        <CardContent className="p-3 sm:p-4 pt-0 space-y-3">
+          <Select value={selectedMoodForTuner} onValueChange={handleMoodSelectChange}>
+            <SelectTrigger className="w-full text-base">
+              <SelectValue placeholder="Select a mood..." />
+            </SelectTrigger>
+            <SelectContent>
+              {moodsData.map(mood => (
+                <SelectItem key={mood.slug} value={mood.slug} className="text-base">
+                  <span className="mr-2">{mood.emoji}</span>{mood.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {/* Removed "Tune to Selected Mood" Button */}
+        </CardContent>
+      </Card>
 
-      <header className={cn("mb-4 md:mb-6", isTunerVisible && "pt-4")}> 
+      {/* Page Header - Always has padding top to account for sticky tuner */}
+      <header className="mb-4 md:mb-6 pt-4"> 
         <div className="flex items-center space-x-2 mb-1">
             <CurrentMoodIcon className="h-7 w-7 md:h-8 md:w-8 text-primary" /> 
             <h1 className="text-2xl md:text-3xl font-bold tracking-normal text-foreground font-mono">
