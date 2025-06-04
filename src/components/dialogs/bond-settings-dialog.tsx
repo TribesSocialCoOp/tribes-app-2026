@@ -60,7 +60,7 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
   useEffect(() => {
     if (isOpen && bond) {
       setNotificationsEnabled(bond.showInIntercom ?? true);
-      setAllowChat(bond.allowChatInitiation ?? (bond.targetType === 'user' && bond.keyType === 'standard'));
+      setAllowChat(bond.allowChatInitiation ?? (bond.targetType === 'user' && !bond.keyType?.startsWith('event_')));
     }
   }, [isOpen, bond]);
 
@@ -95,8 +95,8 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
         <DialogDescriptionComponent>
           Manage preferences for your bond with <span className="italic font-semibold">{bond.targetName}</span> ({bond.targetType === 'user' ? 'User' : 'Tribe'} - {getBondTypeDisplay(bond.bondType)}).
           {bond.keyType && bond.keyType !== 'standard' && (
-            <span className="block mt-1 text-xs text-purple-600">
-              This is an '{bond.keyType.replace('_', ' ')}' key {bond.eventId ? `for event ${bond.eventId}` : ''} with '{bond.accessTier}' access.
+            <span className="block mt-2 text-xs text-purple-600 font-medium p-2 bg-purple-500/10 rounded-md">
+              This is an '{bond.keyType.replace(/_/g, ' ')}' key {bond.eventId ? `for event '${bond.eventId}'` : ''} with '{bond.accessTier}' access.
             </span>
           )}
         </DialogDescriptionComponent>
@@ -141,6 +141,7 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
             Controls if <span className="italic font-semibold">{bond.targetName}</span> ({bond.targetType}) can start new direct conversations with you.
             {bond.targetType === 'tribe' && " Tribes cannot initiate direct chats."}
             {bond.keyType?.startsWith('event_') && " Event pass holders typically cannot initiate direct chats."}
+            {bond.allowChatInitiation === false && bond.targetType === 'user' && !bond.keyType?.startsWith('event_') && `${bond.targetName} currently has chat initiation disabled by you.`}
           </p>
         </fieldset>
       </div>

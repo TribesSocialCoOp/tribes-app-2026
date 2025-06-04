@@ -451,7 +451,8 @@ export default function BondsPage() {
                 {paginatedBonds.map((bond) => {
                   const timeBasedProgress = calculateTimeProgress(bond);
                   const canUpgradeToFamily = bond.bondType !== "family" && bond.targetType === "user" && familyBondsCount < MAX_FAMILY_BONDS && bond.keyType === "standard";
-                  const canStartChat = bond.targetType === 'user' && bond.allowChatInitiation !== false;
+                  const canStartChat = bond.targetType === 'user' && bond.allowChatInitiation !== false && !bond.keyType?.startsWith('event_');
+                  const canIntroduce = bond.targetType === 'user' && !bond.keyType?.startsWith('event_');
 
                   return (
                   <TableRow key={bond.id} className="hover:bg-muted/50">
@@ -505,39 +506,53 @@ export default function BondsPage() {
                             <RefreshCw className="mr-2 h-4 w-4" /> Refresh
                           </DropdownMenuItem>
 
-                          {bond.targetType === 'tribe' || bond.keyType?.startsWith('event_') ? (
-                            <TooltipProvider delayDuration={100}>
-                              <Tooltip>
+                          <TooltipProvider delayDuration={100}>
+                            <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <div>
-                                    <DropdownMenuItem
-                                      disabled={true}
-                                      className="cursor-not-allowed"
-                                    >
-                                      <MessageSquare className="mr-2 h-4 w-4" /> Start Chat
-                                    </DropdownMenuItem>
-                                  </div>
+                                    {/* Div wrapper for TooltipTrigger when child is disabled */}
+                                    <div className={cn(!canStartChat && "cursor-not-allowed")}> 
+                                        <DropdownMenuItem
+                                            onClick={() => canStartChat && handleStartChat(bond.id, bond.targetName)}
+                                            disabled={!canStartChat}
+                                            className={cn(!canStartChat && "opacity-50 cursor-not-allowed")}
+                                        >
+                                        <MessageSquare className="mr-2 h-4 w-4" /> Start Chat
+                                        </DropdownMenuItem>
+                                    </div>
                                 </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{bond.targetType === 'tribe' ? 'Tribes cannot be chatted with directly.' : 'Event passes cannot initiate chats.'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          ) : (
-                            <DropdownMenuItem
-                              onClick={() => handleStartChat(bond.id, bond.targetName)}
-                              disabled={!canStartChat}
-                            >
-                              <MessageSquare className="mr-2 h-4 w-4" /> Start Chat
-                            </DropdownMenuItem>
-                          )}
+                                {!canStartChat && (
+                                    <TooltipContent>
+                                    <p>
+                                        {bond.targetType === 'tribe' ? 'Tribes cannot be chatted with directly.' :
+                                        bond.keyType?.startsWith('event_') ? 'Event passes cannot initiate chats.' :
+                                        bond.allowChatInitiation === false ? `${bond.targetName} has disabled chat initiation.` :
+                                        'Chat not available for this bond.'}
+                                    </p>
+                                    </TooltipContent>
+                                )}
+                            </Tooltip>
+                          </TooltipProvider>
 
-                          <DropdownMenuItem
-                            onClick={() => handleInitiateIntroduction(bond)}
-                            disabled={bond.targetType !== 'user' || bond.keyType?.startsWith('event_')}
-                          >
-                            <Share2 className="mr-2 h-4 w-4" /> Introduce To...
-                          </DropdownMenuItem>
+                          <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                     <div className={cn(!canIntroduce && "cursor-not-allowed")}>
+                                        <DropdownMenuItem
+                                            onClick={() => canIntroduce && handleInitiateIntroduction(bond)}
+                                            disabled={!canIntroduce}
+                                            className={cn(!canIntroduce && "opacity-50 cursor-not-allowed")}
+                                        >
+                                            <Share2 className="mr-2 h-4 w-4" /> Introduce To...
+                                        </DropdownMenuItem>
+                                    </div>
+                                </TooltipTrigger>
+                                {!canIntroduce && (
+                                     <TooltipContent>
+                                        <p>Introductions are only available for user-to-user bonds, not event passes or tribes.</p>
+                                    </TooltipContent>
+                                )}
+                            </Tooltip>
+                          </TooltipProvider>
 
                           <DropdownMenuItem
                               onClick={() => { if(canUpgradeToFamily) handleUpgradeToFamilyBond(bond.id);}}
