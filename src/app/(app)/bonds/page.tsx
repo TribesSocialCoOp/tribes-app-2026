@@ -153,13 +153,19 @@ const ConnectVibeIcon: React.FC<{ bond: Bond }> = ({ bond }) => {
     iconElement = <GhostIcon className="h-6 w-6 text-muted-foreground" />;
     tooltipText = (bond.keyType === "event_promo" || bond.keyType === "event_attendee") ? "Event Pass Expired" : "Bond Expired";
   } else if (bond.keyType === "event_promo" || bond.keyType === "event_attendee") {
+    let baseText = "Event Pass";
     if (bond.passkeyStatus === 'expires_soon') {
       iconElement = <PartyPopper className="h-6 w-6 text-yellow-500" />;
-      tooltipText = `Event Pass Expires Soon${bond.accessTier === 'vip' ? ' (VIP)' : ''}`;
+      baseText += " Expires Soon";
     } else { 
       iconElement = <PartyPopper className="h-6 w-6 text-purple-500" />;
-      tooltipText = `Event Pass Active${bond.accessTier === 'vip' ? ' (VIP)' : ''}`;
+      baseText += " Active";
     }
+    if (bond.accessTier === 'vip') {
+        baseText += " (VIP)";
+    }
+    tooltipText = baseText;
+
   } else if (bond.bondType === "family") {
     iconElement = <Heart className="h-6 w-6 text-pink-500 fill-pink-500" />;
     tooltipText = "Family Bond Vibe";
@@ -536,16 +542,16 @@ export default function BondsPage() {
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <SortableHeaderCell columnKey="targetName" title="Target" />
-                  <TableHead className="hidden md:table-cell w-[80px]"></TableHead> {}
-                  <SortableHeaderCell columnKey="bondType" title="Type" />
-                  <SortableHeaderCell columnKey="passkeyStatus" title="Passkey Status" className="text-center"/>
-                  <TableHead className="text-center hidden md:table-cell">Connect Vibe</TableHead>
-                  <SortableHeaderCell columnKey="expiresAt" title="Expires" className="hidden lg:table-cell"/>
-                  <TableHead>Intercom Feed</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
+                <TableRow>{/*
+                */}<SortableHeaderCell columnKey="targetName" title="Target" />{/*
+                */}<TableHead className="hidden md:table-cell w-[80px]" />{/* Tier column header */}{/*
+                */}<SortableHeaderCell columnKey="bondType" title="Type" />{/*
+                */}<SortableHeaderCell columnKey="passkeyStatus" title="Passkey Status" className="text-center"/>{/*
+                */}<TableHead className="text-center hidden md:table-cell">Connect Vibe</TableHead>{/*
+                */}<SortableHeaderCell columnKey="expiresAt" title="Expires" className="hidden lg:table-cell"/>{/*
+                */}<TableHead>Intercom Feed</TableHead>{/*
+                */}<TableHead className="text-right">Actions</TableHead>{/*
+              */}</TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedBonds.map((bond) => {
@@ -567,7 +573,7 @@ export default function BondsPage() {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell"> {}
+                    <TableCell className="hidden md:table-cell">
                       <div className="flex flex-col items-start gap-1">
                         {bond.keyType === 'event_attendee' && (
                           <Badge variant="outline" className="border-orange-500 text-orange-500 bg-orange-500/10 text-xs whitespace-nowrap">Attendee</Badge>
@@ -623,7 +629,6 @@ export default function BondsPage() {
                           <TooltipProvider delayDuration={100}>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    {}
                                     <div className={cn(!canStartChat && "cursor-not-allowed")}>
                                         <DropdownMenuItem
                                             onClick={() => canStartChat && handleStartChat(bond.id, bond.targetName)}
