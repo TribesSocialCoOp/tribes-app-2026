@@ -4,11 +4,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MessageSquareText, Users, User, HeartHandshake, Rss } from "lucide-react";
+import { MessageSquareText, Users, User, HeartHandshake, Rss, Filter as FilterIcon } from "lucide-react";
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-// Removed Select imports as it's no longer used for single mood filtering here
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Separator } from '@/components/ui/separator';
+
 import { moodsData as allMoods } from '../moods/page'; 
 import { allMoodStreamPosts as globalMoodPosts } from '../moods/[moodSlug]/page'; 
 
@@ -92,7 +96,7 @@ const moodStreamItems: CommunicationItem[] = globalMoodPosts.map(post => {
 });
 
 
-const allComms = [...familyBondMessages, ...regularBondMessages, ...moodStreamItems].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+const allCommsData = [...familyBondMessages, ...regularBondMessages, ...moodStreamItems].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
 const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   const [displayTime, setDisplayTime] = useState<string>(' '); 
@@ -139,7 +143,7 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
     body = item.message || "";
   } else if (item.type === "mood-stream") {
     icon = <Rss className="h-5 w-5 text-accent" />;
-    title = item.sender || "Unknown"; // Display sender for mood posts
+    title = item.sender || "Unknown"; 
     subtitle = `in ${item.moodName || "Mood"} Stream ${item.tribeName ? `(from ${item.tribeName})` : ''}`;
     body = item.content || "";
   }
@@ -182,27 +186,72 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
 
 
 export default function YourCommsPage() {
-  // Define a static list of "subscribed" mood slugs. This can be made dynamic later.
-  const subscribedMoodSlugs = useMemo(() => ['chill', 'focus', 'create', 'discover'], []);
+  const defaultSelectedMoods = ['chill', 'focus', 'create', 'discover'];
+  const [selectedMoodSlugs, setSelectedMoodSlugs] = useState<string[]>(defaultSelectedMoods);
+  const [isTunerOpen, setIsTunerOpen] = useState(false);
 
-  const familyComms = useMemo(() => allComms.filter(c => c.type === 'family-bond'), []);
-  const regularComms = useMemo(() => allComms.filter(c => c.type === 'regular-bond'), []);
+  const handleMoodSelectionChange = (moodSlug: string, checked: boolean | "indeterminate") => {
+    setSelectedMoodSlugs(prev => 
+      checked ? [...prev, moodSlug] : prev.filter(slug => slug !== moodSlug)
+    );
+  };
+
+  const familyComms = useMemo(() => allCommsData.filter(c => c.type === 'family-bond'), []);
+  const regularComms = useMemo(() => allCommsData.filter(c => c.type === 'regular-bond'), []);
   
   const highlightsFromYourMoods = useMemo(() => {
-    return allComms
-      .filter(c => c.type === 'mood-stream' && c.moodSlug && subscribedMoodSlugs.includes(c.moodSlug))
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) // Ensure they are sorted by most recent
-      .slice(0, 5); // Take the top 5
-  }, [subscribedMoodSlugs]);
+    if (selectedMoodSlugs.length === 0) return [];
+    return allCommsData
+      .filter(c => c.type === 'mood-stream' && c.moodSlug && selectedMoodSlugs.includes(c.moodSlug))
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) 
+      .slice(0, 5); 
+  }, [selectedMoodSlugs]);
 
 
   return (
     <div className="space-y-6 md:space-y-8">
-      <header className="mb-4 md:mb-6"> 
-        <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Intercom</h1>
-        <p className="text-md md:text-lg text-muted-foreground mt-1 md:mt-2">
-          Catch up on messages from your bonds and the latest in your mood streams.
-        </p>
+      <header className="mb-4 md:mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2"> 
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Intercom</h1>
+          <p className="text-md md:text-lg text-muted-foreground mt-1 md:mt-2">
+            Catch up on messages from your bonds and the latest in your mood streams.
+          </p>
+        </div>
+        <Popover open={isTunerOpen} onOpenChange={setIsTunerOpen}>
+            <PopoverTrigger asChild>
+                <Button variant="outline">
+                    <FilterIcon className="mr-2 h-4 w-4" /> Tune Feed
+                </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0">
+                <div className="p-4">
+                    <h4 className="font-medium leading-none text-sm">Tune Your Intercom</h4>
+                    <p className="text-xs text-muted-foreground mt-1">
+                        Select moods to include in your "Highlights" feed.
+                    </p>
+                </div>
+                <Separator />
+                <div className="p-4 space-y-3 max-h-72 overflow-y-auto">
+                    <p className="text-sm font-medium text-foreground">Show posts from these moods:</p>
+                    {allMoods.map(mood => (
+                        <div key={mood.slug} className="flex items-center space-x-2">
+                            <Checkbox
+                                id={`mood-check-${mood.slug}`}
+                                checked={selectedMoodSlugs.includes(mood.slug)}
+                                onCheckedChange={(checked) => handleMoodSelectionChange(mood.slug, checked)}
+                            />
+                            <Label htmlFor={`mood-check-${mood.slug}`} className="text-sm font-normal cursor-pointer flex items-center">
+                               <span className="mr-1.5 text-base">{mood.emoji}</span> {mood.name}
+                            </Label>
+                        </div>
+                    ))}
+                </div>
+                <Separator />
+                <div className="p-4 flex justify-end">
+                    <Button size="sm" onClick={() => setIsTunerOpen(false)}>Done</Button>
+                </div>
+            </PopoverContent>
+        </Popover>
       </header>
 
       <div className="grid grid-cols-1 gap-6">
@@ -235,7 +284,6 @@ export default function YourCommsPage() {
                 <h2 className="text-xl md:text-2xl font-semibold text-foreground flex items-center tracking-normal">
                     <Rss className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-accent" /> Highlights from Your Moods
                 </h2>
-                {/* The Select component for mood filtering is removed */}
             </div>
             {highlightsFromYourMoods.length > 0 ? (
                 <div className="space-y-4">
@@ -245,8 +293,14 @@ export default function YourCommsPage() {
                  <Card className="text-center py-8 shadow-none border border-dashed">
                     <CardContent className="p-4">
                         <Rss className="mx-auto h-10 w-10 text-muted-foreground opacity-60 mb-3" />
-                        <p className="text-muted-foreground">No posts from your favorite moods yet.</p>
-                        <p className="text-xs text-muted-foreground">Explore and subscribe to moods to see highlights here!</p>
+                        <p className="text-muted-foreground">
+                          {selectedMoodSlugs.length > 0 ? "No posts from your selected moods yet." : "Select some moods to see highlights here!"}
+                        </p>
+                        {selectedMoodSlugs.length === 0 && (
+                            <Button variant="link" onClick={() => setIsTunerOpen(true)} className="mt-1">
+                                Tune Your Feed
+                            </Button>
+                        )}
                     </CardContent>
                 </Card>
             )}
@@ -257,7 +311,7 @@ export default function YourCommsPage() {
             </CardFooter>
         </section>
         
-        {allComms.length === 0 && ( 
+        {allCommsData.length === 0 && ( 
             <Card className="text-center py-12 shadow-none sm:shadow-lg">
                 <CardContent className="p-4 sm:p-6">
                     <MessageSquareText className="mx-auto h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground opacity-50 mb-4 sm:mb-6" />
