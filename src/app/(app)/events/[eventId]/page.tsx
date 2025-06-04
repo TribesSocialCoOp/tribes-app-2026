@@ -139,7 +139,7 @@ export default function EventDetailPage() {
               data-ai-hint={event.dataAiHintCover || "event banner"}
               priority
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent" />
           </div>
         )}
         <CardHeader className={cn("p-4 md:p-6", event.coverImage && "relative -mt-12 z-10")}>
