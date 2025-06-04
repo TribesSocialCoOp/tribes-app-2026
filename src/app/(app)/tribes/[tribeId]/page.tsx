@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 
 import { tribesData, type Tribe } from '../page';
 import { moodsData } from '../../moods/page';
-import { allMoodStreamPosts } from '../../moods/[moodSlug]/page';
+import { allMoodStreamPosts } from '../../moods/[moodSlug]/page'; 
 import type { Event } from '../../events/[eventId]/page'; 
 import { sampleEventsData } from '../../events/[eventId]/page'; 
 
@@ -182,27 +182,26 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
 const EventHighlightCard: React.FC<{ event: Event }> = ({ event }) => {
   return (
     <Card className="overflow-hidden shadow-lg border-primary/50 hover:shadow-xl transition-shadow bg-primary/5">
-      {event.coverImage && (
-        <div className="relative h-32 w-full">
-          <Image
-            src={event.coverImage}
-            alt={event.name}
-            layout="fill"
-            objectFit="cover"
-            data-ai-hint={event.dataAiHintCover || "event banner mini"}
-          />
-           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/40 to-black/10" />
-        </div>
-      )}
-      <CardHeader className={cn("p-3", event.coverImage && "relative -mt-8 z-10")}>
+      <CardHeader className="p-3">
         <Badge variant="secondary" className="w-fit mb-1 bg-primary/80 text-primary-foreground text-xs">
           UPCOMING EVENT
         </Badge>
-        <CardTitle className={cn("text-lg font-semibold tracking-tight", event.coverImage ? "text-white drop-shadow-lg" : "text-primary")}>
+        <CardTitle className="text-lg font-semibold tracking-tight text-primary">
           {event.name}
         </CardTitle>
       </CardHeader>
       <CardContent className="p-3 pt-0 text-sm">
+        {event.coverImage && (
+          <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-lg border">
+            <Image
+              src={event.coverImage}
+              alt={event.name}
+              fill
+              style={{ objectFit: 'cover' }}
+              data-ai-hint={event.dataAiHintCover || "event thumbnail"}
+            />
+          </div>
+        )}
         <div className="flex items-center text-muted-foreground mb-2">
           <CalendarDays className="h-4 w-4 mr-2 text-primary" />
           <span>{format(event.eventDate, "MMM dd, yyyy 'at' p")}</span>
@@ -255,8 +254,6 @@ export default function TribeDetailPage() {
 
   const postsInTribe = useMemo(() => {
     if (!tribe) return [];
-    // Simulating fetching all posts for a tribe (member view)
-    // or only promoted posts (non-member view) is handled by combinedFeedItems
     return sampleTribePosts
         .filter(post => post.tribeId === tribe.id)
         .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
@@ -265,12 +262,12 @@ export default function TribeDetailPage() {
   const combinedFeedItems = useMemo(() => {
     if (!tribe) return [];
 
-    const eventItems = (isUserMember ? tribeEvents : []) // Only show events to members for now. Could change this.
+    const eventItems = (isUserMember ? tribeEvents : []) 
       .map(event => ({
         id: `event-${event.id}`,
         type: 'event' as const,
         timestamp: event.eventDate,
-        isPinned: true, // All events are "pinned"
+        isPinned: true, 
         data: event,
       }));
 
