@@ -91,7 +91,7 @@ const getBondTypeDisplay = (bond: Bond): string => {
 
 const getBondTypeBadgeClasses = (bond: Bond): string => {
   if (bond.keyType === "event_promo" || bond.keyType === "event_attendee") {
-    return "border-transparent bg-purple-500 text-white hover:bg-purple-600"; 
+    return "border-transparent bg-purple-500 text-white hover:bg-purple-600";
   }
   switch (bond.bondType) {
     case "family": return "border-transparent bg-pink-500 text-white hover:bg-pink-600";
@@ -201,7 +201,7 @@ export default function BondsPage() {
   const [selectedBondForSettings, setSelectedBondForSettings] = useState<Bond | null>(null);
   const [isIntroductionDialogOpen, setIsIntroductionDialogOpen] = useState(false);
   const [bondToIntroduceFrom, setBondToIntroduceFrom] = useState<Bond | null>(null);
-  
+
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
@@ -325,13 +325,13 @@ export default function BondsPage() {
   const paginatedBonds = useMemo(() => {
     return filteredBonds.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   }, [filteredBonds, currentPage, itemsPerPage]);
-  
+
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
-    setCurrentPage(1); 
+    setCurrentPage(1);
   };
-  
+
   const handleClearSearch = () => {
     setSearchTerm("");
     setCurrentPage(1);
@@ -455,7 +455,6 @@ export default function BondsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[50px] hidden sm:table-cell"></TableHead>
                   <TableHead>Target</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead className="text-center">Passkey Status</TableHead>
@@ -474,14 +473,17 @@ export default function BondsPage() {
 
                   return (
                   <TableRow key={bond.id} className="hover:bg-muted/50">
-                    <TableCell className="hidden sm:table-cell">
-                      {getTargetIcon(bond)}
-                    </TableCell>
-                    <TableCell className="font-medium flex items-center">
-                        {bond.targetName}
-                        {/* Promo badge removed */}
-                        {bond.keyType === 'event_attendee' && <Badge variant="outline" className="ml-2 border-orange-500 text-orange-500 bg-orange-500/10 text-xs">Attendee</Badge>}
-                        {bond.accessTier === 'vip' && <Badge variant="outline" className="ml-2 border-yellow-400 text-yellow-500 bg-yellow-500/10 text-xs flex items-center"><Star className="h-3 w-3 mr-1 fill-current"/>VIP</Badge>}
+                    <TableCell className="font-medium">
+                      <div className="flex items-center space-x-2">
+                        <span className="hidden sm:inline-flex shrink-0 items-center justify-center w-6 h-6">
+                          {getTargetIcon(bond)}
+                        </span>
+                        <span className="flex-grow min-w-0">
+                          {bond.targetName}
+                          {bond.keyType === 'event_attendee' && <Badge variant="outline" className="ml-2 border-orange-500 text-orange-500 bg-orange-500/10 text-xs">Attendee</Badge>}
+                          {bond.accessTier === 'vip' && <Badge variant="outline" className="ml-2 border-yellow-400 text-yellow-500 bg-yellow-500/10 text-xs flex items-center"><Star className="h-3 w-3 mr-1 fill-current"/>VIP</Badge>}
+                        </span>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Badge className={cn(getBondTypeBadgeClasses(bond), "whitespace-nowrap")}>
@@ -528,7 +530,7 @@ export default function BondsPage() {
                             <Tooltip>
                                 <TooltipTrigger asChild>
                                     {/* Div wrapper for TooltipTrigger when child is disabled */}
-                                    <div className={cn(!canStartChat && "cursor-not-allowed")}> 
+                                    <div className={cn(!canStartChat && "cursor-not-allowed")}>
                                         <DropdownMenuItem
                                             onClick={() => canStartChat && handleStartChat(bond.id, bond.targetName)}
                                             disabled={!canStartChat}
