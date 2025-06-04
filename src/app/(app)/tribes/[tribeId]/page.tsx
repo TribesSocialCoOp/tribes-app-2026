@@ -10,13 +10,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Users, MessageSquareText, ThumbsUp, Share2, Edit3, Settings, Rss } from "lucide-react";
+import { ArrowLeft, Users, MessageSquareText, ThumbsUp, SquareArrowUp, Edit3, Settings, Rss } from "lucide-react"; // Changed Share2 to SquareArrowUp
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 
 import { tribesData, type Tribe } from '../page';
 import { moodsData } from '../../moods/page';
-import { allMoodStreamPosts } from '../../moods/[moodSlug]/page'; // Import all mood stream posts
+import { allMoodStreamPosts } from '../../moods/[moodSlug]/page'; 
 
 // Define an interface for a tribe post
 interface TribePost {
@@ -172,7 +172,7 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
           <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
         </Button>
         <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
-          <Share2 className="mr-1.5 h-4 w-4" /> Share
+          <SquareArrowUp className="mr-1.5 h-4 w-4" /> Share 
         </Button>
       </CardFooter>
     </Card>
@@ -221,7 +221,7 @@ export default function TribeDetailPage() {
 
   if (!tribe) {
     return (
-      <div className="flex items-center justify-center h-screen">
+      <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
         <p className="text-muted-foreground">Loading tribe details...</p>
       </div>
     );
