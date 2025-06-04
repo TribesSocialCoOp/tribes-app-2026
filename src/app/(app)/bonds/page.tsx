@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2, Search, ChevronLeft, ChevronRight, Filter as FilterIcon, X as XIcon, Ticket, Star } from "lucide-react";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2, Search, ChevronLeft, ChevronRight, Filter as FilterIcon, X as XIcon, Ticket, Star, PartyPopper } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,8 +72,11 @@ const generateInitialBondsData = (): Bond[] => [
 const MAX_FAMILY_BONDS = 25;
 const DEFAULT_ITEMS_PER_PAGE = 8;
 
-const getBondTypeDisplay = (bondType: BondType): string => {
-  switch (bondType) {
+const getBondTypeDisplay = (bond: Bond): string => {
+  if (bond.keyType === "event_promo" || bond.keyType === "event_attendee") {
+    return "Event";
+  }
+  switch (bond.bondType) {
     case "family": return "Family";
     case "friend": return "Friend";
     case "professional": return "Professional";
@@ -81,13 +84,16 @@ const getBondTypeDisplay = (bondType: BondType): string => {
     case "follower": return "Follower";
     case "supporter": return "Supporter";
     default:
-      const exhaustiveCheck: never = bondType;
+      const exhaustiveCheck: never = bond.bondType;
       return exhaustiveCheck;
   }
 };
 
-const getBondTypeBadgeClasses = (bondType: BondType): string => {
-  switch (bondType) {
+const getBondTypeBadgeClasses = (bond: Bond): string => {
+  if (bond.keyType === "event_promo" || bond.keyType === "event_attendee") {
+    return "border-transparent bg-purple-500 text-white hover:bg-purple-600"; 
+  }
+  switch (bond.bondType) {
     case "family": return "border-transparent bg-pink-500 text-white hover:bg-pink-600";
     case "friend": return "border-transparent bg-orange-500 text-white hover:bg-orange-600";
     case "professional": return "border-transparent bg-sky-600 text-white hover:bg-sky-700";
@@ -95,7 +101,7 @@ const getBondTypeBadgeClasses = (bondType: BondType): string => {
     case "follower": return "border-transparent bg-teal-500 text-white hover:bg-teal-600";
     case "supporter": return "border-transparent bg-emerald-500 text-white hover:bg-emerald-600";
     default:
-      const _exhaustiveCheck: never = bondType;
+      const _exhaustiveCheck: never = bond.bondType;
       return "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80";
   }
 };
@@ -145,11 +151,23 @@ const ConnectVibeIcon: React.FC<{ bond: Bond }> = ({ bond }) => {
 
   if (bond.passkeyStatus === "expired") {
     iconElement = <GhostIcon className="h-6 w-6 text-muted-foreground" />;
-    tooltipText = "Bond expired";
+    tooltipText = (bond.keyType === "event_promo" || bond.keyType === "event_attendee") ? "Event Pass Expired" : "Bond Expired";
+  } else if (bond.keyType === "event_promo" || bond.keyType === "event_attendee") {
+    if (bond.accessTier === "vip") {
+      iconElement = <Star className="h-6 w-6 text-yellow-500 fill-yellow-500" />;
+      tooltipText = "VIP Event Access";
+    } else if (bond.passkeyStatus === 'expires_soon') {
+      iconElement = <PartyPopper className="h-6 w-6 text-yellow-500" />;
+      tooltipText = "Event Pass Expires Soon";
+    } else {
+      iconElement = <PartyPopper className="h-6 w-6 text-purple-500" />;
+      tooltipText = "Event Pass Active";
+    }
   } else if (bond.bondType === "family") {
     iconElement = <Heart className="h-6 w-6 text-pink-500 fill-pink-500" />;
     tooltipText = "Family Bond Vibe";
   } else {
+    // Default non-event, non-family bond vibe based on reconnects
     if (bond.reconnectsCount <= 2) {
       iconElement = <Meh className="h-6 w-6 text-muted-foreground" />;
       tooltipText = "Connection active";
@@ -206,7 +224,7 @@ export default function BondsPage() {
         ...bond,
         passkeyStatus: "active",
         lastRefreshedAt: new Date(),
-        expiresAt: new Date(Date.now() + (bond.bondType === 'family' ? 365 : 30) * 86400000),
+        expiresAt: new Date(Date.now() + (bond.bondType === 'family' ? 365 : 30) * 86400000), // Event key expiry might need special logic
         reconnectsCount: (bond.reconnectsCount || 0) + 1,
       } : bond
     ) : null);
@@ -461,13 +479,13 @@ export default function BondsPage() {
                     </TableCell>
                     <TableCell className="font-medium flex items-center">
                         {bond.targetName}
-                        {bond.keyType === 'event_promo' && <Badge variant="outline" className="ml-2 border-purple-500 text-purple-500 bg-purple-500/10 text-xs">Promo</Badge>}
+                        {/* Promo badge removed */}
                         {bond.keyType === 'event_attendee' && <Badge variant="outline" className="ml-2 border-orange-500 text-orange-500 bg-orange-500/10 text-xs">Attendee</Badge>}
                         {bond.accessTier === 'vip' && <Badge variant="outline" className="ml-2 border-yellow-400 text-yellow-500 bg-yellow-500/10 text-xs flex items-center"><Star className="h-3 w-3 mr-1 fill-current"/>VIP</Badge>}
                     </TableCell>
                     <TableCell>
-                      <Badge className={cn(getBondTypeBadgeClasses(bond.bondType), "whitespace-nowrap")}>
-                        {getBondTypeDisplay(bond.bondType)}
+                      <Badge className={cn(getBondTypeBadgeClasses(bond), "whitespace-nowrap")}>
+                        {getBondTypeDisplay(bond)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-center">
@@ -501,7 +519,7 @@ export default function BondsPage() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                               onClick={() => handleRefreshBond(bond.id)}
-                              disabled={bond.passkeyStatus === 'active' && timeBasedProgress > 90 && bond.bondType !== 'family'}
+                              disabled={bond.passkeyStatus === 'active' && timeBasedProgress > 90 && bond.bondType !== 'family' && bond.keyType === 'standard'}
                           >
                             <RefreshCw className="mr-2 h-4 w-4" /> Refresh
                           </DropdownMenuItem>
@@ -633,3 +651,4 @@ export default function BondsPage() {
     </div>
   );
 }
+
