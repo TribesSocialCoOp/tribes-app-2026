@@ -140,19 +140,31 @@ export default function EventDetailPage() {
               priority
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent" />
+            <CardHeader className="absolute bottom-0 left-0 right-0 z-10 p-4 md:p-6">
+              <CardTitle className="text-3xl md:text-4xl font-bold font-mono tracking-tight text-white drop-shadow-lg">
+                {event.name}
+              </CardTitle>
+              <div className="flex items-center space-x-3 pt-1">
+                <Badge variant={event.isPublic ? "secondary" : "destructive"} className="text-xs py-1 px-2 backdrop-blur-sm bg-black/30 text-white border-white/50">
+                  {event.isPublic ? <><Globe className="inline-block mr-1.5 h-3.5 w-3.5" />Public Event</> : <><Lock className="inline-block mr-1.5 h-3.5 w-3.5" />Private Event</>}
+                </Badge>
+              </div>
+            </CardHeader>
           </div>
         )}
-        <CardHeader className={cn("p-4 md:p-6", event.coverImage && "relative -mt-12 z-10")}>
-          <CardTitle className={cn("text-3xl md:text-4xl font-bold font-mono tracking-tight", event.coverImage ? "text-white drop-shadow-lg" : "text-foreground")}>
-            {event.name}
-          </CardTitle>
-          <div className="flex items-center space-x-3 pt-1">
-            <Badge variant={event.isPublic ? "secondary" : "destructive"} className={cn("text-xs py-1 px-2", event.coverImage && "backdrop-blur-sm bg-black/30 text-white border-white/50")}>
-              {event.isPublic ? <><Globe className="inline-block mr-1.5 h-3.5 w-3.5" />Public Event</> : <><Lock className="inline-block mr-1.5 h-3.5 w-3.5" />Private Event</>}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4 md:p-6 pt-2 space-y-6">
+        {!event.coverImage && (
+           <CardHeader className="p-4 md:p-6">
+             <CardTitle className="text-3xl md:text-4xl font-bold font-mono tracking-tight text-foreground">
+               {event.name}
+             </CardTitle>
+             <div className="flex items-center space-x-3 pt-1">
+               <Badge variant={event.isPublic ? "secondary" : "destructive"} className="text-xs py-1 px-2">
+                 {event.isPublic ? <><Globe className="inline-block mr-1.5 h-3.5 w-3.5" />Public Event</> : <><Lock className="inline-block mr-1.5 h-3.5 w-3.5" />Private Event</>}
+               </Badge>
+             </div>
+           </CardHeader>
+        )}
+        <CardContent className="p-4 md:p-6 space-y-6">
           <div>
             <h3 className="text-lg font-semibold text-foreground mb-1">Event Details</h3>
             <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{event.description}</p>
