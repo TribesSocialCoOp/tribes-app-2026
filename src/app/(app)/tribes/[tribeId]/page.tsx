@@ -130,7 +130,7 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
             <div className="flex items-center space-x-2">
                 <CardDescription className="text-xs">{displayTime}</CardDescription>
                 {isUserMember && isPromoted && (
-                    <div className="flex items-center text-xs text-accent">
+                    <div className="flex items-center text-xs text-accent-foreground">
                         <Rss className="h-3 w-3 mr-1" />
                         <span>In Mood Stream</span>
                     </div>
