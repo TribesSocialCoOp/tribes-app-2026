@@ -153,11 +153,10 @@ const ConnectVibeIcon: React.FC<{ bond: Bond }> = ({ bond }) => {
     iconElement = <GhostIcon className="h-6 w-6 text-muted-foreground" />;
     tooltipText = (bond.keyType === "event_promo" || bond.keyType === "event_attendee") ? "Event Pass Expired" : "Bond Expired";
   } else if (bond.keyType === "event_promo" || bond.keyType === "event_attendee") {
-    // Star is now a separate badge. Default to PartyPopper logic for VIPs too.
     if (bond.passkeyStatus === 'expires_soon') {
       iconElement = <PartyPopper className="h-6 w-6 text-yellow-500" />;
       tooltipText = `Event Pass Expires Soon${bond.accessTier === 'vip' ? ' (VIP)' : ''}`;
-    } else { // Active or other statuses that aren't 'expired' or 'expires_soon'
+    } else { 
       iconElement = <PartyPopper className="h-6 w-6 text-purple-500" />;
       tooltipText = `Event Pass Active${bond.accessTier === 'vip' ? ' (VIP)' : ''}`;
     }
@@ -165,7 +164,6 @@ const ConnectVibeIcon: React.FC<{ bond: Bond }> = ({ bond }) => {
     iconElement = <Heart className="h-6 w-6 text-pink-500 fill-pink-500" />;
     tooltipText = "Family Bond Vibe";
   } else {
-    // Default non-event, non-family bond vibe based on reconnects
     if (bond.reconnectsCount <= 2) {
       iconElement = <Meh className="h-6 w-6 text-muted-foreground" />;
       tooltipText = "Connection active";
@@ -236,7 +234,7 @@ export default function BondsPage() {
         ...bond,
         passkeyStatus: "active",
         lastRefreshedAt: new Date(),
-        expiresAt: new Date(Date.now() + (bond.bondType === 'family' ? 365 : 30) * 86400000), // Event key expiry might need special logic
+        expiresAt: new Date(Date.now() + (bond.bondType === 'family' ? 365 : 30) * 86400000), 
         reconnectsCount: (bond.reconnectsCount || 0) + 1,
       } : bond
     ) : null);
@@ -337,18 +335,17 @@ export default function BondsPage() {
     if (!filteredBonds) return [];
     let sortableBonds = [...filteredBonds];
 
-    if (sortConfig.key === null) { // Default sort
+    if (sortConfig.key === null) { 
       sortableBonds.sort((a, b) => {
         const isAEvent = a.keyType === 'event_promo' || a.keyType === 'event_attendee';
         const isBEvent = b.keyType === 'event_promo' || b.keyType === 'event_attendee';
 
-        if (isAEvent && !isBEvent) return -1; // Events first
-        if (!isAEvent && isBEvent) return 1; // Non-events after
+        if (isAEvent && !isBEvent) return -1; 
+        if (!isAEvent && isBEvent) return 1; 
 
-        // Secondary sort: by target name for both groups
         return a.targetName.localeCompare(b.targetName);
       });
-    } else { // Column-specific sort
+    } else { 
       sortableBonds.sort((a, b) => {
         const aValue = a[sortConfig.key as keyof Bond];
         const bValue = b[sortConfig.key as keyof Bond];
@@ -541,8 +538,8 @@ export default function BondsPage() {
               <TableHeader>
                 <TableRow>
                   <SortableHeaderCell columnKey="targetName" title="Target" />
+                  <TableHead className="hidden md:table-cell w-[80px]"></TableHead> {}
                   <SortableHeaderCell columnKey="bondType" title="Type" />
-                  <TableHead className="hidden md:table-cell w-[80px]"></TableHead> {/* New Unlabeled Tier Column */}
                   <SortableHeaderCell columnKey="passkeyStatus" title="Passkey Status" className="text-center"/>
                   <TableHead className="text-center hidden md:table-cell">Connect Vibe</TableHead>
                   <SortableHeaderCell columnKey="expiresAt" title="Expires" className="hidden lg:table-cell"/>
@@ -570,12 +567,7 @@ export default function BondsPage() {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge className={cn(getBondTypeBadgeClasses(bond), "whitespace-nowrap")}>
-                        {getBondTypeDisplay(bond)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell"> {/* New Tier Cell */}
+                    <TableCell className="hidden md:table-cell"> {}
                       <div className="flex flex-col items-start gap-1">
                         {bond.keyType === 'event_attendee' && (
                           <Badge variant="outline" className="border-orange-500 text-orange-500 bg-orange-500/10 text-xs whitespace-nowrap">Attendee</Badge>
@@ -586,6 +578,11 @@ export default function BondsPage() {
                           </Badge>
                         )}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={cn(getBondTypeBadgeClasses(bond), "whitespace-nowrap")}>
+                        {getBondTypeDisplay(bond)}
+                      </Badge>
                     </TableCell>
                     <TableCell className="text-center">
                       <PasskeyStatusIcon status={bond.passkeyStatus} />
@@ -626,7 +623,7 @@ export default function BondsPage() {
                           <TooltipProvider delayDuration={100}>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    {/* Div wrapper for TooltipTrigger when child is disabled */}
+                                    {}
                                     <div className={cn(!canStartChat && "cursor-not-allowed")}>
                                         <DropdownMenuItem
                                             onClick={() => canStartChat && handleStartChat(bond.id, bond.targetName)}
