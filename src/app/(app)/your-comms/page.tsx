@@ -13,41 +13,41 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from '@/components/ui/separator';
 
-import { moodsData as allMoods } from '../moods/page'; 
-import { allMoodStreamPosts as globalMoodPosts } from '../moods/[moodSlug]/page'; 
+import { moodsData as allMoods } from '../moods/page';
+import { allMoodStreamPosts as globalMoodPosts } from '../moods/[moodSlug]/page';
 
 interface CommunicationItem {
   id: string;
   type: "family-bond" | "regular-bond" | "mood-stream";
-  sender?: string; 
-  bondName?: string; 
-  tribeName?: string; 
-  message?: string; 
-  content?: string; 
-  moodSlug?: string; 
-  moodName?: string; 
+  sender?: string;
+  bondName?: string;
+  tribeName?: string;
+  message?: string;
+  content?: string;
+  moodSlug?: string;
+  moodName?: string;
   avatarSrc?: string;
   avatarFallback?: string;
   timestamp: Date;
-  dataAiHint?: string; 
-  imageUrl?: string; 
-  imageAlt?: string; 
-  dataAiHintImage?: string; 
+  dataAiHint?: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  dataAiHintImage?: string;
 }
 
 const familyBondMessages: CommunicationItem[] = [
   { id: "fb1", type: "family-bond", sender: "Mom", bondName: "Family Link", message: "Don't forget dinner on Sunday! Bringing your favorite pie. 🥧", avatarSrc: "https://placehold.co/40x40.png?text=M", avatarFallback: "M", timestamp: new Date(Date.now() - 3600000 * 1), dataAiHint: "mother family" },
-  { 
-    id: "fb3", 
-    type: "family-bond", 
-    sender: "Dad", 
-    bondName: "Family Link", 
-    message: "Check out this photo from our fishing trip last weekend!", 
-    imageUrl: "https://placehold.co/600x400.png", 
-    imageAlt: "Fishing trip photo", 
-    avatarSrc: "https://placehold.co/40x40.png?text=D", 
-    avatarFallback: "D", 
-    timestamp: new Date(Date.now() - 3600000 * 8), 
+  {
+    id: "fb3",
+    type: "family-bond",
+    sender: "Dad",
+    bondName: "Family Link",
+    message: "Check out this photo from our fishing trip last weekend!",
+    imageUrl: "https://placehold.co/600x400.png",
+    imageAlt: "Fishing trip photo",
+    avatarSrc: "https://placehold.co/40x40.png?text=D",
+    avatarFallback: "D",
+    timestamp: new Date(Date.now() - 3600000 * 8),
     dataAiHint: "father family",
     dataAiHintImage: "fishing nature"
   },
@@ -56,17 +56,17 @@ const familyBondMessages: CommunicationItem[] = [
 
 const regularBondMessages: CommunicationItem[] = [
   { id: "rb1", type: "regular-bond", sender: "Work Group Chat", bondName: "Project Phoenix", message: "Reminder: Project Phoenix sprint review at 2 PM today.", avatarSrc: "https://placehold.co/40x40.png?text=PG", avatarFallback: "PG", timestamp: new Date(Date.now() - 3600000 * 2), dataAiHint: "work group" },
-  { 
-    id: "rb3", 
-    type: "regular-bond", 
-    sender: "Travel Buddies Tribe", 
-    bondName: "Adventure Seekers", 
+  {
+    id: "rb3",
+    type: "regular-bond",
+    sender: "Travel Buddies Tribe",
+    bondName: "Adventure Seekers",
     message: "Just booked flights for the Bali trip! Who's in for a villa?",
     imageUrl: "https://placehold.co/600x350.png",
     imageAlt: "Bali beach",
-    avatarSrc: "https://placehold.co/40x40.png?text=TB", 
-    avatarFallback: "TB", 
-    timestamp: new Date(Date.now() - 3600000 * 20), 
+    avatarSrc: "https://placehold.co/40x40.png?text=TB",
+    avatarFallback: "TB",
+    timestamp: new Date(Date.now() - 3600000 * 20),
     dataAiHint: "travel group",
     dataAiHintImage: "beach travel"
   },
@@ -99,30 +99,30 @@ const moodStreamItems: CommunicationItem[] = globalMoodPosts.map(post => {
 const allCommsData = [...familyBondMessages, ...regularBondMessages, ...moodStreamItems].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
 const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
-  const [displayTime, setDisplayTime] = useState<string>(' '); 
+  const [displayTime, setDisplayTime] = useState<string>(' ');
 
   useEffect(() => {
     const timeSince = (date: Date): string => {
-      const now = new Date(); 
+      const now = new Date();
       const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-      
+
       if (seconds < 5) return "just now";
       if (seconds < 60) return `${Math.floor(seconds)}s ago`;
-      
-      let interval = Math.floor(seconds / 60); 
+
+      let interval = Math.floor(seconds / 60);
       if (interval < 60) return `${interval}m ago`;
-      
-      interval = Math.floor(seconds / 3600); 
+
+      interval = Math.floor(seconds / 3600);
       if (interval < 24) return `${interval}h ago`;
-      
-      interval = Math.floor(seconds / 86400); 
+
+      interval = Math.floor(seconds / 86400);
       if (interval < 7) return `${interval}d ago`;
       if (interval < 30) return `${Math.floor(interval/7)}w ago`;
 
-      interval = Math.floor(seconds / 2592000); 
+      interval = Math.floor(seconds / 2592000);
       if (interval < 12) return `${interval}mo ago`;
-      
-      interval = Math.floor(seconds / 31536000); 
+
+      interval = Math.floor(seconds / 31536000);
       return `${interval}y ago`;
     };
 
@@ -135,15 +135,15 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   let body = "";
 
   if (item.type === "family-bond" || item.type === "regular-bond") {
-    icon = item.type === "family-bond" 
-      ? <HeartHandshake className="h-5 w-5 text-pink-500" /> 
+    icon = item.type === "family-bond"
+      ? <HeartHandshake className="h-5 w-5 text-pink-500" />
       : <User className="h-5 w-5 text-foreground" />;
     title = item.sender || "Unknown Sender";
     subtitle = `via ${item.bondName || "Direct Message"}`;
     body = item.message || "";
   } else if (item.type === "mood-stream") {
     icon = <Rss className="h-5 w-5 text-accent" />;
-    title = item.sender || "Unknown"; 
+    title = item.sender || "Unknown";
     subtitle = `in ${item.moodName || "Mood"} Stream ${item.tribeName ? `(from ${item.tribeName})` : ''}`;
     body = item.content || "";
   }
@@ -169,9 +169,9 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
       <CardContent className="p-3 sm:p-4 pt-2 sm:pt-3">
         {item.imageUrl && (
           <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-md">
-            <Image 
-              src={item.imageUrl} 
-              alt={item.imageAlt || "Communication media"} 
+            <Image
+              src={item.imageUrl}
+              alt={item.imageAlt || "Communication media"}
               fill
               style={{ objectFit: 'cover' }}
               data-ai-hint={item.dataAiHintImage || "media content"}
@@ -187,30 +187,59 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
 
 export default function YourCommsPage() {
   const defaultSelectedMoods = ['chill', 'focus', 'create', 'discover'];
-  const [selectedMoodSlugs, setSelectedMoodSlugs] = useState<string[]>(defaultSelectedMoods);
+  const localStorageKey = 'tribesAppSelectedMoods';
+
+  const [selectedMoodSlugs, setSelectedMoodSlugs] = useState<string[]>([]);
   const [isTunerOpen, setIsTunerOpen] = useState(false);
+  const [hasLoadedFromStorage, setHasLoadedFromStorage] = useState(false);
+
+  useEffect(() => {
+    const storedMoods = localStorage.getItem(localStorageKey);
+    if (storedMoods) {
+      try {
+        const parsedMoods = JSON.parse(storedMoods);
+        if (Array.isArray(parsedMoods) && parsedMoods.every(slug => typeof slug === 'string')) {
+          setSelectedMoodSlugs(parsedMoods);
+        } else {
+          setSelectedMoodSlugs(defaultSelectedMoods);
+        }
+      } catch (e) {
+        setSelectedMoodSlugs(defaultSelectedMoods);
+      }
+    } else {
+      setSelectedMoodSlugs(defaultSelectedMoods);
+    }
+    setHasLoadedFromStorage(true);
+  }, []);
+
+  useEffect(() => {
+    if (hasLoadedFromStorage) {
+      localStorage.setItem(localStorageKey, JSON.stringify(selectedMoodSlugs));
+    }
+  }, [selectedMoodSlugs, hasLoadedFromStorage]);
+
 
   const handleMoodSelectionChange = (moodSlug: string, checked: boolean | "indeterminate") => {
-    setSelectedMoodSlugs(prev => 
+    setSelectedMoodSlugs(prev =>
       checked ? [...prev, moodSlug] : prev.filter(slug => slug !== moodSlug)
     );
   };
 
   const familyComms = useMemo(() => allCommsData.filter(c => c.type === 'family-bond'), []);
   const regularComms = useMemo(() => allCommsData.filter(c => c.type === 'regular-bond'), []);
-  
+
   const highlightsFromYourMoods = useMemo(() => {
     if (selectedMoodSlugs.length === 0) return [];
     return allCommsData
       .filter(c => c.type === 'mood-stream' && c.moodSlug && selectedMoodSlugs.includes(c.moodSlug))
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) 
-      .slice(0, 5); 
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, 5);
   }, [selectedMoodSlugs]);
 
 
   return (
     <div className="space-y-6 md:space-y-8">
-      <header className="mb-4 md:mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2"> 
+      <header className="mb-4 md:mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Intercom</h1>
           <p className="text-md md:text-lg text-muted-foreground mt-1 md:mt-2">
@@ -278,7 +307,7 @@ export default function YourCommsPage() {
           </section>
         )}
 
-        
+
         <section>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-6 mb-3 gap-2">
                 <h2 className="text-xl md:text-2xl font-semibold text-foreground flex items-center tracking-normal">
@@ -310,8 +339,8 @@ export default function YourCommsPage() {
                 </Link>
             </CardFooter>
         </section>
-        
-        {allCommsData.length === 0 && ( 
+
+        {allCommsData.length === 0 && (
             <Card className="text-center py-12 shadow-none sm:shadow-lg">
                 <CardContent className="p-4 sm:p-6">
                     <MessageSquareText className="mx-auto h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground opacity-50 mb-4 sm:mb-6" />
