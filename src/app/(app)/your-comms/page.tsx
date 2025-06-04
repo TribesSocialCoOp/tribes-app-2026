@@ -8,7 +8,7 @@ import { MessageSquareText, Users, User, HeartHandshake, Rss } from "lucide-reac
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Removed Select imports as it's no longer used for single mood filtering here
 import { moodsData as allMoods } from '../moods/page'; 
 import { allMoodStreamPosts as globalMoodPosts } from '../moods/[moodSlug]/page'; 
 
@@ -139,8 +139,8 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
     body = item.message || "";
   } else if (item.type === "mood-stream") {
     icon = <Rss className="h-5 w-5 text-accent" />;
-    title = `New in ${item.moodName || "Mood"} Stream`;
-    subtitle = `from ${item.sender || item.tribeName || "Unknown Tribe"}`;
+    title = item.sender || "Unknown"; // Display sender for mood posts
+    subtitle = `in ${item.moodName || "Mood"} Stream ${item.tribeName ? `(from ${item.tribeName})` : ''}`;
     body = item.content || "";
   }
 
@@ -182,14 +182,18 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
 
 
 export default function YourCommsPage() {
-  const [selectedMoodSlug, setSelectedMoodSlug] = useState<string>(allMoods[0]?.slug || "");
+  // Define a static list of "subscribed" mood slugs. This can be made dynamic later.
+  const subscribedMoodSlugs = useMemo(() => ['chill', 'focus', 'create', 'discover'], []);
 
-  const familyComms = allComms.filter(c => c.type === 'family-bond');
-  const regularComms = allComms.filter(c => c.type === 'regular-bond');
+  const familyComms = useMemo(() => allComms.filter(c => c.type === 'family-bond'), []);
+  const regularComms = useMemo(() => allComms.filter(c => c.type === 'regular-bond'), []);
   
-  const filteredMoodItems = useMemo(() => {
-    return allComms.filter(c => c.type === 'mood-stream' && c.moodSlug === selectedMoodSlug);
-  }, [selectedMoodSlug]);
+  const highlightsFromYourMoods = useMemo(() => {
+    return allComms
+      .filter(c => c.type === 'mood-stream' && c.moodSlug && subscribedMoodSlugs.includes(c.moodSlug))
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()) // Ensure they are sorted by most recent
+      .slice(0, 5); // Take the top 5
+  }, [subscribedMoodSlugs]);
 
 
   return (
@@ -229,33 +233,20 @@ export default function YourCommsPage() {
         <section>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-6 mb-3 gap-2">
                 <h2 className="text-xl md:text-2xl font-semibold text-foreground flex items-center tracking-normal">
-                <Rss className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-accent" /> Mood Stream
+                    <Rss className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-accent" /> Highlights from Your Moods
                 </h2>
-                <div className="w-full sm:w-auto sm:min-w-[200px]">
-                <Select value={selectedMoodSlug} onValueChange={setSelectedMoodSlug}>
-                    <SelectTrigger className="w-full text-base">
-                    <SelectValue placeholder="Tune your mood..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                    {allMoods.map(mood => (
-                        <SelectItem key={mood.slug} value={mood.slug} className="text-base">
-                        <span className="mr-2">{mood.emoji}</span>{mood.name}
-                        </SelectItem>
-                    ))}
-                    </SelectContent>
-                </Select>
-                </div>
+                {/* The Select component for mood filtering is removed */}
             </div>
-            {filteredMoodItems.length > 0 ? (
+            {highlightsFromYourMoods.length > 0 ? (
                 <div className="space-y-4">
-                {filteredMoodItems.slice(0, 5).map(item => <YourCommsItem key={item.id} item={item} />)}
+                {highlightsFromYourMoods.map(item => <YourCommsItem key={item.id} item={item} />)}
                 </div>
             ) : (
                  <Card className="text-center py-8 shadow-none border border-dashed">
                     <CardContent className="p-4">
                         <Rss className="mx-auto h-10 w-10 text-muted-foreground opacity-60 mb-3" />
-                        <p className="text-muted-foreground">No posts for this mood yet.</p>
-                        <p className="text-xs text-muted-foreground">Try tuning to a different mood!</p>
+                        <p className="text-muted-foreground">No posts from your favorite moods yet.</p>
+                        <p className="text-xs text-muted-foreground">Explore and subscribe to moods to see highlights here!</p>
                     </CardContent>
                 </Card>
             )}
