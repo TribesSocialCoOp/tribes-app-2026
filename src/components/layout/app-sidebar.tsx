@@ -23,7 +23,8 @@ import {
   Sparkles,
   FileText,
   PlusCircle,
-  Link2 
+  Link2,
+  CalendarPlus // Added for Create Event
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -58,11 +59,19 @@ export function AppSidebar() {
       <SidebarContent className="flex-1 p-2">
         <SidebarMenu className="space-y-1">
           <Link href="/tribes/create" passHref>
-            <Button variant="default" className="w-full justify-start group-data-[collapsible=icon]:justify-center my-2 bg-accent text-accent-foreground hover:bg-accent/90">
+            <Button variant="default" className="w-full justify-start group-data-[collapsible=icon]:justify-center my-1 bg-accent text-accent-foreground hover:bg-accent/90">
                 <PlusCircle className="h-5 w-5 mr-2 group-data-[collapsible=icon]:mr-0" />
                 <span className="group-data-[collapsible=icon]:hidden">New Tribe</span>
             </Button>
           </Link>
+          
+          <Link href="/events/create" passHref>
+            <Button variant="default" className="w-full justify-start group-data-[collapsible=icon]:justify-center my-1 bg-accent text-accent-foreground hover:bg-accent/90">
+                <CalendarPlus className="h-5 w-5 mr-2 group-data-[collapsible=icon]:mr-0" />
+                <span className="group-data-[collapsible=icon]:hidden">New Event</span>
+            </Button>
+          </Link>
+
 
           {navItems.map((item) => (
             <SidebarMenuItem key={item.href}>
