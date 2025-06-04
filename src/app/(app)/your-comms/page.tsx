@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MessageSquareText, Users, User, HeartHandshake, Rss, Filter as FilterIcon } from "lucide-react";
+import { MessageSquareText, Users, User, HeartHandshake, Rss, Filter as FilterIcon, PlusCircle } from "lucide-react";
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -229,12 +229,14 @@ export default function YourCommsPage() {
   const regularComms = useMemo(() => allCommsData.filter(c => c.type === 'regular-bond'), []);
 
   const highlightsFromYourMoods = useMemo(() => {
-    if (selectedMoodSlugs.length === 0) return [];
+    if (selectedMoodSlugs.length === 0 && hasLoadedFromStorage) return []; // if nothing selected AND loaded, show nothing
+    const slugsToFilter = selectedMoodSlugs.length > 0 ? selectedMoodSlugs : (hasLoadedFromStorage ? [] : defaultSelectedMoods); // Use defaults if not loaded yet
+    
     return allCommsData
-      .filter(c => c.type === 'mood-stream' && c.moodSlug && selectedMoodSlugs.includes(c.moodSlug))
+      .filter(c => c.type === 'mood-stream' && c.moodSlug && slugsToFilter.includes(c.moodSlug))
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, 5);
-  }, [selectedMoodSlugs]);
+  }, [selectedMoodSlugs, hasLoadedFromStorage]);
 
 
   return (
@@ -256,24 +258,39 @@ export default function YourCommsPage() {
                 <div className="p-4">
                     <h4 className="font-medium leading-none text-sm">Tune Your Intercom</h4>
                     <p className="text-xs text-muted-foreground mt-1">
-                        Select moods to include in your "Highlights" feed.
+                        Select sources to include in your "Highlights" feed.
                     </p>
                 </div>
                 <Separator />
-                <div className="p-4 space-y-3 max-h-72 overflow-y-auto">
-                    <p className="text-sm font-medium text-foreground">Show posts from these moods:</p>
-                    {allMoods.map(mood => (
-                        <div key={mood.slug} className="flex items-center space-x-2">
-                            <Checkbox
-                                id={`mood-check-${mood.slug}`}
-                                checked={selectedMoodSlugs.includes(mood.slug)}
-                                onCheckedChange={(checked) => handleMoodSelectionChange(mood.slug, checked)}
-                            />
-                            <Label htmlFor={`mood-check-${mood.slug}`} className="text-sm font-normal cursor-pointer flex items-center">
-                               <span className="mr-1.5 text-base">{mood.emoji}</span> {mood.name}
-                            </Label>
+                <div className="p-4 space-y-1 max-h-96 overflow-y-auto">
+                    <p className="text-sm font-medium text-foreground mb-2">Filter by Moods:</p>
+                    <div className="space-y-2 pl-1">
+                        {allMoods.map(mood => (
+                            <div key={mood.slug} className="flex items-center space-x-2">
+                                <Checkbox
+                                    id={`mood-check-${mood.slug}`}
+                                    checked={selectedMoodSlugs.includes(mood.slug)}
+                                    onCheckedChange={(checked) => handleMoodSelectionChange(mood.slug, checked)}
+                                />
+                                <Label htmlFor={`mood-check-${mood.slug}`} className="text-sm font-normal cursor-pointer flex items-center">
+                                   <span className="mr-1.5 text-base">{mood.emoji}</span> {mood.name}
+                                </Label>
+                            </div>
+                        ))}
+                    </div>
+                    <Separator className="my-4" />
+                    <div>
+                        <p className="text-sm font-medium text-foreground mb-2">Your Custom Streams:</p>
+                        <div className="space-y-2 pl-1">
+                            <p className="text-xs text-muted-foreground p-2 text-center bg-muted/50 rounded-md">
+                                Soon you'll be able to create and select custom streams combining your favorite tribes and moods!
+                            </p>
+                            <Button variant="outline" size="sm" className="w-full mt-2" disabled>
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Create New Custom Stream
+                            </Button>
                         </div>
-                    ))}
+                    </div>
                 </div>
                 <Separator />
                 <div className="p-4 flex justify-end">
@@ -323,9 +340,9 @@ export default function YourCommsPage() {
                     <CardContent className="p-4">
                         <Rss className="mx-auto h-10 w-10 text-muted-foreground opacity-60 mb-3" />
                         <p className="text-muted-foreground">
-                          {selectedMoodSlugs.length > 0 ? "No posts from your selected moods yet." : "Select some moods to see highlights here!"}
+                          {(selectedMoodSlugs.length > 0 || !hasLoadedFromStorage) ? "No posts from your selected moods yet." : "Select some moods to see highlights here!"}
                         </p>
-                        {selectedMoodSlugs.length === 0 && (
+                        {(selectedMoodSlugs.length === 0 && hasLoadedFromStorage) && (
                             <Button variant="link" onClick={() => setIsTunerOpen(true)} className="mt-1">
                                 Tune Your Feed
                             </Button>
