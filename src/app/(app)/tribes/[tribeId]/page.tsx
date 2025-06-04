@@ -4,90 +4,101 @@
 import { useParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Users, MessageSquareText, ThumbsUp, Share2, Edit3, Image as ImageIcon, Settings } from "lucide-react";
+import { ArrowLeft, Users, MessageSquareText, ThumbsUp, Share2, Edit3, Settings, Rss } from "lucide-react"; // Added Rss
 
-import { tribesData, type Tribe } from '../page'; // Assuming tribesData and Tribe type are exported
-import { moodsData } from '../../moods/page'; // For mood badges
+import { tribesData, type Tribe } from '../page';
+import { moodsData } from '../../moods/page';
+import { allMoodStreamPosts } from '../../moods/[moodSlug]/page'; // Import all mood stream posts
 
 // Define an interface for a tribe post
 interface TribePost {
   id: string;
   tribeId: string;
   authorName: string;
-  authorAvatar?: string; // URL to avatar image
+  authorAvatar?: string;
   authorAvatarFallback: string;
   timestamp: Date;
   title?: string;
   content: string;
-  imageUrl?: string; // URL to an image for the post
+  imageUrl?: string;
   imageAlt?: string;
   dataAiHintAvatar?: string;
   dataAiHintImage?: string;
   vibes?: number;
   comments?: number;
+  isPromotedToMoodStream?: boolean; // Flag to indicate promotion
 }
 
-// Sample data for tribe posts (ensure tribeId matches existing tribes)
+// Sample data for tribe posts
+// Ensure some IDs match posts in `allMoodStreamPosts` to simulate promotion
 const sampleTribePosts: TribePost[] = [
-  {
-    id: "post1", tribeId: "1", authorName: "AI Enthusiast", authorAvatarFallback: "AE",
-    timestamp: new Date(Date.now() - 3600000 * 2), // 2 hours ago
-    title: "Breakthrough in Generative Models!",
-    content: "Just read an amazing paper on a new technique for generating highly realistic images. The implications for creative industries are huge. What are your thoughts?",
-    imageUrl: "https://placehold.co/600x400.png", imageAlt: "Abstract AI art", dataAiHintImage: "abstract ai",
-    vibes: 120, comments: 15, dataAiHintAvatar: "researcher scientist",
+  { // Local post for AI Innovators
+    id: "tribe_post_ai_local1", tribeId: "1", authorName: "AI Enthusiast", authorAvatarFallback: "AE",
+    timestamp: new Date(Date.now() - 3600000 * 2),
+    title: "Local Discussion: Ethics in AI Development",
+    content: "Starting a thread specifically for our tribe members on the ethical considerations of recent AI breakthroughs. What are your immediate thoughts?",
+    vibes: 30, comments: 5, dataAiHintAvatar: "researcher scientist",
   },
-  {
-    id: "post2", tribeId: "1", authorName: "Code Wiz", authorAvatarFallback: "CW",
-    timestamp: new Date(Date.now() - 3600000 * 5), // 5 hours ago
-    content: "Anyone experimented with the latest Genkit features? Looking for tips on integrating custom tools.",
-    vibes: 75, comments: 8, dataAiHintAvatar: "developer coder",
+  { // Promoted post for AI Innovators (matches msp2 from allMoodStreamPosts)
+    id: "msp2", tribeId: "1", authorName: "ProductivePro", authorAvatarFallback: "PP",
+    timestamp: new Date(Date.now() - 3600000 * 3),
+    title: "My Top 5 Productivity Hacks for Deep Work",
+    content: "Sharing my secrets to staying in the zone! Tip #1: Time blocking is key. This was also shared to the Focus mood stream.",
+    imageUrl: "https://placehold.co/600x400.png?text=FocusHacks", imageAlt: "Productivity hacks", dataAiHintImage: "productivity office",
+    vibes: 125, comments: 18, dataAiHintAvatar: "work professional",
   },
-  {
-    id: "post3", tribeId: "2", authorName: "Trail Blazer", authorAvatarFallback: "TB",
-    timestamp: new Date(Date.now() - 86400000 * 1), // 1 day ago
-    title: "Weekend Hike Recap: Mountain Peak",
-    content: "The views from Mountain Peak trail were absolutely stunning this weekend! Sharing some photos. Highly recommend this route if you're up for a challenge.",
+  { // Local post for Weekend Hikers
+    id: "tribe_post_hikers_local1", tribeId: "2", authorName: "Trail Blazer", authorAvatarFallback: "TB",
+    timestamp: new Date(Date.now() - 86400000 * 1),
+    title: "Weekend Hike Recap: Mountain Peak (Tribe Exclusive Pics)",
+    content: "The views from Mountain Peak trail were absolutely stunning this weekend! Sharing some extra photos just for our tribe. Highly recommend this route.",
     imageUrl: "https://placehold.co/600x450.png", imageAlt: "Mountain landscape", dataAiHintImage: "mountain landscape",
     vibes: 210, comments: 32, dataAiHintAvatar: "hiker adventurer",
   },
-  {
-    id: "post4", tribeId: "2", authorName: "Nature Lover", authorAvatarFallback: "NL",
-    timestamp: new Date(Date.now() - 3600000 * 8), // 8 hours ago
-    content: "Spotted some rare wildflowers on the valley loop trail today. Anyone know what these are called?",
-    vibes: 60, comments: 7, dataAiHintAvatar: "nature person",
+   { // Promoted post for Weekend Hikers (matches msp9 from allMoodStreamPosts - assuming it can be relevant to a hiking group that also visits local markets)
+    id: "msp9", tribeId: "2", authorName: "LocalFoodie", authorAvatarFallback: "LF",
+    timestamp: new Date(Date.now() - 3600000 * 7), // Adjusted timestamp
+    title: "Post-Hike Find: Amazing Farmers Market!",
+    content: "After our hike near Miller's Pond, stumbled upon this fantastic farmers market. Great fuel and cool local crafts! Shared this to Discover stream too.",
+    imageUrl: "https://placehold.co/600x420.png", imageAlt: "Farmers market produce", dataAiHintImage: "market food",
+    vibes: 85, comments: 12, dataAiHintAvatar: "foodie person",
   },
-  {
-    id: "post5", tribeId: "7", authorName: "GigGoer", authorAvatarFallback: "GG",
+  { // Local post for The Local Gig Circuit
+    id: "tribe_post_music_local1", tribeId: "7", authorName: "GigGoer", authorAvatarFallback: "GG",
     timestamp: new Date(Date.now() - 3600000 * 1),
-    title: "Last Night's Show Was Epic!",
-    content: "The Local Band absolutely crushed it at The Underground last night! Who else was there? The energy was insane. #livemusic",
+    title: "Last Night's Show Was Epic! (Tribe Thoughts)",
+    content: "The Local Band absolutely crushed it at The Underground! What did our tribe members think of the new songs?",
     imageUrl: "https://placehold.co/600x380.png", imageAlt: "Concert crowd", dataAiHintImage: "concert crowd",
     vibes: 95, comments: 22, dataAiHintAvatar: "music fan",
   },
-  {
-    id: "post6", tribeId: "7", authorName: "Venue Promoter", authorAvatarFallback: "VP",
-    timestamp: new Date(Date.now() - 86400000 * 2),
-    content: "Just announced: Indie Fest is coming to town next month! Check out the lineup on our website. Early bird tickets available now through 'The Local Gig Circuit' tribe pass!",
-    vibes: 150, comments: 18, dataAiHintAvatar: "promoter event",
+  { // Promoted post for The Local Gig Circuit (matches msp8)
+    id: "msp8", tribeId: "7", authorName: "RockstarDev", authorAvatarFallback: "RD",
+    timestamp: new Date(Date.now() - 3600000 * 8),
+    title: "My Stage Setup for Tonight's Gig",
+    content: "Sound check done! Ready to rock the 'Music Hall' tonight. Who's coming? Also shared to Create mood stream!",
+    imageUrl: "https://placehold.co/600x380.png", imageAlt: "Stage setup with instruments", dataAiHintImage: "stage music",
+    vibes: 150, comments: 18, dataAiHintAvatar: "musician band",
   },
-  { // Add a post for a tribe that might not have many, to test empty state
+  { // Local post for Indie Game Devs
     id: "post7", tribeId: "3", authorName: "DevQuest", authorAvatarFallback: "DQ",
     timestamp: new Date(Date.now() - 3600000 * 3),
-    title: "Seeking Beta Testers for New Puzzle Game",
-    content: "Our indie studio is looking for beta testers for our upcoming mobile puzzle game 'Color Grid'. DM me if you're interested! (Private tribe post)",
+    title: "Seeking Beta Testers for New Puzzle Game (Tribe Only)",
+    content: "Our indie studio is looking for beta testers for our upcoming mobile puzzle game 'Color Grid'. DM me if you're interested! This is a private post for tribe members.",
     vibes: 40, comments: 5, dataAiHintAvatar: "game developer",
   },
 ];
 
+// Helper to create a Set of IDs from mood stream posts for efficient lookup
+const moodStreamPostIds = new Set(allMoodStreamPosts.map(p => p.id));
+
 // Component to render individual TribePost
-const TribePostCard: React.FC<{ post: TribePost }> = ({ post }) => {
+const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMember: boolean }> = ({ post, isPromoted, isUserMember }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
 
   useEffect(() => {
@@ -116,7 +127,15 @@ const TribePostCard: React.FC<{ post: TribePost }> = ({ post }) => {
           </Avatar>
           <div className="flex-1">
             <CardTitle className="text-md font-semibold tracking-normal">{post.authorName}</CardTitle>
-            <CardDescription className="text-xs">{displayTime}</CardDescription>
+            <div className="flex items-center space-x-2">
+                <CardDescription className="text-xs">{displayTime}</CardDescription>
+                {isUserMember && isPromoted && (
+                    <div className="flex items-center text-xs text-accent">
+                        <Rss className="h-3 w-3 mr-1" />
+                        <span>In Mood Stream</span>
+                    </div>
+                )}
+            </div>
           </div>
           {/* Future: Add options like edit/delete for post author */}
         </div>
@@ -158,23 +177,38 @@ export default function TribeDetailPage() {
   const tribeId = params.tribeId as string;
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
-  const [postsInTribe, setPostsInTribe] = useState<TribePost[]>([]);
+  
+  // SIMULATE USER MEMBERSHIP - toggle this to test views
+  const isUserMember = true; 
+  // const isUserMember = false; 
+
 
   useEffect(() => {
     if (tribeId) {
       const currentTribe = tribesData.find(t => t.id === tribeId);
       if (currentTribe) {
         setTribe(currentTribe);
-        const filteredPosts = sampleTribePosts
-          .filter(post => post.tribeId === tribeId)
-          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-        setPostsInTribe(filteredPosts);
       } else {
-        // Handle tribe not found, e.g., redirect or show error
         router.push('/tribes');
       }
     }
   }, [tribeId, router]);
+
+  const postsInTribe = useMemo(() => {
+    if (!tribe) return [];
+    
+    const allTribeOriginalPosts = sampleTribePosts
+        .filter(post => post.tribeId === tribe.id)
+        .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+    if (isUserMember) {
+        return allTribeOriginalPosts; // Members see all posts
+    } else {
+        // Non-members only see posts that are also in mood streams
+        return allTribeOriginalPosts.filter(post => moodStreamPostIds.has(post.id));
+    }
+  }, [tribe, isUserMember]);
+
 
   if (!tribe) {
     return (
@@ -255,15 +289,24 @@ export default function TribeDetailPage() {
 
       {/* Feed of Tribe Posts */}
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold text-foreground tracking-normal">Recent Posts</h2>
+        <h2 className="text-xl font-semibold text-foreground tracking-normal">
+            {isUserMember ? "All Posts" : "Featured Posts in Mood Streams"}
+        </h2>
         {postsInTribe.length > 0 ? (
-          postsInTribe.map(post => <TribePostCard key={post.id} post={post} />)
+          postsInTribe.map(post => {
+            const isPromoted = moodStreamPostIds.has(post.id);
+            return <TribePostCard key={post.id} post={post} isPromoted={isPromoted} isUserMember={isUserMember} />;
+          })
         ) : (
           <Card className="text-center py-12 shadow-md">
             <CardContent className="flex flex-col items-center justify-center">
               <MessageSquareText className="h-16 w-16 text-muted-foreground opacity-50 mb-4" />
-              <h3 className="text-xl font-semibold text-foreground mb-1">No Posts Yet</h3>
-              <p className="text-muted-foreground">Be the first to share something in <span className="font-semibold">{tribe.name}</span>!</p>
+              <h3 className="text-xl font-semibold text-foreground mb-1">
+                {isUserMember ? `No Posts Yet in ${tribe.name}` : `No Featured Posts from ${tribe.name} in Mood Streams`}
+              </h3>
+              <p className="text-muted-foreground">
+                {isUserMember ? `Be the first to share something!` : "Check back later for promoted content from this tribe."}
+              </p>
             </CardContent>
           </Card>
         )}
@@ -272,3 +315,4 @@ export default function TribeDetailPage() {
   );
 }
 
+    
