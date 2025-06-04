@@ -11,7 +11,7 @@ import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { cn } from '@/lib/utils';
 
-interface Tribe {
+export interface Tribe { // Added export
   id: string;
   name: string;
   description: string;
@@ -22,7 +22,7 @@ interface Tribe {
   moods?: string[]; // Optional: to associate tribes with moods for discovery
 }
 
-const tribesData: Tribe[] = [
+export const tribesData: Tribe[] = [ // Added export
   { id: "1", name: "AI Innovators", description: "Exploring the future of artificial intelligence and machine learning. Professional networking and project discussions.", members: 128, isPublic: true, cover: "https://placehold.co/400x200.png?text=AI" , dataAiHint: "technology innovation", moods: ["focus", "learn"] },
   { id: "2", name: "Weekend Hikers Club", description: "Sharing trails, tips, and breathtaking views from our adventures in nature.", members: 76, isPublic: true, cover: "https://placehold.co/400x200.png?text=Hiking" , dataAiHint: "nature mountain", moods: ["discover", "connect"] },
   { id: "3", name: "Indie Game Devs", description: "A community for indie game developers to collaborate, share projects, and find local playtesters.", members: 245, isPublic: false, cover: "https://placehold.co/400x200.png?text=Games" , dataAiHint: "gaming development", moods: ["create", "focus", "game"] },
@@ -86,23 +86,25 @@ export default function TribesPage() {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {tribes.map((tribe) => (
         <Card key={tribe.id} className="shadow-lg hover:shadow-xl transition-shadow flex flex-col overflow-hidden">
-          <div className="relative h-40 w-full">
-            <Image src={tribe.cover} alt={tribe.name} layout="fill" objectFit="cover" data-ai-hint={tribe.dataAiHint} />
-            <Badge variant={tribe.isPublic ? "secondary" : "outline"} className={cn("absolute top-2 right-2", !tribe.isPublic && "border-pink-500 text-pink-500 bg-pink-500/10")}>
-              {tribe.isPublic ? "Public" : "Private"}
-            </Badge>
-          </div>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xl font-semibold truncate tracking-normal">{tribe.name}</CardTitle>
-          </CardHeader>
-          <CardContent className="flex-grow pb-2">
-            <CardDescription className="text-sm h-16 overflow-hidden text-ellipsis leading-relaxed">{tribe.description}</CardDescription>
-            <div className="flex items-center text-xs text-muted-foreground mt-2 space-x-3">
-              <div className="flex items-center"><Users className="h-3.5 w-3.5 mr-1"/> {tribe.members} members</div>
-              <div className="flex items-center"><Smile className="h-3.5 w-3.5 mr-1"/> {Math.floor(Math.random()*500 + 50)} Vibes</div>
-              <div className="flex items-center"><MessageCircle className="h-3.5 w-3.5 mr-1"/> {Math.floor(Math.random()*100 + 20)} Posts</div>
+          <Link href={`/tribes/${tribe.id}`} passHref className="contents"> {/* Make whole card clickable */}
+            <div className="relative h-40 w-full">
+              <Image src={tribe.cover} alt={tribe.name} layout="fill" objectFit="cover" data-ai-hint={tribe.dataAiHint} />
+              <Badge variant={tribe.isPublic ? "secondary" : "outline"} className={cn("absolute top-2 right-2", !tribe.isPublic && "border-pink-500 text-pink-500 bg-pink-500/10")}>
+                {tribe.isPublic ? "Public" : "Private"}
+              </Badge>
             </div>
-          </CardContent>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xl font-semibold truncate tracking-normal">{tribe.name}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex-grow pb-2">
+              <CardDescription className="text-sm h-16 overflow-hidden text-ellipsis leading-relaxed">{tribe.description}</CardDescription>
+              <div className="flex items-center text-xs text-muted-foreground mt-2 space-x-3">
+                <div className="flex items-center"><Users className="h-3.5 w-3.5 mr-1"/> {tribe.members} members</div>
+                <div className="flex items-center"><Smile className="h-3.5 w-3.5 mr-1"/> {Math.floor(Math.random()*500 + 50)} Vibes</div>
+                <div className="flex items-center"><MessageCircle className="h-3.5 w-3.5 mr-1"/> {Math.floor(Math.random()*100 + 20)} Posts</div>
+              </div>
+            </CardContent>
+          </Link>
           <CardFooter>
             {isMyTribeList ? (
               <Link href={`/tribes/${tribe.id}`} passHref className="w-full">
@@ -183,3 +185,5 @@ export default function TribesPage() {
     </div>
   );
 }
+
+    
