@@ -10,7 +10,7 @@ import { format } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, CalendarDays, Users, Globe, Lock, Tag, Info, MapPin } from "lucide-react";
+import { ArrowLeft, CalendarDays, Users, Globe, Lock, Tag, Info, MapPin, ExternalLink } from "lucide-react";
 import { cn } from '@/lib/utils';
 
 // Define an interface for an Event
@@ -131,6 +131,9 @@ export default function EventDetailPage() {
       </div>
     );
   }
+  
+  const googleMapsQuery = encodeURIComponent(`${event.locationName}, ${event.locationCityRegion}`);
+  const googleMapsUrl = `https://www.google.com/maps/search/?api=1&query=${googleMapsQuery}`;
 
   return (
     <div className="space-y-6 pb-12 max-w-4xl mx-auto">
@@ -193,22 +196,49 @@ export default function EventDetailPage() {
               <div>
                 <p className="font-semibold text-foreground">Organized By</p>
                 <p className="text-muted-foreground">{event.associatedTribe}</p>
-                {/* Future: Link to tribe page: <Link href={`/tribes/${tribe.associatedTribe}`} className="text-primary hover:underline">{event.associatedTribe}</Link> */}
               </div>
             </div>
           </div>
 
           {(event.locationName || event.locationCityRegion) && (
-             <div className="flex items-start p-3 bg-muted/50 rounded-md text-sm">
-              <MapPin className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
-              <div>
-                <p className="font-semibold text-foreground">Location</p>
-                {event.locationName && <p className="text-muted-foreground">{event.locationName}</p>}
-                {event.locationCityRegion && <p className="text-muted-foreground">{event.locationCityRegion}</p>}
-                {event.locationName === "Online" && !event.locationCityRegion && <p className="text-muted-foreground">This is an online event.</p>}
+             <div className="p-3 bg-muted/50 rounded-md text-sm space-y-3">
+              <div className="flex items-start">
+                <MapPin className="h-5 w-5 text-primary mr-3 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground">Location</p>
+                  {event.locationName && <p className="text-muted-foreground">{event.locationName}</p>}
+                  {event.locationCityRegion && <p className="text-muted-foreground">{event.locationCityRegion}</p>}
+                  {event.locationName.toLowerCase() === "online" && !event.locationCityRegion && <p className="text-muted-foreground">This is an online event.</p>}
+                </div>
               </div>
+              {event.locationName.toLowerCase() !== "online" && (
+                <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                    <Button variant="outline" size="sm">
+                        <ExternalLink className="mr-2 h-4 w-4" /> View on Map
+                    </Button>
+                </a>
+              )}
             </div>
           )}
+
+          <div className="mt-4 p-3 bg-muted/30 rounded-md space-y-2">
+            <h4 className="text-md font-semibold text-foreground flex items-center">
+                <MapPin className="h-4 w-4 mr-2 text-muted-foreground"/>
+                Map Preview
+            </h4>
+            <div className="aspect-video bg-muted rounded-md flex items-center justify-center relative overflow-hidden border">
+                <Image 
+                    src="https://placehold.co/600x300.png" 
+                    alt="Map placeholder"
+                    layout="fill"
+                    objectFit="cover"
+                    data-ai-hint="map location placeholder"
+                />
+                <p className="absolute bottom-2 right-2 text-xs bg-black/50 text-white px-2 py-1 rounded">
+                    Interactive map preview coming soon
+                </p>
+            </div>
+          </div>
           
           {event.keywords && (
             <div>
@@ -224,7 +254,6 @@ export default function EventDetailPage() {
             </div>
           )}
 
-          {/* Placeholder for RSVP / Ticket Button */}
           <div className="pt-4">
             <Button size="lg" className="w-full md:w-auto bg-accent text-accent-foreground hover:bg-accent/90">
               RSVP / Get Tickets (Coming Soon)
@@ -237,3 +266,5 @@ export default function EventDetailPage() {
   );
 }
 
+
+    
