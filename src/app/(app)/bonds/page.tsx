@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2, Search, ChevronLeft, ChevronRight, Filter as FilterIcon, X as XIcon, Ticket, Star, PartyPopper } from "lucide-react";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2, Search, ChevronLeft, ChevronRight, Filter as FilterIcon, X as XIcon, Ticket, Star, PartyPopper, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -194,6 +194,19 @@ const ConnectVibeIcon: React.FC<{ bond: Bond }> = ({ bond }) => {
   );
 };
 
+type SortableBondKeys = 'targetName' | 'bondType' | 'passkeyStatus' | 'expiresAt';
+
+interface SortConfig {
+  key: SortableBondKeys | null;
+  direction: 'ascending' | 'descending';
+}
+
+const passkeySortOrder: Record<Bond["passkeyStatus"], number> = {
+  active: 1,
+  expires_soon: 2,
+  needs_refresh: 3,
+  expired: 4,
+};
 
 export default function BondsPage() {
   const [bonds, setBonds] = useState<Bond[] | null>(null);
@@ -205,6 +218,7 @@ export default function BondsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: 'ascending' });
 
 
   useEffect(() => {
@@ -321,10 +335,51 @@ export default function BondsPage() {
     );
   }, [bonds, searchTerm]);
 
-  const totalPages = Math.ceil(filteredBonds.length / itemsPerPage);
+  const sortedBonds = useMemo(() => {
+    if (!filteredBonds) return [];
+    let sortableBonds = [...filteredBonds];
+
+    if (sortConfig.key === null) { // Default sort
+      sortableBonds.sort((a, b) => {
+        const isAEvent = a.keyType === 'event_promo' || a.keyType === 'event_attendee';
+        const isBEvent = b.keyType === 'event_promo' || b.keyType === 'event_attendee';
+
+        if (isAEvent && !isBEvent) return -1; // Events first
+        if (!isAEvent && isBEvent) return 1; // Non-events after
+
+        // Secondary sort: by target name for both groups
+        return a.targetName.localeCompare(b.targetName);
+      });
+    } else { // Column-specific sort
+      sortableBonds.sort((a, b) => {
+        const aValue = a[sortConfig.key as keyof Bond];
+        const bValue = b[sortConfig.key as keyof Bond];
+        let comparison = 0;
+
+        if (aValue === null || aValue === undefined) comparison = 1;
+        else if (bValue === null || bValue === undefined) comparison = -1;
+        else if (sortConfig.key === 'passkeyStatus') {
+           comparison = passkeySortOrder[aValue as Bond["passkeyStatus"]] - passkeySortOrder[bValue as Bond["passkeyStatus"]];
+        } else if (typeof aValue === 'string' && typeof bValue === 'string') {
+          comparison = aValue.localeCompare(bValue);
+        } else if (aValue instanceof Date && bValue instanceof Date) {
+          comparison = aValue.getTime() - bValue.getTime();
+        } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+          comparison = aValue - bValue;
+        } else if (typeof aValue === 'boolean' && typeof bValue === 'boolean') {
+          comparison = aValue === bValue ? 0 : aValue ? -1 : 1;
+        }
+        return sortConfig.direction === 'ascending' ? comparison : comparison * -1;
+      });
+    }
+    return sortableBonds;
+  }, [filteredBonds, sortConfig]);
+
+
+  const totalPages = Math.ceil(sortedBonds.length / itemsPerPage);
   const paginatedBonds = useMemo(() => {
-    return filteredBonds.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  }, [filteredBonds, currentPage, itemsPerPage]);
+    return sortedBonds.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  }, [sortedBonds, currentPage, itemsPerPage]);
 
 
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -358,6 +413,38 @@ export default function BondsPage() {
       return <User className="h-6 w-6 text-muted-foreground" />;
     }
     return <Users className="h-6 w-6 text-muted-foreground" />;
+  };
+
+  const handleSort = (keyToSort: SortableBondKeys) => {
+    setCurrentPage(1);
+    setSortConfig(prevConfig => {
+      if (prevConfig.key === keyToSort && prevConfig.direction === 'ascending') {
+        return { key: keyToSort, direction: 'descending' };
+      }
+      return { key: keyToSort, direction: 'ascending' };
+    });
+  };
+
+  interface SortableHeaderCellProps {
+    columnKey: SortableBondKeys;
+    title: string;
+    className?: string;
+  }
+
+  const SortableHeaderCell: React.FC<SortableHeaderCellProps> = ({ columnKey, title, className }) => {
+    const isSorted = sortConfig.key === columnKey;
+    const Icon = isSorted
+      ? (sortConfig.direction === 'ascending' ? ArrowUp : ArrowDown)
+      : ChevronsUpDown;
+
+    return (
+      <TableHead className={cn("cursor-pointer hover:bg-muted/80", className)} onClick={() => handleSort(columnKey)}>
+        <div className="flex items-center space-x-1">
+          <span>{title}</span>
+          <Icon className={cn("h-3.5 w-3.5", isSorted ? "text-foreground" : "text-muted-foreground/70")} />
+        </div>
+      </TableHead>
+    );
   };
 
   return (
@@ -455,11 +542,11 @@ export default function BondsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="text-center">Passkey Status</TableHead>
+                  <SortableHeaderCell columnKey="targetName" title="Target" />
+                  <SortableHeaderCell columnKey="bondType" title="Type" />
+                  <SortableHeaderCell columnKey="passkeyStatus" title="Passkey Status" className="text-center"/>
                   <TableHead className="text-center hidden md:table-cell">Connect Vibe</TableHead>
-                  <TableHead className="hidden lg:table-cell">Expires</TableHead>
+                  <SortableHeaderCell columnKey="expiresAt" title="Expires" className="hidden lg:table-cell"/>
                   <TableHead>Intercom Feed</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -470,9 +557,10 @@ export default function BondsPage() {
                   const canUpgradeToFamily = bond.bondType !== "family" && bond.targetType === "user" && familyBondsCount < MAX_FAMILY_BONDS && bond.keyType === "standard";
                   const canStartChat = bond.targetType === 'user' && bond.allowChatInitiation !== false && !bond.keyType?.startsWith('event_');
                   const canIntroduce = bond.targetType === 'user' && !bond.keyType?.startsWith('event_');
+                  const isEventBond = bond.keyType === 'event_promo' || bond.keyType === 'event_attendee';
 
                   return (
-                  <TableRow key={bond.id} className="hover:bg-muted/50">
+                  <TableRow key={bond.id} className={cn("hover:bg-muted/50", isEventBond && "bg-purple-500/5 hover:bg-purple-500/10")}>
                     <TableCell className="font-medium">
                       <div className="flex items-center space-x-2">
                         <span className="hidden sm:inline-flex shrink-0 items-center justify-center w-6 h-6">
@@ -653,4 +741,3 @@ export default function BondsPage() {
     </div>
   );
 }
-
