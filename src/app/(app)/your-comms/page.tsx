@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area'; // Added ScrollArea
 
 import { moodsData as allMoods } from '../moods/page';
 import { allMoodStreamPosts as globalMoodPosts } from '../moods/[moodSlug]/page';
@@ -229,8 +230,8 @@ export default function YourCommsPage() {
   const regularComms = useMemo(() => allCommsData.filter(c => c.type === 'regular-bond'), []);
 
   const highlightsFromYourMoods = useMemo(() => {
-    if (selectedMoodSlugs.length === 0 && hasLoadedFromStorage) return []; // if nothing selected AND loaded, show nothing
-    const slugsToFilter = selectedMoodSlugs.length > 0 ? selectedMoodSlugs : (hasLoadedFromStorage ? [] : defaultSelectedMoods); // Use defaults if not loaded yet
+    if (selectedMoodSlugs.length === 0 && hasLoadedFromStorage) return [];
+    const slugsToFilter = selectedMoodSlugs.length > 0 ? selectedMoodSlugs : (hasLoadedFromStorage ? [] : defaultSelectedMoods); 
     
     return allCommsData
       .filter(c => c.type === 'mood-stream' && c.moodSlug && slugsToFilter.includes(c.moodSlug))
@@ -254,47 +255,49 @@ export default function YourCommsPage() {
                     <FilterIcon className="mr-2 h-4 w-4" /> Tune Feed
                 </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-80 p-0">
-                <div className="p-4">
+            <PopoverContent className="w-80 p-0 max-h-[75vh] flex flex-col">
+                <div className="p-4 border-b">
                     <h4 className="font-medium leading-none text-sm">Tune Your Intercom</h4>
                     <p className="text-xs text-muted-foreground mt-1">
                         Select sources to include in your "Highlights" feed.
                     </p>
                 </div>
-                <Separator />
-                <div className="p-4 space-y-1 max-h-96 overflow-y-auto">
-                    <p className="text-sm font-medium text-foreground mb-2">Filter by Moods:</p>
-                    <div className="space-y-2 pl-1">
-                        {allMoods.map(mood => (
-                            <div key={mood.slug} className="flex items-center space-x-2">
-                                <Checkbox
-                                    id={`mood-check-${mood.slug}`}
-                                    checked={selectedMoodSlugs.includes(mood.slug)}
-                                    onCheckedChange={(checked) => handleMoodSelectionChange(mood.slug, checked)}
-                                />
-                                <Label htmlFor={`mood-check-${mood.slug}`} className="text-sm font-normal cursor-pointer flex items-center">
-                                   <span className="mr-1.5 text-base">{mood.emoji}</span> {mood.name}
-                                </Label>
-                            </div>
-                        ))}
-                    </div>
-                    <Separator className="my-4" />
-                    <div>
-                        <p className="text-sm font-medium text-foreground mb-2">Your Custom Streams:</p>
+                
+                <ScrollArea className="flex-1 p-4">
+                    <div className="space-y-1">
+                        <p className="text-sm font-medium text-foreground mb-2">Filter by Moods:</p>
                         <div className="space-y-2 pl-1">
-                            <p className="text-xs text-muted-foreground p-2 text-center bg-muted/50 rounded-md">
-                                Soon you'll be able to create and select custom streams combining your favorite tribes and moods!
-                            </p>
-                            <Button variant="outline" size="sm" className="w-full mt-2" disabled>
-                                <PlusCircle className="mr-2 h-4 w-4" />
-                                Create New Custom Stream
-                            </Button>
+                            {allMoods.map(mood => (
+                                <div key={mood.slug} className="flex items-center space-x-2">
+                                    <Checkbox
+                                        id={`mood-check-${mood.slug}`}
+                                        checked={selectedMoodSlugs.includes(mood.slug)}
+                                        onCheckedChange={(checked) => handleMoodSelectionChange(mood.slug, checked)}
+                                    />
+                                    <Label htmlFor={`mood-check-${mood.slug}`} className="text-sm font-normal cursor-pointer flex items-center">
+                                       <span className="mr-1.5 text-base">{mood.emoji}</span> {mood.name}
+                                    </Label>
+                                </div>
+                            ))}
                         </div>
                     </div>
-                </div>
-                <Separator />
-                <div className="p-4 flex justify-end">
-                    <Button size="sm" onClick={() => setIsTunerOpen(false)}>Done</Button>
+
+                    <Separator className="my-4" />
+                    
+                    <div className="space-y-2">
+                        <p className="text-sm font-medium text-foreground mb-2">Your Custom Streams:</p>
+                        <p className="text-xs text-muted-foreground p-2 text-center bg-muted/50 rounded-md">
+                            Soon you'll be able to create and select custom streams combining your favorite tribes and moods!
+                        </p>
+                        <Button variant="outline" size="sm" className="w-full mt-2" disabled>
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Create New Custom Stream
+                        </Button>
+                    </div>
+                </ScrollArea>
+                
+                <div className="p-4 border-t">
+                    <Button size="sm" onClick={() => setIsTunerOpen(false)} className="w-full">Done</Button>
                 </div>
             </PopoverContent>
         </Popover>
