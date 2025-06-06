@@ -29,6 +29,8 @@ export interface Event {
   locationCityRegion: string; // e.g., "Springfield, IL", "Online"
 }
 
+const MOCK_CURRENT_DATE_MS = new Date("2024-07-23T10:00:00.000Z").getTime();
+
 // Sample event data (mimicking what might come from a database)
 export const sampleEventsData: Event[] = [
   {
@@ -36,7 +38,7 @@ export const sampleEventsData: Event[] = [
     name: "Summer Music Festival Kick-off",
     keywords: "Live Music, Outdoor, Summer, Festival",
     description: "Join us for the grand opening of the Summer Music Festival! Featuring top local bands, food trucks, and amazing vibes. Don't miss out on the biggest party of the summer. Get ready to dance and celebrate with us under the stars. This is an event you won't want to miss, filled with great music and fun for everyone.",
-    eventDate: new Date(new Date().setDate(new Date().getDate() + 30)), // Approx 30 days from now
+    eventDate: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 30), // Approx 30 days from now
     associatedTribe: "The Local Gig Circuit", // Matches Tribe Name
     coverImage: "https://placehold.co/1200x400.png",
     dataAiHintCover: "music festival concert",
@@ -50,7 +52,7 @@ export const sampleEventsData: Event[] = [
     name: "Tech Innovators Summit - AI Edition",
     keywords: "Technology, AI, Networking, Workshop",
     description: "A deep dive into the latest advancements in Artificial Intelligence. Network with industry leaders, attend insightful workshops, and discover the future of tech. This summit is perfect for developers, researchers, and tech enthusiasts.",
-    eventDate: new Date(new Date().setDate(new Date().getDate() + 60)), // Approx 60 days from now
+    eventDate: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 60), // Approx 60 days from now
     associatedTribe: "AI Innovators", // Matches Tribe Name
     coverImage: "https://placehold.co/1200x400.png",
     dataAiHintCover: "technology conference abstract",
@@ -64,7 +66,7 @@ export const sampleEventsData: Event[] = [
     name: "Artisan Craft Fair - Members Preview",
     keywords: "Crafts, Art, Local, Shopping",
     description: "A special preview night for members of the Artisan Alley Collective. Get first dibs on unique handmade items before the public opening. Support local artists and find beautiful crafts. Light refreshments will be served.",
-    eventDate: new Date(new Date().setDate(new Date().getDate() + 15)), // Approx 15 days from now
+    eventDate: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 15), // Approx 15 days from now
     associatedTribe: "Artisan Alley Collective", // Matches Tribe Name
     // No cover image for this one
     isPublic: false, // Private event
@@ -77,7 +79,7 @@ export const sampleEventsData: Event[] = [
     name: "AI Ethics Debate Night",
     keywords: "AI, Ethics, Discussion, Debate",
     description: "Join AI Innovators for a lively debate on the ethical implications of current AI trends. Featuring guest speakers and an open Q&A session.",
-    eventDate: new Date(new Date().setDate(new Date().getDate() + 40)), 
+    eventDate: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 40), 
     associatedTribe: "AI Innovators", // Another event for AI Innovators
     coverImage: "https://placehold.co/1200x400.png",
     dataAiHintCover: "debate discussion abstract",

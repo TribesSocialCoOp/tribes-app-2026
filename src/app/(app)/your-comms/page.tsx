@@ -36,8 +36,10 @@ interface CommunicationItem {
   dataAiHintImage?: string;
 }
 
+const MOCK_CURRENT_DATE_MS = new Date("2024-07-23T10:00:00.000Z").getTime();
+
 const familyBondMessages: CommunicationItem[] = [
-  { id: "fb1", type: "family-bond", sender: "Mom", bondName: "Family Link", message: "Don't forget dinner on Sunday! Bringing your favorite pie. 🥧", avatarSrc: "https://placehold.co/40x40.png?text=M", avatarFallback: "M", timestamp: new Date(Date.now() - 3600000 * 1), dataAiHint: "mother family" },
+  { id: "fb1", type: "family-bond", sender: "Mom", bondName: "Family Link", message: "Don't forget dinner on Sunday! Bringing your favorite pie. 🥧", avatarSrc: "https://placehold.co/40x40.png?text=M", avatarFallback: "M", timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1), dataAiHint: "mother family" },
   {
     id: "fb3",
     type: "family-bond",
@@ -48,15 +50,15 @@ const familyBondMessages: CommunicationItem[] = [
     imageAlt: "Fishing trip photo",
     avatarSrc: "https://placehold.co/40x40.png?text=D",
     avatarFallback: "D",
-    timestamp: new Date(Date.now() - 3600000 * 8),
+    timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 8),
     dataAiHint: "father family",
     dataAiHintImage: "fishing nature"
   },
-  { id: "fb2", type: "family-bond", sender: "Alex (Best Friend)", bondName: "Closest Allies", message: "Hey, are we still on for the game night this Friday? Got the new board game!", avatarSrc: "https://placehold.co/40x40.png?text=A", avatarFallback: "A", timestamp: new Date(Date.now() - 3600000 * 10), dataAiHint: "friend person" },
+  { id: "fb2", type: "family-bond", sender: "Alex (Best Friend)", bondName: "Closest Allies", message: "Hey, are we still on for the game night this Friday? Got the new board game!", avatarSrc: "https://placehold.co/40x40.png?text=A", avatarFallback: "A", timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 10), dataAiHint: "friend person" },
 ];
 
 const regularBondMessages: CommunicationItem[] = [
-  { id: "rb1", type: "regular-bond", sender: "Work Group Chat", bondName: "Project Phoenix", message: "Reminder: Project Phoenix sprint review at 2 PM today.", avatarSrc: "https://placehold.co/40x40.png?text=PG", avatarFallback: "PG", timestamp: new Date(Date.now() - 3600000 * 2), dataAiHint: "work group" },
+  { id: "rb1", type: "regular-bond", sender: "Work Group Chat", bondName: "Project Phoenix", message: "Reminder: Project Phoenix sprint review at 2 PM today.", avatarSrc: "https://placehold.co/40x40.png?text=PG", avatarFallback: "PG", timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2), dataAiHint: "work group" },
   {
     id: "rb3",
     type: "regular-bond",
@@ -67,11 +69,11 @@ const regularBondMessages: CommunicationItem[] = [
     imageAlt: "Bali beach",
     avatarSrc: "https://placehold.co/40x40.png?text=TB",
     avatarFallback: "TB",
-    timestamp: new Date(Date.now() - 3600000 * 20),
+    timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 20),
     dataAiHint: "travel group",
     dataAiHintImage: "beach travel"
   },
-  { id: "rb2", type: "regular-bond", sender: "Sarah (Tech Meetup)", bondName: "Tech Connects", message: "Great talk last night! Here's the link to the slides I mentioned.", avatarSrc: "https://placehold.co/40x40.png?text=S", avatarFallback: "S", timestamp: new Date(Date.now() - 3600000 * 25), dataAiHint: "colleague professional" },
+  { id: "rb2", type: "regular-bond", sender: "Sarah (Tech Meetup)", bondName: "Tech Connects", message: "Great talk last night! Here's the link to the slides I mentioned.", avatarSrc: "https://placehold.co/40x40.png?text=S", avatarFallback: "S", timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 25), dataAiHint: "colleague professional" },
 ];
 
 const moodStreamItems: CommunicationItem[] = globalMoodPosts.map(post => {
@@ -87,7 +89,7 @@ const moodStreamItems: CommunicationItem[] = globalMoodPosts.map(post => {
     moodName: moodDetails?.name || primaryMoodSlug,
     avatarSrc: post.authorAvatarSrc,
     avatarFallback: post.authorAvatarFallback || post.author?.substring(0,2),
-    timestamp: post.timestamp,
+    timestamp: post.timestamp, // Timestamps from globalMoodPosts are already fixed
     dataAiHint: post.dataAiHintAvatar,
     imageUrl: post.imageUrl,
     imageAlt: post.imageAlt,
@@ -104,7 +106,7 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
 
   useEffect(() => {
     const timeSince = (date: Date): string => {
-      const now = new Date();
+      const now = new Date(); // This 'now' is client-side and okay for display formatting
       const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
       if (seconds < 5) return "just now";

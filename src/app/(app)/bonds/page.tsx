@@ -47,25 +47,27 @@ export interface Bond {
   accessTier?: AccessTier;
 }
 
+const MOCK_CURRENT_DATE_MS = new Date("2024-07-23T10:00:00.000Z").getTime();
+
 const generateInitialBondsData = (): Bond[] => [
-  { id: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 30), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "2", targetName: "Alice Wonderland", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 5), lastRefreshedAt: new Date(Date.now() - 86400000 * 25), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "3", targetName: "Weekend Hikers", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", expiresAt: new Date(Date.now() + 86400000 * 80), lastRefreshedAt: new Date(Date.now() - 86400000 * 10), reconnectsCount: 0, showInIntercom: false, allowChatInitiation: false, keyType: "standard" },
-  { id: "4", targetName: "Bob The Builder", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "expired", expiresAt: new Date(Date.now() - 86400000 * 2), lastRefreshedAt: new Date(Date.now() - 86400000 * 62), reconnectsCount: 3, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "5", targetName: "Mom", targetType: "user", bondType: "family", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 10), expiresAt: new Date(Date.now() + 365 * 86400000), reconnectsCount: 5, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 180), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "7", targetName: "Project Collab", targetType: "tribe", bondType: "collaborator", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), expiresAt: new Date(Date.now() + 86400000 * 15), reconnectsCount: 7, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "8", targetName: "Art Patronage Inc.", targetType: "tribe", bondType: "supporter", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 15), expiresAt: new Date(Date.now() + 86400000 * (45)), reconnectsCount: 4, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 12), lastRefreshedAt: new Date(Date.now() - 86400000 * 18), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "10", targetName: "John Doe (Dev)", targetType: "user", bondType: "collaborator", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(Date.now() - 86400000 * 90), expiresAt: new Date(Date.now() + 86400000 * (30)), reconnectsCount: 10, showInIntercom: false, allowChatInitiation: false, keyType: "standard" },
-  { id: "11", targetName: "Charlie Chaplin", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 5), expiresAt: new Date(Date.now() + 86400000 * (25)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "12", targetName: "David Copperfield", targetType: "user", bondType: "collaborator", formationMethod: "digital_introduction", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 2), expiresAt: new Date(Date.now() + 86400000 * (28)), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "13", targetName: "Emily Elephant", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(Date.now() + 86400000 * 3), lastRefreshedAt: new Date(Date.now() - 86400000 * 27), reconnectsCount: 1, showInIntercom: false, allowChatInitiation: true, keyType: "standard" },
-  { id: "14", targetName: "Fiona Fox", targetType: "user", bondType: "follower", formationMethod: "virtual_request", passkeyStatus: "active", lastRefreshedAt: new Date(Date.now() - 86400000 * 10), expiresAt: new Date(Date.now() + 86400000 * (20)), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "15", targetName: "George Gorilla", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "expired", expiresAt: new Date(Date.now() - 86400000 * 5), lastRefreshedAt: new Date(Date.now() - 86400000 * 35), reconnectsCount: 5, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "16", targetName: "Summer Fest Pass", targetType: "user", bondType: "follower", formationMethod: "virtual_request", keyType: "event_promo", eventId: "summerfest2024", accessTier: "spectator", passkeyStatus: "active", expiresAt: new Date(Date.now() + 86400000 * 60), lastRefreshedAt: new Date(), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: false },
-  { id: "17", targetName: "Concert VIP Access", targetType: "user", bondType: "supporter", formationMethod: "rfid_tap", keyType: "event_attendee", eventId: "bandlive2024", accessTier: "vip", passkeyStatus: "active", expiresAt: new Date(Date.now() + 86400000 * 1), lastRefreshedAt: new Date(), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true },
-  { id: "18", targetName: "Tech Conference Day Pass", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", keyType: "event_attendee", eventId: "devcon2024", accessTier: "attendee", passkeyStatus: "active", expiresAt: new Date(Date.now() + 86400000 * 0.5), lastRefreshedAt: new Date(), reconnectsCount: 0, showInIntercom: false, allowChatInitiation: false },
+  { id: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 30), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "2", targetName: "Alice Wonderland", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 5), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 25), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
+  { id: "3", targetName: "Weekend Hikers", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 80), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 10), reconnectsCount: 0, showInIntercom: false, allowChatInitiation: false, keyType: "standard" },
+  { id: "4", targetName: "Bob The Builder", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "expired", expiresAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 2), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 62), reconnectsCount: 3, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "5", targetName: "Mom", targetType: "user", bondType: "family", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 10), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 365 * 86400000), reconnectsCount: 5, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
+  { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 180), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "7", targetName: "Project Collab", targetType: "tribe", bondType: "collaborator", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 15), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 15), reconnectsCount: 7, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "8", targetName: "Art Patronage Inc.", targetType: "tribe", bondType: "supporter", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 15), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (45)), reconnectsCount: 4, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 12), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 18), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
+  { id: "10", targetName: "John Doe (Dev)", targetType: "user", bondType: "collaborator", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 90), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 10, showInIntercom: false, allowChatInitiation: false, keyType: "standard" },
+  { id: "11", targetName: "Charlie Chaplin", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 5), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (25)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
+  { id: "12", targetName: "David Copperfield", targetType: "user", bondType: "collaborator", formationMethod: "digital_introduction", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 2), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (28)), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
+  { id: "13", targetName: "Emily Elephant", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 3), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 27), reconnectsCount: 1, showInIntercom: false, allowChatInitiation: true, keyType: "standard" },
+  { id: "14", targetName: "Fiona Fox", targetType: "user", bondType: "follower", formationMethod: "virtual_request", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 10), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (20)), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
+  { id: "15", targetName: "George Gorilla", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "expired", expiresAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 5), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 35), reconnectsCount: 5, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "16", targetName: "Summer Fest Pass", targetType: "user", bondType: "follower", formationMethod: "virtual_request", keyType: "event_promo", eventId: "summerfest2024", accessTier: "spectator", passkeyStatus: "active", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 60), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: false },
+  { id: "17", targetName: "Concert VIP Access", targetType: "user", bondType: "supporter", formationMethod: "rfid_tap", keyType: "event_attendee", eventId: "bandlive2024", accessTier: "vip", passkeyStatus: "active", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 1), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true },
+  { id: "18", targetName: "Tech Conference Day Pass", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", keyType: "event_attendee", eventId: "devcon2024", accessTier: "attendee", passkeyStatus: "active", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 0.5), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), reconnectsCount: 0, showInIntercom: false, allowChatInitiation: false },
 ];
 
 
@@ -239,8 +241,8 @@ export default function BondsPage() {
       bond.id === bondId ? {
         ...bond,
         passkeyStatus: "active",
-        lastRefreshedAt: new Date(),
-        expiresAt: new Date(Date.now() + (bond.bondType === 'family' ? 365 : 30) * 86400000), 
+        lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), // Use MOCK_CURRENT_DATE_MS for consistency
+        expiresAt: new Date(MOCK_CURRENT_DATE_MS + (bond.bondType === 'family' ? 365 : 30) * 86400000), 
         reconnectsCount: (bond.reconnectsCount || 0) + 1,
       } : bond
     ) : null);
@@ -260,8 +262,8 @@ export default function BondsPage() {
         ...bond,
         bondType: "family",
         passkeyStatus: "active",
-        lastRefreshedAt: new Date(),
-        expiresAt: new Date(Date.now() + 365 * 86400000),
+        lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), // Use MOCK_CURRENT_DATE_MS
+        expiresAt: new Date(MOCK_CURRENT_DATE_MS + 365 * 86400000),
         reconnectsCount: (bond.reconnectsCount || 0) + 1,
       } : bond
     ) : null);
@@ -312,7 +314,7 @@ export default function BondsPage() {
         return 0;
     }
 
-    const now = Date.now();
+    const now = MOCK_CURRENT_DATE_MS; // Use MOCK_CURRENT_DATE_MS
     const expiresAtTime = bond.expiresAt.getTime();
     const lastRefreshedAtTime = bond.lastRefreshedAt.getTime();
 

@@ -38,17 +38,19 @@ interface TribePost {
   comments?: number;
 }
 
+const MOCK_CURRENT_DATE_MS = new Date("2024-07-23T10:00:00.000Z").getTime();
+
 const sampleTribePosts: TribePost[] = [
   { 
     id: "tribe_post_ai_local1", tribeId: "1", authorName: "AI Enthusiast", authorAvatarFallback: "AE",
-    timestamp: new Date(Date.now() - 3600000 * 2),
+    timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2),
     title: "Local Discussion: Ethics in AI Development",
     content: "Starting a thread specifically for our tribe members on the ethical considerations of recent AI breakthroughs. What are your immediate thoughts?",
     vibes: 30, comments: 5, dataAiHintAvatar: "researcher scientist",
   },
   { 
-    id: "msp2", tribeId: "1", authorName: "ProductivePro", authorAvatarFallback: "PP", // This ID matches a mood stream post
-    timestamp: new Date(Date.now() - 3600000 * 3),
+    id: "msp2", tribeId: "1", authorName: "ProductivePro", authorAvatarFallback: "PP", 
+    timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 3),
     title: "My Top 5 Productivity Hacks for Deep Work",
     content: "Sharing my secrets to staying in the zone! Tip #1: Time blocking is key. This was also shared to the Focus mood stream.",
     imageUrl: "https://placehold.co/600x400.png?text=FocusHacks", imageAlt: "Productivity hacks", dataAiHintImage: "productivity office",
@@ -56,15 +58,15 @@ const sampleTribePosts: TribePost[] = [
   },
   { 
     id: "tribe_post_hikers_local1", tribeId: "2", authorName: "Trail Blazer", authorAvatarFallback: "TB",
-    timestamp: new Date(Date.now() - 86400000 * 1),
+    timestamp: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 1),
     title: "Weekend Hike Recap: Mountain Peak (Tribe Exclusive Pics)",
     content: "The views from Mountain Peak trail were absolutely stunning this weekend! Sharing some extra photos just for our tribe. Highly recommend this route.",
     imageUrl: "https://placehold.co/600x450.png", imageAlt: "Mountain landscape", dataAiHintImage: "mountain landscape",
     vibes: 210, comments: 32, dataAiHintAvatar: "hiker adventurer",
   },
    { 
-    id: "msp9", tribeId: "2", authorName: "LocalFoodie", authorAvatarFallback: "LF", // This ID matches a mood stream post
-    timestamp: new Date(Date.now() - 3600000 * 7), 
+    id: "msp9", tribeId: "2", authorName: "LocalFoodie", authorAvatarFallback: "LF", 
+    timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 7), 
     title: "Post-Hike Find: Amazing Farmers Market!",
     content: "After our hike near Miller's Pond, stumbled upon this fantastic farmers market. Great fuel and cool local crafts! Shared this to Discover stream too.",
     imageUrl: "https://placehold.co/600x420.png", imageAlt: "Farmers market produce", dataAiHintImage: "market food",
@@ -72,15 +74,15 @@ const sampleTribePosts: TribePost[] = [
   },
   { 
     id: "tribe_post_music_local1", tribeId: "7", authorName: "GigGoer", authorAvatarFallback: "GG",
-    timestamp: new Date(Date.now() - 3600000 * 1),
+    timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1),
     title: "Last Night's Show Was Epic! (Tribe Thoughts)",
     content: "The Local Band absolutely crushed it at The Underground! What did our tribe members think of the new songs?",
     imageUrl: "https://placehold.co/600x380.png", imageAlt: "Concert crowd", dataAiHintImage: "concert crowd",
     vibes: 95, comments: 22, dataAiHintAvatar: "music fan",
   },
   { 
-    id: "msp8", tribeId: "7", authorName: "RockstarDev", authorAvatarFallback: "RD", // This ID matches a mood stream post
-    timestamp: new Date(Date.now() - 3600000 * 8),
+    id: "msp8", tribeId: "7", authorName: "RockstarDev", authorAvatarFallback: "RD", 
+    timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 8),
     title: "My Stage Setup for Tonight's Gig",
     content: "Sound check done! Ready to rock the 'Music Hall' tonight. Who's coming? Also shared to Create mood stream!",
     imageUrl: "https://placehold.co/600x380.png", imageAlt: "Stage setup with instruments", dataAiHintImage: "stage music",
@@ -88,7 +90,7 @@ const sampleTribePosts: TribePost[] = [
   },
   { 
     id: "post7", tribeId: "3", authorName: "DevQuest", authorAvatarFallback: "DQ",
-    timestamp: new Date(Date.now() - 3600000 * 3),
+    timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 3),
     title: "Seeking Beta Testers for New Puzzle Game (Tribe Only)",
     content: "Our indie studio is looking for beta testers for our upcoming mobile puzzle game 'Color Grid'. DM me if you're interested! This is a private post for tribe members.",
     vibes: 40, comments: 5, dataAiHintAvatar: "game developer",
@@ -251,7 +253,8 @@ export default function TribeDetailPage() {
 
   const tribeEvents = useMemo(() => {
     if (!tribe) return [];
-    return sampleEventsData
+    // Ensure sampleEventsData uses fixed timestamps if it doesn't already
+    return sampleEventsData 
       .filter(event => event.associatedTribe === tribe.name)
       .sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime());
   }, [tribe]);
@@ -270,7 +273,7 @@ export default function TribeDetailPage() {
       .map(event => ({
         id: `event-${event.id}`,
         type: 'event' as const,
-        timestamp: event.eventDate,
+        timestamp: event.eventDate, // eventDate should be from fixed sample data
         isPinned: true, 
         data: event,
       }));
@@ -279,7 +282,7 @@ export default function TribeDetailPage() {
       .map(post => ({
         id: `post-${post.id}`,
         type: 'post' as const,
-        timestamp: post.timestamp,
+        timestamp: post.timestamp, // timestamp from sampleTribePosts already fixed
         isPinned: false,
         data: post,
         isPromoted: moodStreamPostIds.has(post.id)
