@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -7,13 +8,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Send, UserPlus } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 export default function FamilyOnboardingIntroducePage() {
   const connectedFamilyMemberName = "Alex"; // Mock data
   const existingFamilyMembers = [ // Mock data
-    { id: "fam1", name: "Mom" },
-    { id: "fam2", name: "Dad" },
-    { id: "fam3", name: "Grandma Sue" },
+    { id: "fam1", name: "Mom", avatarFallback: "M" },
+    { id: "fam2", name: "Dad", avatarFallback: "D" },
+    { id: "fam3", name: "Grandma Sue", avatarFallback: "GS" },
   ];
 
   return (
@@ -32,12 +34,20 @@ export default function FamilyOnboardingIntroducePage() {
           <h3 className="text-lg font-semibold mb-3 text-foreground">Select Existing Family:</h3>
           <div className="space-y-3">
             {existingFamilyMembers.map((member) => (
-              <div key={member.id} className="flex items-center space-x-3 p-3 border rounded-md hover:bg-muted/50">
-                <Checkbox id={`fam-member-${member.id}`} />
-                <Label htmlFor={`fam-member-${member.id}`} className="text-sm font-medium flex-1 cursor-pointer">
+              <Label 
+                key={member.id} 
+                htmlFor={`fam-member-${member.id}`}
+                className="flex items-center space-x-3 p-3 border rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
+              >
+                <Checkbox id={`fam-member-${member.id}`} className="shrink-0" />
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={`https://placehold.co/40x40.png?text=${member.avatarFallback}`} alt={member.name} data-ai-hint="avatar person"/>
+                  <AvatarFallback>{member.avatarFallback}</AvatarFallback>
+                </Avatar>
+                <span className="text-sm font-medium flex-1">
                   {member.name}
-                </Label>
-              </div>
+                </span>
+              </Label>
             ))}
           </div>
         </div>
