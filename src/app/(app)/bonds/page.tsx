@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2, Search, ChevronLeft, ChevronRight, Filter as FilterIcon, X as XIcon, Ticket, Star, PartyPopper, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, MessageSquare, Settings, Share2, Search, ChevronLeft, ChevronRight, Filter as FilterIcon, X as XIcon, Ticket, Star, PartyPopper, ArrowUp, ArrowDown, ChevronsUpDown, AtSign, UserCheck } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,43 +22,23 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from '@/lib/utils';
+import type { Bond } from '@/lib/types'; // Import Bond from centralized location
 import { BondSettingsDialog } from '@/components/dialogs/bond-settings-dialog';
 import { IntroductionDialog } from '@/components/dialogs/introduction-dialog';
 
-type BondType = "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";
-type FormationMethod = "rfid_tap" | "digital_introduction" | "virtual_request";
-type KeyType = "standard" | "event_promo" | "event_attendee";
-type AccessTier = "spectator" | "attendee" | "vip";
-
-export interface Bond {
-  id: string;
-  targetName: string;
-  targetType: "user" | "tribe";
-  bondType: BondType;
-  formationMethod: FormationMethod;
-  passkeyStatus: "active" | "expires_soon" | "expired" | "needs_refresh";
-  expiresAt: Date;
-  lastRefreshedAt: Date;
-  reconnectsCount: number;
-  showInIntercom?: boolean;
-  allowChatInitiation?: boolean;
-  keyType?: KeyType;
-  eventId?: string;
-  accessTier?: AccessTier;
-}
 
 const MOCK_CURRENT_DATE_MS = new Date("2024-07-23T10:00:00.000Z").getTime();
 
 const generateInitialBondsData = (): Bond[] => [
-  { id: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 30), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "2", targetName: "Alice Wonderland", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 5), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 25), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
+  { id: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 30), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: false, keyType: "standard", pseudonym: "TechWatcher" },
+  { id: "2", targetName: "Alice Wonderland", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 5), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 25), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true, keyType: "standard", pseudonym: "WonderBuddy", targetPseudonymForMe: "MadHatter" },
   { id: "3", targetName: "Weekend Hikers", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 80), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 10), reconnectsCount: 0, showInIntercom: false, allowChatInitiation: false, keyType: "standard" },
   { id: "4", targetName: "Bob The Builder", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "expired", expiresAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 2), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 62), reconnectsCount: 3, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
   { id: "5", targetName: "Mom", targetType: "user", bondType: "family", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 10), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 365 * 86400000), reconnectsCount: 5, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 180), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 180), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: false, keyType: "standard", pseudonym: "PixelPusher" },
   { id: "7", targetName: "Project Collab", targetType: "tribe", bondType: "collaborator", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 15), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 15), reconnectsCount: 7, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
   { id: "8", targetName: "Art Patronage Inc.", targetType: "tribe", bondType: "supporter", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 15), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (45)), reconnectsCount: 4, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 12), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 18), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
+  { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 12), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 18), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true, keyType: "standard", targetPseudonymForMe: "PageTurner" },
   { id: "10", targetName: "John Doe (Dev)", targetType: "user", bondType: "collaborator", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 90), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 10, showInIntercom: false, allowChatInitiation: false, keyType: "standard" },
   { id: "11", targetName: "Charlie Chaplin", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 5), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (25)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
   { id: "12", targetName: "David Copperfield", targetType: "user", bondType: "collaborator", formationMethod: "digital_introduction", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 2), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (28)), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
@@ -241,7 +221,7 @@ export default function BondsPage() {
       bond.id === bondId ? {
         ...bond,
         passkeyStatus: "active",
-        lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), // Use MOCK_CURRENT_DATE_MS for consistency
+        lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), 
         expiresAt: new Date(MOCK_CURRENT_DATE_MS + (bond.bondType === 'family' ? 365 : 30) * 86400000), 
         reconnectsCount: (bond.reconnectsCount || 0) + 1,
       } : bond
@@ -262,7 +242,7 @@ export default function BondsPage() {
         ...bond,
         bondType: "family",
         passkeyStatus: "active",
-        lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), // Use MOCK_CURRENT_DATE_MS
+        lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), 
         expiresAt: new Date(MOCK_CURRENT_DATE_MS + 365 * 86400000),
         reconnectsCount: (bond.reconnectsCount || 0) + 1,
       } : bond
@@ -314,7 +294,7 @@ export default function BondsPage() {
         return 0;
     }
 
-    const now = MOCK_CURRENT_DATE_MS; // Use MOCK_CURRENT_DATE_MS
+    const now = MOCK_CURRENT_DATE_MS; 
     const expiresAtTime = bond.expiresAt.getTime();
     const lastRefreshedAtTime = bond.lastRefreshedAt.getTime();
 
@@ -335,7 +315,9 @@ export default function BondsPage() {
   const filteredBonds = useMemo(() => {
     if (!bonds) return [];
     return bonds.filter(bond =>
-      bond.targetName.toLowerCase().includes(searchTerm.toLowerCase())
+      bond.targetName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (bond.pseudonym && bond.pseudonym.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (bond.targetPseudonymForMe && bond.targetPseudonymForMe.toLowerCase().includes(searchTerm.toLowerCase()))
     );
   }, [bonds, searchTerm]);
 
@@ -458,7 +440,7 @@ export default function BondsPage() {
             <h1 className="text-4xl font-bold tracking-normal text-foreground font-mono">Manage Bonds</h1>
         </div>
         <p className="text-lg text-muted-foreground mt-1">
-          Oversee your connections, manage passkey status, and utilize your family bonds.
+          Oversee connections, manage passkeys, pseudonyms, and family bonds.
         </p>
       </header>
 
@@ -482,7 +464,7 @@ export default function BondsPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex-1">
               <CardTitle className="tracking-normal">Current Bonds</CardTitle>
-              <CardDescription>A list of your active and expired bonds. Toggle visibility in your Intercom feed.</CardDescription>
+              <CardDescription>View and manage your bonds. Use pseudonyms for specific interactions.</CardDescription>
             </div>
             <Popover>
               <PopoverTrigger asChild>
@@ -492,7 +474,7 @@ export default function BondsPage() {
               </PopoverTrigger>
               <PopoverContent className="w-80 space-y-4 p-4">
                 <div className="space-y-2">
-                  <Label htmlFor="bond-search-input">Search by Name</Label>
+                  <Label htmlFor="bond-search-input">Search by Name or Pseudonym</Label>
                   <div className="relative">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -566,13 +548,23 @@ export default function BondsPage() {
                   return (
                   <TableRow key={bond.id} className={cn("hover:bg-muted/50", isEventBond && "bg-purple-500/5 hover:bg-purple-500/10")}>
                     <TableCell className="font-medium">
-                      <div className="flex items-center space-x-2">
-                        <span className="hidden sm:inline-flex shrink-0 items-center justify-center w-6 h-6">
+                      <div className="flex items-start space-x-2">
+                        <span className="hidden sm:inline-flex shrink-0 items-center justify-center w-6 h-6 pt-0.5">
                           {getTargetIcon(bond)}
                         </span>
-                        <span className="flex-grow min-w-0">
-                          {bond.targetName}
-                        </span>
+                        <div className="flex-grow min-w-0">
+                          <span className="block">{bond.targetName}</span>
+                          {bond.pseudonym && (
+                            <div className="text-xs text-muted-foreground flex items-center">
+                              <AtSign className="h-3 w-3 mr-1 text-primary" /> Your alias: {bond.pseudonym}
+                            </div>
+                          )}
+                          {bond.targetPseudonymForMe && (
+                            <div className="text-xs text-muted-foreground flex items-center">
+                              <UserCheck className="h-3 w-3 mr-1 text-sky-600" /> Known as to them: {bond.targetPseudonymForMe}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
@@ -754,4 +746,3 @@ export default function BondsPage() {
     </div>
   );
 }
-

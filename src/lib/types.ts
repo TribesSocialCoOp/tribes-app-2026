@@ -24,6 +24,29 @@ export interface UserProfile {
 }
 */
 
+// Bond related types, centralized here
+export type BondType = "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";
+export type FormationMethod = "rfid_tap" | "digital_introduction" | "virtual_request";
+export type KeyType = "standard" | "event_promo" | "event_attendee";
+export type AccessTier = "spectator" | "attendee" | "vip";
+
+export interface Bond {
+  id: string;
+  targetName: string;
+  targetType: "user" | "tribe";
+  bondType: BondType;
+  formationMethod: FormationMethod;
+  passkeyStatus: "active" | "expires_soon" | "expired" | "needs_refresh";
+  expiresAt: Date;
+  lastRefreshedAt: Date;
+  reconnectsCount: number;
+  showInIntercom?: boolean;
+  allowChatInitiation?: boolean;
+  keyType?: KeyType;
+  eventId?: string;
+  accessTier?: AccessTier;
+  pseudonym?: string; // Your alias when interacting with this bond target
+  targetPseudonymForMe?: string; // The alias the bond target uses for you (if known/applicable)
+}
+
 // Other shared types can be added here as the application grows.
-// For instance, if the Bond interface (currently in /src/app/(app)/bonds/page.tsx)
-// needs to be used in more places, it could be centralized here.

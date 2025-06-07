@@ -11,27 +11,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import type { Bond } from '@/lib/types'; // Import Bond from centralized location
+import { AtSign, UserCheck } from 'lucide-react';
 
-type FormationMethod = "rfid_tap" | "digital_introduction" | "virtual_request";
-type KeyType = "standard" | "event_promo" | "event_attendee";
-type AccessTier = "spectator" | "attendee" | "vip";
-
-// Minimal Bond interface for this dialog
-export interface Bond {
-  id: string;
-  targetName: string;
-  targetType: "user" | "tribe";
-  bondType: "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";
-  formationMethod: FormationMethod;
-  showInIntercom?: boolean;
-  allowChatInitiation?: boolean;
-  keyType?: KeyType;
-  eventId?: string;
-  accessTier?: AccessTier;
-}
 
 interface BondSettingsDialogProps {
   isOpen: boolean;
@@ -56,11 +42,19 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
   const isMobile = useIsMobile();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [allowChat, setAllowChat] = useState(true);
+  const [yourPseudonym, setYourPseudonym] = useState("");
+  const [theirPseudonymForYou, setTheirPseudonymForYou] = useState("");
 
   useEffect(() => {
     if (isOpen && bond) {
       setNotificationsEnabled(bond.showInIntercom ?? true);
       setAllowChat(bond.allowChatInitiation ?? (bond.targetType === 'user' && !bond.keyType?.startsWith('event_')));
+      setYourPseudonym(bond.pseudonym || "");
+      setTheirPseudonymForYou(bond.targetPseudonymForMe || "");
+    } else if (!isOpen) {
+      // Reset when dialog closes
+      setYourPseudonym("");
+      setTheirPseudonymForYou("");
     }
   }, [isOpen, bond]);
 
@@ -75,6 +69,8 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
             ...bond,
             showInIntercom: notificationsEnabled,
             allowChatInitiation: allowChat,
+            pseudonym: yourPseudonym.trim() || undefined, // Save as undefined if empty
+            targetPseudonymForMe: theirPseudonymForYou.trim() || undefined, // Save as undefined if empty
         };
         onSave(updatedBond);
     }
@@ -104,45 +100,75 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
 
       <div className="py-4 space-y-6 text-sm">
         <fieldset>
-          <legend className="text-base font-semibold text-foreground mb-3">Notification Settings</legend>
-          <div className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
-            <Label htmlFor={`notifications-${bond.id}`} className="cursor-pointer flex-1 text-sm">
-              Receive notifications for this bond
-            </Label>
-            <Switch
-              id={`notifications-${bond.id}`}
-              checked={notificationsEnabled}
-              onCheckedChange={setNotificationsEnabled}
-              aria-label="Toggle notifications for this bond"
-            />
+          <legend className="text-base font-semibold text-foreground mb-3">Interaction Settings</legend>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+                <Label htmlFor={`notifications-${bond.id}`} className="cursor-pointer flex-1 text-sm">
+                Receive Intercom updates for this bond
+                </Label>
+                <Switch
+                id={`notifications-${bond.id}`}
+                checked={notificationsEnabled}
+                onCheckedChange={setNotificationsEnabled}
+                aria-label="Toggle Intercom updates for this bond"
+                />
+            </div>
+            {bond.targetType === 'user' && !bond.keyType?.startsWith('event_') && (
+                <div className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
+                    <Label htmlFor={`allowChat-${bond.id}`} className="cursor-pointer flex-1 text-sm">
+                    Allow <span className="italic font-semibold">{bond.targetName}</span> to initiate chat with you
+                    </Label>
+                    <Switch
+                    id={`allowChat-${bond.id}`}
+                    checked={allowChat}
+                    onCheckedChange={setAllowChat}
+                    aria-label={`Toggle allowing ${bond.targetName} to initiate chat with you`}
+                    />
+                </div>
+            )}
           </div>
-          <p className="text-xs text-muted-foreground mt-1 px-1">
-            Controls if updates from this bond appear in your Intercom feed.
-          </p>
         </fieldset>
 
         <Separator />
 
         <fieldset>
-          <legend className="text-base font-semibold text-foreground mb-3">Chat Settings</legend>
-          <div className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
-            <Label htmlFor={`allowChat-${bond.id}`} className="cursor-pointer flex-1 text-sm">
-              Allow <span className="italic font-semibold">{bond.targetName}</span> to initiate chat with you
-            </Label>
-            <Switch
-              id={`allowChat-${bond.id}`}
-              checked={allowChat}
-              onCheckedChange={setAllowChat}
-              aria-label={`Toggle allowing ${bond.targetName} to initiate chat with you`}
-              disabled={bond.targetType === 'tribe' || bond.keyType?.startsWith('event_')}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground mt-1 px-1">
-            Controls if <span className="italic font-semibold">{bond.targetName}</span> ({bond.targetType}) can start new direct conversations with you.
-            {bond.targetType === 'tribe' && " Tribes cannot initiate direct chats."}
-            {bond.keyType?.startsWith('event_') && " Event pass holders typically cannot initiate direct chats."}
-            {bond.allowChatInitiation === false && bond.targetType === 'user' && !bond.keyType?.startsWith('event_') && `${bond.targetName} currently has chat initiation disabled by you.`}
-          </p>
+            <legend className="text-base font-semibold text-foreground mb-3">Pseudonym Settings</legend>
+            <div className="space-y-4">
+                <div>
+                    <Label htmlFor={`your-pseudonym-${bond.id}`} className="flex items-center mb-1.5">
+                        <AtSign className="h-4 w-4 mr-2 text-primary"/>
+                        Your Alias for <span className="italic font-semibold ml-1">{bond.targetName}</span>
+                    </Label>
+                    <Input
+                        id={`your-pseudonym-${bond.id}`}
+                        value={yourPseudonym}
+                        onChange={(e) => setYourPseudonym(e.target.value)}
+                        placeholder="e.g., TechGuru, ArtLover (optional)"
+                        className="text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1 px-1">
+                        How you appear to this bond target if set. Leave blank to use your main profile name.
+                    </p>
+                </div>
+                 {bond.targetType === 'user' && ( // Only makes sense for user bonds
+                    <div>
+                        <Label htmlFor={`their-pseudonym-${bond.id}`} className="flex items-center mb-1.5">
+                            <UserCheck className="h-4 w-4 mr-2 text-sky-600"/>
+                            Their Alias for You (if known)
+                        </Label>
+                        <Input
+                            id={`their-pseudonym-${bond.id}`}
+                            value={theirPseudonymForYou}
+                            onChange={(e) => setTheirPseudonymForYou(e.target.value)}
+                            placeholder="e.g., CollaboratorX (optional)"
+                            className="text-sm"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1 px-1">
+                            If <span className="italic font-semibold">{bond.targetName}</span> uses an alias for you, note it here.
+                        </p>
+                    </div>
+                )}
+            </div>
         </fieldset>
       </div>
 
@@ -157,7 +183,7 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
   if (isMobile) {
     return (
       <RootComponent open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContentComponent side="bottom" className="h-auto max-h-[80vh] flex flex-col p-0">
+        <DialogContentComponent side="bottom" className="h-auto max-h-[90vh] flex flex-col p-0">
             <ScrollArea className="flex-1">
                  <div className="p-4 sm:p-6">
                     {commonContent}
