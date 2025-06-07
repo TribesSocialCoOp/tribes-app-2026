@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Radio, MessageSquareText, UserCircle } from "lucide-react"; // Using Radio as a placeholder for live icon
+import { Radio, MessageSquareText } from "lucide-react"; // Using Radio as a placeholder for live icon
 import React, { useState, useEffect } from "react";
 
 export default function EventStreamPage() {
@@ -17,10 +17,10 @@ export default function EventStreamPage() {
   const [nickname, setNickname] = useState("Guest");
 
   useEffect(() => {
-    const name = searchParams.get("eventName");
-    const nick = searchParams.get("nickname");
-    if (name) setEventName(name);
-    if (nick) setNickname(nick);
+    const nameParam = searchParams.get("eventName");
+    const nickParam = searchParams.get("nickname");
+    if (nameParam) setEventName(nameParam);
+    if (nickParam) setNickname(nickParam);
   }, [searchParams]);
 
   return (

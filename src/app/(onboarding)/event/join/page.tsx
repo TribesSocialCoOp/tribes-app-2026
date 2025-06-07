@@ -18,10 +18,10 @@ export default function EventOnboardingJoinPage() {
   const [nickname, setNickname] = useState("");
 
   useEffect(() => {
-    const name = searchParams.get("eventName");
-    const id = searchParams.get("eventId");
-    if (name) setEventName(name);
-    if (id) setEventId(id);
+    const nameParam = searchParams.get("eventName");
+    const idParam = searchParams.get("eventId");
+    if (nameParam) setEventName(nameParam);
+    if (idParam) setEventId(idParam);
   }, [searchParams]);
 
   const handleJoinEvent = () => {
@@ -30,7 +30,7 @@ export default function EventOnboardingJoinPage() {
       alert("Event ID is missing. Cannot join.");
       return;
     }
-    const chosenNickname = nickname.trim() || `Anon${Math.floor(Math.random() * 1000)}`;
+    const chosenNickname = nickname.trim() || `Anon${Math.floor(100 + Math.random() * 900)}`; // Default nickname if empty
     router.push(`/event/stream/${eventId}?eventName=${encodeURIComponent(eventName)}&nickname=${encodeURIComponent(chosenNickname)}`);
   };
 
@@ -48,12 +48,17 @@ export default function EventOnboardingJoinPage() {
       <CardContent className="space-y-6">
         <div className="space-y-2">
           <Label htmlFor="nickname" className="text-lg">Your Nickname for this Event:</Label>
-          <Input 
-            id="nickname" 
-            placeholder="e.g., MusicFan123, TechieTom" 
+          <Input
+            id="nickname"
+            placeholder="e.g., MusicFan123, TechieTom"
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
             className="text-base"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleJoinEvent();
+              }
+            }}
           />
           <p className="text-xs text-muted-foreground px-1 pt-1">
             Use a nickname to interact. Your main profile stays private unless you choose to share more.
