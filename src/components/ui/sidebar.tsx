@@ -11,9 +11,6 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-// Sheet and SheetContent are no longer used for the primary mobile sidebar mechanism if main content slides.
-// However, Sheet might be used by other parts of the app, so keep imports if necessary, or remove if specific to this old sidebar logic.
-// For this change, we are replacing the mobile sidebar's Sheet usage.
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -25,14 +22,14 @@ import {
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "16rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem" // Default width for mobile sidebar
+const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 type SidebarContext = {
-  state: "expanded" | "collapsed"
-  open: boolean
-  setOpen: (open: boolean) => void
+  state: "expanded" | "collapsed" // Desktop sidebar state
+  open: boolean // Desktop sidebar open state
+  setOpen: (open: boolean | ((currentOpen: boolean) => boolean)) => void // Controls desktop sidebar state
   openMobile: boolean
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
@@ -50,19 +47,30 @@ function useSidebar() {
   return context
 }
 
+const getInitialSidebarCookieState = (defaultOpenValue: boolean): boolean => {
+  if (typeof window === "undefined") {
+    return defaultOpenValue; // For SSR, or if window is not available
+  }
+  const cookieValue = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+    ?.split("=")[1];
+  return cookieValue ? cookieValue === "true" : defaultOpenValue;
+};
+
 const SidebarProvider = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
-    defaultOpen?: boolean
-    open?: boolean
-    onOpenChange?: (open: boolean) => void
+    defaultOpen?: boolean // Initial default if no cookie
+    open?: boolean // For controlled component scenarios (desktop)
+    onOpenChange?: (open: boolean) => void // For controlled component scenarios (desktop)
   }
 >(
   (
     {
       defaultOpen = true,
-      open: openProp,
-      onOpenChange: setOpenProp,
+      open: openProp, // This is the controlled prop for desktop sidebar
+      onOpenChange: setOpenProp, // Callback for controlled prop
       className,
       style,
       children,
@@ -73,26 +81,34 @@ const SidebarProvider = React.forwardRef<
     const isMobile = useIsMobile()
     const [openMobile, setOpenMobile] = React.useState(false)
 
-    const [_open, _setOpen] = React.useState(defaultOpen)
-    const open = openProp ?? _open
-    const setOpen = React.useCallback(
-      (value: boolean | ((value: boolean) => boolean)) => {
-        const openState = typeof value === "function" ? value(open) : value
-        if (setOpenProp) {
-          setOpenProp(openState)
-        } else {
-          _setOpen(openState)
+    // Internal state for desktop sidebar, initialized from cookie or defaultOpen
+    const [_openDesktop, _setOpenDesktop] = React.useState(() => getInitialSidebarCookieState(defaultOpen));
+    
+    // Effective open state for desktop (respects controlled prop if provided)
+    const currentDesktopOpen = openProp ?? _openDesktop;
+
+    const setDesktopOpen = React.useCallback(
+      (value: boolean | ((currentOpen: boolean) => boolean)) => {
+        const newOpenState = typeof value === "function" ? value(currentDesktopOpen) : value;
+
+        if (typeof window !== "undefined") {
+          document.cookie = `${SIDEBAR_COOKIE_NAME}=${newOpenState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
         }
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
+
+        if (setOpenProp) { // If controlled from outside
+          setOpenProp(newOpenState);
+        } else { // Else, manage internally
+          _setOpenDesktop(newOpenState);
+        }
       },
-      [setOpenProp, open]
-    )
+      [currentDesktopOpen, setOpenProp] // _setOpenDesktop is implicitly captured
+    );
 
     const toggleSidebar = React.useCallback(() => {
       return isMobile
-        ? setOpenMobile((open) => !open)
-        : setOpen((open) => !open)
-    }, [isMobile, setOpen, setOpenMobile])
+        ? setOpenMobile((current) => !current)
+        : setDesktopOpen((current) => !current);
+    }, [isMobile, setDesktopOpen, setOpenMobile]);
 
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
@@ -108,19 +124,19 @@ const SidebarProvider = React.forwardRef<
       return () => window.removeEventListener("keydown", handleKeyDown)
     }, [toggleSidebar])
 
-    const state = open ? "expanded" : "collapsed"
+    const desktopStateString = currentDesktopOpen ? "expanded" : "collapsed"
 
     const contextValue = React.useMemo<SidebarContext>(
       () => ({
-        state,
-        open,
-        setOpen,
+        state: desktopStateString,
+        open: currentDesktopOpen,
+        setOpen: setDesktopOpen,
         isMobile,
         openMobile,
         setOpenMobile,
         toggleSidebar,
       }),
-      [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+      [desktopStateString, currentDesktopOpen, setDesktopOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
     )
 
     return (
@@ -131,12 +147,12 @@ const SidebarProvider = React.forwardRef<
               {
                 "--sidebar-width": SIDEBAR_WIDTH,
                 "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
-                "--sidebar-width-mobile": SIDEBAR_WIDTH_MOBILE, // Added for mobile
+                "--sidebar-width-mobile": SIDEBAR_WIDTH_MOBILE,
                 ...style,
               } as React.CSSProperties
             }
             className={cn(
-              "group/sidebar-wrapper flex min-h-svh w-full overflow-x-hidden has-[[data-variant=inset]]:bg-sidebar", // Added overflow-x-hidden
+              "group/sidebar-wrapper flex min-h-svh w-full overflow-x-hidden has-[[data-variant=inset]]:bg-sidebar",
               className
             )}
             ref={ref}
@@ -161,11 +177,11 @@ const Sidebar = React.forwardRef<
 >(
   (
     {
-      side = "left", // Default to left
+      side = "left", 
       variant = "sidebar",
       collapsible = "offcanvas",
       className,
-      children, // This is AppSidebar's content
+      children, 
       ...props
     },
     ref
@@ -173,37 +189,29 @@ const Sidebar = React.forwardRef<
     const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
 
     if (isMobile) {
-      // New mobile implementation: main content slides, menu is fixed underneath.
       return (
         <>
-          {/* Mobile sidebar panel (fixed, revealed by main content sliding) */}
           <div
             data-sidebar="sidebar"
             data-mobile="true"
-            // Apply relevant classNames from the original Sidebar component if needed, or keep it simple
             className={cn(
               "fixed inset-y-0 z-10 h-full bg-sidebar text-sidebar-foreground p-0",
               "w-[var(--sidebar-width-mobile)]",
-              side === "left" ? "left-0" : "right-0" // Supports side prop
+              side === "left" ? "left-0" : "right-0" 
             )}
-            // style prop is already on SidebarProvider for --sidebar-width-mobile
           >
             <div className="flex h-full w-full flex-col">{children}</div>
           </div>
-
-          {/* Overlay for click-to-close, covers the slid-out main content */}
           {openMobile && (
             <div
               onClick={() => setOpenMobile(false)}
-              className="fixed inset-0 z-15 bg-black/50 md:hidden" // z-15 to be above sidebar (z-10) but below main content (z-20 when closed) or just high enough to catch clicks
-                                                                  // Correct z-index would be higher than slid main content (z-20). So z-25 could work.
+              className="fixed inset-0 z-20 bg-black/50 md:hidden" 
             />
           )}
         </>
       )
     }
-
-    // Desktop implementation (existing logic)
+    
     if (collapsible === "none") {
       return (
         <div
@@ -247,9 +255,9 @@ const Sidebar = React.forwardRef<
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
-            className // This className is from the <Sidebar> usage in app-sidebar.tsx
+            className 
           )}
-          {...props} // These props are from the <Sidebar> usage
+          {...props} 
         >
           <div
             data-sidebar="sidebar"
@@ -328,9 +336,8 @@ const SidebarInset = React.forwardRef<
     <main
       ref={ref}
       className={cn(
-        "relative flex min-h-svh flex-1 flex-col bg-background transition-transform duration-300 ease-in-out md:transition-none z-20", // Added transitions and z-20
-        isMobile && openMobile ? "translate-x-[var(--sidebar-width-mobile)] shadow-xl" : "translate-x-0", // Slide on mobile
-        // Desktop inset styles:
+        "relative flex min-h-svh flex-1 flex-col bg-background transition-transform duration-300 ease-in-out md:transition-none z-20", 
+        isMobile && openMobile ? "translate-x-[var(--sidebar-width-mobile)] shadow-xl" : "translate-x-0", 
         "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}

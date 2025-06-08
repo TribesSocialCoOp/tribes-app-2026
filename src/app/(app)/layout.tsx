@@ -6,10 +6,10 @@ import { AppHeader } from "@/components/layout/app-header";
 import React from "react";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = React.useState(true); // Default sidebar to open
-
+  // SidebarProvider will now manage its own open/collapsed state using cookies.
+  // No need for AppLayout to maintain 'open' state for the sidebar.
   return (
-    <SidebarProvider open={open} onOpenChange={setOpen}>
+    <SidebarProvider>
       <AppSidebar />
       <SidebarRail />
       <SidebarInset className="flex flex-col flex-1">
