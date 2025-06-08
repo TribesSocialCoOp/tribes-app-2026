@@ -26,7 +26,7 @@ interface EventStreamPost {
   dataAiHintImage?: string;
 }
 
-const MOCK_EVENT_STREAM_DATE_MS = new Date("2024-07-25T10:00:00.000Z").getTime();
+const MOCK_EVENT_STREAM_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
 // Sample event stream posts
 const sampleEventPosts: EventStreamPost[] = [

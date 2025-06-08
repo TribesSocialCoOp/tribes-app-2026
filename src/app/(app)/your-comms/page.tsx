@@ -36,7 +36,7 @@ interface CommunicationItem {
   dataAiHintImage?: string;
 }
 
-const MOCK_CURRENT_DATE_MS = new Date("2024-07-23T10:00:00.000Z").getTime();
+const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
 const familyBondMessages: CommunicationItem[] = [
   { id: "fb1", type: "family-bond", sender: "Mom", bondName: "Family Link", message: "Don't forget dinner on Sunday! Bringing your favorite pie. 🥧", avatarSrc: "https://placehold.co/40x40.png?text=M", avatarFallback: "M", timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1), dataAiHint: "mother family" },
@@ -378,3 +378,4 @@ export default function YourCommsPage() {
   );
 }
 
+    

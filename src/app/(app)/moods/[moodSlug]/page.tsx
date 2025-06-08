@@ -31,7 +31,7 @@ interface MoodStreamPost {
   dataAiHintImage?: string;
 }
 
-const MOCK_CURRENT_DATE_MS = new Date("2024-07-23T10:00:00.000Z").getTime();
+const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
 export const allMoodStreamPosts: MoodStreamPost[] = [
   // Existing Chill
@@ -258,5 +258,7 @@ export default function MoodStreamPage() {
     </div>
   );
 }
+
+    
 
     

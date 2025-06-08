@@ -27,7 +27,7 @@ import { BondSettingsDialog } from '@/components/dialogs/bond-settings-dialog';
 import { IntroductionDialog } from '@/components/dialogs/introduction-dialog';
 
 
-const MOCK_CURRENT_DATE_MS = new Date("2024-07-23T10:00:00.000Z").getTime();
+const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
 const generateInitialBondsData = (): Bond[] => [
   { id: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 30), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: false, keyType: "standard", pseudonym: "TechWatcher" },
@@ -746,3 +746,5 @@ export default function BondsPage() {
     </div>
   );
 }
+
+    

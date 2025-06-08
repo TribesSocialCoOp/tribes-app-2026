@@ -41,7 +41,7 @@ interface TribePost {
   comments?: number;
 }
 
-const MOCK_CURRENT_DATE_MS = new Date("2024-07-23T10:00:00.000Z").getTime();
+const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
 const sampleTribePosts: TribePost[] = [
   {
@@ -388,8 +388,7 @@ export default function TribeDetailPage() {
           <AccordionItem value="admin-tools" className="border-destructive/30 rounded-lg shadow-lg overflow-hidden">
             {/* The Card component is removed from here; its styling is applied to AccordionItem and Trigger/Content */}
               <AccordionTrigger className="w-full hover:bg-muted/20 transition-colors p-4 hover:no-underline rounded-t-lg">
-                {/* Grouping icon and text to ensure they stay left */}
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-3"> {/* Grouping icon and text */}
                   <ShieldAlert className="h-6 w-6 text-destructive" />
                   <div>
                     <CardTitle className="text-xl font-semibold tracking-normal text-destructive text-left">Tribe Admin Tools</CardTitle>
@@ -398,7 +397,6 @@ export default function TribeDetailPage() {
                     </CardDescription>
                   </div>
                 </div>
-                {/* Chevron is automatically added by AccordionTrigger and will be on the right */}
               </AccordionTrigger>
               <AccordionContent>
                 {/* CardContent's padding is applied here, original CardContent component removed */}
@@ -569,3 +567,5 @@ export default function TribeDetailPage() {
   );
 }
 
+
+    
