@@ -28,7 +28,7 @@ const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 type SidebarContext = {
   state: "expanded" | "collapsed" // Desktop sidebar state
-  open: boolean // Desktop sidebar open state
+  open: boolean // Desktop sidebar open state (effective state)
   setOpen: (open: boolean | ((currentOpen: boolean) => boolean)) => void // Controls desktop sidebar state
   openMobile: boolean
   setOpenMobile: (open: boolean) => void
@@ -47,30 +47,19 @@ function useSidebar() {
   return context
 }
 
-const getInitialSidebarCookieState = (defaultOpenValue: boolean): boolean => {
-  if (typeof window === "undefined") {
-    return defaultOpenValue; // For SSR, or if window is not available
-  }
-  const cookieValue = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
-    ?.split("=")[1];
-  return cookieValue ? cookieValue === "true" : defaultOpenValue;
-};
-
 const SidebarProvider = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
-    defaultOpen?: boolean // Initial default if no cookie
-    open?: boolean // For controlled component scenarios (desktop)
-    onOpenChange?: (open: boolean) => void // For controlled component scenarios (desktop)
+    defaultOpen?: boolean
+    open?: boolean 
+    onOpenChange?: (open: boolean) => void
   }
 >(
   (
     {
       defaultOpen = true,
-      open: openProp, // This is the controlled prop for desktop sidebar
-      onOpenChange: setOpenProp, // Callback for controlled prop
+      open: openProp,
+      onOpenChange: setOpenProp,
       className,
       style,
       children,
@@ -80,28 +69,38 @@ const SidebarProvider = React.forwardRef<
   ) => {
     const isMobile = useIsMobile()
     const [openMobile, setOpenMobile] = React.useState(false)
+    const [_openDesktop, _setOpenDesktop] = React.useState<boolean | undefined>(undefined);
 
-    // Internal state for desktop sidebar, initialized from cookie or defaultOpen
-    const [_openDesktop, _setOpenDesktop] = React.useState(() => getInitialSidebarCookieState(defaultOpen));
-    
-    // Effective open state for desktop (respects controlled prop if provided)
-    const currentDesktopOpen = openProp ?? _openDesktop;
+    // Effect to read cookie on mount
+    React.useEffect(() => {
+      if (typeof window !== "undefined" && _openDesktop === undefined) { // Only run if not already set (e.g. by controlled prop)
+        const cookieValue = document.cookie
+          .split("; ")
+          .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
+          ?.split("=")[1];
+        _setOpenDesktop(cookieValue ? cookieValue === "true" : defaultOpen);
+      }
+    }, [defaultOpen, _openDesktop]); // Add _openDesktop to dependencies to re-evaluate if it becomes undefined
+
+    // Determine effective open state for desktop
+    // If _openDesktop is undefined, it means we haven't read from cookie yet, so use defaultOpen or openProp.
+    const effectiveDesktopOpen = openProp ?? (_openDesktop === undefined ? defaultOpen : _openDesktop);
 
     const setDesktopOpen = React.useCallback(
       (value: boolean | ((currentOpen: boolean) => boolean)) => {
-        const newOpenState = typeof value === "function" ? value(currentDesktopOpen) : value;
+        const newOpenState = typeof value === "function" ? value(effectiveDesktopOpen) : value;
 
         if (typeof window !== "undefined") {
           document.cookie = `${SIDEBAR_COOKIE_NAME}=${newOpenState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
         }
 
-        if (setOpenProp) { // If controlled from outside
+        if (setOpenProp) {
           setOpenProp(newOpenState);
-        } else { // Else, manage internally
+        } else {
           _setOpenDesktop(newOpenState);
         }
       },
-      [currentDesktopOpen, setOpenProp] // _setOpenDesktop is implicitly captured
+      [effectiveDesktopOpen, setOpenProp]
     );
 
     const toggleSidebar = React.useCallback(() => {
@@ -124,20 +123,30 @@ const SidebarProvider = React.forwardRef<
       return () => window.removeEventListener("keydown", handleKeyDown)
     }, [toggleSidebar])
 
-    const desktopStateString = currentDesktopOpen ? "expanded" : "collapsed"
+    const desktopStateString = effectiveDesktopOpen ? "expanded" : "collapsed"
 
     const contextValue = React.useMemo<SidebarContext>(
       () => ({
         state: desktopStateString,
-        open: currentDesktopOpen,
+        open: effectiveDesktopOpen,
         setOpen: setDesktopOpen,
         isMobile,
         openMobile,
         setOpenMobile,
         toggleSidebar,
       }),
-      [desktopStateString, currentDesktopOpen, setDesktopOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+      [desktopStateString, effectiveDesktopOpen, setDesktopOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
     )
+
+    // If _openDesktop is still undefined, it means we're in the very initial render cycle before useEffect has run.
+    // This can happen during SSR or very fast client renders.
+    // To prevent a flash, we might want to show nothing or a loader, but for simplicity here,
+    // we'll let it use defaultOpen, and useEffect will quickly correct it.
+    if (_openDesktop === undefined && typeof window !== "undefined" && !openProp) {
+      // This block is tricky. If we return null, it might cause issues with hydration if SSR rendered something else.
+      // For now, we'll allow the brief use of defaultOpen until useEffect corrects.
+      // A more advanced solution might involve a "loading" state in the context.
+    }
 
     return (
       <SidebarContext.Provider value={contextValue}>
@@ -186,7 +195,7 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+    const { isMobile, state, openMobile, setOpenMobile, open: desktopOpen } = useSidebar() // Use `open` from context
 
     if (isMobile) {
       return (
@@ -194,10 +203,12 @@ const Sidebar = React.forwardRef<
           <div
             data-sidebar="sidebar"
             data-mobile="true"
+            data-state={openMobile ? "expanded" : "collapsed"} // Added data-state for mobile
             className={cn(
-              "fixed inset-y-0 z-10 h-full bg-sidebar text-sidebar-foreground p-0",
+              "fixed inset-y-0 z-30 h-full bg-sidebar text-sidebar-foreground p-0 transition-transform duration-300 ease-in-out", // z-index increased
               "w-[var(--sidebar-width-mobile)]",
-              side === "left" ? "left-0" : "right-0" 
+              side === "left" ? (openMobile ? "translate-x-0" : "-translate-x-full") : (openMobile ? "translate-x-0" : "translate-x-full"), // Corrected for right side
+              className
             )}
           >
             <div className="flex h-full w-full flex-col">{children}</div>
@@ -227,12 +238,15 @@ const Sidebar = React.forwardRef<
       )
     }
     
+    // Use `desktopOpen` (which is `open` from context) for desktop state
+    const currentDesktopState = desktopOpen ? "expanded" : "collapsed";
+
     return (
       <div
         ref={ref}
         className="group peer hidden md:block text-sidebar-foreground"
-        data-state={state}
-        data-collapsible={state === "collapsed" ? collapsible : ""}
+        data-state={currentDesktopState} // Use effective state
+        data-collapsible={currentDesktopState === "collapsed" ? collapsible : ""}
         data-variant={variant}
         data-side={side}
       >
@@ -276,7 +290,7 @@ const SidebarTrigger = React.forwardRef<
   React.ElementRef<typeof Button>,
   React.ComponentProps<typeof Button>
 >(({ className, onClick, ...props }, ref) => {
-  const { toggleSidebar, isMobile } = useSidebar()
+  const { toggleSidebar, isMobile, openMobile, open: desktopOpen } = useSidebar()
 
   return (
     <Button
@@ -284,14 +298,14 @@ const SidebarTrigger = React.forwardRef<
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn(className)}
+      className={cn("z-30", className)} // z-index increased for mobile trigger
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
-      {isMobile ? <Menu /> : <PanelLeft />}
+      {isMobile ? (openMobile ? <PanelLeft /> : <Menu />) : (desktopOpen ? <PanelLeft /> : <Menu />) }
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )
@@ -336,8 +350,8 @@ const SidebarInset = React.forwardRef<
     <main
       ref={ref}
       className={cn(
-        "relative flex min-h-svh flex-1 flex-col bg-background transition-transform duration-300 ease-in-out md:transition-none z-20", 
-        isMobile && openMobile ? "translate-x-[var(--sidebar-width-mobile)] shadow-xl" : "translate-x-0", 
+        "relative flex min-h-svh flex-1 flex-col bg-background transition-transform duration-300 ease-in-out md:transition-none",
+        isMobile && openMobile ? "translate-x-[var(--sidebar-width-mobile)] shadow-xl z-20" : "translate-x-0 z-0", // Ensure z-index logic
         "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}
