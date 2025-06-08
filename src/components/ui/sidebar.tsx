@@ -32,7 +32,7 @@ type SidebarContext = {
   setOpen: (open: boolean | ((currentOpen: boolean) => boolean)) => void // Controls desktop sidebar state
   openMobile: boolean
   setOpenMobile: (open: boolean) => void
-  isMobile: boolean
+  isMobile: boolean | undefined // Can be undefined initially
   toggleSidebar: () => void
 }
 
@@ -67,23 +67,20 @@ const SidebarProvider = React.forwardRef<
     },
     ref
   ) => {
-    const isMobile = useIsMobile()
+    const clientIsMobile = useIsMobile() // from hook, undefined initially
     const [openMobile, setOpenMobile] = React.useState(false)
     const [_openDesktop, _setOpenDesktop] = React.useState<boolean | undefined>(undefined);
 
-    // Effect to read cookie on mount
     React.useEffect(() => {
-      if (typeof window !== "undefined" && _openDesktop === undefined) { // Only run if not already set (e.g. by controlled prop)
+      if (openProp === undefined && _openDesktop === undefined && typeof window !== "undefined") {
         const cookieValue = document.cookie
           .split("; ")
           .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
           ?.split("=")[1];
         _setOpenDesktop(cookieValue ? cookieValue === "true" : defaultOpen);
       }
-    }, [defaultOpen, _openDesktop]); // Add _openDesktop to dependencies to re-evaluate if it becomes undefined
+    }, [defaultOpen, openProp, _openDesktop]);
 
-    // Determine effective open state for desktop
-    // If _openDesktop is undefined, it means we haven't read from cookie yet, so use defaultOpen or openProp.
     const effectiveDesktopOpen = openProp ?? (_openDesktop === undefined ? defaultOpen : _openDesktop);
 
     const setDesktopOpen = React.useCallback(
@@ -104,10 +101,10 @@ const SidebarProvider = React.forwardRef<
     );
 
     const toggleSidebar = React.useCallback(() => {
-      return isMobile
+      return clientIsMobile // Use the value from the hook
         ? setOpenMobile((current) => !current)
         : setDesktopOpen((current) => !current);
-    }, [isMobile, setDesktopOpen, setOpenMobile]);
+    }, [clientIsMobile, setDesktopOpen, setOpenMobile]);
 
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
@@ -130,23 +127,13 @@ const SidebarProvider = React.forwardRef<
         state: desktopStateString,
         open: effectiveDesktopOpen,
         setOpen: setDesktopOpen,
-        isMobile,
+        isMobile: clientIsMobile, // Pass the potentially undefined value
         openMobile,
         setOpenMobile,
         toggleSidebar,
       }),
-      [desktopStateString, effectiveDesktopOpen, setDesktopOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+      [desktopStateString, effectiveDesktopOpen, setDesktopOpen, clientIsMobile, openMobile, setOpenMobile, toggleSidebar]
     )
-
-    // If _openDesktop is still undefined, it means we're in the very initial render cycle before useEffect has run.
-    // This can happen during SSR or very fast client renders.
-    // To prevent a flash, we might want to show nothing or a loader, but for simplicity here,
-    // we'll let it use defaultOpen, and useEffect will quickly correct it.
-    if (_openDesktop === undefined && typeof window !== "undefined" && !openProp) {
-      // This block is tricky. If we return null, it might cause issues with hydration if SSR rendered something else.
-      // For now, we'll allow the brief use of defaultOpen until useEffect corrects.
-      // A more advanced solution might involve a "loading" state in the context.
-    }
 
     return (
       <SidebarContext.Provider value={contextValue}>
@@ -195,19 +182,19 @@ const Sidebar = React.forwardRef<
     },
     ref
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile, open: desktopOpen } = useSidebar() // Use `open` from context
+    const { isMobile, state, openMobile, setOpenMobile, open: desktopOpen } = useSidebar() 
 
-    if (isMobile) {
+    if (isMobile) { // isMobile can be undefined here initially on client
       return (
         <>
           <div
             data-sidebar="sidebar"
             data-mobile="true"
-            data-state={openMobile ? "expanded" : "collapsed"} // Added data-state for mobile
+            data-state={openMobile ? "expanded" : "collapsed"}
             className={cn(
-              "fixed inset-y-0 z-30 h-full bg-sidebar text-sidebar-foreground p-0 transition-transform duration-300 ease-in-out", // z-index increased
+              "fixed inset-y-0 z-30 h-full bg-sidebar text-sidebar-foreground p-0 transition-transform duration-300 ease-in-out",
               "w-[var(--sidebar-width-mobile)]",
-              side === "left" ? (openMobile ? "translate-x-0" : "-translate-x-full") : (openMobile ? "translate-x-0" : "translate-x-full"), // Corrected for right side
+              side === "left" ? (openMobile ? "translate-x-0" : "-translate-x-full") : (openMobile ? "translate-x-0" : "translate-x-full"),
               className
             )}
           >
@@ -223,6 +210,7 @@ const Sidebar = React.forwardRef<
       )
     }
     
+    // For desktop, if isMobile is undefined, we assume it's not mobile.
     if (collapsible === "none") {
       return (
         <div
@@ -238,14 +226,13 @@ const Sidebar = React.forwardRef<
       )
     }
     
-    // Use `desktopOpen` (which is `open` from context) for desktop state
     const currentDesktopState = desktopOpen ? "expanded" : "collapsed";
 
     return (
       <div
         ref={ref}
         className="group peer hidden md:block text-sidebar-foreground"
-        data-state={currentDesktopState} // Use effective state
+        data-state={currentDesktopState}
         data-collapsible={currentDesktopState === "collapsed" ? collapsible : ""}
         data-variant={variant}
         data-side={side}
@@ -291,6 +278,19 @@ const SidebarTrigger = React.forwardRef<
   React.ComponentProps<typeof Button>
 >(({ className, onClick, ...props }, ref) => {
   const { toggleSidebar, isMobile, openMobile, open: desktopOpen } = useSidebar()
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const renderIcon = () => {
+    if (!mounted || isMobile === undefined) {
+      // Initial render state (matches server if desktopOpen is consistent)
+      return desktopOpen ? <PanelLeft /> : <Menu />;
+    }
+    return isMobile ? (openMobile ? <PanelLeft /> : <Menu />) : (desktopOpen ? <PanelLeft /> : <Menu />);
+  }
 
   return (
     <Button
@@ -298,14 +298,14 @@ const SidebarTrigger = React.forwardRef<
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn("z-30", className)} // z-index increased for mobile trigger
+      className={cn("z-30", className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
       }}
       {...props}
     >
-      {isMobile ? (openMobile ? <PanelLeft /> : <Menu />) : (desktopOpen ? <PanelLeft /> : <Menu />) }
+      {renderIcon()}
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   )
@@ -346,12 +346,19 @@ const SidebarInset = React.forwardRef<
   React.ComponentProps<"main">
 >(({ className, ...props }, ref) => {
   const { isMobile, openMobile } = useSidebar();
+  const [mounted, setMounted] = React.useState(false)
+
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+
   return (
     <main
       ref={ref}
       className={cn(
         "relative flex min-h-svh flex-1 flex-col bg-background transition-transform duration-300 ease-in-out md:transition-none",
-        isMobile && openMobile ? "translate-x-[var(--sidebar-width-mobile)] shadow-xl z-20" : "translate-x-0 z-0", // Ensure z-index logic
+        // Only apply transform classes after mount and if isMobile is determined
+        mounted && isMobile && openMobile ? "translate-x-[var(--sidebar-width-mobile)] shadow-xl z-20" : "translate-x-0 z-0",
         "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}
@@ -611,7 +618,7 @@ const SidebarMenuButton = React.forwardRef<
         <TooltipContent
           side="right"
           align="center"
-          hidden={state !== "collapsed" || isMobile}
+          hidden={(isMobile === undefined || isMobile) || state !== "collapsed" } // Hide if mobile or sidebar expanded
           {...tooltip}
         />
       </Tooltip>
