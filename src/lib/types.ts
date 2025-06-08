@@ -48,7 +48,9 @@ export interface Bond {
   pseudonym?: string; // Your alias when interacting with this bond target
   targetPseudonymForMe?: string; // The alias the bond target (if user) uses for you
   tribeAssignedNickname?: string; // The nickname assigned to YOU by the tribe (if target is tribe)
+  displayPreferenceForTribeNickname?: 'my_alias' | 'tribe_assigned_nickname'; // User's preference for display
+  tribeNicknameVibe?: 'love_it' | 'okay' | 'not_for_me'; // User's feedback on the nickname
+  isTribeNicknameReported?: boolean; // Flag if the nickname has been reported
 }
 
 // Other shared types can be added here as the application grows.
-
