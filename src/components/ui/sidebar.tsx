@@ -6,7 +6,7 @@ import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft, Menu } from "lucide-react"
 
-import { useIsMobile } from "@/hooks/use-mobile"
+import { useIsMobile as useActualIsMobile } from "@/hooks/use-mobile" // Renamed to avoid conflict if used directly
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,25 +25,25 @@ const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
+const MOBILE_BREAKPOINT = 768 // Keep this consistent with use-mobile hook
 
-type SidebarContext = {
-  state: "expanded" | "collapsed" // Desktop sidebar state
-  open: boolean // Desktop sidebar open state (effective state)
+type SidebarContextValue = {
+  state: "expanded" | "collapsed" // Desktop sidebar state string
+  open: boolean // Effective desktop open state (true for expanded)
   setOpen: (open: boolean | ((currentOpen: boolean) => boolean)) => void // Controls desktop sidebar state
   openMobile: boolean
   setOpenMobile: (open: boolean) => void
-  isMobile: boolean | undefined // Can be undefined initially
+  isMobile: boolean // No longer undefined in context
   toggleSidebar: () => void
 }
 
-const SidebarContext = React.createContext<SidebarContext | null>(null)
+const SidebarContext = React.createContext<SidebarContextValue | null>(null)
 
 function useSidebar() {
   const context = React.useContext(SidebarContext)
   if (!context) {
     throw new Error("useSidebar must be used within a SidebarProvider.")
   }
-
   return context
 }
 
@@ -51,15 +51,15 @@ const SidebarProvider = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
     defaultOpen?: boolean
-    open?: boolean 
+    open?: boolean
     onOpenChange?: (open: boolean) => void
   }
 >(
   (
     {
       defaultOpen = true,
-      open: openProp,
-      onOpenChange: setOpenProp,
+      open: openProp, // Controlled prop for desktop open state
+      onOpenChange: setOpenProp, // Controlled prop setter
       className,
       style,
       children,
@@ -67,73 +67,89 @@ const SidebarProvider = React.forwardRef<
     },
     ref
   ) => {
-    const clientIsMobile = useIsMobile() // from hook, undefined initially
-    const [openMobile, setOpenMobile] = React.useState(false)
-    const [_openDesktop, _setOpenDesktop] = React.useState<boolean | undefined>(undefined);
+    // State for client-side determination
+    const [isMobileClient, setIsMobileClient] = React.useState(false);
+    const [openDesktopState, setOpenDesktopState] = React.useState(defaultOpen); // Internal state if not controlled
 
+    // Mobile-specific state
+    const [openMobile, setOpenMobile] = React.useState(false)
+
+    // Determine effective desktop open state (controlled or internal)
+    const effectiveDesktopOpen = openProp !== undefined ? openProp : openDesktopState;
+
+    // Effect for client-side only logic (isMobile, cookie)
     React.useEffect(() => {
-      if (openProp === undefined && _openDesktop === undefined && typeof window !== "undefined") {
+      // Determine isMobile
+      const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+      const handleResize = () => setIsMobileClient(mql.matches);
+      mql.addEventListener("change", handleResize);
+      handleResize(); // Initial check
+
+      // Read cookie for desktop state if not controlled
+      if (openProp === undefined) {
         const cookieValue = document.cookie
           .split("; ")
           .find((row) => row.startsWith(`${SIDEBAR_COOKIE_NAME}=`))
           ?.split("=")[1];
-        _setOpenDesktop(cookieValue ? cookieValue === "true" : defaultOpen);
+        if (cookieValue !== undefined) {
+          setOpenDesktopState(cookieValue === "true");
+        }
       }
-    }, [defaultOpen, openProp, _openDesktop]);
+      
+      return () => mql.removeEventListener("change", handleResize);
+    }, [openProp]); // Only re-run if openProp changes (relevant for controlled component scenario)
 
-    const effectiveDesktopOpen = openProp ?? (_openDesktop === undefined ? defaultOpen : _openDesktop);
 
     const setDesktopOpen = React.useCallback(
       (value: boolean | ((currentOpen: boolean) => boolean)) => {
         const newOpenState = typeof value === "function" ? value(effectiveDesktopOpen) : value;
 
+        if (setOpenProp) { // If controlled, call the prop
+          setOpenProp(newOpenState);
+        } else { // Else, update internal state
+          setOpenDesktopState(newOpenState);
+        }
+        // Always update cookie
         if (typeof window !== "undefined") {
           document.cookie = `${SIDEBAR_COOKIE_NAME}=${newOpenState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
-        }
-
-        if (setOpenProp) {
-          setOpenProp(newOpenState);
-        } else {
-          _setOpenDesktop(newOpenState);
         }
       },
       [effectiveDesktopOpen, setOpenProp]
     );
 
     const toggleSidebar = React.useCallback(() => {
-      return clientIsMobile // Use the value from the hook
-        ? setOpenMobile((current) => !current)
-        : setDesktopOpen((current) => !current);
-    }, [clientIsMobile, setDesktopOpen, setOpenMobile]);
+      if (isMobileClient) {
+        setOpenMobile((current) => !current);
+      } else {
+        setDesktopOpen((current) => !current);
+      }
+    }, [isMobileClient, setDesktopOpen]);
 
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
-        if (
-          event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-          (event.metaKey || event.ctrlKey)
-        ) {
-          event.preventDefault()
-          toggleSidebar()
+        if (event.key === SIDEBAR_KEYBOARD_SHORTCUT && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          toggleSidebar();
         }
-      }
-      window.addEventListener("keydown", handleKeyDown)
-      return () => window.removeEventListener("keydown", handleKeyDown)
-    }, [toggleSidebar])
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [toggleSidebar]);
 
-    const desktopStateString = effectiveDesktopOpen ? "expanded" : "collapsed"
+    const desktopStateString = effectiveDesktopOpen ? "expanded" : "collapsed";
 
-    const contextValue = React.useMemo<SidebarContext>(
+    const contextValue = React.useMemo<SidebarContextValue>(
       () => ({
         state: desktopStateString,
         open: effectiveDesktopOpen,
         setOpen: setDesktopOpen,
-        isMobile: clientIsMobile, // Pass the potentially undefined value
+        isMobile: isMobileClient, // Use the client-determined value
         openMobile,
         setOpenMobile,
         toggleSidebar,
       }),
-      [desktopStateString, effectiveDesktopOpen, setDesktopOpen, clientIsMobile, openMobile, setOpenMobile, toggleSidebar]
-    )
+      [desktopStateString, effectiveDesktopOpen, setDesktopOpen, isMobileClient, openMobile, setOpenMobile, toggleSidebar]
+    );
 
     return (
       <SidebarContext.Provider value={contextValue}>
@@ -173,18 +189,18 @@ const Sidebar = React.forwardRef<
 >(
   (
     {
-      side = "left", 
+      side = "left",
       variant = "sidebar",
       collapsible = "offcanvas",
       className,
-      children, 
+      children,
       ...props
     },
     ref
   ) => {
-    const { isMobile, state, openMobile, setOpenMobile, open: desktopOpen } = useSidebar() 
+    const { isMobile, state, openMobile, setOpenMobile, open: desktopOpen } = useSidebar()
 
-    if (isMobile) { // isMobile can be undefined here initially on client
+    if (isMobile) {
       return (
         <>
           <div
@@ -203,14 +219,13 @@ const Sidebar = React.forwardRef<
           {openMobile && (
             <div
               onClick={() => setOpenMobile(false)}
-              className="fixed inset-0 z-20 bg-black/50 md:hidden" 
+              className="fixed inset-0 z-20 bg-black/50 md:hidden"
             />
           )}
         </>
       )
     }
-    
-    // For desktop, if isMobile is undefined, we assume it's not mobile.
+
     if (collapsible === "none") {
       return (
         <div
@@ -225,7 +240,7 @@ const Sidebar = React.forwardRef<
         </div>
       )
     }
-    
+
     const currentDesktopState = desktopOpen ? "expanded" : "collapsed";
 
     return (
@@ -256,9 +271,9 @@ const Sidebar = React.forwardRef<
             variant === "floating" || variant === "inset"
               ? "p-2 group-data-[collapsible=icon]:w-[calc(var(--sidebar-width-icon)_+_theme(spacing.4)_+2px)]"
               : "group-data-[collapsible=icon]:w-[--sidebar-width-icon] group-data-[side=left]:border-r group-data-[side=right]:border-l",
-            className 
+            className
           )}
-          {...props} 
+          {...props}
         >
           <div
             data-sidebar="sidebar"
@@ -278,17 +293,14 @@ const SidebarTrigger = React.forwardRef<
   React.ComponentProps<typeof Button>
 >(({ className, onClick, ...props }, ref) => {
   const { toggleSidebar, isMobile, openMobile, open: desktopOpen } = useSidebar()
-  const [mounted, setMounted] = React.useState(false)
-
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
 
   const renderIcon = () => {
-    if (!mounted || isMobile === undefined) {
-      // Initial render state (matches server if desktopOpen is consistent)
+    // On the server and initial client render before isMobile is determined,
+    // base the icon on desktopOpen to match server rendering.
+    if (typeof window === 'undefined' || !('matchMedia' in window)) { // Simplistic check for server
       return desktopOpen ? <PanelLeft /> : <Menu />;
     }
+    // Once on client and isMobile is determined
     return isMobile ? (openMobile ? <PanelLeft /> : <Menu />) : (desktopOpen ? <PanelLeft /> : <Menu />);
   }
 
@@ -346,19 +358,19 @@ const SidebarInset = React.forwardRef<
   React.ComponentProps<"main">
 >(({ className, ...props }, ref) => {
   const { isMobile, openMobile } = useSidebar();
-  const [mounted, setMounted] = React.useState(false)
 
-  React.useEffect(() => {
-    setMounted(true)
-  }, [])
+  // Logic to determine class based on client-side state, ensuring server match initially
+  const getDynamicClass = () => {
+    if (typeof window === 'undefined') return "translate-x-0 z-0"; // Server render
+    return isMobile && openMobile ? "translate-x-[var(--sidebar-width-mobile)] shadow-xl z-20" : "translate-x-0 z-0";
+  };
 
   return (
     <main
       ref={ref}
       className={cn(
         "relative flex min-h-svh flex-1 flex-col bg-background transition-transform duration-300 ease-in-out md:transition-none",
-        // Only apply transform classes after mount and if isMobile is determined
-        mounted && isMobile && openMobile ? "translate-x-[var(--sidebar-width-mobile)] shadow-xl z-20" : "translate-x-0 z-0",
+        getDynamicClass(), // Apply dynamic class
         "peer-data-[variant=inset]:min-h-[calc(100svh-theme(spacing.4))] md:peer-data-[variant=inset]:m-2 md:peer-data-[state=collapsed]:peer-data-[variant=inset]:ml-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-xl md:peer-data-[variant=inset]:shadow",
         className
       )}
@@ -618,7 +630,7 @@ const SidebarMenuButton = React.forwardRef<
         <TooltipContent
           side="right"
           align="center"
-          hidden={(isMobile === undefined || isMobile) || state !== "collapsed" } // Hide if mobile or sidebar expanded
+          hidden={ isMobile || state !== "collapsed" }
           {...tooltip}
         />
       </Tooltip>
@@ -794,3 +806,5 @@ export {
   SidebarTrigger,
   useSidebar,
 }
+
+    
