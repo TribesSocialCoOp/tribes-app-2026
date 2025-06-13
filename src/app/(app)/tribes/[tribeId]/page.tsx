@@ -11,14 +11,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Users, MessageSquareText, ThumbsUp, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, Pencil } from "lucide-react";
+import { ArrowLeft, Users, MessageSquareText, ThumbsUp, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, ListChecks, UsersRound, FileWarning } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from '@/components/ui/separator';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 
@@ -120,7 +118,7 @@ export const mockReportedContentData: ReportedPost[] = [
   { postId: "tribe_post_hikers_local1", postTitle: "Weekend Hike Recap: Mountain Peak (Tribe Exclusive Pics)", reporterName: "SafetyFirst", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2), reason: "Sharing potentially dangerous trail info without proper warnings." },
 ];
 
-interface TribeMember {
+export interface TribeMember {
   id: string;
   name: string;
   avatar: string;
@@ -318,32 +316,24 @@ export default function TribeDetailPage() {
   const [locallyPromotedPostIds, setLocallyPromotedPostIds] = useState<Set<string>>(new Set());
   
   const [currentTribePostsData, setCurrentTribePostsData] = useState<TribePost[]>(initialSampleTribePosts);
-  const [reportedContent, setReportedContent] = useState<ReportedPost[]>(mockReportedContentData);
-  const [currentTribeMembers, setCurrentTribeMembers] = useState<TribeMember[]>(
-    initialMockMembers.map(member => ({ ...member, tribeAssignedNickname: undefined }))
-  );
-  const [isNicknameDialogOpen, setIsNicknameDialogOpen] = useState(false);
-  const [memberToEditNickname, setMemberToEditNickname] = useState<TribeMember | null>(null);
-  const [nicknameInputValue, setNicknameInputValue] = useState("");
+  const [reportedContent] = useState<ReportedPost[]>(mockReportedContentData); // Global reports state remains for now
+  const [currentTribeMembers, setCurrentTribeMembers] = useState<TribeMember[]>([]);
 
 
   const isUserMember = true;
-  const isTribeAdmin = true;
+  const isTribeAdmin = true; // Assuming user is admin for this tribe for now
 
   useEffect(() => {
     if (tribeId) {
       const currentTribeData = tribesData.find(t => t.id === tribeId);
       if (currentTribeData) {
         setTribe(currentTribeData);
-        // Here you might filter initialMockMembers to only include actual members of this tribe if that data was available.
-        // For now, we assume initialMockMembers are generic users who *could* be in this tribe.
-        const membersWithPossibleNicknames = initialMockMembers.map(member => ({
+        const membersForThisTribe = initialMockMembers.map(member => ({
             ...member,
-            // In a real app, this nickname would be fetched based on tribeId and member.id
-            tribeAssignedNickname: member.id === 'user1' && tribeId === '1' ? 'AI Lead' : undefined 
+            tribeAssignedNickname: (member.id === 'user1' && tribeId === '1') ? 'AI Lead' : 
+                                   (member.id === 'user2' && tribeId === '2') ? 'Trail Master' : undefined
         }));
-        setCurrentTribeMembers(membersWithPossibleNicknames);
-
+        setCurrentTribeMembers(membersForThisTribe);
       } else {
         router.push('/tribes');
       }
@@ -419,7 +409,6 @@ export default function TribeDetailPage() {
       toast({
         title: "Already Promoted",
         description: `"${post.title || 'This post'}" is already in a mood stream.`,
-        variant: "default",
       });
       return;
     }
@@ -443,7 +432,6 @@ export default function TribeDetailPage() {
          toast({
             title: "Already Reported",
             description: `You or someone else has already reported "${post.title || 'this post'}". An admin will review it.`,
-            variant: "default",
         });
         return;
     }
@@ -453,64 +441,6 @@ export default function TribeDetailPage() {
     });
   };
 
-  const handleAdminViewReportedPost = (postId: string) => {
-    const postElement = document.getElementById(`post-${postId}`);
-    if (postElement) {
-      postElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      postElement.classList.add('ring-2', 'ring-offset-2', 'ring-primary', 'transition-all', 'duration-1000');
-      setTimeout(() => {
-        postElement.classList.remove('ring-2', 'ring-offset-2', 'ring-primary', 'transition-all', 'duration-1000');
-      }, 3000);
-    } else {
-      toast({
-          title: "Post Not Found in Feed",
-          description: `Post ID: ${postId} may have been removed or is not currently visible.`,
-          variant: "destructive"
-      });
-    }
-  };
-  
-  const handleAdminDismissReport = (postIdToDismiss: string) => {
-    setReportedContent(prev => prev.filter(report => report.postId !== postIdToDismiss));
-    toast({
-      title: "Report Dismissed",
-      description: `Report for post ID ${postIdToDismiss} has been dismissed. The post remains visible.`,
-    });
-  };
-  
-  const handleAdminRemovePost = (postIdToRemove: string, postTitle?: string) => {
-    setReportedContent(prev => prev.filter(report => report.postId !== postIdToRemove));
-    setCurrentTribePostsData(prevPosts => prevPosts.filter(post => post.id !== postIdToRemove));
-    
-    toast({
-      title: "Post Removed",
-      description: `Post "${postTitle || postIdToRemove}" has been removed from the tribe feed and the report queue.`,
-      variant: "destructive",
-    });
-  };
-
-  const handleOpenNicknameDialog = (member: TribeMember) => {
-    setMemberToEditNickname(member);
-    setNicknameInputValue(member.tribeAssignedNickname || "");
-    setIsNicknameDialogOpen(true);
-  };
-
-  const handleSaveNickname = () => {
-    if (!memberToEditNickname) return;
-    setCurrentTribeMembers(prevMembers => 
-      prevMembers.map(member => 
-        member.id === memberToEditNickname.id 
-          ? { ...member, tribeAssignedNickname: nicknameInputValue.trim() || undefined } 
-          : member
-      )
-    );
-    toast({
-      title: "Nickname Updated",
-      description: `Nickname for ${memberToEditNickname.name} has been set to "${nicknameInputValue.trim() || '(cleared)'}".`,
-    });
-    setIsNicknameDialogOpen(false);
-    setMemberToEditNickname(null);
-  };
 
   if (!tribe) {
     return (
@@ -522,127 +452,51 @@ export default function TribeDetailPage() {
 
   const tribeMoodObjects = tribe.moods?.map(slug => moodsData.find(m => m.slug === slug)).filter(Boolean) || [];
 
-  const handleMuteUser = (userId: string, userName: string) => {
-    alert(`User ${userName} muted in tribe. (Simulated)`);
-  };
-
-  const handleRemoveUser = (userId: string, userName: string) => {
-    alert(`User ${userName} removed from tribe. (Simulated)`);
-  };
-
-  const handleViewUserProfile = (userId: string) => {
-    alert(`Viewing profile for user ID: ${userId}. (Simulated)`);
-  };
-
 
   return (
     <div className="space-y-6 pb-12">
       {isTribeAdmin && (
-        <Accordion type="single" collapsible className="w-full" defaultValue="admin-tools-closed">
-          <AccordionItem value="admin-tools" className="border-destructive/30 rounded-lg shadow-lg overflow-hidden">
-              <AccordionTrigger className="w-full hover:bg-muted/20 transition-colors p-4 hover:no-underline rounded-t-lg">
+        <Card className="shadow-xl border-primary/30">
+            <CardHeader className="p-4">
                 <div className="flex items-center space-x-3">
-                  <ShieldAlert className="h-6 w-6 text-destructive" />
-                  <div>
-                    <CardTitle className="text-xl font-semibold tracking-normal text-destructive text-left">Tribe Admin Tools</CardTitle>
-                    <CardDescription className="text-sm text-left">
-                      Manage members, content, and settings for <span className="font-medium">{tribe.name}</span>.
-                    </CardDescription>
-                  </div>
+                    <ShieldAlert className="h-7 w-7 text-primary" />
+                    <div>
+                        <CardTitle className="text-xl font-semibold tracking-normal text-primary">Tribe Admin Dashboard</CardTitle>
+                        <CardDescription className="text-sm">
+                            Quick stats and admin tools for <span className="font-medium">{tribe.name}</span>.
+                        </CardDescription>
+                    </div>
                 </div>
-              </AccordionTrigger>
-              <AccordionContent>
-                <div className="space-y-6 p-4 pt-2">
-                  <div>
-                    <h3 className="text-lg font-medium text-foreground mb-2 flex items-center">
-                      <UserCog className="mr-2 h-5 w-5 text-muted-foreground" /> Member Management
-                    </h3>
-                    {currentTribeMembers.length > 0 ? (
-                      <ul className="space-y-2">
-                        {currentTribeMembers.map(member => (
-                          <li key={member.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-md">
-                            <div className="flex items-center space-x-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={member.avatar} alt={member.name} data-ai-hint={member.dataAiHint} />
-                                <AvatarFallback>{member.name.substring(0,2).toUpperCase()}</AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <span className="text-sm font-medium">{member.name}</span>
-                                {member.tribeAssignedNickname && (
-                                  <p className="text-xs text-primary italic">Nickname: {member.tribeAssignedNickname}</p>
-                                )}
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <Button variant="ghost" size="sm" onClick={() => handleViewUserProfile(member.id)}>View</Button>
-                              <Button variant="outline" size="sm" onClick={() => handleOpenNicknameDialog(member)}>
-                                <Pencil className="h-3.5 w-3.5 mr-1.5" /> {member.tribeAssignedNickname ? "Edit" : "Assign"} Nickname
-                              </Button>
-                              <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                                          <MoreVertical className="h-4 w-4" />
-                                      </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                      <DropdownMenuItem onClick={() => handleMuteUser(member.id, member.name)}>Mute in Tribe</DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => handleRemoveUser(member.id, member.name)} className="text-destructive">Remove from Tribe</DropdownMenuItem>
-                                  </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No members to manage currently.</p>
-                    )}
-                  </div>
-                  <Separator />
-                  <div>
-                    <h3 className="text-lg font-medium text-foreground mb-3 flex items-center">
-                      <Inbox className="mr-2 h-5 w-5 text-muted-foreground" /> Reported Content Queue ({currentTribeReportedPosts.length})
-                    </h3>
-                    {currentTribeReportedPosts.length > 0 ? (
-                      <ul className="space-y-3">
-                        {currentTribeReportedPosts.map(report => (
-                          <li key={report.postId} className="p-3 bg-muted/30 rounded-md border border-destructive/20">
-                            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
-                                <div>
-                                    <p className="text-sm font-semibold">
-                                        <button onClick={() => handleAdminViewReportedPost(report.postId)} className="hover:underline text-primary">
-                                            {report.postTitle || `Post ID: ${report.postId}`}
-                                        </button>
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        Reported by: {report.reporterName} on {format(report.reportedAt, "MMM d, yyyy h:mm a")}
-                                    </p>
-                                    {report.reason && <p className="text-xs text-destructive italic mt-1">Reason: {report.reason}</p>}
-                                </div>
-                                <div className="flex items-center space-x-2 mt-2 sm:mt-0 shrink-0">
-                                    <Button variant="outline" size="sm" onClick={() => handleAdminViewReportedPost(report.postId)}>View</Button>
-                                    <Button variant="outline" size="sm" onClick={() => handleAdminDismissReport(report.postId)}>Dismiss</Button>
-                                    <Button variant="destructive" size="sm" onClick={() => handleAdminRemovePost(report.postId, report.postTitle)}>
-                                        <Trash2 className="h-3.5 w-3.5 mr-1.5"/>Remove Post
-                                    </Button>
-                                </div>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">No reported content for this tribe at this time.</p>
-                    )}
-                  </div>
-                  <Separator />
-                  <div>
-                      <Button variant="outline" className="w-full sm:w-auto">
-                          <Settings className="mr-2 h-4 w-4"/> Edit Tribe Settings
-                      </Button>
-                  </div>
+            </CardHeader>
+            <CardContent className="p-4 pt-2 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <Card className="bg-muted/50 p-3">
+                        <p className="text-xs text-muted-foreground font-medium">TOTAL MEMBERS</p>
+                        <p className="text-2xl font-bold text-foreground">{currentTribeMembers.length}</p>
+                    </Card>
+                    <Card className="bg-muted/50 p-3">
+                        <p className="text-xs text-muted-foreground font-medium">PENDING REPORTS</p>
+                        <p className="text-2xl font-bold text-destructive">{currentTribeReportedPosts.length}</p>
+                    </Card>
                 </div>
-              </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+                 <Separator />
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <Link href={`/tribes/${tribeId}/manage-members`} passHref className="flex-1">
+                        <Button variant="outline" className="w-full">
+                            <UsersRound className="mr-2 h-4 w-4"/> Manage Members
+                        </Button>
+                    </Link>
+                    <Link href={`/tribes/${tribeId}/mod-queue`} passHref className="flex-1">
+                        <Button variant="outline" className="w-full">
+                            <ListChecks className="mr-2 h-4 w-4"/> Moderation Queue
+                        </Button>
+                    </Link>
+                     <Button variant="outline" className="w-full flex-1" disabled> {/* Placeholder for now */}
+                        <Settings className="mr-2 h-4 w-4"/> Tribe Settings
+                    </Button>
+                </div>
+            </CardContent>
+        </Card>
       )}
 
 
@@ -654,7 +508,7 @@ export default function TribeDetailPage() {
         </div>
         {isTribeAdmin && (
             <div className="absolute top-4 right-4 z-10">
-            <Button variant="outline" size="icon" className="bg-background/70 hover:bg-background/90 backdrop-blur-sm">
+            <Button variant="outline" size="icon" className="bg-background/70 hover:bg-background/90 backdrop-blur-sm" disabled> {/* Placeholder for now */}
                 <Settings className="h-5 w-5" />
             </Button>
             </div>
@@ -762,39 +616,6 @@ export default function TribeDetailPage() {
           tribeMoodSlugs={tribe.moods || []}
         />
       )}
-      {memberToEditNickname && (
-        <Dialog open={isNicknameDialogOpen} onOpenChange={setIsNicknameDialogOpen}>
-            <DialogContent className="sm:max-w-[425px]">
-                <DialogHeader>
-                    <DialogTitle>Edit Nickname for {memberToEditNickname.name}</DialogTitle>
-                    <DialogDescription>
-                        Set a tribe-specific nickname for this member. This will be visible within this tribe.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                        <Label htmlFor="nickname" className="text-right">
-                            Nickname
-                        </Label>
-                        <Input
-                            id="nickname"
-                            value={nicknameInputValue}
-                            onChange={(e) => setNicknameInputValue(e.target.value)}
-                            placeholder="Enter nickname (optional)"
-                            className="col-span-3"
-                        />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <DialogClose asChild>
-                        <Button type="button" variant="outline">Cancel</Button>
-                    </DialogClose>
-                    <Button type="button" onClick={handleSaveNickname}>Save Nickname</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-      )}
     </div>
   );
 }
-
