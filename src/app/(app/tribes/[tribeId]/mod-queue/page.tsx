@@ -20,6 +20,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, ListChecks, ShieldAlert, Inbox, Trash2, Eye, AlertCircle, CheckCircle, Search, Filter as FilterIcon, X as XIcon, ChevronLeft, ChevronRight, Ban } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
 
 import { tribesData, type Tribe } from '../../page'; 
 import { 
@@ -406,18 +408,43 @@ export default function TribeModQueuePage() {
                             </div>
                           )}
 
-                          <div className="flex flex-wrap gap-2 pt-4 border-t mt-4">
-                            <Button size="sm" variant="outline" onClick={() => handleDismissReport(report.postId)}>
-                              Dismiss Report
-                            </Button>
+                          <div className="flex items-center space-x-2 pt-4 border-t mt-4">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button size="icon" variant="outline" onClick={() => handleDismissReport(report.postId)}>
+                                    <CheckCircle className="h-4 w-4" />
+                                    <span className="sr-only">Dismiss Report</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Dismiss Report</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+
                             {!post.isRemoved && ( 
-                                <Button size="sm" variant="destructive" onClick={() => handleRemovePostAndNotify(report.postId, report.postTitle || post.title)}>
-                                <Trash2 className="mr-1.5 h-3.5 w-3.5"/> Mark Post as Removed
-                                </Button>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button size="icon" variant="destructive" onClick={() => handleRemovePostAndNotify(report.postId, report.postTitle || post.title)}>
+                                      <Trash2 className="h-4 w-4"/>
+                                      <span className="sr-only">Mark Post as Removed</span>
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Mark Post as Removed</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             )}
-                             <Button size="sm" variant="secondary" onClick={() => handleEscalateReport(report.postId)}>
-                                <AlertCircle className="mr-1.5 h-3.5 w-3.5"/> Escalate to Global
-                            </Button>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button size="icon" variant="secondary" onClick={() => handleEscalateReport(report.postId)}>
+                                    <ShieldAlert className="h-4 w-4"/>
+                                    <span className="sr-only">Escalate to Global</span>
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Escalate to Global</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </div>
                         </div>
                       ) : (
