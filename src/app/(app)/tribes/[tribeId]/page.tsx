@@ -30,6 +30,7 @@ import { PromotePostDialog } from '@/components/dialogs/boost-post-dialog';
 export interface TribePost {
   id: string;
   tribeId: string;
+  authorId: string; // Added for banning
   authorName: string;
   authorAvatar?: string;
   authorAvatarFallback: string;
@@ -48,14 +49,14 @@ const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
 export const initialSampleTribePosts: TribePost[] = [
   {
-    id: "tribe_post_ai_local1", tribeId: "1", authorName: "AI Enthusiast", authorAvatarFallback: "AE",
+    id: "tribe_post_ai_local1", tribeId: "1", authorId: "authorAE", authorName: "AI Enthusiast", authorAvatarFallback: "AE",
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2),
     title: "Local Discussion: Ethics in AI Development",
     content: "Starting a thread specifically for our tribe members on the ethical considerations of recent AI breakthroughs. What are your immediate thoughts?",
     vibes: 30, comments: 5, dataAiHintAvatar: "researcher scientist",
   },
   {
-    id: "msp2", tribeId: "1", authorName: "ProductivePro", authorAvatarFallback: "PP",
+    id: "msp2", tribeId: "1", authorId: "authorPP", authorName: "ProductivePro", authorAvatarFallback: "PP",
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 3),
     title: "My Top 5 Productivity Hacks for Deep Work",
     content: "Sharing my secrets to staying in the zone! Tip #1: Time blocking is key. This was also shared to the Focus mood stream.",
@@ -63,7 +64,7 @@ export const initialSampleTribePosts: TribePost[] = [
     vibes: 125, comments: 18, dataAiHintAvatar: "work professional",
   },
   {
-    id: "tribe_post_hikers_local1", tribeId: "2", authorName: "Trail Blazer", authorAvatarFallback: "TB",
+    id: "tribe_post_hikers_local1", tribeId: "2", authorId: "authorTB", authorName: "Trail Blazer", authorAvatarFallback: "TB",
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 1),
     title: "Weekend Hike Recap: Mountain Peak (Tribe Exclusive Pics)",
     content: "The views from Mountain Peak trail were absolutely stunning this weekend! Sharing some extra photos just for our tribe. Highly recommend this route.",
@@ -71,7 +72,7 @@ export const initialSampleTribePosts: TribePost[] = [
     vibes: 210, comments: 32, dataAiHintAvatar: "hiker adventurer",
   },
    {
-    id: "msp9", tribeId: "2", authorName: "LocalFoodie", authorAvatarFallback: "LF",
+    id: "msp9", tribeId: "2", authorId: "authorLF", authorName: "LocalFoodie", authorAvatarFallback: "LF",
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 7),
     title: "Post-Hike Find: Amazing Farmers Market!",
     content: "After our hike near Miller's Pond, stumbled upon this fantastic farmers market. Great fuel and cool local crafts! Shared this to Discover stream too.",
@@ -79,7 +80,7 @@ export const initialSampleTribePosts: TribePost[] = [
     vibes: 85, comments: 12, dataAiHintAvatar: "foodie person",
   },
   {
-    id: "tribe_post_music_local1", tribeId: "7", authorName: "GigGoer", authorAvatarFallback: "GG",
+    id: "tribe_post_music_local1", tribeId: "7", authorId: "authorGG", authorName: "GigGoer", authorAvatarFallback: "GG",
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1),
     title: "Last Night's Show Was Epic! (Tribe Thoughts)",
     content: "The Local Band absolutely crushed it at The Underground! What did our tribe members think of the new songs?",
@@ -87,7 +88,7 @@ export const initialSampleTribePosts: TribePost[] = [
     vibes: 95, comments: 22, dataAiHintAvatar: "music fan",
   },
   {
-    id: "msp8", tribeId: "7", authorName: "RockstarDev", authorAvatarFallback: "RD",
+    id: "msp8", tribeId: "7", authorId: "authorRD", authorName: "RockstarDev", authorAvatarFallback: "RD",
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 8),
     title: "My Stage Setup for Tonight's Gig",
     content: "Sound check done! Ready to rock the 'Music Hall' tonight. Who's coming? Also shared to Create mood stream!",
@@ -95,7 +96,7 @@ export const initialSampleTribePosts: TribePost[] = [
     vibes: 150, comments: 18, dataAiHintAvatar: "musician band",
   },
   {
-    id: "post7", tribeId: "3", authorName: "DevQuest", authorAvatarFallback: "DQ",
+    id: "post7", tribeId: "3", authorId: "authorDQ", authorName: "DevQuest", authorAvatarFallback: "DQ",
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 3),
     title: "Seeking Beta Testers for New Puzzle Game (Tribe Only)",
     content: "Our indie studio is looking for beta testers for our upcoming mobile puzzle game 'Color Grid'. DM me if you're interested! This is a private post for tribe members.",
@@ -119,7 +120,7 @@ export const mockReportedContentData: ReportedPost[] = [
   { postId: "tribe_post_ai_local1", postTitle: "Local Discussion: Ethics in AI Development", reporterName: "Ethicist22", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1), reason: "Heated discussion, potential personal attacks." },
 ];
 
-export interface TribeMember { // Exporting this for use in sub-pages
+export interface TribeMember { 
   id: string;
   name: string;
   avatar: string;
@@ -127,7 +128,7 @@ export interface TribeMember { // Exporting this for use in sub-pages
   tribeAssignedNickname?: string;
 }
 
-export const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname'>[] = [ // Exporting this for use in sub-pages
+export const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname'>[] = [ 
   { id: 'user1', name: 'Alice Wonderland', avatar: 'https://placehold.co/40x40.png?text=AW', dataAiHint: 'avatar person' },
   { id: 'user2', name: 'Bob The Builder', avatar: 'https://placehold.co/40x40.png?text=BB', dataAiHint: 'avatar character' },
   { id: 'user3', name: 'Charlie Chaplin', avatar: 'https://placehold.co/40x40.png?text=CC', dataAiHint: 'avatar person' },
@@ -642,3 +643,6 @@ export default function TribeDetailPage() {
   );
 }
 
+    
+
+    

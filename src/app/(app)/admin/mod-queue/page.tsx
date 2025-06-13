@@ -12,26 +12,31 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { ShieldAlert, Inbox, Trash2, Eye, Users as TribeIcon, AlertCircle, CheckCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { ShieldAlert, Inbox, Trash2, Eye, Users as TribeIcon, AlertCircle, CheckCircle, Hammer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 
-// Data imports - assuming these are now correctly exported from their respective files
 import { initialSampleTribePosts, type TribePost, mockReportedContentData, type ReportedPost } from '../../tribes/[tribeId]/page';
 import { tribesData, type Tribe } from '../../tribes/page';
 
-// TODO: Implement role-based filtering.
-// Admins should see all reported content.
-// Tribe Owners/Moderators ('Speakers') should only see reports for their specific tribes.
-// For this simulation, all reports are shown.
 
 export default function ModQueuePage() {
   const router = useRouter();
   const { toast } = useToast();
 
   const [reports, setReports] = useState<ReportedPost[]>(mockReportedContentData);
-  const [allPosts, setAllPosts] = useState<TribePost[]>(initialSampleTribePosts); // State for all posts
-  const [allTribes, setAllTribes] = useState<Tribe[]>(tribesData); // State for all tribes
+  const [allPosts, setAllPosts] = useState<TribePost[]>(initialSampleTribePosts); 
+  const [allTribes, setAllTribes] = useState<Tribe[]>(tribesData); 
+
+  const [isBanDialogOpen, setIsBanDialogOpen] = useState(false);
+  const [userToBanDetails, setUserToBanDetails] = useState<{ userId: string; userName: string; postId: string } | null>(null);
+  const [banDuration, setBanDuration] = useState("permanent");
+  const [banReason, setBanReason] = useState("");
+
 
   const getPostById = (postId: string): TribePost | undefined => {
     return allPosts.find(post => post.id === postId);
@@ -51,7 +56,6 @@ export default function ModQueuePage() {
 
   const handleRemovePostAndNotify = (postIdToRemove: string, postTitle?: string) => {
     setReports(prev => prev.filter(report => report.postId !== postIdToRemove));
-    // Simulate removing the post from the "system"
     setAllPosts(prevPosts => prevPosts.filter(post => post.id !== postIdToRemove));
     toast({
       title: "Post Removal Actioned (Simulated)",
@@ -64,11 +68,48 @@ export default function ModQueuePage() {
     router.push(`/tribes/${tribeId}`);
   };
   
-  const handleEscalate = (reportPostId: string) => { // Changed parameter to avoid conflict
+  const handleEscalate = (reportPostId: string) => { 
       toast({
         title: "Report Escalated (Simulated)",
         description: `Report for post ID ${reportPostId} has been escalated to platform administrators.`,
       });
+  };
+
+  const handleOpenBanDialog = (post: TribePost) => {
+    if (!post || !post.authorId || !post.authorName) {
+        toast({ variant: "destructive", title: "Error", description: "Cannot ban author: missing author details."});
+        return;
+    }
+    setUserToBanDetails({ userId: post.authorId, userName: post.authorName, postId: post.id });
+    setIsBanDialogOpen(true);
+  };
+
+  const handleConfirmBan = () => {
+    if (!userToBanDetails) return;
+
+    console.log("Banning user:", {
+        userId: userToBanDetails.userId,
+        userName: userToBanDetails.userName,
+        postId: userToBanDetails.postId,
+        duration: banDuration,
+        reason: banReason,
+    });
+
+    let durationText = "permanently";
+    if (banDuration === "1_day") durationText = "for 1 day";
+    else if (banDuration === "7_days") durationText = "for 7 days";
+    else if (banDuration === "30_days") durationText = "for 30 days";
+    
+    toast({
+      title: "User Banned (Simulated)",
+      description: `User ${userToBanDetails.userName} has been banned ${durationText}. Their reputation has been impacted (Simulated). ${banReason ? `Reason: ${banReason}` : ''}`,
+      variant: "destructive",
+    });
+
+    setIsBanDialogOpen(false);
+    setUserToBanDetails(null);
+    setBanDuration("permanent");
+    setBanReason("");
   };
 
 
@@ -88,7 +129,7 @@ export default function ModQueuePage() {
           <h1 className="text-3xl sm:text-4xl font-bold tracking-normal text-foreground font-mono">Global Moderation Queue</h1>
         </div>
         <p className="text-md sm:text-lg text-muted-foreground mt-2">
-          Review and manage reported content from across all tribes.
+          Review and manage reported content from across all tribes. Admins see all; tribe owners/moderators see content for their tribes only.
         </p>
       </header>
 
@@ -164,6 +205,9 @@ export default function ModQueuePage() {
                             <Button size="sm" variant="destructive" onClick={() => handleRemovePostAndNotify(report.postId, report.postTitle || post.title)}>
                               <Trash2 className="mr-1.5 h-3.5 w-3.5"/> Remove Post & Notify
                             </Button>
+                             <Button size="sm" variant="destructive" className="bg-red-700 hover:bg-red-800" onClick={() => handleOpenBanDialog(post)}>
+                                <Hammer className="mr-1.5 h-3.5 w-3.5"/> Ban Author
+                            </Button>
                             {tribe && (
                               <Button size="sm" variant="secondary" onClick={() => handleViewTribe(post.tribeId)}>
                                 <TribeIcon className="mr-1.5 h-3.5 w-3.5"/> View Tribe
@@ -185,6 +229,58 @@ export default function ModQueuePage() {
           )}
         </CardContent>
       </Card>
+
+      {userToBanDetails && (
+        <Dialog open={isBanDialogOpen} onOpenChange={setIsBanDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Ban User: {userToBanDetails.userName}</DialogTitle>
+                    <DialogDescription>
+                        Select the duration and provide a reason for banning this user. This action may impact their reputation score.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-4">
+                    <div>
+                        <Label className="text-sm font-medium">Ban Duration</Label>
+                        <RadioGroup value={banDuration} onValueChange={setBanDuration} className="mt-2 space-y-1">
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="1_day" id="ban-1day" />
+                                <Label htmlFor="ban-1day" className="font-normal">1 Day</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="7_days" id="ban-7days" />
+                                <Label htmlFor="ban-7days" className="font-normal">7 Days</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="30_days" id="ban-30days" />
+                                <Label htmlFor="ban-30days" className="font-normal">30 Days</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="permanent" id="ban-permanent" />
+                                <Label htmlFor="ban-permanent" className="font-normal">Permanent</Label>
+                            </div>
+                        </RadioGroup>
+                    </div>
+                    <div>
+                        <Label htmlFor="ban-reason" className="text-sm font-medium">Reason for Ban (Optional)</Label>
+                        <Textarea
+                            id="ban-reason"
+                            value={banReason}
+                            onChange={(e) => setBanReason(e.target.value)}
+                            placeholder="Provide context for the ban..."
+                            className="mt-1 min-h-[80px]"
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="outline">Cancel</Button>
+                    </DialogClose>
+                    <Button type="button" variant="destructive" onClick={handleConfirmBan}>Confirm Ban</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
