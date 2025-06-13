@@ -45,7 +45,7 @@ export interface TribePost {
 
 const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
-const initialSampleTribePosts: TribePost[] = [
+export const initialSampleTribePosts: TribePost[] = [
   {
     id: "tribe_post_ai_local1", tribeId: "1", authorName: "AI Enthusiast", authorAvatarFallback: "AE",
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2),
@@ -104,7 +104,7 @@ const initialSampleTribePosts: TribePost[] = [
 
 const moodStreamPostIds = new Set(allMoodStreamPosts.map(p => p.id));
 
-interface ReportedPost {
+export interface ReportedPost {
   postId: string;
   postTitle?: string;
   reporterName: string;
@@ -112,7 +112,7 @@ interface ReportedPost {
   reason?: string;
 }
 
-const mockReportedContentData: ReportedPost[] = [
+export const mockReportedContentData: ReportedPost[] = [
   { postId: "msp2", postTitle: "My Top 5 Productivity Hacks for Deep Work", reporterName: "ConcernedUser1", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 5), reason: "Spamming irrelevant content" },
   { postId: "tribe_post_hikers_local1", postTitle: "Weekend Hike Recap: Mountain Peak (Tribe Exclusive Pics)", reporterName: "SafetyFirst", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2), reason: "Sharing potentially dangerous trail info without proper warnings." },
 ];
@@ -319,7 +319,6 @@ export default function TribeDetailPage() {
       const currentTribeData = tribesData.find(t => t.id === tribeId);
       if (currentTribeData) {
         setTribe(currentTribeData);
-        // setCurrentTribePostsData remains initialized with all posts, filtering happens in useMemo
       } else {
         router.push('/tribes');
       }
@@ -414,6 +413,25 @@ export default function TribeDetailPage() {
   };
 
   const handleUserReportPost = (post: TribePost) => {
+    // In a real app, this would send data to a backend.
+    // For now, we can simulate adding it to our mockReportedContentData if not already there
+    // or just show a toast.
+    // To avoid complexity with global state update from child component,
+    // this example will just show a toast.
+    // If we were adding to a central reported list, we'd need a context or Zustand.
+    const alreadyReported = reportedContent.some(r => r.postId === post.id);
+    if(alreadyReported){
+         toast({
+            title: "Already Reported",
+            description: `You or someone else has already reported "${post.title || 'this post'}". An admin will review it.`,
+            variant: "default",
+        });
+        return;
+    }
+    // Simulate adding:
+    // const newReport: ReportedPost = { postId: post.id, postTitle: post.title, reporterName: "CurrentUser", reportedAt: new Date(), reason: "User reported from card" };
+    // setReportedContent(prev => [...prev, newReport]); // This would show in global queue but not directly on card unless passed down
+
     toast({
       title: "Post Reported (Simulated)",
       description: `Thank you for reporting "${post.title || 'this post'}". An admin will review it.`,
@@ -430,8 +448,8 @@ export default function TribeDetailPage() {
       }, 3000);
     } else {
       toast({
-          title: "Post Not Found",
-          description: `Could not find post ID: ${postId} in the current feed. It might have been removed or belongs to another tribe.`,
+          title: "Post Not Found in Feed",
+          description: `Post ID: ${postId} may have been removed or is not currently visible.`,
           variant: "destructive"
       });
     }
@@ -441,7 +459,7 @@ export default function TribeDetailPage() {
     setReportedContent(prev => prev.filter(report => report.postId !== postIdToDismiss));
     toast({
       title: "Report Dismissed",
-      description: `Report for post ID ${postIdToDismiss} has been dismissed.`,
+      description: `Report for post ID ${postIdToDismiss} has been dismissed. The post remains visible.`,
     });
   };
   
@@ -451,7 +469,7 @@ export default function TribeDetailPage() {
     
     toast({
       title: "Post Removed",
-      description: `Post "${postTitle || postIdToRemove}" has been removed from the tribe feed.`,
+      description: `Post "${postTitle || postIdToRemove}" has been removed from the tribe feed and the report queue.`,
       variant: "destructive",
     });
   };
@@ -702,5 +720,3 @@ export default function TribeDetailPage() {
     </div>
   );
 }
-
-    
