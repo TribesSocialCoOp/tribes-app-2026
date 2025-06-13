@@ -9,22 +9,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, UsersRound, Pencil, UserCircle } from 'lucide-react';
+import { Badge } from "@/components/ui/badge"; // Added Badge
+import { ArrowLeft, UsersRound, Pencil, UserCircle, UserCheck, UserX } from 'lucide-react'; // Added UserCheck, UserX
 import React, { useEffect, useState } from 'react';
-import { tribesData, type Tribe } from '../../page'; // Corrected import path
+import { tribesData, type Tribe } from '../../page';
 import { useToast } from "@/hooks/use-toast";
+import { cn } from '@/lib/utils';
 
-// Re-defining TribeMember and initialMockMembers here for now.
-// Ideally, TribeMember would be in lib/types.ts and initialMockMembers could be shared or fetched.
 export interface TribeMember {
   id: string;
   name: string;
   avatar: string;
   dataAiHint: string;
   tribeAssignedNickname?: string;
+  role?: 'member' | 'speaker'; // Added role
 }
 
-const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname'>[] = [
+const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname' | 'role'>[] = [
   { id: 'user1', name: 'Alice Wonderland', avatar: 'https://placehold.co/40x40.png?text=AW', dataAiHint: 'avatar person' },
   { id: 'user2', name: 'Bob The Builder', avatar: 'https://placehold.co/40x40.png?text=BB', dataAiHint: 'avatar character' },
   { id: 'user3', name: 'Charlie Chaplin', avatar: 'https://placehold.co/40x40.png?text=CC', dataAiHint: 'avatar person' },
@@ -52,9 +53,9 @@ export default function ManageMembersPage() {
       if (currentTribeData) {
         const membersForThisTribe = initialMockMembers.map(member => ({
             ...member,
-            // Example initial nickname assignment logic (can be expanded)
             tribeAssignedNickname: (member.id === 'user1' && tribeId === '1') ? 'AI Lead' :
-                                   (member.id === 'user2' && tribeId === '2') ? 'Trail Master' : undefined
+                                   (member.id === 'user2' && tribeId === '2') ? 'Trail Master' : undefined,
+            role: (member.id === 'user1' && tribeId === '1') ? 'speaker' : 'member' // Example initial role
         }));
         setCurrentTribeMembers(membersForThisTribe);
       }
@@ -86,6 +87,23 @@ export default function ManageMembersPage() {
     setNicknameInputValue("");
   };
 
+  const handleToggleSpeakerRole = (memberId: string) => {
+    setCurrentTribeMembers(prevMembers =>
+      prevMembers.map(member => {
+        if (member.id === memberId) {
+          const newRole = member.role === 'speaker' ? 'member' : 'speaker';
+          const targetMember = prevMembers.find(m => m.id === memberId);
+          toast({
+            title: `Role Updated for ${targetMember?.name || 'Member'}`,
+            description: `${targetMember?.name || 'The member'} is now a ${newRole}.`,
+          });
+          return { ...member, role: newRole };
+        }
+        return member;
+      })
+    );
+  };
+
 
   if (!tribe) {
     return (
@@ -110,7 +128,7 @@ export default function ManageMembersPage() {
             <UsersRound className="h-7 w-7 text-primary" />
             <div>
               <CardTitle className="text-2xl font-semibold tracking-normal">Manage Members</CardTitle>
-              <CardDescription>View, assign nicknames, and manage members for {tribe.name}.</CardDescription>
+              <CardDescription>View, assign nicknames, and manage roles for members of {tribe.name}.</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -118,25 +136,34 @@ export default function ManageMembersPage() {
           {currentTribeMembers.length > 0 ? (
             <div className="space-y-3">
               {currentTribeMembers.map(member => (
-                <Card key={member.id} className="p-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center space-x-3">
+                <Card key={member.id} className="p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:bg-muted/30 transition-colors">
+                  <div className="flex items-center space-x-3 mb-2 sm:mb-0 flex-grow">
                     <Avatar className="h-10 w-10">
                       <AvatarImage src={member.avatar} alt={member.name} data-ai-hint={member.dataAiHint} />
                       <AvatarFallback>{member.name.substring(0,2).toUpperCase()}</AvatarFallback>
                     </Avatar>
-                    <div>
+                    <div className="flex-grow">
                       <p className="font-semibold text-sm">{member.name}</p>
                       {member.tribeAssignedNickname ? (
                         <p className="text-xs text-primary">Nickname: <span className="italic">{member.tribeAssignedNickname}</span></p>
                       ) : (
-                        <p className="text-xs text-muted-foreground">No tribe-specific nickname assigned.</p>
+                        <p className="text-xs text-muted-foreground">No tribe-specific nickname.</p>
                       )}
+                       <Badge variant={member.role === 'speaker' ? "default" : "outline"} className={cn("text-xs mt-1", member.role === 'speaker' ? "bg-primary text-primary-foreground" : "border-muted-foreground text-muted-foreground")}>
+                        {member.role === 'speaker' ? 'Speaker' : 'Member'}
+                      </Badge>
                     </div>
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => handleOpenNicknameDialog(member)}>
-                    <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                    {member.tribeAssignedNickname ? "Edit" : "Assign"} Nickname
-                  </Button>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+                    <Button variant="outline" size="sm" onClick={() => handleOpenNicknameDialog(member)} className="w-full sm:w-auto">
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                      {member.tribeAssignedNickname ? "Edit" : "Assign"} Nickname
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleToggleSpeakerRole(member.id)} className="w-full sm:w-auto">
+                      {member.role === 'speaker' ? <UserX className="mr-1.5 h-3.5 w-3.5" /> : <UserCheck className="mr-1.5 h-3.5 w-3.5" />}
+                      {member.role === 'speaker' ? 'Demote to Member' : 'Make Speaker'}
+                    </Button>
+                  </div>
                 </Card>
               ))}
             </div>
