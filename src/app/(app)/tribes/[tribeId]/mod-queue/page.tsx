@@ -12,7 +12,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, ListChecks, ShieldAlert, Inbox, Trash2, Eye, AlertCircle, CheckCircle } from 'lucide-react';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ArrowLeft, ListChecks, ShieldAlert, Inbox, Trash2, Eye, AlertCircle, CheckCircle, Search, Filter as FilterIcon, X as XIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 
@@ -20,9 +24,30 @@ import { tribesData, type Tribe } from '../../page';
 import { 
     initialSampleTribePosts, 
     type TribePost, 
-    mockReportedContentData, // This will be the mutable 'let' export
+    mockReportedContentData, 
     type ReportedPost 
 } from '../page'; 
+
+const ITEMS_PER_PAGE_OPTIONS = [5, 10, 15];
+const DEFAULT_ITEMS_PER_PAGE = 5;
+
+type SortableReportKeysTribe = 'reportedAt' | 'postTitle' | 'reporterName';
+interface SortOptionTribe {
+  value: string;
+  label: string;
+  key: SortableReportKeysTribe;
+  direction: 'ascending' | 'descending';
+}
+
+const sortOptionsTribe: SortOptionTribe[] = [
+  { value: 'reportedAt_desc', label: 'Newest Reports', key: 'reportedAt', direction: 'descending' },
+  { value: 'reportedAt_asc', label: 'Oldest Reports', key: 'reportedAt', direction: 'ascending' },
+  { value: 'postTitle_asc', label: 'Post Title (A-Z)', key: 'postTitle', direction: 'ascending' },
+  { value: 'postTitle_desc', label: 'Post Title (Z-A)', key: 'postTitle', direction: 'descending' },
+  { value: 'reporterName_asc', label: 'Reporter (A-Z)', key: 'reporterName', direction: 'ascending' },
+  { value: 'reporterName_desc', label: 'Reporter (Z-A)', key: 'reporterName', direction: 'descending' },
+];
+
 
 export default function TribeModQueuePage() {
   const router = useRouter();
@@ -31,8 +56,14 @@ export default function TribeModQueuePage() {
   const tribeId = params.tribeId as string;
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
-  const [reportsForThisTribe, setReportsForThisTribe] = useState<ReportedPost[]>([]);
+  const [allReportsForTribe, setAllReportsForTribe] = useState<ReportedPost[]>([]);
   const [postsForThisTribe, setPostsForThisTribe] = useState<TribePost[]>(initialSampleTribePosts); 
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentSortValue, setCurrentSortValue] = useState<string>(sortOptionsTribe[0].value);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
+
 
   useEffect(() => {
     if (tribeId) {
@@ -43,33 +74,30 @@ export default function TribeModQueuePage() {
         const tribePostIds = new Set(
             initialSampleTribePosts.filter(p => p.tribeId === currentTribeData.id).map(p => p.id)
         );
-        // Filter from the potentially mutated global mockReportedContentData
         const filteredReports = mockReportedContentData.filter(report => tribePostIds.has(report.postId));
-        setReportsForThisTribe(filteredReports);
+        setAllReportsForTribe(filteredReports);
+        setPostsForThisTribe(initialSampleTribePosts.filter(p => p.tribeId === currentTribeData.id));
+        setCurrentPage(1); // Reset page on tribe change
       }
     }
-  }, [tribeId]); // mockReportedContentData is not a dependency here as this effect is for initial load/tribe change
+  }, [tribeId]);
   
   const getPostById = (postId: string): TribePost | undefined => {
     return postsForThisTribe.find(post => post.id === postId);
   };
 
   const handleDismissReport = (postIdToDismiss: string) => {
-    // Directly mutate the imported 'let' mockReportedContentData
-    // This is a mock-specific approach for client-side shared state
     let found = false;
     for (let i = mockReportedContentData.length - 1; i >= 0; i--) {
         if (mockReportedContentData[i].postId === postIdToDismiss) {
             mockReportedContentData.splice(i, 1);
             found = true;
-            // Assuming only one report per post ID for simplicity in this mock
             break; 
         }
     }
 
     if (found) {
-        // Update local state to reflect the change
-        setReportsForThisTribe(prev => prev.filter(report => report.postId !== postIdToDismiss));
+        setAllReportsForTribe(prev => prev.filter(report => report.postId !== postIdToDismiss));
         toast({
             title: "Report Dismissed",
             description: `Report for post ID ${postIdToDismiss} has been dismissed. The post remains.`,
@@ -84,7 +112,6 @@ export default function TribeModQueuePage() {
   };
 
   const handleRemovePostAndNotify = (postIdToRemove: string, postTitle?: string) => {
-    // Also dismiss the report from the global mock
     let reportFoundAndDismissed = false;
     for (let i = mockReportedContentData.length - 1; i >= 0; i--) {
         if (mockReportedContentData[i].postId === postIdToRemove) {
@@ -94,7 +121,7 @@ export default function TribeModQueuePage() {
         }
     }
     
-    setReportsForThisTribe(prev => prev.filter(report => report.postId !== postIdToRemove));
+    setAllReportsForTribe(prev => prev.filter(report => report.postId !== postIdToRemove));
     setPostsForThisTribe(prev => prev.filter(post => post.id !== postIdToRemove)); 
     toast({
       title: "Post Removed (Simulated)",
@@ -110,6 +137,82 @@ export default function TribeModQueuePage() {
     });
   };
 
+  const filteredReports = useMemo(() => {
+    if (!searchTerm) return allReportsForTribe;
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return allReportsForTribe.filter(report => {
+      const post = getPostById(report.postId);
+      return (
+        (report.postTitle && report.postTitle.toLowerCase().includes(lowerSearchTerm)) ||
+        (post?.title && post.title.toLowerCase().includes(lowerSearchTerm)) ||
+        (report.reporterName && report.reporterName.toLowerCase().includes(lowerSearchTerm)) ||
+        (report.reason && report.reason.toLowerCase().includes(lowerSearchTerm))
+      );
+    });
+  }, [allReportsForTribe, searchTerm, postsForThisTribe]);
+
+  const sortedAndFilteredReports = useMemo(() => {
+    const sortConfig = sortOptionsTribe.find(opt => opt.value === currentSortValue);
+    if (!sortConfig) return filteredReports;
+
+    return [...filteredReports].sort((a, b) => {
+      let aValue, bValue;
+
+      if (sortConfig.key === 'reportedAt') {
+        aValue = new Date(a.reportedAt).getTime();
+        bValue = new Date(b.reportedAt).getTime();
+      } else if (sortConfig.key === 'postTitle') {
+        aValue = a.postTitle?.toLowerCase() || getPostById(a.postId)?.title?.toLowerCase() || '';
+        bValue = b.postTitle?.toLowerCase() || getPostById(b.postId)?.title?.toLowerCase() || '';
+      } else if (sortConfig.key === 'reporterName') {
+        aValue = a.reporterName?.toLowerCase() || '';
+        bValue = b.reporterName?.toLowerCase() || '';
+      } else {
+         aValue = (a as any)[sortConfig.key];
+         bValue = (b as any)[sortConfig.key];
+      }
+      
+      if (aValue === undefined || aValue === null) return 1;
+      if (bValue === undefined || bValue === null) return -1;
+
+      let comparison = 0;
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        comparison = aValue.localeCompare(bValue);
+      } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+        comparison = aValue - bValue;
+      }
+      return sortConfig.direction === 'ascending' ? comparison : comparison * -1;
+    });
+  }, [filteredReports, currentSortValue, postsForThisTribe]);
+
+  const totalPages = Math.ceil(sortedAndFilteredReports.length / itemsPerPage);
+  const paginatedReports = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return sortedAndFilteredReports.slice(startIndex, startIndex + itemsPerPage);
+  }, [sortedAndFilteredReports, currentPage, itemsPerPage]);
+
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value);
+    setCurrentPage(1);
+  };
+  
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setCurrentPage(1);
+  };
+
+  const handleSortChange = (value: string) => {
+    setCurrentSortValue(value);
+    setCurrentPage(1);
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(Number(value));
+    setCurrentPage(1);
+  };
+  
+  const handleNextPage = () => setCurrentPage(prev => Math.min(prev + 1, totalPages));
+  const handlePreviousPage = () => setCurrentPage(prev => Math.max(prev - 1, 1));
 
   if (!tribe) {
     return (
@@ -130,24 +233,91 @@ export default function TribeModQueuePage() {
 
       <Card className="shadow-xl">
         <CardHeader>
-          <div className="flex items-center space-x-3">
-            <ListChecks className="h-7 w-7 text-primary" />
-            <div>
-              <CardTitle className="text-2xl font-semibold tracking-normal">Moderation Queue: {tribe.name}</CardTitle>
-              <CardDescription>Review and manage reported content specifically for this tribe.</CardDescription>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex-1">
+                <div className="flex items-center space-x-3">
+                    <ListChecks className="h-7 w-7 text-primary" />
+                    <div>
+                        <CardTitle className="text-xl sm:text-2xl font-semibold tracking-normal">Moderation Queue</CardTitle>
+                        <CardDescription>Review reported content for {tribe.name}. ({sortedAndFilteredReports.length} items)</CardDescription>
+                    </div>
+                </div>
             </div>
+             <Popover>
+              <PopoverTrigger asChild>
+                <Button variant={searchTerm ? "secondary" : "outline"} size="sm">
+                  <FilterIcon className="mr-2 h-4 w-4" /> Filter & View
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 space-y-4 p-4">
+                <div className="space-y-2">
+                  <Label htmlFor="report-search-input-tribe">Search Reports</Label>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="report-search-input-tribe"
+                        type="search"
+                        placeholder="Search by title, reporter, reason..."
+                        value={searchTerm}
+                        onChange={handleSearchChange}
+                        className="pl-8 w-full"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sort-select-tribe">Sort By</Label>
+                  <Select value={currentSortValue} onValueChange={handleSortChange}>
+                    <SelectTrigger id="sort-select-tribe" className="w-full">
+                      <SelectValue placeholder="Select sort order" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortOptionsTribe.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="items-per-page-select-tribe">Items per Page</Label>
+                  <Select value={String(itemsPerPage)} onValueChange={handleItemsPerPageChange}>
+                    <SelectTrigger id="items-per-page-select-tribe" className="w-full">
+                      <SelectValue placeholder="Select items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ITEMS_PER_PAGE_OPTIONS.map(num => (
+                        <SelectItem key={num} value={String(num)}>{num}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </CardHeader>
-        <CardContent>
-          {reportsForThisTribe.length === 0 ? (
+         {searchTerm && (
+          <div className="px-6 pt-0 pb-4">
+            <Badge variant="secondary" className="flex items-center justify-between max-w-max">
+              Search: "{searchTerm}"
+              <Button variant="ghost" size="icon" className="ml-1 h-5 w-5 hover:bg-transparent" onClick={handleClearSearch}>
+                <XIcon className="h-3 w-3" />
+              </Button>
+            </Badge>
+          </div>
+        )}
+        <CardContent className={cn(searchTerm && "pt-0")}>
+          {paginatedReports.length === 0 ? (
             <div className="text-center py-10">
               <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-              <p className="text-lg font-semibold text-foreground">All Clear!</p>
-              <p className="text-muted-foreground">There are no reported items for {tribe.name}.</p>
+              <p className="text-lg font-semibold text-foreground">
+                 {searchTerm ? "No reports match your search." : "All Clear!"}
+              </p>
+              <p className="text-muted-foreground">
+                {searchTerm ? "Try a different search term." : `There are no reported items for ${tribe.name}.`}
+              </p>
             </div>
           ) : (
             <Accordion type="multiple" className="w-full space-y-3">
-              {reportsForThisTribe.map((report) => {
+              {paginatedReports.map((report) => {
                 const post = getPostById(report.postId);
                 return (
                   <AccordionItem key={report.postId} value={report.postId} className="border rounded-lg overflow-hidden bg-card hover:bg-muted/30 transition-colors">
@@ -212,9 +382,35 @@ export default function TribeModQueuePage() {
             </Accordion>
           )}
         </CardContent>
+        {totalPages > 1 && (
+          <CardFooter className="border-t pt-4 flex flex-col sm:flex-row items-center justify-between">
+            <p className="text-xs text-muted-foreground mb-2 sm:mb-0">
+              Showing {paginatedReports.length} of {sortedAndFilteredReports.length} reports.
+            </p>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePreviousPage}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextPage}
+                disabled={currentPage === totalPages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </CardFooter>
+        )}
       </Card>
     </div>
   );
 }
-
-    
