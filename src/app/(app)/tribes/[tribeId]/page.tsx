@@ -299,8 +299,9 @@ export default function TribeDetailPage() {
   const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false);
   const [postToPromote, setPostToPromote] = useState<TribePost | null>(null);
   const [locallyPromotedPostIds, setLocallyPromotedPostIds] = useState<Set<string>>(new Set());
-  const [reportedContent, setReportedContent] = useState<ReportedPost[]>(mockReportedContentData);
+  
   const [currentTribePostsData, setCurrentTribePostsData] = useState<TribePost[]>(initialSampleTribePosts);
+  const [reportedContent, setReportedContent] = useState<ReportedPost[]>(mockReportedContentData);
 
 
   const isUserMember = true;
@@ -318,7 +319,7 @@ export default function TribeDetailPage() {
       const currentTribeData = tribesData.find(t => t.id === tribeId);
       if (currentTribeData) {
         setTribe(currentTribeData);
-        setCurrentTribePostsData(initialSampleTribePosts);
+        // setCurrentTribePostsData remains initialized with all posts, filtering happens in useMemo
       } else {
         router.push('/tribes');
       }
@@ -342,6 +343,16 @@ export default function TribeDetailPage() {
   const activeReportedPostIds = useMemo(() => {
     return new Set(reportedContent.map(report => report.postId));
   }, [reportedContent]);
+
+  const currentTribeReportedPosts = useMemo(() => {
+    if (!tribe || !currentTribePostsData) return [];
+    const postsInThisTribeIds = new Set(
+        currentTribePostsData
+            .filter(p => p.tribeId === tribe.id)
+            .map(p => p.id)
+    );
+    return reportedContent.filter(report => postsInThisTribeIds.has(report.postId));
+  }, [tribe, reportedContent, currentTribePostsData]);
 
 
   const combinedFeedItems = useMemo(() => {
@@ -403,36 +414,26 @@ export default function TribeDetailPage() {
   };
 
   const handleUserReportPost = (post: TribePost) => {
-    // In a real app, this would send a report to the backend.
-    // For simulation, we can add it to our local reportedContent if it's not already there.
-    // For now, we just show a toast.
     toast({
       title: "Post Reported (Simulated)",
       description: `Thank you for reporting "${post.title || 'this post'}". An admin will review it.`,
     });
-     // To demonstrate the indicator (optional, can be removed if reports are backend-driven)
-    // if (!activeReportedPostIds.has(post.id)) {
-    //   setReportedContent(prev => [...prev, {
-    //     postId: post.id,
-    //     postTitle: post.title,
-    //     reporterName: "CurrentUser",
-    //     reportedAt: new Date(),
-    //     reason: "User reported via UI"
-    //   }]);
-    // }
   };
 
   const handleAdminViewReportedPost = (postId: string) => {
     const postElement = document.getElementById(`post-${postId}`);
     if (postElement) {
       postElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Optionally, add a temporary highlight effect
       postElement.classList.add('ring-2', 'ring-offset-2', 'ring-primary', 'transition-all', 'duration-1000');
       setTimeout(() => {
         postElement.classList.remove('ring-2', 'ring-offset-2', 'ring-primary', 'transition-all', 'duration-1000');
       }, 3000);
     } else {
-      alert(`Admin action: Post ID: ${postId} not found in current feed. (Simulated)`);
+      toast({
+          title: "Post Not Found",
+          description: `Could not find post ID: ${postId} in the current feed. It might have been removed or belongs to another tribe.`,
+          variant: "destructive"
+      });
     }
   };
   
@@ -536,11 +537,11 @@ export default function TribeDetailPage() {
                   <Separator />
                   <div>
                     <h3 className="text-lg font-medium text-foreground mb-3 flex items-center">
-                      <Inbox className="mr-2 h-5 w-5 text-muted-foreground" /> Reported Content Queue ({reportedContent.length})
+                      <Inbox className="mr-2 h-5 w-5 text-muted-foreground" /> Reported Content Queue ({currentTribeReportedPosts.length})
                     </h3>
-                    {reportedContent.length > 0 ? (
+                    {currentTribeReportedPosts.length > 0 ? (
                       <ul className="space-y-3">
-                        {reportedContent.map(report => (
+                        {currentTribeReportedPosts.map(report => (
                           <li key={report.postId} className="p-3 bg-muted/30 rounded-md border border-destructive/20">
                             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                                 <div>
@@ -554,11 +555,11 @@ export default function TribeDetailPage() {
                                     </p>
                                     {report.reason && <p className="text-xs text-destructive italic mt-1">Reason: {report.reason}</p>}
                                 </div>
-                                <div className="flex items-center space-x-2 mt-2 sm:mt-0 shrink-0"> {/* Adjusted space-x */}
+                                <div className="flex items-center space-x-2 mt-2 sm:mt-0 shrink-0">
                                     <Button variant="outline" size="sm" onClick={() => handleAdminViewReportedPost(report.postId)}>View</Button>
                                     <Button variant="outline" size="sm" onClick={() => handleAdminDismissReport(report.postId)}>Dismiss</Button>
                                     <Button variant="destructive" size="sm" onClick={() => handleAdminRemovePost(report.postId, report.postTitle)}>
-                                        <Trash2 className="h-3.5 w-3.5 mr-1.5"/>Remove Post {/* Increased icon size slightly and added margin */}
+                                        <Trash2 className="h-3.5 w-3.5 mr-1.5"/>Remove Post
                                     </Button>
                                 </div>
                             </div>
@@ -566,7 +567,7 @@ export default function TribeDetailPage() {
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-sm text-muted-foreground">No reported content at this time.</p>
+                      <p className="text-sm text-muted-foreground">No reported content for this tribe at this time.</p>
                     )}
                   </div>
                   <Separator />
