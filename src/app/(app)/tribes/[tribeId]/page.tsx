@@ -26,11 +26,12 @@ import { allMoodStreamPosts } from '../../moods/[moodSlug]/page';
 import type { Event } from '../../events/[eventId]/page';
 import { sampleEventsData } from '../../events/[eventId]/page';
 import { PromotePostDialog } from '@/components/dialogs/boost-post-dialog';
+import { ReportPostDialog } from '@/components/dialogs/report-post-dialog'; // New Dialog
 
 export interface TribePost {
   id: string;
   tribeId: string;
-  authorId: string; 
+  authorId: string;
   authorName: string;
   authorAvatar?: string;
   authorAvatarFallback: string;
@@ -114,14 +115,13 @@ export interface ReportedPost {
   reason?: string;
 }
 
-// Changed to 'let' to allow mutation for mock purposes
 export let mockReportedContentData: ReportedPost[] = [
   { postId: "msp2", postTitle: "My Top 5 Productivity Hacks for Deep Work", reporterName: "ConcernedUser1", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 5), reason: "Spamming irrelevant content" },
   { postId: "tribe_post_hikers_local1", postTitle: "Weekend Hike Recap: Mountain Peak (Tribe Exclusive Pics)", reporterName: "SafetyFirst", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2), reason: "Sharing potentially dangerous trail info without proper warnings." },
   { postId: "tribe_post_ai_local1", postTitle: "Local Discussion: Ethics in AI Development", reporterName: "Ethicist22", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1), reason: "Heated discussion, potential personal attacks." },
 ];
 
-export interface TribeMember { 
+export interface TribeMember {
   id: string;
   name: string;
   avatar: string;
@@ -129,7 +129,7 @@ export interface TribeMember {
   tribeAssignedNickname?: string;
 }
 
-export const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname'>[] = [ 
+export const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname'>[] = [
   { id: 'user1', name: 'Alice Wonderland', avatar: 'https://placehold.co/40x40.png?text=AW', dataAiHint: 'avatar person' },
   { id: 'user2', name: 'Bob The Builder', avatar: 'https://placehold.co/40x40.png?text=BB', dataAiHint: 'avatar character' },
   { id: 'user3', name: 'Charlie Chaplin', avatar: 'https://placehold.co/40x40.png?text=CC', dataAiHint: 'avatar person' },
@@ -317,15 +317,18 @@ export default function TribeDetailPage() {
   const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false);
   const [postToPromote, setPostToPromote] = useState<TribePost | null>(null);
   const [locallyPromotedPostIds, setLocallyPromotedPostIds] = useState<Set<string>>(new Set());
-  
+
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [postToReport, setPostToReport] = useState<TribePost | null>(null);
+  const [reportReason, setReportReason] = useState("");
+
   const [currentTribePostsData, setCurrentTribePostsData] = useState<TribePost[]>(initialSampleTribePosts);
-  // const [reportedContent] = useState<ReportedPost[]>(mockReportedContentData); // No longer needed as local state here
   const [currentTribeMembers, setCurrentTribeMembers] = useState<TribeMember[]>([]);
   const [reportsLastUpdated, setReportsLastUpdated] = useState(Date.now());
 
 
   const isUserMember = true;
-  const isTribeAdmin = true; 
+  const isTribeAdmin = true;
 
   useEffect(() => {
     if (tribeId) {
@@ -334,11 +337,11 @@ export default function TribeDetailPage() {
         setTribe(currentTribeData);
          const membersForThisTribe = initialMockMembers.map(member => ({
             ...member,
-            tribeAssignedNickname: (member.id === 'user1' && tribeId === '1') ? 'AI Lead' : 
+            tribeAssignedNickname: (member.id === 'user1' && tribeId === '1') ? 'AI Lead' :
                                    (member.id === 'user2' && tribeId === '2') ? 'Trail Master' : undefined
         }));
         setCurrentTribeMembers(membersForThisTribe);
-        setReportsLastUpdated(Date.now()); // Ensure reports are fresh on tribe load
+        setReportsLastUpdated(Date.now());
       } else {
         router.push('/tribes');
       }
@@ -371,9 +374,6 @@ export default function TribeDetailPage() {
   }, [tribe, currentTribePostsData]);
 
   const activeReportedPostIds = useMemo(() => {
-    // This now directly uses the (potentially mutated) global mockReportedContentData
-    // The reportsLastUpdated dependency ensures this useMemo hook re-runs when we want to refresh.
-    // console.log("TribeDetailPage: Recalculating activeReportedPostIds due to reportsLastUpdated:", reportsLastUpdated);
     return new Set(mockReportedContentData.map(report => report.postId));
   }, [reportsLastUpdated]);
 
@@ -385,7 +385,6 @@ export default function TribeDetailPage() {
             .filter(p => p.tribeId === tribe.id)
             .map(p => p.id)
     );
-    // Use the global, mutable mockReportedContentData here as well
     return mockReportedContentData.filter(report => postsInThisTribeIds.has(report.postId));
   }, [tribe, currentTribePostsData, reportsLastUpdated]);
 
@@ -410,7 +409,7 @@ export default function TribeDetailPage() {
         isPinned: false,
         data: post,
         isPromoted: moodStreamPostIds.has(post.id) || locallyPromotedPostIds.has(post.id),
-        isReported: activeReportedPostIds.has(post.id), // Uses the reactive activeReportedPostIds
+        isReported: activeReportedPostIds.has(post.id),
       }));
 
     const allItems: FeedItem[] = [...eventItems, ...postItems];
@@ -447,8 +446,8 @@ export default function TribeDetailPage() {
     setPostToPromote(null);
   };
 
-  const handleUserReportPost = (post: TribePost) => {
-    const alreadyReported = mockReportedContentData.some(r => r.postId === post.id); // Check global mock
+  const handleOpenReportDialog = (post: TribePost) => {
+    const alreadyReported = mockReportedContentData.some(r => r.postId === post.id);
     if(alreadyReported){
          toast({
             title: "Already Reported",
@@ -456,37 +455,30 @@ export default function TribeDetailPage() {
         });
         return;
     }
-    // Simulate adding to the global mock data for immediate feedback (in a real app, this would be a backend call)
+    setPostToReport(post);
+    setReportReason(""); // Reset reason
+    setIsReportDialogOpen(true);
+  };
+
+  const handleConfirmReport = () => {
+    if (!postToReport) return;
+
     mockReportedContentData.push({
-        postId: post.id,
-        postTitle: post.title,
-        reporterName: "You (Simulated)",
+        postId: postToReport.id,
+        postTitle: postToReport.title,
+        reporterName: "You (Simulated User)", // In a real app, this would be the current user's name/ID
         reportedAt: new Date(),
-        reason: "User reported from tribe detail page."
+        reason: reportReason.trim() || "No reason provided.",
     });
-    setReportsLastUpdated(Date.now()); // Trigger re-calculation of activeReportedPostIds
+    setReportsLastUpdated(Date.now());
 
     toast({
-      title: "Post Reported (Simulated)",
-      description: `Thank you for reporting "${post.title || 'this post'}". An admin will review it.`,
+      title: "Post Reported",
+      description: `Thank you for reporting "${postToReport.title || 'this post'}". An admin will review it.`,
     });
-  };
-  
-  const handleAdminViewReportedPost = (postId: string) => {
-    const postElement = document.getElementById(`post-${postId}`);
-    if (postElement) {
-      postElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      postElement.classList.add('ring-2', 'ring-offset-2', 'ring-primary', 'transition-all', 'duration-300');
-      setTimeout(() => {
-        postElement.classList.remove('ring-2', 'ring-offset-2', 'ring-primary');
-      }, 2500);
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Post Not Found",
-        description: "The reported post could not be found in the current feed. It might have been removed or is on a different page.",
-      });
-    }
+    setIsReportDialogOpen(false);
+    setPostToReport(null);
+    setReportReason("");
   };
 
 
@@ -540,7 +532,7 @@ export default function TribeDetailPage() {
                         </Button>
                     </Link>
                      <Link href={`/tribes/${tribeId}/settings`} passHref className="flex-1">
-                        <Button variant="outline" className="w-full"> 
+                        <Button variant="outline" className="w-full">
                             <Settings className="mr-2 h-4 w-4"/> Tribe Settings
                         </Button>
                     </Link>
@@ -559,7 +551,7 @@ export default function TribeDetailPage() {
         {isTribeAdmin && (
             <div className="absolute top-4 right-4 z-10">
               <Link href={`/tribes/${tribeId}/settings`} passHref>
-                <Button variant="outline" size="icon" className="bg-background/70 hover:bg-background/90 backdrop-blur-sm"> 
+                <Button variant="outline" size="icon" className="bg-background/70 hover:bg-background/90 backdrop-blur-sm">
                     <Settings className="h-5 w-5" />
                 </Button>
               </Link>
@@ -630,17 +622,17 @@ export default function TribeDetailPage() {
               return <EventHighlightCard key={item.id} event={item.data as Event} />;
             }
             const post = item.data as TribePost;
-            const postKey = `post-${post.id}`; 
+            const postKey = `post-${post.id}`;
             return (
-              <div key={postKey} id={postKey}> 
-                <TribePostCard                 
-                  post={post} 
-                  isPromoted={item.isPromoted} 
-                  isUserMember={isUserMember} 
+              <div key={postKey} id={postKey}>
+                <TribePostCard
+                  post={post}
+                  isPromoted={item.isPromoted}
+                  isUserMember={isUserMember}
                   isTribeAdmin={isTribeAdmin}
                   isReported={item.isReported}
                   onPromoteClick={handleOpenPromoteDialog}
-                  onReportClick={handleUserReportPost}
+                  onReportClick={handleOpenReportDialog}
                 />
               </div>
             );
@@ -666,6 +658,16 @@ export default function TribeDetailPage() {
           post={postToPromote}
           onConfirmPromotion={handleConfirmPromotion}
           tribeMoodSlugs={tribe.moods || []}
+        />
+      )}
+       {postToReport && (
+        <ReportPostDialog
+          isOpen={isReportDialogOpen}
+          onOpenChange={setIsReportDialogOpen}
+          post={postToReport}
+          reportReason={reportReason}
+          setReportReason={setReportReason}
+          onConfirmReport={handleConfirmReport}
         />
       )}
     </div>
