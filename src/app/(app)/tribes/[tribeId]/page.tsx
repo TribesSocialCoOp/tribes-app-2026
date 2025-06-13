@@ -24,9 +24,9 @@ import { moodsData } from '../../moods/page';
 import { allMoodStreamPosts } from '../../moods/[moodSlug]/page'; 
 import type { Event } from '../../events/[eventId]/page';
 import { sampleEventsData } from '../../events/[eventId]/page';
-import { BoostPostDialog } from '@/components/dialogs/boost-post-dialog'; // Import the new dialog
+import { PromotePostDialog } from '@/components/dialogs/boost-post-dialog'; // Component renamed, filename is boost-post-dialog
 
-export interface TribePost { // Exporting for use in dialog
+export interface TribePost {
   id: string;
   tribeId: string;
   authorName: string;
@@ -104,7 +104,7 @@ const sampleTribePosts: TribePost[] = [
 
 const moodStreamPostIds = new Set(allMoodStreamPosts.map(p => p.id));
 
-const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMember: boolean; isTribeAdmin: boolean; onBoostClick: (post: TribePost) => void; }> = ({ post, isPromoted, isUserMember, isTribeAdmin, onBoostClick }) => {
+const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMember: boolean; isTribeAdmin: boolean; onPromoteClick: (post: TribePost) => void; }> = ({ post, isPromoted, isUserMember, isTribeAdmin, onPromoteClick }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
 
   useEffect(() => {
@@ -146,7 +146,7 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
                     <TooltipProvider delayDuration={100}>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                           <div className="flex items-center text-xs text-accent"> {/* Changed to text-accent */}
+                           <div className="flex items-center text-xs text-accent">
                              <Rss className="h-3.5 w-3.5" />
                            </div>
                         </TooltipTrigger>
@@ -168,8 +168,8 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
               <DropdownMenuContent align="end">
                 {isTribeAdmin && (
                   <>
-                    <DropdownMenuItem onClick={() => onBoostClick(post)}>
-                      <Rss className="mr-2 h-4 w-4" /> Boost to Mood Stream
+                    <DropdownMenuItem onClick={() => onPromoteClick(post)}>
+                      <Rss className="mr-2 h-4 w-4" /> Promote to Mood Stream
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
@@ -270,8 +270,8 @@ export default function TribeDetailPage() {
   const { toast } = useToast();
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
-  const [isBoostDialogOpen, setIsBoostDialogOpen] = useState(false);
-  const [postToBoost, setPostToBoost] = useState<TribePost | null>(null);
+  const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false); 
+  const [postToPromote, setPostToPromote] = useState<TribePost | null>(null); 
 
   const isUserMember = true; 
   const isTribeAdmin = true; 
@@ -317,7 +317,7 @@ export default function TribeDetailPage() {
         id: `event-${event.id}`,
         type: 'event' as const,
         timestamp: event.eventDate,
-        isPinned: true, // Assuming events are always pinned or shown prominently
+        isPinned: true,
         data: event,
       }));
 
@@ -343,23 +343,18 @@ export default function TribeDetailPage() {
   }, [tribe, tribeEvents, postsInTribe, isUserMember]);
 
 
-  const handleOpenBoostDialog = (post: TribePost) => {
-    setPostToBoost(post);
-    setIsBoostDialogOpen(true);
+  const handleOpenPromoteDialog = (post: TribePost) => { 
+    setPostToPromote(post); 
+    setIsPromoteDialogOpen(true); 
   };
 
-  const handleConfirmBoost = (postId: string, selectedMoodSlugs: string[]) => {
-    console.log(`Boosting post ID: ${postId} to moods: ${selectedMoodSlugs.join(', ')}`);
-    // Here you would typically call an API to update the backend.
-    // For simulation, we can update the local state if needed or just log.
-    // To simulate the post becoming "promoted", you'd add its ID to `moodStreamPostIds`
-    // or update `allMoodStreamPosts` and trigger a re-render of components that depend on it.
-    // For this example, we'll just show a toast.
+  const handleConfirmPromotion = (postId: string, selectedMoodSlugs: string[]) => { 
+    console.log(`Promoting post ID: ${postId} to moods: ${selectedMoodSlugs.join(', ')}`);
     toast({
-      title: "Post Boosted (Simulated)",
-      description: `Post "${postToBoost?.title || postId}" is now conceptually boosted to ${selectedMoodSlugs.length} mood stream(s). Re-fetching data would show its promoted status.`,
+      title: "Post Promoted (Simulated)",
+      description: `Post "${postToPromote?.title || postId}" is now conceptually promoted to ${selectedMoodSlugs.length} mood stream(s). Re-fetching data would show its promoted status.`,
     });
-    setPostToBoost(null);
+    setPostToPromote(null); 
   };
 
 
@@ -540,7 +535,7 @@ export default function TribeDetailPage() {
               return <EventHighlightCard key={item.id} event={item.data as Event} />;
             }
             const post = item.data as TribePost;
-            return <TribePostCard key={item.id} post={post} isPromoted={item.isPromoted} isUserMember={isUserMember} isTribeAdmin={isTribeAdmin} onBoostClick={handleOpenBoostDialog} />;
+            return <TribePostCard key={item.id} post={post} isPromoted={item.isPromoted} isUserMember={isUserMember} isTribeAdmin={isTribeAdmin} onPromoteClick={handleOpenPromoteDialog} />;
           })
         ) : (
           <Card className="text-center py-12 shadow-md">
@@ -556,12 +551,12 @@ export default function TribeDetailPage() {
           </Card>
         )}
       </section>
-      {postToBoost && (
-        <BoostPostDialog
-          isOpen={isBoostDialogOpen}
-          onOpenChange={setIsBoostDialogOpen}
-          post={postToBoost}
-          onConfirmBoost={handleConfirmBoost}
+      {postToPromote && (
+        <PromotePostDialog 
+          isOpen={isPromoteDialogOpen}
+          onOpenChange={setIsPromoteDialogOpen}
+          post={postToPromote}
+          onConfirmPromotion={handleConfirmPromotion} 
         />
       )}
     </div>

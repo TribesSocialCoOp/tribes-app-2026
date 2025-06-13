@@ -13,29 +13,29 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { TribePost } from '@/app/(app)/tribes/[tribeId]/page'; // Assuming TribePost is exported or defined
-import { moodsData, type Tribe as MoodTribeInfo } from '@/app/(app)/moods/page'; // For mood selection
+import type { TribePost } from '@/app/(app)/tribes/[tribeId]/page';
+import { moodsData } from '@/app/(app)/moods/page';
 import { Rss } from 'lucide-react';
 
-interface BoostPostDialogProps {
+interface PromotePostDialogProps { // Renamed from BoostPostDialogProps
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   post: TribePost | null;
-  onConfirmBoost: (postId: string, selectedMoodSlugs: string[]) => void;
+  onConfirmPromotion: (postId: string, selectedMoodSlugs: string[]) => void; // Renamed from onConfirmBoost
 }
 
-export function BoostPostDialog({
+export function PromotePostDialog({ // Renamed from BoostPostDialog
   isOpen,
   onOpenChange,
   post,
-  onConfirmBoost
-}: BoostPostDialogProps) {
+  onConfirmPromotion // Renamed from onConfirmBoost
+}: PromotePostDialogProps) {
   const isMobile = useIsMobile();
   const [selectedMoodSlugs, setSelectedMoodSlugs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isOpen) {
-      setSelectedMoodSlugs(new Set()); // Reset selections when dialog closes
+      setSelectedMoodSlugs(new Set());
     }
   }, [isOpen]);
 
@@ -56,7 +56,7 @@ export function BoostPostDialog({
   };
 
   const handleConfirm = () => {
-    onConfirmBoost(post.id, Array.from(selectedMoodSlugs));
+    onConfirmPromotion(post.id, Array.from(selectedMoodSlugs)); // Renamed from onConfirmBoost
     onOpenChange(false);
   };
 
@@ -71,7 +71,7 @@ export function BoostPostDialog({
     <>
       <DialogHeaderComponent>
         <DialogTitleComponent className="flex items-center">
-          <Rss className="mr-2 h-5 w-5 text-primary" /> Boost Post to Mood Streams
+          <Rss className="mr-2 h-5 w-5 text-primary" /> Promote Post to Mood Streams
         </DialogTitleComponent>
         <DialogDescriptionComponent>
           Select the mood streams where you want to feature the post titled: <span className="italic font-semibold">"{post.title || 'this post'}"</span>.
@@ -88,17 +88,17 @@ export function BoostPostDialog({
 
         <div>
           <Label className="text-sm font-medium text-foreground">Select Moods:</Label>
-          <p className="text-xs text-muted-foreground mb-2">Choose one or more moods to boost this post to.</p>
+          <p className="text-xs text-muted-foreground mb-2">Choose one or more moods to promote this post to.</p>
           <ScrollArea className="h-[200px] sm:h-[250px] pr-3 border rounded-md p-3">
             <div className="space-y-2">
               {moodsData.map(mood => (
                 <div key={mood.slug} className="flex items-center space-x-2">
                   <Checkbox
-                    id={`boost-mood-${mood.slug}`}
+                    id={`promote-mood-${mood.slug}`}
                     checked={selectedMoodSlugs.has(mood.slug)}
                     onCheckedChange={(checked) => handleMoodSelectionChange(mood.slug, checked)}
                   />
-                  <Label htmlFor={`boost-mood-${mood.slug}`} className="text-sm font-normal cursor-pointer flex items-center">
+                  <Label htmlFor={`promote-mood-${mood.slug}`} className="text-sm font-normal cursor-pointer flex items-center">
                     <span className="mr-1.5 text-base">{mood.emoji}</span> {mood.name}
                   </Label>
                 </div>
@@ -115,7 +115,7 @@ export function BoostPostDialog({
           disabled={selectedMoodSlugs.size === 0}
           className="bg-primary hover:bg-primary/90 text-primary-foreground"
         >
-          Confirm Boost ({selectedMoodSlugs.size})
+          Confirm Promotion ({selectedMoodSlugs.size})
         </Button>
       </DialogFooterComponent>
     </>
