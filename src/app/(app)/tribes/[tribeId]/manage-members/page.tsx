@@ -9,8 +9,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge"; // Added Badge
-import { ArrowLeft, UsersRound, Pencil, UserCircle, UserCheck, UserX } from 'lucide-react'; // Added UserCheck, UserX
+import { Badge } from "@/components/ui/badge";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
+import { ArrowLeft, UsersRound, Pencil, UserCheck, UserX, Hammer } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { tribesData, type Tribe } from '../../page';
 import { useToast } from "@/hooks/use-toast";
@@ -22,7 +24,7 @@ export interface TribeMember {
   avatar: string;
   dataAiHint: string;
   tribeAssignedNickname?: string;
-  role?: 'member' | 'speaker'; // Added role
+  role?: 'member' | 'speaker';
 }
 
 const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname' | 'role'>[] = [
@@ -46,6 +48,13 @@ export default function ManageMembersPage() {
   const [memberToEditNickname, setMemberToEditNickname] = useState<TribeMember | null>(null);
   const [nicknameInputValue, setNicknameInputValue] = useState("");
 
+  // State for Ban Dialog
+  const [isBanDialogOpen, setIsBanDialogOpen] = useState(false);
+  const [memberToBanDetails, setMemberToBanDetails] = useState<{ memberId: string; memberName: string; } | null>(null);
+  const [banDuration, setBanDuration] = useState("permanent_from_tribe"); // Default for tribe-specific ban
+  const [banReason, setBanReason] = useState("");
+
+
   useEffect(() => {
     if (tribeId) {
       const currentTribeData = tribesData.find(t => t.id === tribeId);
@@ -55,7 +64,7 @@ export default function ManageMembersPage() {
             ...member,
             tribeAssignedNickname: (member.id === 'user1' && tribeId === '1') ? 'AI Lead' :
                                    (member.id === 'user2' && tribeId === '2') ? 'Trail Master' : undefined,
-            role: (member.id === 'user1' && tribeId === '1') ? 'speaker' : 'member' // Example initial role
+            role: (member.id === 'user1' && tribeId === '1') ? 'speaker' : 'member'
         }));
         setCurrentTribeMembers(membersForThisTribe);
       }
@@ -104,6 +113,48 @@ export default function ManageMembersPage() {
     );
   };
 
+  const handleOpenBanDialog = (member: TribeMember) => {
+    if (!member || !member.id || !member.name) {
+        toast({ variant: "destructive", title: "Error", description: "Cannot ban member: missing member details."});
+        return;
+    }
+    setMemberToBanDetails({ memberId: member.id, memberName: member.name });
+    setIsBanDialogOpen(true);
+  };
+
+  const handleConfirmBan = () => {
+    if (!memberToBanDetails || !tribe) return;
+
+    // Simulate banning action
+    console.log("Banning member from tribe:", {
+        memberId: memberToBanDetails.memberId,
+        memberName: memberToBanDetails.memberName,
+        tribeId: tribe.id,
+        tribeName: tribe.name,
+        duration: banDuration,
+        reason: banReason,
+    });
+
+    let durationText = "permanently from this tribe";
+    if (banDuration === "1_day") durationText = "for 1 day from this tribe";
+    else if (banDuration === "7_days") durationText = "for 7 days from this tribe";
+    else if (banDuration === "30_days") durationText = "for 30 days from this tribe";
+    
+    toast({
+      title: "Member Banned from Tribe (Simulated)",
+      description: `Member ${memberToBanDetails.memberName} has been banned ${durationText}. Their reputation may be impacted (Simulated). ${banReason ? `Reason: ${banReason}` : ''}`,
+      variant: "destructive",
+    });
+
+    // Remove member from the list locally
+    setCurrentTribeMembers(prevMembers => prevMembers.filter(m => m.id !== memberToBanDetails.memberId));
+
+    setIsBanDialogOpen(false);
+    setMemberToBanDetails(null);
+    setBanDuration("permanent_from_tribe");
+    setBanReason("");
+  };
+
 
   if (!tribe) {
     return (
@@ -137,7 +188,7 @@ export default function ManageMembersPage() {
             <div className="space-y-3">
               {currentTribeMembers.map(member => (
                 <Card key={member.id} className="p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center space-x-3 mb-2 sm:mb-0 flex-grow">
+                  <div className="flex items-center space-x-3 mb-3 sm:mb-0 flex-grow">
                     <Avatar className="h-10 w-10">
                       <AvatarImage src={member.avatar} alt={member.name} data-ai-hint={member.dataAiHint} />
                       <AvatarFallback>{member.name.substring(0,2).toUpperCase()}</AvatarFallback>
@@ -154,14 +205,18 @@ export default function ManageMembersPage() {
                       </Badge>
                     </div>
                   </div>
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
-                    <Button variant="outline" size="sm" onClick={() => handleOpenNicknameDialog(member)} className="w-full sm:w-auto">
+                  <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-start sm:justify-end">
+                    <Button variant="outline" size="sm" onClick={() => handleOpenNicknameDialog(member)} className="flex-grow sm:flex-grow-0">
                       <Pencil className="mr-1.5 h-3.5 w-3.5" />
                       {member.tribeAssignedNickname ? "Edit" : "Assign"} Nickname
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleToggleSpeakerRole(member.id)} className="w-full sm:w-auto">
+                    <Button variant="outline" size="sm" onClick={() => handleToggleSpeakerRole(member.id)} className="flex-grow sm:flex-grow-0">
                       {member.role === 'speaker' ? <UserX className="mr-1.5 h-3.5 w-3.5" /> : <UserCheck className="mr-1.5 h-3.5 w-3.5" />}
-                      {member.role === 'speaker' ? 'Demote to Member' : 'Make Speaker'}
+                      {member.role === 'speaker' ? 'Demote' : 'Make Speaker'}
+                    </Button>
+                     <Button variant="destructive" size="sm" onClick={() => handleOpenBanDialog(member)} className="flex-grow sm:flex-grow-0 bg-red-700 hover:bg-red-800">
+                      <Hammer className="mr-1.5 h-3.5 w-3.5" />
+                      Ban Member
                     </Button>
                   </div>
                 </Card>
@@ -176,6 +231,7 @@ export default function ManageMembersPage() {
         </CardContent>
       </Card>
 
+      {/* Nickname Dialog */}
       {memberToEditNickname && (
         <Dialog open={isNicknameDialogOpen} onOpenChange={setIsNicknameDialogOpen}>
           <DialogContent className="sm:max-w-md">
@@ -204,8 +260,63 @@ export default function ManageMembersPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Ban Member Dialog */}
+      {memberToBanDetails && (
+        <Dialog open={isBanDialogOpen} onOpenChange={setIsBanDialogOpen}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Ban Member: {memberToBanDetails.memberName}</DialogTitle>
+                    <DialogDescription>
+                        Select the duration and provide a reason for banning this member from {tribe.name}. This action may impact their overall reputation.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4 space-y-4">
+                    <div>
+                        <Label className="text-sm font-medium">Ban Duration from {tribe.name}</Label>
+                        <RadioGroup value={banDuration} onValueChange={setBanDuration} className="mt-2 space-y-1">
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="1_day" id="ban-1day-tribe" />
+                                <Label htmlFor="ban-1day-tribe" className="font-normal">1 Day</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="7_days" id="ban-7days-tribe" />
+                                <Label htmlFor="ban-7days-tribe" className="font-normal">7 Days</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="30_days" id="ban-30days-tribe" />
+                                <Label htmlFor="ban-30days-tribe" className="font-normal">30 Days</Label>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                                <RadioGroupItem value="permanent_from_tribe" id="ban-permanent-tribe" />
+                                <Label htmlFor="ban-permanent-tribe" className="font-normal">Permanent from this Tribe</Label>
+                            </div>
+                        </RadioGroup>
+                    </div>
+                    <div>
+                        <Label htmlFor="ban-reason-tribe" className="text-sm font-medium">Reason for Ban (Optional)</Label>
+                        <Textarea
+                            id="ban-reason-tribe"
+                            value={banReason}
+                            onChange={(e) => setBanReason(e.target.value)}
+                            placeholder="Provide context for the ban..."
+                            className="mt-1 min-h-[80px]"
+                        />
+                    </div>
+                </div>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button type="button" variant="outline">Cancel</Button>
+                    </DialogClose>
+                    <Button type="button" variant="destructive" onClick={handleConfirmBan}>Confirm Tribe Ban</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
+
+    
 
     
