@@ -11,8 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+// Input and Label are not directly used in this file anymore, but kept if future inline forms appear
+// import { Input } from "@/components/ui/input";
+// import { Label } from "@/components/ui/label";
 import { ArrowLeft, Users, MessageSquareText, ThumbsUp, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, ListChecks, UsersRound, FileWarning, RefreshCcw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -61,7 +62,7 @@ export let initialSampleTribePosts: TribePost[] = [
     title: "Local Discussion: Ethics in AI Development",
     content: "Starting a thread specifically for our tribe members on the ethical considerations of recent AI breakthroughs. What are your immediate thoughts?",
     vibes: 30, comments: 5, dataAiHintAvatar: "researcher scientist",
-    isRemoved: true, // For testing the repost button
+    isRemoved: true, 
     canBeReposted: true,
     removalReason: "Marked for testing repost functionality."
   },
@@ -174,18 +175,18 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
       {post.isRemoved && (
         <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-10 p-4 space-y-2">
             <Badge variant="destructive" className="text-md p-2 px-3">POST REMOVED</Badge>
-            {isCurrentUserAuthor && post.canBeReposted !== false && (
+             {isCurrentUserAuthor && post.canBeReposted !== false && (
                 <Button
                     variant="secondary"
                     size="sm"
                     onClick={() => onRepostClick(post)}
-                    className="pointer-events-auto" 
+                    className="pointer-events-auto mt-2" 
                 >
                     <RefreshCcw className="mr-1.5 h-4 w-4" /> Repost
                 </Button>
             )}
             {post.removalReason && (
-                <p className="text-xs text-white/90 text-center italic max-w-xs bg-black/40 p-1.5 rounded">
+                <p className="text-xs text-white/90 text-center italic max-w-xs bg-black/40 p-1.5 rounded mt-1">
                     Reason: {post.removalReason}
                 </p>
             )}
@@ -274,13 +275,13 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
           <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{post.content}</p>
         </CardContent>
         <CardFooter className="p-4 pt-2 flex items-center justify-between border-t bg-muted/30">
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
             <ThumbsUp className="mr-1.5 h-4 w-4" /> {post.vibes || 0}
           </Button>
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
             <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
           </Button>
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
             <SquareArrowUp className="mr-1.5 h-4 w-4" /> Share
           </Button>
         </CardFooter>
@@ -480,12 +481,12 @@ export default function TribeDetailPage() {
       description: `Post "${postToPromote?.title || postId}" has been successfully promoted to ${selectedMoodSlugs.length} mood stream(s). (Simulated)`,
     });
     setPostToPromote(null);
-    setIsPromoteDialogOpen(false); // Close dialog
+    setIsPromoteDialogOpen(false); 
   };
 
   const handleOpenReportDialog = (post: TribePost) => {
     const alreadyReported = mockReportedContentData.some(r => r.postId === post.id);
-    if(alreadyReported && !post.isRemoved){ // Check if not removed, as removed posts might still be in mockReportedContentData
+    if(alreadyReported && !post.isRemoved){ 
          toast({
             title: "Already Reported",
             description: `You or someone else has already reported "${post.title || 'this post'}". An admin will review it.`,
@@ -768,6 +769,8 @@ export default function TribeDetailPage() {
     </div>
   );
 }
+    
+
     
 
     
