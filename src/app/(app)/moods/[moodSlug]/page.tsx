@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MessageSquareText, Smile, Filter as FilterIcon, Settings2 } from 'lucide-react'; // Added FilterIcon
+import { MessageSquareText, Smile, Filter as FilterIcon, Settings2 } from 'lucide-react';
 import { moodsData } from '../page'; 
 import { cn } from '@/lib/utils';
 
@@ -25,7 +25,7 @@ interface MoodStreamPost {
   tribeName?: string; 
   imageUrl?: string; 
   imageAlt?: string; 
-  moodTags: string[]; // e.g., ["chill", "relaxing"]
+  moodTags: string[]; 
   timestamp: Date;
   vibes?: number; 
   comments?: number;
@@ -36,36 +36,21 @@ interface MoodStreamPost {
 const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
 export const allMoodStreamPosts: MoodStreamPost[] = [
-  // Existing Chill
   { id: "msp1", content: "Just found this amazing ambient playlist, perfect for a #chill afternoon. 🎶", author: "MusicLover22", moodTags: ["chill"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1), vibes: 15, comments: 3, authorAvatarSrc: "https://placehold.co/40x40.png?text=ML", authorAvatarFallback: "ML", dataAiHintAvatar: "music person" },
   { id: "msp7", content: "Sunday morning coffee and a good book. Pure bliss. #chill", author: "ReaderLife", moodTags: ["chill", "learn"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2), imageUrl: "https://placehold.co/600x450.png", imageAlt: "Coffee and book", dataAiHintImage: "coffee book", dataAiHintAvatar: "reader person", vibes: 22 },
-  
-  // Existing Focus
   { id: "msp2", title: "My Top 5 Productivity Hacks for Deep Work", content: "Sharing my secrets to staying in the zone! Tip #1: Time blocking is key. #focus", author: "ProductivePro", tribeName: "Focus Finders", moodTags: ["focus", "learn"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 3), vibes: 45, comments: 12, authorAvatarSrc: "https://placehold.co/40x40.png?text=PP", authorAvatarFallback: "PP", dataAiHintAvatar: "work professional" },
-  
-  // Tuned Create (Showcase/Performance)
   { id: "msp3", title: "Live Painting Session - Downtown Gallery!", content: "Going live with a new canvas at the gallery opening. Come say hi! #create #discover", author: "ArtByLena", moodTags: ["create", "discover"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 5), imageUrl: "https://placehold.co/600x400.png", imageAlt: "Artist live painting", vibes: 72, comments: 8, authorAvatarSrc: "https://placehold.co/40x40.png?text=AL", authorAvatarFallback: "AL", dataAiHintAvatar: "artist live", dataAiHintImage: "painting gallery" },
   { id: "msp8", title: "My Stage Setup for Tonight's Gig", content: "Sound check done! Ready to rock the 'Music Hall' tonight. Who's coming? #create", author: "RockstarDev", tribeName: "The Local Gig Circuit", moodTags: ["create", "discover"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 8), imageUrl: "https://placehold.co/600x380.png", imageAlt: "Stage setup with instruments", dataAiHintImage: "stage music", dataAiHintAvatar: "musician band", vibes: 50 },
-  
-  // Tuned Discover (Live Events/Local Scenes)
   { id: "msp4", title: "Street Art Tour - City Center", content: "Just discovered some amazing murals on the street art tour. Check out the pics! #discover", author: "UrbanExplorer", moodTags: ["discover", "create"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 10), imageUrl: "https://placehold.co/600x400.png", imageAlt: "Street art mural", dataAiHintImage: "street art graffiti", vibes: 33, comments: 7, authorAvatarSrc: "https://placehold.co/40x40.png?text=UE", authorAvatarFallback: "UE", dataAiHintAvatar: "explorer urban" },
-  { id: "msp9", title: "Farmers Market Haul & Community Meetup!", content: "Fresh produce and great chats at today's market. Met some cool folks from the 'Sustainable Living Hub'! #discover #connect", author: "LocalFoodie", moodTags: ["discover", "shop", "connect"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2), imageUrl: "https://placehold.co/600x420.png", imageAlt: "Farmers market produce", vibes: 28, comments: 5, authorAvatarSrc: "https://placehold.co/40x40.png?text=LF", authorAvatarFallback: "LF", dataAiHintAvatar: "foodie person", dataAiHintImage: "market food" },
+  { id: "msp9", title: "Farmers Market Haul & Community Meetup!", content: "Fresh produce and great chats at today's market. Met some cool folks from the 'Sustainable Living Hub'! #discover #connect", author: "LocalFoodie", tribeName: "Weekend Hikers Club", moodTags: ["discover", "shop", "connect"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2), imageUrl: "https://placehold.co/600x420.png", imageAlt: "Farmers market produce", vibes: 28, comments: 5, authorAvatarSrc: "https://placehold.co/40x40.png?text=LF", authorAvatarFallback: "LF", dataAiHintAvatar: "foodie person", dataAiHintImage: "market food" },
   { id: "msp10", title: "Neighborhood Festival This Weekend!", content: "Music, food, and art at the community festival this Saturday. Let's connect! #discover #connect", author: "Community Events", tribeName: "City Volunteers", moodTags: ["discover", "connect"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 24), vibes: 55, comments: 10, dataAiHintAvatar: "community group", imageUrl: "https://placehold.co/600x390.png", dataAiHintImage: "festival event" },
-
-  // New Connect Posts
   { id: "connect1", title: "Post-Show Meetup at The Green Dragon", content: "Great gig tonight! Anyone heading to The Green Dragon for a post-show chat? #connect", author: "BandFanatic", tribeName: "The Local Gig Circuit", moodTags: ["connect", "discover"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 0.5), vibes: 40, comments: 15, authorAvatarSrc: "https://placehold.co/40x40.png?text=BF", authorAvatarFallback: "BF", dataAiHintAvatar: "fan music" },
   { id: "connect2", content: "Planning a collab session for artisan makers next week. DM if interested! #connect #create", author: "CraftyConnector", tribeName: "Artisan Alley Collective", moodTags: ["connect", "create"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 18), vibes: 25, comments: 6, dataAiHintAvatar: "crafter community" },
   { id: "connect3", title: "Poetry Slam Sign-ups Open!", content: "Our next Open Mic Night needs poets! Sign up in the 'Open Mic Night Crew' tribe. #connect #create", author: "PoetryHost", tribeName: "Open Mic Night Crew", moodTags: ["connect", "create", "discover"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 48), imageUrl: "https://placehold.co/600x360.png", imageAlt: "Microphone on stage", dataAiHintImage: "microphone stage", vibes: 30, comments: 9, dataAiHintAvatar: "host event" },
-
-  // Existing Shop
   { id: "msp11", title: "Indie Artist Merch Drop!", content: "Support local artists! New T-shirts and prints available from members of 'Artisan Alley Collective'. Link in bio. #shop #create", author: "ArtCollector", moodTags: ["shop", "create"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 4), vibes: 88, comments: 22, authorAvatarSrc: "https://placehold.co/40x40.png?text=AC", authorAvatarFallback: "AC", dataAiHintAvatar: "collector art" },
   { id: "msp12", content: "Limited edition band tees at the merch stand tonight! #shop #discover", author: "GigMerch", tribeName: "The Local Gig Circuit", moodTags: ["shop", "discover"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 6), imageUrl: "https://placehold.co/600x370.png", imageAlt: "Band t-shirts", vibes: 115, comments: 30, authorAvatarSrc: "https://placehold.co/40x40.png?text=GM", authorAvatarFallback: "GM", dataAiHintAvatar: "merch seller", dataAiHintImage: "tshirt fashion" },
-  
-  // Existing Learn
   { id: "msp5", title: "Workshop: DIY Screen Printing", content: "Learn how to screen print your own designs! Hosted by 'Artisan Alley Collective' next Saturday. #learn #create", author: "WorkshopGuru", moodTags: ["learn", "create"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 12), imageUrl: "https://placehold.co/600x350.png", imageAlt: "Screen printing workshop", vibes: 102, comments: 25, authorAvatarSrc: "https://placehold.co/40x40.png?text=WG", authorAvatarFallback: "WG", dataAiHintAvatar: "teacher craft", dataAiHintImage: "workshop craft" },
   { id: "new_learn1", title: "Songwriting Masterclass - Notes & Tips", content: "Sharing some insights from the songwriting masterclass I attended. Key takeaway: storytelling is everything! #learn #create", author: "MusicStudent", moodTags: ["learn", "create"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 7), vibes: 67, comments: 11, dataAiHintAvatar: "student music" },
-  
-  // Existing Game
   { id: "msp6", content: "Just hit a new high score in 'Cyber Runner'! So stoked. #game 🏆", author: "ProGamerX", moodTags: ["game"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 15), vibes: 60, comments: 18, authorAvatarSrc: "https://placehold.co/40x40.png?text=PG", authorAvatarFallback: "PG", dataAiHintAvatar: "gamer person"},
   { id: "new_game1", title: "Upcoming Cozy Game Releases", content: "So many cute and relaxing games are coming out next month! Which ones are you excited for? #game #chill", author: "CozyGamer", moodTags: ["game", "chill"], timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 9), imageUrl: "https://placehold.co/600x330.png", imageAlt: "Cozy game graphics", dataAiHintImage: "games illustration", dataAiHintAvatar: "gamer girl", vibes: 95, comments: 20 },
 ];
@@ -109,7 +94,9 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
             <AvatarFallback>{post.authorAvatarFallback || post.author.substring(0,2)}</AvatarFallback>
           </Avatar>
           <div className="flex-1">
-            <CardTitle className="text-sm font-semibold leading-tight tracking-normal">{post.author} {post.tribeName && <span className="text-xs text-muted-foreground font-normal">in {post.tribeName}</span>}</CardTitle>
+            <CardTitle className="text-sm font-semibold leading-tight tracking-normal">
+                {post.author} {post.tribeName && <span className="text-xs text-muted-foreground font-normal">in {post.tribeName}</span>}
+            </CardTitle>
             <CardDescription className="text-xs">{displayTime}</CardDescription>
           </div>
         </div>
@@ -176,13 +163,8 @@ export default function MoodStreamPage() {
   const [isTunerOpen, setIsTunerOpen] = useState(false);
 
   useEffect(() => {
-    // Update selected slugs if URL changes directly
     if (moodSlugFromUrl && (selectedMoodSlugs.length !== 1 || selectedMoodSlugs[0] !== moodSlugFromUrl)) {
       setSelectedMoodSlugs([moodSlugFromUrl]);
-    } else if (!moodSlugFromUrl && selectedMoodSlugs.length > 0) {
-        // If URL has no slug but we have selections, this indicates user interaction with tuner.
-        // We don't need to reset, but we might want to clear the URL slug if it's a specific navigation pattern.
-        // For now, let's allow tuner to override URL slug for subsequent filtering.
     }
   }, [moodSlugFromUrl, selectedMoodSlugs]);
 
@@ -190,14 +172,6 @@ export default function MoodStreamPage() {
   const handleMoodSelectionChange = (moodSlug: string, checked: boolean | "indeterminate") => {
     setSelectedMoodSlugs(prev => {
         const newSlugs = checked ? [...prev, moodSlug] : prev.filter(slug => slug !== moodSlug);
-        // Optional: Update URL when tuner is used, but this can get complex.
-        // If only one mood is selected, navigate to its slug. Otherwise, maybe to a generic /moods/tuned page or clear slug.
-        // For simplicity, let's not manage URL updates from tuner for now.
-        // if (newSlugs.length === 1) {
-        //   router.replace(`/moods/${newSlugs[0]}`, { scroll: false });
-        // } else if (newSlugs.length === 0 && moodSlugFromUrl) {
-        //   router.replace(`/moods`, { scroll: false }); // Or some other default
-        // }
         return newSlugs;
     });
   };
@@ -314,9 +288,3 @@ export default function MoodStreamPage() {
     </div>
   );
 }
-
-    
-
-    
-
-    

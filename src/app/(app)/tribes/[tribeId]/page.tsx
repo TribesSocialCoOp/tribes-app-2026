@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils';
 
 import { tribesData, type Tribe } from '../page';
 import { moodsData } from '../../moods/page';
-import { allMoodStreamPosts } from '../../moods/[moodSlug]/page';
+import { allMoodStreamPosts } from '../../moods/[moodSlug]/page'; // Renamed for clarity
 import type { Event } from '../../events/[eventId]/page';
 import { sampleEventsData } from '../../events/[eventId]/page';
 
@@ -52,7 +52,7 @@ const sampleTribePosts: TribePost[] = [
     vibes: 30, comments: 5, dataAiHintAvatar: "researcher scientist",
   },
   {
-    id: "msp2", tribeId: "1", authorName: "ProductivePro", authorAvatarFallback: "PP",
+    id: "msp2", tribeId: "1", authorName: "ProductivePro", authorAvatarFallback: "PP", // Assuming tribeId "1" is AI Innovators / Focus Finders
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 3),
     title: "My Top 5 Productivity Hacks for Deep Work",
     content: "Sharing my secrets to staying in the zone! Tip #1: Time blocking is key. This was also shared to the Focus mood stream.",
@@ -68,7 +68,7 @@ const sampleTribePosts: TribePost[] = [
     vibes: 210, comments: 32, dataAiHintAvatar: "hiker adventurer",
   },
    {
-    id: "msp9", tribeId: "2", authorName: "LocalFoodie", authorAvatarFallback: "LF",
+    id: "msp9", tribeId: "2", authorName: "LocalFoodie", authorAvatarFallback: "LF", // Assuming tribeId "2" is Weekend Hikers
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 7),
     title: "Post-Hike Find: Amazing Farmers Market!",
     content: "After our hike near Miller's Pond, stumbled upon this fantastic farmers market. Great fuel and cool local crafts! Shared this to Discover stream too.",
@@ -84,7 +84,7 @@ const sampleTribePosts: TribePost[] = [
     vibes: 95, comments: 22, dataAiHintAvatar: "music fan",
   },
   {
-    id: "msp8", tribeId: "7", authorName: "RockstarDev", authorAvatarFallback: "RD",
+    id: "msp8", tribeId: "7", authorName: "RockstarDev", authorAvatarFallback: "RD", // Assuming tribeId "7" is The Local Gig Circuit
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 8),
     title: "My Stage Setup for Tonight's Gig",
     content: "Sound check done! Ready to rock the 'Music Hall' tonight. Who's coming? Also shared to Create mood stream!",
@@ -122,15 +122,11 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
   }, [post.timestamp]);
 
   const handleReportPost = () => {
-    // Backend: API call to /api/reports with postId, userId, reason
-    // UI: Show a confirmation toast or dialog
     alert(`Post "${post.title || post.id}" reported. (Simulated)`);
   };
 
   const handleBoostToMoodStream = () => {
-    // Backend: API call to /api/tribes/{tribeId}/posts/{postId}/boost with targetMoodStreamId
-    // UI: Show a confirmation or a modal to select mood stream
-    alert(`Post "${post.title || post.id}" boosted to mood stream. (Simulated)`);
+    alert(`Simulating: Open modal to select Mood Stream(s) for post '${post.title || post.id}'.`);
   };
 
 
@@ -173,7 +169,7 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {isTribeAdmin && (
+                {isUserMember && isTribeAdmin && (
                   <>
                     <DropdownMenuItem onClick={handleBoostToMoodStream}>
                       <Rss className="mr-2 h-4 w-4" /> Boost to Mood Stream
@@ -184,7 +180,6 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
                 <DropdownMenuItem onClick={handleReportPost}>
                   <Flag className="mr-2 h-4 w-4" /> Report Post
                 </DropdownMenuItem>
-                {/* Add more actions like 'Hide Post' for the user */}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -277,19 +272,15 @@ export default function TribeDetailPage() {
   const tribeId = params.tribeId as string;
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
-  const isUserMember = true; // Simulate user membership
-  // Backend: This should come from user's roles/permissions for the current tribeId
-  const isTribeAdmin = true; // Simulate user being an admin of this tribe
+  const isUserMember = true; 
+  const isTribeAdmin = true; 
 
-  // Mock data for admin tools
   const mockMembers = [
     { id: 'user1', name: 'Alice Wonderland', avatar: 'https://placehold.co/40x40.png?text=AW', dataAiHint: 'avatar person' },
     { id: 'user2', name: 'Bob The Builder', avatar: 'https://placehold.co/40x40.png?text=BB', dataAiHint: 'avatar character' },
     { id: 'user3', name: 'Charlie Chaplin', avatar: 'https://placehold.co/40x40.png?text=CC', dataAiHint: 'avatar person' },
   ];
-  const mockReportedContent = [
-    // { postId: 'postXYZ', reportedBy: 'user789', reason: 'Spam content', timestamp: new Date() }
-  ];
+  const mockReportedContent: any[] = [];
 
 
   useEffect(() => {
@@ -336,7 +327,7 @@ export default function TribeDetailPage() {
         timestamp: post.timestamp,
         isPinned: false,
         data: post,
-        isPromoted: moodStreamPostIds.has(post.id)
+        isPromoted: moodStreamPostIds.has(post.id) 
       }));
 
     const allItems: FeedItem[] = [...eventItems, ...postItems];
@@ -362,33 +353,25 @@ export default function TribeDetailPage() {
   const tribeMoodObjects = tribe.moods?.map(slug => moodsData.find(m => m.slug === slug)).filter(Boolean) || [];
 
   const handleMuteUser = (userId: string, userName: string) => {
-    // Backend: API call to /api/tribes/{tribeId}/members/{userId}/mute with duration
-    // UI: Confirmation, update UI if member list is dynamic
     alert(`User ${userName} muted in tribe. (Simulated)`);
   };
 
   const handleRemoveUser = (userId: string, userName: string) => {
-    // Backend: API call to /api/tribes/{tribeId}/members/{userId}/remove
-    // UI: Confirmation, update UI
     alert(`User ${userName} removed from tribe. (Simulated)`);
   };
 
   const handleViewUserProfile = (userId: string) => {
-    // Navigation: router.push(`/profile/${userId}`) - if such a page exists
     alert(`Viewing profile for user ID: ${userId}. (Simulated)`);
   };
 
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Backend: Access to this Admin Tools card should be gated by user role (e.g., tribe founder, admin, speaker) */}
-      {/* This check `isTribeAdmin` is a frontend simulation of that role check. */}
       {isTribeAdmin && (
-        <Accordion type="single" collapsible className="w-full">
+        <Accordion type="single" collapsible className="w-full" defaultValue="admin-tools-closed">
           <AccordionItem value="admin-tools" className="border-destructive/30 rounded-lg shadow-lg overflow-hidden">
-            {/* The Card component is removed from here; its styling is applied to AccordionItem and Trigger/Content */}
               <AccordionTrigger className="w-full hover:bg-muted/20 transition-colors p-4 hover:no-underline rounded-t-lg">
-                <div className="flex items-center space-x-3"> {/* Grouping icon and text */}
+                <div className="flex items-center space-x-3"> 
                   <ShieldAlert className="h-6 w-6 text-destructive" />
                   <div>
                     <CardTitle className="text-xl font-semibold tracking-normal text-destructive text-left">Tribe Admin Tools</CardTitle>
@@ -399,14 +382,11 @@ export default function TribeDetailPage() {
                 </div>
               </AccordionTrigger>
               <AccordionContent>
-                {/* CardContent's padding is applied here, original CardContent component removed */}
                 <div className="space-y-6 p-4 pt-2">
                   <div>
                     <h3 className="text-lg font-medium text-foreground mb-2 flex items-center">
                       <UserCog className="mr-2 h-5 w-5 text-muted-foreground" /> Member Management
                     </h3>
-                    {/* Backend Comment: This list should be paginated and searchable for larger tribes. */}
-                    {/* Backend Comment: Actions (mute, remove) need to trigger API calls and handle permissions. */}
                     {mockMembers.length > 0 ? (
                       <ul className="space-y-2">
                         {mockMembers.map(member => (
@@ -442,7 +422,6 @@ export default function TribeDetailPage() {
                   <Separator />
                   <div>
                     <h3 className="text-lg font-medium text-foreground mb-2">Reported Content Queue</h3>
-                    {/* Backend Comment: This queue needs to be populated by user reports and provide actions for moderators (dismiss, remove content, warn user). */}
                     {mockReportedContent.length > 0 ? (
                       <p className="text-sm text-muted-foreground">Display reported items here...</p>
                     ) : (
@@ -454,7 +433,6 @@ export default function TribeDetailPage() {
                       <Button variant="outline" className="w-full sm:w-auto">
                           <Settings className="mr-2 h-4 w-4"/> Edit Tribe Settings
                       </Button>
-                      {/* Backend Comment: This button should link to a tribe settings page (e.g., /tribes/{tribeId}/settings) */}
                   </div>
                 </div>
               </AccordionContent>
@@ -469,21 +447,19 @@ export default function TribeDetailPage() {
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </div>
-        {/* Backend: Tribe settings button should only be visible to tribe admins/founders */}
         {isTribeAdmin && (
             <div className="absolute top-4 right-4 z-10">
             <Button variant="outline" size="icon" className="bg-background/70 hover:bg-background/90 backdrop-blur-sm">
                 <Settings className="h-5 w-5" />
             </Button>
-            {/* UI: This button would link to a tribe settings page, e.g., /tribes/{tribeId}/settings */}
             </div>
         )}
         <div className="relative h-48 md:h-64 w-full">
           <Image
             src={tribe.cover}
             alt={`${tribe.name} cover image`}
-            layout="fill"
-            objectFit="cover"
+            fill
+            style={{objectFit:"cover"}}
             data-ai-hint={tribe.dataAiHint || "community group"}
             priority
           />
@@ -514,7 +490,6 @@ export default function TribeDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Backend: The ability to create a post should be limited to tribe members. */}
       {isUserMember && (
         <Card className="shadow-lg">
             <CardHeader className="p-4 flex-row items-center space-x-3">
@@ -525,13 +500,11 @@ export default function TribeDetailPage() {
                 <Button variant="outline" className="flex-1 justify-start text-muted-foreground">
                     What's on your mind, User?
                 </Button>
-                 {/* UI: Clicking this would ideally open an inline editor or a modal to create a post */}
             </CardHeader>
             <CardFooter className="p-4 pt-0 flex justify-end">
                 <Button className="bg-primary hover:bg-primary/90">
                     <Edit3 className="mr-2 h-4 w-4" /> Create Post
                 </Button>
-                {/* Backend: This action would submit new post data to /api/tribes/{tribeId}/posts */}
             </CardFooter>
         </Card>
       )}
@@ -545,7 +518,6 @@ export default function TribeDetailPage() {
             if (item.type === 'event') {
               return <EventHighlightCard key={item.id} event={item.data as Event} />;
             }
-            // item.type === 'post'
             const post = item.data as TribePost;
             return <TribePostCard key={item.id} post={post} isPromoted={item.isPromoted} isUserMember={isUserMember} isTribeAdmin={isTribeAdmin} />;
           })
@@ -566,6 +538,3 @@ export default function TribeDetailPage() {
     </div>
   );
 }
-
-
-    
