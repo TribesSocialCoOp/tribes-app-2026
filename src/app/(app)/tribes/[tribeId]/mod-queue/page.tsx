@@ -20,9 +20,9 @@ import { tribesData, type Tribe } from '../../page';
 import { 
     initialSampleTribePosts, 
     type TribePost, 
-    mockReportedContentData, 
+    mockReportedContentData, // This will be the mutable 'let' export
     type ReportedPost 
-} from '../page'; // Import from the main tribe detail page
+} from '../page'; 
 
 export default function TribeModQueuePage() {
   const router = useRouter();
@@ -32,7 +32,7 @@ export default function TribeModQueuePage() {
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
   const [reportsForThisTribe, setReportsForThisTribe] = useState<ReportedPost[]>([]);
-  const [postsForThisTribe, setPostsForThisTribe] = useState<TribePost[]>(initialSampleTribePosts); // Keep all posts to allow removal, will filter for display
+  const [postsForThisTribe, setPostsForThisTribe] = useState<TribePost[]>(initialSampleTribePosts); 
 
   useEffect(() => {
     if (tribeId) {
@@ -40,34 +40,65 @@ export default function TribeModQueuePage() {
       setTribe(currentTribeData || null);
 
       if (currentTribeData) {
-        // Filter reports relevant to this tribe
         const tribePostIds = new Set(
             initialSampleTribePosts.filter(p => p.tribeId === currentTribeData.id).map(p => p.id)
         );
+        // Filter from the potentially mutated global mockReportedContentData
         const filteredReports = mockReportedContentData.filter(report => tribePostIds.has(report.postId));
         setReportsForThisTribe(filteredReports);
       }
     }
-  }, [tribeId]);
+  }, [tribeId]); // mockReportedContentData is not a dependency here as this effect is for initial load/tribe change
   
   const getPostById = (postId: string): TribePost | undefined => {
     return postsForThisTribe.find(post => post.id === postId);
   };
 
   const handleDismissReport = (postIdToDismiss: string) => {
-    setReportsForThisTribe(prev => prev.filter(report => report.postId !== postIdToDismiss));
-    toast({
-      title: "Report Dismissed",
-      description: `Report for post ID ${postIdToDismiss} has been dismissed. The post remains.`,
-    });
+    // Directly mutate the imported 'let' mockReportedContentData
+    // This is a mock-specific approach for client-side shared state
+    let found = false;
+    for (let i = mockReportedContentData.length - 1; i >= 0; i--) {
+        if (mockReportedContentData[i].postId === postIdToDismiss) {
+            mockReportedContentData.splice(i, 1);
+            found = true;
+            // Assuming only one report per post ID for simplicity in this mock
+            break; 
+        }
+    }
+
+    if (found) {
+        // Update local state to reflect the change
+        setReportsForThisTribe(prev => prev.filter(report => report.postId !== postIdToDismiss));
+        toast({
+            title: "Report Dismissed",
+            description: `Report for post ID ${postIdToDismiss} has been dismissed. The post remains.`,
+        });
+    } else {
+         toast({
+            title: "Dismissal Error",
+            description: `Could not find report for post ID ${postIdToDismiss} to dismiss.`,
+            variant: "destructive"
+        });
+    }
   };
 
   const handleRemovePostAndNotify = (postIdToRemove: string, postTitle?: string) => {
+    // Also dismiss the report from the global mock
+    let reportFoundAndDismissed = false;
+    for (let i = mockReportedContentData.length - 1; i >= 0; i--) {
+        if (mockReportedContentData[i].postId === postIdToRemove) {
+            mockReportedContentData.splice(i, 1);
+            reportFoundAndDismissed = true;
+            break;
+        }
+    }
+    
     setReportsForThisTribe(prev => prev.filter(report => report.postId !== postIdToRemove));
-    setPostsForThisTribe(prev => prev.filter(post => post.id !== postIdToRemove)); // Simulate post removal
+    setPostsForThisTribe(prev => prev.filter(post => post.id !== postIdToRemove)); 
     toast({
       title: "Post Removed (Simulated)",
-      description: `Post "${postTitle || postIdToRemove}" has been removed from this tribe. The report is dismissed.`,
+      description: `Post "${postTitle || postIdToRemove}" has been removed from this tribe. ${reportFoundAndDismissed ? 'The report is dismissed.' : 'Report was not found.'}`,
       variant: "destructive",
     });
   };
@@ -185,3 +216,5 @@ export default function TribeModQueuePage() {
     </div>
   );
 }
+
+    

@@ -114,7 +114,8 @@ export interface ReportedPost {
   reason?: string;
 }
 
-export const mockReportedContentData: ReportedPost[] = [
+// Changed to 'let' to allow mutation for mock purposes
+export let mockReportedContentData: ReportedPost[] = [
   { postId: "msp2", postTitle: "My Top 5 Productivity Hacks for Deep Work", reporterName: "ConcernedUser1", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 5), reason: "Spamming irrelevant content" },
   { postId: "tribe_post_hikers_local1", postTitle: "Weekend Hike Recap: Mountain Peak (Tribe Exclusive Pics)", reporterName: "SafetyFirst", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2), reason: "Sharing potentially dangerous trail info without proper warnings." },
   { postId: "tribe_post_ai_local1", postTitle: "Local Discussion: Ethics in AI Development", reporterName: "Ethicist22", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1), reason: "Heated discussion, potential personal attacks." },
@@ -318,8 +319,9 @@ export default function TribeDetailPage() {
   const [locallyPromotedPostIds, setLocallyPromotedPostIds] = useState<Set<string>>(new Set());
   
   const [currentTribePostsData, setCurrentTribePostsData] = useState<TribePost[]>(initialSampleTribePosts);
-  const [reportedContent] = useState<ReportedPost[]>(mockReportedContentData); 
+  // const [reportedContent] = useState<ReportedPost[]>(mockReportedContentData); // No longer needed as local state here
   const [currentTribeMembers, setCurrentTribeMembers] = useState<TribeMember[]>([]);
+  const [reportsLastUpdated, setReportsLastUpdated] = useState(Date.now());
 
 
   const isUserMember = true;
@@ -336,11 +338,23 @@ export default function TribeDetailPage() {
                                    (member.id === 'user2' && tribeId === '2') ? 'Trail Master' : undefined
         }));
         setCurrentTribeMembers(membersForThisTribe);
+        setReportsLastUpdated(Date.now()); // Ensure reports are fresh on tribe load
       } else {
         router.push('/tribes');
       }
     }
   }, [tribeId, router]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+        setReportsLastUpdated(Date.now());
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+        window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
 
   const tribeEvents = useMemo(() => {
     if (!tribe) return [];
@@ -357,18 +371,23 @@ export default function TribeDetailPage() {
   }, [tribe, currentTribePostsData]);
 
   const activeReportedPostIds = useMemo(() => {
-    return new Set(reportedContent.map(report => report.postId));
-  }, [reportedContent]);
+    // This now directly uses the (potentially mutated) global mockReportedContentData
+    // The reportsLastUpdated dependency ensures this useMemo hook re-runs when we want to refresh.
+    // console.log("TribeDetailPage: Recalculating activeReportedPostIds due to reportsLastUpdated:", reportsLastUpdated);
+    return new Set(mockReportedContentData.map(report => report.postId));
+  }, [reportsLastUpdated]);
 
-  const currentTribeReportedPosts = useMemo(() => {
+
+  const currentTribeReportedPostsForDashboard = useMemo(() => {
     if (!tribe || !currentTribePostsData) return [];
     const postsInThisTribeIds = new Set(
         currentTribePostsData
             .filter(p => p.tribeId === tribe.id)
             .map(p => p.id)
     );
-    return reportedContent.filter(report => postsInThisTribeIds.has(report.postId));
-  }, [tribe, reportedContent, currentTribePostsData]);
+    // Use the global, mutable mockReportedContentData here as well
+    return mockReportedContentData.filter(report => postsInThisTribeIds.has(report.postId));
+  }, [tribe, currentTribePostsData, reportsLastUpdated]);
 
 
   const combinedFeedItems = useMemo(() => {
@@ -391,7 +410,7 @@ export default function TribeDetailPage() {
         isPinned: false,
         data: post,
         isPromoted: moodStreamPostIds.has(post.id) || locallyPromotedPostIds.has(post.id),
-        isReported: activeReportedPostIds.has(post.id),
+        isReported: activeReportedPostIds.has(post.id), // Uses the reactive activeReportedPostIds
       }));
 
     const allItems: FeedItem[] = [...eventItems, ...postItems];
@@ -429,7 +448,7 @@ export default function TribeDetailPage() {
   };
 
   const handleUserReportPost = (post: TribePost) => {
-    const alreadyReported = reportedContent.some(r => r.postId === post.id);
+    const alreadyReported = mockReportedContentData.some(r => r.postId === post.id); // Check global mock
     if(alreadyReported){
          toast({
             title: "Already Reported",
@@ -437,6 +456,16 @@ export default function TribeDetailPage() {
         });
         return;
     }
+    // Simulate adding to the global mock data for immediate feedback (in a real app, this would be a backend call)
+    mockReportedContentData.push({
+        postId: post.id,
+        postTitle: post.title,
+        reporterName: "You (Simulated)",
+        reportedAt: new Date(),
+        reason: "User reported from tribe detail page."
+    });
+    setReportsLastUpdated(Date.now()); // Trigger re-calculation of activeReportedPostIds
+
     toast({
       title: "Post Reported (Simulated)",
       description: `Thank you for reporting "${post.title || 'this post'}". An admin will review it.`,
@@ -495,7 +524,7 @@ export default function TribeDetailPage() {
                     </Card>
                     <Card className="bg-muted/50 p-3">
                         <p className="text-xs text-muted-foreground font-medium">PENDING REPORTS</p>
-                        <p className="text-2xl font-bold text-destructive">{currentTribeReportedPosts.length}</p>
+                        <p className="text-2xl font-bold text-destructive">{currentTribeReportedPostsForDashboard.length}</p>
                     </Card>
                 </div>
                  <Separator />
@@ -642,4 +671,6 @@ export default function TribeDetailPage() {
     </div>
   );
 }
+    
+
     
