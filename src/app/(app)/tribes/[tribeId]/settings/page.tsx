@@ -14,16 +14,22 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { ArrowLeft, Settings as SettingsIcon, Globe, Lock } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
+import { cn } from '@/lib/utils';
 
-import { tribesData, type Tribe } from '../../page'; // Corrected import path
+import { tribesData, type Tribe } from '../../page';
+import { moodsData as allMoodsData } from '../../../moods/page';
 
 const tribeSettingsFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
   isPublic: z.boolean().default(true),
-  // coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`), // Add later if needed
+  moods: z.array(z.string())
+    .max(3, { message: "You can select a maximum of 3 moods." })
+    .optional()
+    .default([]),
 });
 
 type TribeSettingsFormValues = z.infer<typeof tribeSettingsFormSchema>;
@@ -43,6 +49,7 @@ export default function TribeSettingsPage() {
       name: "",
       description: "",
       isPublic: true,
+      moods: [],
     },
   });
 
@@ -55,9 +62,10 @@ export default function TribeSettingsPage() {
           name: currentTribeData.name,
           description: currentTribeData.description,
           isPublic: currentTribeData.isPublic,
+          moods: currentTribeData.moods || [],
         });
       } else {
-        router.push('/tribes'); // Redirect if tribe not found
+        router.push('/tribes'); 
       }
     }
   }, [tribeId, form, router]);
@@ -65,19 +73,16 @@ export default function TribeSettingsPage() {
   async function onSubmit(values: TribeSettingsFormValues) {
     setIsLoading(true);
     console.log("Tribe Settings Update Submitted:", values);
-    // Simulate API call to update tribe settings
+    
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    // In a real app, you would update the source of truth (e.g., database)
-    // and then potentially update the local state or re-fetch.
-    // For this mock, we'll just show a toast and potentially update the local `tribe` state.
     if (tribe) {
         setTribe(prevTribe => prevTribe ? {...prevTribe, ...values} : null);
     }
 
     toast({
       title: "Settings Saved (Simulated)",
-      description: `Settings for tribe "${values.name}" have been updated.`,
+      description: `Settings for tribe "${values.name}" have been updated. Moods selected: ${values.moods?.join(', ') || 'None'}.`,
     });
     setIsLoading(false);
   }
@@ -105,7 +110,7 @@ export default function TribeSettingsPage() {
             <SettingsIcon className="h-7 w-7 text-primary" />
             <div>
               <CardTitle className="text-2xl font-semibold tracking-normal">Tribe Settings: {tribe.name}</CardTitle>
-              <CardDescription>Manage the core settings for your tribe.</CardDescription>
+              <CardDescription>Manage the core settings and associated moods for your tribe.</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -146,6 +151,61 @@ export default function TribeSettingsPage() {
                 )}
               />
               
+              <FormField
+                control={form.control}
+                name="moods"
+                render={({ field }) => (
+                  <FormItem>
+                    <div className="mb-2">
+                      <FormLabel className="text-md flex items-center">
+                        <Tag className="mr-2 h-4 w-4 text-muted-foreground"/> Associated Moods (Max 3)
+                      </FormLabel>
+                      <FormDescription className="mt-1">
+                        Select up to 3 moods that best represent your tribe. These help users discover your tribe.
+                      </FormDescription>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 border rounded-md">
+                      {allMoodsData.map((moodOption) => {
+                        const isChecked = field.value?.includes(moodOption.slug);
+                        const isDisabled = !isChecked && (field.value?.length ?? 0) >= 3;
+                        return (
+                          <Label
+                            key={moodOption.slug}
+                            htmlFor={`mood-${moodOption.slug}`}
+                            className={cn(
+                              "flex items-center space-x-2 p-2 border rounded-md hover:bg-muted/50 cursor-pointer transition-colors",
+                              isChecked && "bg-accent/70 border-accent",
+                              isDisabled && "cursor-not-allowed opacity-60 hover:bg-transparent"
+                            )}
+                          >
+                            <Checkbox
+                              id={`mood-${moodOption.slug}`}
+                              checked={isChecked}
+                              disabled={isDisabled}
+                              onCheckedChange={(checkedClient) => {
+                                const currentSelectedMoods = field.value ? [...field.value] : [];
+                                if (checkedClient) {
+                                  if (currentSelectedMoods.length < 3) {
+                                    field.onChange([...currentSelectedMoods, moodOption.slug]);
+                                  }
+                                } else {
+                                  field.onChange(currentSelectedMoods.filter((slug) => slug !== moodOption.slug));
+                                }
+                              }}
+                              className="shrink-0"
+                            />
+                            <span className={cn("font-normal text-sm", isDisabled && "text-muted-foreground")}>
+                              {moodOption.emoji} {moodOption.name}
+                            </span>
+                          </Label>
+                        );
+                      })}
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="isPublic"
@@ -190,4 +250,3 @@ export default function TribeSettingsPage() {
     </div>
   );
 }
-
