@@ -12,7 +12,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, UsersRound, Pencil, UserCheck, UserX, Hammer } from 'lucide-react';
+import { ArrowLeft, UsersRound, Pencil, UserCheck, UserX, Hammer, MoreVertical } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import React, { useEffect, useState } from 'react';
 import { tribesData, type Tribe } from '../../page';
 import { useToast } from "@/hooks/use-toast";
@@ -48,10 +55,9 @@ export default function ManageMembersPage() {
   const [memberToEditNickname, setMemberToEditNickname] = useState<TribeMember | null>(null);
   const [nicknameInputValue, setNicknameInputValue] = useState("");
 
-  // State for Ban Dialog
   const [isBanDialogOpen, setIsBanDialogOpen] = useState(false);
   const [memberToBanDetails, setMemberToBanDetails] = useState<{ memberId: string; memberName: string; } | null>(null);
-  const [banDuration, setBanDuration] = useState("permanent_from_tribe"); // Default for tribe-specific ban
+  const [banDuration, setBanDuration] = useState("permanent_from_tribe"); 
   const [banReason, setBanReason] = useState("");
 
 
@@ -64,7 +70,7 @@ export default function ManageMembersPage() {
             ...member,
             tribeAssignedNickname: (member.id === 'user1' && tribeId === '1') ? 'AI Lead' :
                                    (member.id === 'user2' && tribeId === '2') ? 'Trail Master' : undefined,
-            role: (member.id === 'user1' && tribeId === '1') ? 'speaker' : 'member'
+            role: (member.id === 'user1' && tribeId === '1') ? 'speaker' : 'member' as 'member' | 'speaker'
         }));
         setCurrentTribeMembers(membersForThisTribe);
       }
@@ -125,7 +131,6 @@ export default function ManageMembersPage() {
   const handleConfirmBan = () => {
     if (!memberToBanDetails || !tribe) return;
 
-    // Simulate banning action
     console.log("Banning member from tribe:", {
         memberId: memberToBanDetails.memberId,
         memberName: memberToBanDetails.memberName,
@@ -146,7 +151,6 @@ export default function ManageMembersPage() {
       variant: "destructive",
     });
 
-    // Remove member from the list locally
     setCurrentTribeMembers(prevMembers => prevMembers.filter(m => m.id !== memberToBanDetails.memberId));
 
     setIsBanDialogOpen(false);
@@ -187,8 +191,8 @@ export default function ManageMembersPage() {
           {currentTribeMembers.length > 0 ? (
             <div className="space-y-3">
               {currentTribeMembers.map(member => (
-                <Card key={member.id} className="p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between hover:bg-muted/30 transition-colors">
-                  <div className="flex items-center space-x-3 mb-3 sm:mb-0 flex-grow">
+                <Card key={member.id} className="p-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
+                  <div className="flex items-center space-x-3 flex-grow">
                     <Avatar className="h-10 w-10">
                       <AvatarImage src={member.avatar} alt={member.name} data-ai-hint={member.dataAiHint} />
                       <AvatarFallback>{member.name.substring(0,2).toUpperCase()}</AvatarFallback>
@@ -205,20 +209,32 @@ export default function ManageMembersPage() {
                       </Badge>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 w-full sm:w-auto justify-start sm:justify-end">
-                    <Button variant="outline" size="sm" onClick={() => handleOpenNicknameDialog(member)} className="flex-grow sm:flex-grow-0">
-                      <Pencil className="mr-1.5 h-3.5 w-3.5" />
-                      {member.tribeAssignedNickname ? "Edit" : "Assign"} Nickname
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleToggleSpeakerRole(member.id)} className="flex-grow sm:flex-grow-0">
-                      {member.role === 'speaker' ? <UserX className="mr-1.5 h-3.5 w-3.5" /> : <UserCheck className="mr-1.5 h-3.5 w-3.5" />}
-                      {member.role === 'speaker' ? 'Demote' : 'Make Speaker'}
-                    </Button>
-                     <Button variant="destructive" size="sm" onClick={() => handleOpenBanDialog(member)} className="flex-grow sm:flex-grow-0 bg-red-700 hover:bg-red-800">
-                      <Hammer className="mr-1.5 h-3.5 w-3.5" />
-                      Ban Member
-                    </Button>
-                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
+                        <MoreVertical className="h-4 w-4" />
+                        <span className="sr-only">Member Actions</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleOpenNicknameDialog(member)}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        {member.tribeAssignedNickname ? "Edit" : "Assign"} Nickname
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleToggleSpeakerRole(member.id)}>
+                        {member.role === 'speaker' ? <UserX className="mr-2 h-4 w-4" /> : <UserCheck className="mr-2 h-4 w-4" />}
+                        {member.role === 'speaker' ? 'Demote to Member' : 'Make Speaker'}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        onClick={() => handleOpenBanDialog(member)} 
+                        className="text-destructive hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive"
+                      >
+                        <Hammer className="mr-2 h-4 w-4" />
+                        Ban Member
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </Card>
               ))}
             </div>
@@ -231,7 +247,6 @@ export default function ManageMembersPage() {
         </CardContent>
       </Card>
 
-      {/* Nickname Dialog */}
       {memberToEditNickname && (
         <Dialog open={isNicknameDialogOpen} onOpenChange={setIsNicknameDialogOpen}>
           <DialogContent className="sm:max-w-md">
@@ -261,7 +276,6 @@ export default function ManageMembersPage() {
         </Dialog>
       )}
 
-      {/* Ban Member Dialog */}
       {memberToBanDetails && (
         <Dialog open={isBanDialogOpen} onOpenChange={setIsBanDialogOpen}>
             <DialogContent className="sm:max-w-md">
@@ -316,7 +330,3 @@ export default function ManageMembersPage() {
     </div>
   );
 }
-
-    
-
-    
