@@ -25,7 +25,8 @@ import {
   PlusCircle,
   Link2,
   CalendarPlus,
-  CalendarDays // Added for Events link
+  CalendarDays,
+  ShieldAlert // Added for Mod Queue
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -36,9 +37,10 @@ const navItems = [
   { href: "/tribes", icon: Users, label: "Tribes", tooltip: "Tribes" },
   { href: "/bonds", icon: Link2, label: "Bonds", tooltip: "Manage Bonds" },
   { href: "/moods", icon: Smile, label: "Moods", tooltip: "Moods" },
-  { href: "/events", icon: CalendarDays, label: "Events", tooltip: "Discover Events" }, // Added Events link
+  { href: "/events", icon: CalendarDays, label: "Events", tooltip: "Discover Events" },
   { href: "/files", icon: FileText, label: "Files", tooltip: "Files" },
   { href: "/ai-assistant", icon: Bot, label: "AI Assistant", tooltip: "AI Assistant" },
+  { href: "/admin/mod-queue", icon: ShieldAlert, label: "Mod Queue", tooltip: "Moderation Queue" }, // New Item
 ];
 
 const bottomNavItems = [
@@ -118,5 +120,4 @@ export function AppSidebar() {
     </Sidebar>
   );
 }
-
     
