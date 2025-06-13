@@ -3,7 +3,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import Image from 'next/image';
 import { format } from 'date-fns';
 
@@ -15,13 +14,37 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { ShieldAlert, Inbox, Trash2, Eye, Users as TribeIcon, AlertCircle, CheckCircle, Hammer } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ShieldAlert, Inbox, Trash2, Users as TribeIcon, AlertCircle, CheckCircle, Hammer, Search, Filter as FilterIcon, X as XIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 
 import { initialSampleTribePosts, type TribePost, mockReportedContentData, type ReportedPost } from '../../tribes/[tribeId]/page';
 import { tribesData, type Tribe } from '../../tribes/page';
+
+const ITEMS_PER_PAGE_OPTIONS = [5, 10, 15, 20];
+const DEFAULT_ITEMS_PER_PAGE = 10;
+
+type SortableReportKeys = 'reportedAt' | 'postTitle' | 'reporterName' | 'tribeName';
+interface SortOption {
+  value: string;
+  label: string;
+  key: SortableReportKeys;
+  direction: 'ascending' | 'descending';
+}
+
+const sortOptions: SortOption[] = [
+  { value: 'reportedAt_desc', label: 'Newest Reports', key: 'reportedAt', direction: 'descending' },
+  { value: 'reportedAt_asc', label: 'Oldest Reports', key: 'reportedAt', direction: 'ascending' },
+  { value: 'postTitle_asc', label: 'Post Title (A-Z)', key: 'postTitle', direction: 'ascending' },
+  { value: 'postTitle_desc', label: 'Post Title (Z-A)', key: 'postTitle', direction: 'descending' },
+  { value: 'reporterName_asc', label: 'Reporter (A-Z)', key: 'reporterName', direction: 'ascending' },
+  { value: 'reporterName_desc', label: 'Reporter (Z-A)', key: 'reporterName', direction: 'descending' },
+  // Tribe name sorting might require fetching tribe name first or storing it on report
+];
 
 
 export default function ModQueuePage() {
@@ -29,13 +52,18 @@ export default function ModQueuePage() {
   const { toast } = useToast();
 
   const [reports, setReports] = useState<ReportedPost[]>(mockReportedContentData);
-  const [allPosts, setAllPosts] = useState<TribePost[]>(initialSampleTribePosts); 
-  const [allTribes, setAllTribes] = useState<Tribe[]>(tribesData); 
+  const [allPosts, setAllPosts] = useState<TribePost[]>(initialSampleTribePosts);
+  const [allTribes, setAllTribes] = useState<Tribe[]>(tribesData);
 
   const [isBanDialogOpen, setIsBanDialogOpen] = useState(false);
   const [userToBanDetails, setUserToBanDetails] = useState<{ userId: string; userName: string; postId: string } | null>(null);
   const [banDuration, setBanDuration] = useState("permanent");
   const [banReason, setBanReason] = useState("");
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentSortValue, setCurrentSortValue] = useState<string>(sortOptions[0].value);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
 
 
   const getPostById = (postId: string): TribePost | undefined => {
@@ -65,20 +93,22 @@ export default function ModQueuePage() {
   };
 
   const handleViewTribe = (tribeId: string) => {
-    router.push(`/tribes/${tribeId}`);
+    const post = reports.find(r => r.postId)?.postId ? allPosts.find(p => p.id === reports.find(r => r.postId)?.postId && p.tribeId === tribeId) : undefined;
+    if (post) router.push(`/tribes/${post.tribeId}`);
+    else toast({title: "Error", description: "Could not find tribe for this post.", variant: "destructive"});
   };
-  
-  const handleEscalate = (reportPostId: string) => { 
-      toast({
-        title: "Report Escalated (Simulated)",
-        description: `Report for post ID ${reportPostId} has been escalated to platform administrators.`,
-      });
+
+  const handleEscalate = (reportPostId: string) => {
+    toast({
+      title: "Report Escalated (Simulated)",
+      description: `Report for post ID ${reportPostId} has been escalated to platform administrators.`,
+    });
   };
 
   const handleOpenBanDialog = (post: TribePost) => {
     if (!post || !post.authorId || !post.authorName) {
-        toast({ variant: "destructive", title: "Error", description: "Cannot ban author: missing author details."});
-        return;
+      toast({ variant: "destructive", title: "Error", description: "Cannot ban author: missing author details." });
+      return;
     }
     setUserToBanDetails({ userId: post.authorId, userName: post.authorName, postId: post.id });
     setIsBanDialogOpen(true);
@@ -86,40 +116,126 @@ export default function ModQueuePage() {
 
   const handleConfirmBan = () => {
     if (!userToBanDetails) return;
-
-    console.log("Banning user:", {
-        userId: userToBanDetails.userId,
-        userName: userToBanDetails.userName,
-        postId: userToBanDetails.postId,
-        duration: banDuration,
-        reason: banReason,
-    });
-
+    console.log("Banning user:", { userId: userToBanDetails.userId, userName: userToBanDetails.userName, postId: userToBanDetails.postId, duration: banDuration, reason: banReason });
     let durationText = "permanently";
     if (banDuration === "1_day") durationText = "for 1 day";
     else if (banDuration === "7_days") durationText = "for 7 days";
     else if (banDuration === "30_days") durationText = "for 30 days";
-    
     toast({
       title: "User Banned (Simulated)",
       description: `User ${userToBanDetails.userName} has been banned ${durationText}. Their reputation has been impacted (Simulated). ${banReason ? `Reason: ${banReason}` : ''}`,
       variant: "destructive",
     });
-
     setIsBanDialogOpen(false);
     setUserToBanDetails(null);
     setBanDuration("permanent");
     setBanReason("");
   };
 
+  const filteredReports = useMemo(() => {
+    if (!searchTerm) return reports;
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return reports.filter(report => {
+      const post = getPostById(report.postId);
+      const tribe = post ? getTribeById(post.tribeId) : undefined;
+      return (
+        (report.postTitle && report.postTitle.toLowerCase().includes(lowerSearchTerm)) ||
+        (post?.title && post.title.toLowerCase().includes(lowerSearchTerm)) ||
+        (report.reporterName && report.reporterName.toLowerCase().includes(lowerSearchTerm)) ||
+        (report.reason && report.reason.toLowerCase().includes(lowerSearchTerm)) ||
+        (tribe?.name && tribe.name.toLowerCase().includes(lowerSearchTerm))
+      );
+    });
+  }, [reports, searchTerm, allPosts, allTribes]); // Added allPosts and allTribes
+
+  const sortedAndFilteredReports = useMemo(() => {
+    const sortConfig = sortOptions.find(opt => opt.value === currentSortValue);
+    if (!sortConfig) return filteredReports;
+
+    return [...filteredReports].sort((a, b) => {
+      let aValue, bValue;
+
+      if (sortConfig.key === 'reportedAt') {
+        aValue = new Date(a.reportedAt).getTime();
+        bValue = new Date(b.reportedAt).getTime();
+      } else if (sortConfig.key === 'postTitle') {
+        aValue = a.postTitle?.toLowerCase() || getPostById(a.postId)?.title?.toLowerCase() || '';
+        bValue = b.postTitle?.toLowerCase() || getPostById(b.postId)?.title?.toLowerCase() || '';
+      } else if (sortConfig.key === 'reporterName') {
+        aValue = a.reporterName?.toLowerCase() || '';
+        bValue = b.reporterName?.toLowerCase() || '';
+      } else if (sortConfig.key === 'tribeName') {
+        const tribeA = getPostById(a.postId) ? getTribeById(getPostById(a.postId)!.tribeId) : undefined;
+        const tribeB = getPostById(b.postId) ? getTribeById(getPostById(b.postId)!.tribeId) : undefined;
+        aValue = tribeA?.name.toLowerCase() || '';
+        bValue = tribeB?.name.toLowerCase() || '';
+      } else {
+         aValue = (a as any)[sortConfig.key];
+         bValue = (b as any)[sortConfig.key];
+      }
+      
+      if (aValue === undefined || aValue === null) return 1;
+      if (bValue === undefined || bValue === null) return -1;
+
+      let comparison = 0;
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
+        comparison = aValue.localeCompare(bValue);
+      } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+        comparison = aValue - bValue;
+      }
+      return sortConfig.direction === 'ascending' ? comparison : comparison * -1;
+    });
+  }, [filteredReports, currentSortValue, allPosts, allTribes]); // Added allPosts and allTribes
+
+  const totalPages = Math.ceil(sortedAndFilteredReports.length / itemsPerPage);
+  const paginatedReports = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return sortedAndFilteredReports.slice(startIndex, startIndex + itemsPerPage);
+  }, [sortedAndFilteredReports, currentPage, itemsPerPage]);
+
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(event.target.value);
+    setCurrentPage(1);
+  };
+  
+  const handleClearSearch = () => {
+    setSearchTerm("");
+    setCurrentPage(1);
+  };
+
+  const handleSortChange = (value: string) => {
+    setCurrentSortValue(value);
+    setCurrentPage(1);
+  };
+
+  const handleItemsPerPageChange = (value: string) => {
+    setItemsPerPage(Number(value));
+    setCurrentPage(1);
+  };
+  
+  const handleNextPage = () => setCurrentPage(prev => Math.min(prev + 1, totalPages));
+  const handlePreviousPage = () => setCurrentPage(prev => Math.max(prev - 1, 1));
 
   if (!reports || !allPosts || !allTribes) {
-      return (
-        <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
-            <p className="text-muted-foreground">Loading moderation data...</p>
-        </div>
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
+        <p className="text-muted-foreground">Loading moderation data...</p>
+      </div>
     );
   }
+  
+  const availableSortOptions = useMemo(() => {
+    // Dynamically add tribe name sorting if tribes are available
+    const options = [...sortOptions];
+    if (allTribes.length > 0) {
+      options.push(
+        { value: 'tribeName_asc', label: 'Tribe Name (A-Z)', key: 'tribeName', direction: 'ascending' },
+        { value: 'tribeName_desc', label: 'Tribe Name (Z-A)', key: 'tribeName', direction: 'descending' }
+      );
+    }
+    return options;
+  }, [allTribes]);
+
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
@@ -135,24 +251,89 @@ export default function ModQueuePage() {
 
       <Card className="shadow-xl">
         <CardHeader>
-          <div className="flex items-center space-x-2">
-            <Inbox className="h-6 w-6 text-muted-foreground" />
-            <CardTitle className="text-xl tracking-normal">Reported Items ({reports.length})</CardTitle>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center space-x-2">
+              <Inbox className="h-6 w-6 text-muted-foreground" />
+              <CardTitle className="text-xl tracking-normal">Reported Items ({sortedAndFilteredReports.length})</CardTitle>
+            </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant={searchTerm ? "secondary" : "outline"}>
+                  <FilterIcon className="mr-2 h-4 w-4" /> Filter & View Options
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 space-y-4 p-4">
+                <div className="space-y-2">
+                  <Label htmlFor="report-search-input">Search Reports</Label>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        id="report-search-input"
+                        type="search"
+                        placeholder="Search by title, reporter, reason..."
+                        value={searchTerm}
+                        onChange={handleSearchChange}
+                        className="pl-8 w-full"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sort-select">Sort By</Label>
+                  <Select value={currentSortValue} onValueChange={handleSortChange}>
+                    <SelectTrigger id="sort-select" className="w-full">
+                      <SelectValue placeholder="Select sort order" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availableSortOptions.map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="items-per-page-select">Items per Page</Label>
+                  <Select value={String(itemsPerPage)} onValueChange={handleItemsPerPageChange}>
+                    <SelectTrigger id="items-per-page-select" className="w-full">
+                      <SelectValue placeholder="Select items per page" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ITEMS_PER_PAGE_OPTIONS.map(num => (
+                        <SelectItem key={num} value={String(num)}>{num}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
-           <CardDescription>
+           <CardDescription className="pt-2">
             Expand items to view post details and take action.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          {reports.length === 0 ? (
+        {searchTerm && (
+          <div className="px-6 pt-0 pb-4">
+            <Badge variant="secondary" className="flex items-center justify-between max-w-max">
+              Search: "{searchTerm}"
+              <Button variant="ghost" size="icon" className="ml-1 h-5 w-5 hover:bg-transparent" onClick={handleClearSearch}>
+                <XIcon className="h-3 w-3" />
+              </Button>
+            </Badge>
+          </div>
+        )}
+        <CardContent className={cn(searchTerm && "pt-0")}>
+          {paginatedReports.length === 0 ? (
             <div className="text-center py-10">
               <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
-              <p className="text-lg font-semibold text-foreground">All Clear!</p>
-              <p className="text-muted-foreground">There are no reported items in the queue.</p>
+              <p className="text-lg font-semibold text-foreground">
+                {searchTerm ? "No reports match your search." : "All Clear!"}
+              </p>
+              <p className="text-muted-foreground">
+                {searchTerm ? "Try a different search term or clear the filter." : "There are no reported items in the queue."}
+              </p>
             </div>
           ) : (
             <Accordion type="multiple" className="w-full space-y-3">
-              {reports.map((report) => {
+              {paginatedReports.map((report) => {
                 const post = getPostById(report.postId);
                 const tribe = post ? getTribeById(post.tribeId) : undefined;
 
@@ -167,7 +348,7 @@ export default function ModQueuePage() {
                           <span>Reported by: {report.reporterName}</span>
                           {tribe && <span>from Tribe: <span className="font-medium">{tribe.name}</span></span>}
                         </div>
-                         {report.reason && <p className="text-xs text-destructive italic mt-1">Reason: {report.reason}</p>}
+                        {report.reason && <p className="text-xs text-destructive italic mt-1">Reason: {report.reason}</p>}
                       </div>
                       <Badge variant="outline" className="ml-auto mr-2 whitespace-nowrap text-xs">
                         {format(new Date(report.reportedAt), "MMM d, h:mm a")}
@@ -179,23 +360,23 @@ export default function ModQueuePage() {
                           <div>
                             <h4 className="text-xs uppercase text-muted-foreground mb-1">Reported Post Content:</h4>
                             <div className="p-3 border rounded-md bg-muted/20">
-                                <div className="flex items-center space-x-2 mb-2">
-                                    <Avatar className="h-8 w-8">
-                                        {post.authorAvatar && <AvatarImage src={post.authorAvatar} alt={post.authorName} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
-                                        <AvatarFallback>{post.authorAvatarFallback}</AvatarFallback>
-                                    </Avatar>
-                                    <div>
-                                        <p className="text-xs font-semibold">{post.authorName}</p>
-                                        <p className="text-xs text-muted-foreground">{format(new Date(post.timestamp), "MMM d, yyyy 'at' h:mm a")}</p>
-                                    </div>
+                              <div className="flex items-center space-x-2 mb-2">
+                                <Avatar className="h-8 w-8">
+                                  {post.authorAvatar && <AvatarImage src={post.authorAvatar} alt={post.authorName} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
+                                  <AvatarFallback>{post.authorAvatarFallback}</AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="text-xs font-semibold">{post.authorName}</p>
+                                  <p className="text-xs text-muted-foreground">{format(new Date(post.timestamp), "MMM d, yyyy 'at' h:mm a")}</p>
                                 </div>
-                                {post.title && <h5 className="font-semibold text-sm mb-1">{post.title}</h5>}
-                                <p className="text-xs whitespace-pre-wrap">{post.content}</p>
-                                {post.imageUrl && (
-                                    <div className="mt-2 relative aspect-video max-w-xs rounded-md overflow-hidden border">
-                                    <Image src={post.imageUrl} alt={post.imageAlt || "Post image"} fill style={{objectFit:"cover"}} data-ai-hint={post.dataAiHintImage || "post image"}/>
-                                    </div>
-                                )}
+                              </div>
+                              {post.title && <h5 className="font-semibold text-sm mb-1">{post.title}</h5>}
+                              <p className="text-xs whitespace-pre-wrap">{post.content}</p>
+                              {post.imageUrl && (
+                                <div className="mt-2 relative aspect-video max-w-xs rounded-md overflow-hidden border">
+                                  <Image src={post.imageUrl} alt={post.imageAlt || "Post image"} fill style={{ objectFit: "cover" }} data-ai-hint={post.dataAiHintImage || "post image"} />
+                                </div>
+                              )}
                             </div>
                           </div>
                           <div className="flex flex-wrap gap-2 pt-2">
@@ -203,18 +384,18 @@ export default function ModQueuePage() {
                               Dismiss Report
                             </Button>
                             <Button size="sm" variant="destructive" onClick={() => handleRemovePostAndNotify(report.postId, report.postTitle || post.title)}>
-                              <Trash2 className="mr-1.5 h-3.5 w-3.5"/> Remove Post & Notify
+                              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Remove Post & Notify
                             </Button>
-                             <Button size="sm" variant="destructive" className="bg-red-700 hover:bg-red-800" onClick={() => handleOpenBanDialog(post)}>
-                                <Hammer className="mr-1.5 h-3.5 w-3.5"/> Ban Author
+                            <Button size="sm" variant="destructive" className="bg-red-700 hover:bg-red-800" onClick={() => handleOpenBanDialog(post)}>
+                              <Hammer className="mr-1.5 h-3.5 w-3.5" /> Ban Author
                             </Button>
                             {tribe && (
                               <Button size="sm" variant="secondary" onClick={() => handleViewTribe(post.tribeId)}>
-                                <TribeIcon className="mr-1.5 h-3.5 w-3.5"/> View Tribe
+                                <TribeIcon className="mr-1.5 h-3.5 w-3.5" /> View Tribe
                               </Button>
                             )}
-                             <Button size="sm" variant="outline" onClick={() => handleEscalate(report.postId)}>
-                                <AlertCircle className="mr-1.5 h-3.5 w-3.5"/> Escalate
+                            <Button size="sm" variant="outline" onClick={() => handleEscalate(report.postId)}>
+                              <AlertCircle className="mr-1.5 h-3.5 w-3.5" /> Escalate
                             </Button>
                           </div>
                         </div>
@@ -228,61 +409,70 @@ export default function ModQueuePage() {
             </Accordion>
           )}
         </CardContent>
+        {totalPages > 1 && (
+          <CardFooter className="border-t pt-4 flex flex-col sm:flex-row items-center justify-between">
+            <p className="text-xs text-muted-foreground mb-2 sm:mb-0">
+              Showing {paginatedReports.length} of {sortedAndFilteredReports.length} reports.
+            </p>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePreviousPage}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleNextPage}
+                disabled={currentPage === totalPages}
+              >
+                Next <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </CardFooter>
+        )}
       </Card>
 
       {userToBanDetails && (
         <Dialog open={isBanDialogOpen} onOpenChange={setIsBanDialogOpen}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>Ban User: {userToBanDetails.userName}</DialogTitle>
-                    <DialogDescription>
-                        Select the duration and provide a reason for banning this user. This action may impact their reputation score.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="py-4 space-y-4">
-                    <div>
-                        <Label className="text-sm font-medium">Ban Duration</Label>
-                        <RadioGroup value={banDuration} onValueChange={setBanDuration} className="mt-2 space-y-1">
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="1_day" id="ban-1day" />
-                                <Label htmlFor="ban-1day" className="font-normal">1 Day</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="7_days" id="ban-7days" />
-                                <Label htmlFor="ban-7days" className="font-normal">7 Days</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="30_days" id="ban-30days" />
-                                <Label htmlFor="ban-30days" className="font-normal">30 Days</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="permanent" id="ban-permanent" />
-                                <Label htmlFor="ban-permanent" className="font-normal">Permanent</Label>
-                            </div>
-                        </RadioGroup>
-                    </div>
-                    <div>
-                        <Label htmlFor="ban-reason" className="text-sm font-medium">Reason for Ban (Optional)</Label>
-                        <Textarea
-                            id="ban-reason"
-                            value={banReason}
-                            onChange={(e) => setBanReason(e.target.value)}
-                            placeholder="Provide context for the ban..."
-                            className="mt-1 min-h-[80px]"
-                        />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <DialogClose asChild>
-                        <Button type="button" variant="outline">Cancel</Button>
-                    </DialogClose>
-                    <Button type="button" variant="destructive" onClick={handleConfirmBan}>Confirm Ban</Button>
-                </DialogFooter>
-            </DialogContent>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Ban User: {userToBanDetails.userName}</DialogTitle>
+              <DialogDescription>
+                Select the duration and provide a reason for banning this user. This action may impact their reputation score.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-4">
+              <div>
+                <Label className="text-sm font-medium">Ban Duration</Label>
+                <RadioGroup value={banDuration} onValueChange={setBanDuration} className="mt-2 space-y-1">
+                  <div className="flex items-center space-x-2"><RadioGroupItem value="1_day" id="ban-1day" /><Label htmlFor="ban-1day" className="font-normal">1 Day</Label></div>
+                  <div className="flex items-center space-x-2"><RadioGroupItem value="7_days" id="ban-7days" /><Label htmlFor="ban-7days" className="font-normal">7 Days</Label></div>
+                  <div className="flex items-center space-x-2"><RadioGroupItem value="30_days" id="ban-30days" /><Label htmlFor="ban-30days" className="font-normal">30 Days</Label></div>
+                  <div className="flex items-center space-x-2"><RadioGroupItem value="permanent" id="ban-permanent" /><Label htmlFor="ban-permanent" className="font-normal">Permanent</Label></div>
+                </RadioGroup>
+              </div>
+              <div>
+                <Label htmlFor="ban-reason" className="text-sm font-medium">Reason for Ban (Optional)</Label>
+                <Textarea id="ban-reason" value={banReason} onChange={(e) => setBanReason(e.target.value)} placeholder="Provide context for the ban..." className="mt-1 min-h-[80px]" />
+              </div>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+              <Button type="button" variant="destructive" onClick={handleConfirmBan}>Confirm Ban</Button>
+            </DialogFooter>
+          </DialogContent>
         </Dialog>
       )}
     </div>
   );
 }
+
 
     
