@@ -166,114 +166,124 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
         "overflow-hidden shadow-lg relative",
         isPromoted && "bg-accent/5 hover:bg-accent/10 border-accent/30",
         isReported && !post.isRemoved && "border-destructive/50 ring-2 ring-destructive/30",
-        post.isRemoved && "opacity-60 bg-muted/70"
+        // Removed: post.isRemoved && "opacity-60 bg-muted/70" // Opacity is handled by the overlay now
       )}>
       {post.isRemoved && (
-        <div className="absolute inset-0 bg-black/30 flex items-center justify-center z-10 pointer-events-none">
-            <Badge variant="destructive" className="text-sm p-2">POST REMOVED</Badge>
+        <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-10 p-4">
+            <Badge variant="destructive" className="text-md p-2 px-3 mb-3">POST REMOVED</Badge>
+            {isCurrentUserAuthor && post.canBeReposted !== false && (
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => onRepostClick(post)}
+                    className="pointer-events-auto"
+                >
+                    <RefreshCcw className="mr-1.5 h-4 w-4" /> Repost
+                </Button>
+            )}
+            {post.removalReason && (
+                <p className="text-xs text-white/90 mt-3 text-center italic max-w-xs bg-black/30 p-1.5 rounded">
+                    Reason: {post.removalReason}
+                </p>
+            )}
         </div>
       )}
-      <CardHeader className="p-4 pb-2">
-        <div className="flex items-start space-x-3">
-          <Avatar className="h-10 w-10 border">
-            {post.authorAvatar && <AvatarImage src={post.authorAvatar} alt={post.authorName} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
-            <AvatarFallback>{post.authorAvatarFallback}</AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <CardTitle className="text-md font-semibold tracking-normal">{post.authorName}</CardTitle>
-            <div className="flex items-center space-x-2">
-                <CardDescription className="text-xs">{displayTime}</CardDescription>
-                {isUserMember && isPromoted && !post.isRemoved && (
+      <div className={cn(post.isRemoved && "opacity-50 pointer-events-none")}> {/* Apply opacity and disable interaction on content below overlay */}
+        <CardHeader className="p-4 pb-2">
+          <div className="flex items-start space-x-3">
+            <Avatar className="h-10 w-10 border">
+              {post.authorAvatar && <AvatarImage src={post.authorAvatar} alt={post.authorName} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
+              <AvatarFallback>{post.authorAvatarFallback}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <CardTitle className="text-md font-semibold tracking-normal">{post.authorName}</CardTitle>
+              <div className="flex items-center space-x-2">
+                  <CardDescription className="text-xs">{displayTime}</CardDescription>
+                  {isUserMember && isPromoted && !post.isRemoved && (
+                      <TooltipProvider delayDuration={100}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center text-xs text-accent">
+                              <Rss className="h-3.5 w-3.5" />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Promoted to Mood Stream</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                  )}
+                  {isReported && !post.isRemoved && (
                     <TooltipProvider delayDuration={100}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                           <div className="flex items-center text-xs text-accent">
-                             <Rss className="h-3.5 w-3.5" />
-                           </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>Promoted to Mood Stream</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                )}
-                {isReported && !post.isRemoved && (
-                   <TooltipProvider delayDuration={100}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                           <div className="flex items-center text-xs text-destructive">
-                             <Flag className="h-3.5 w-3.5" />
-                           </div>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p>This post has been reported and is under review.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                )}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center text-xs text-destructive">
+                              <Flag className="h-3.5 w-3.5" />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>This post has been reported and is under review.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                  )}
+              </div>
             </div>
+            {(isUserMember || isCurrentUserAuthor) && !post.isRemoved && ( 
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {isTribeAdmin && (
+                    <>
+                      <DropdownMenuItem onClick={() => onPromoteClick(post)} disabled={isPromoted}>
+                        <Rss className="mr-2 h-4 w-4" /> {isPromoted ? "Already Promoted" : "Promote to Mood Stream"}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  {!isCurrentUserAuthor && ( 
+                      <DropdownMenuItem onClick={() => onReportClick(post)}>
+                      <Flag className="mr-2 h-4 w-4" /> Report Post
+                      </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
-           {(isUserMember || isCurrentUserAuthor) && !post.isRemoved && ( 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {isTribeAdmin && (
-                  <>
-                    <DropdownMenuItem onClick={() => onPromoteClick(post)} disabled={isPromoted}>
-                      <Rss className="mr-2 h-4 w-4" /> {isPromoted ? "Already Promoted" : "Promote to Mood Stream"}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                  </>
-                )}
-                {!isCurrentUserAuthor && ( 
-                    <DropdownMenuItem onClick={() => onReportClick(post)}>
-                    <Flag className="mr-2 h-4 w-4" /> Report Post
-                    </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
+        </CardHeader>
+        <CardContent className="p-4 pt-2">
+          {post.title && <h3 className="text-xl font-semibold mb-2 text-foreground tracking-tight">{post.title}</h3>}
+          {post.imageUrl && (
+            <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-lg border">
+              <Image
+                src={post.imageUrl}
+                alt={post.imageAlt || "Post image"}
+                fill
+                style={{ objectFit: 'cover' }}
+                data-ai-hint={post.dataAiHintImage || "post image"}
+              />
+            </div>
           )}
-        </div>
-      </CardHeader>
-      <CardContent className="p-4 pt-2">
-        {post.title && <h3 className="text-xl font-semibold mb-2 text-foreground tracking-tight">{post.title}</h3>}
-        {post.imageUrl && (
-          <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-lg border">
-            <Image
-              src={post.imageUrl}
-              alt={post.imageAlt || "Post image"}
-              fill
-              style={{ objectFit: 'cover' }}
-              data-ai-hint={post.dataAiHintImage || "post image"}
-            />
-          </div>
-        )}
-        <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{post.content}</p>
-        {post.isRemoved && post.removalReason && (
-            <p className="text-xs text-destructive italic mt-2">Reason: {post.removalReason}</p>
-        )}
-      </CardContent>
-      <CardFooter className="p-4 pt-2 flex items-center justify-between border-t bg-muted/30">
-        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
-          <ThumbsUp className="mr-1.5 h-4 w-4" /> {post.vibes || 0}
-        </Button>
-        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
-          <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
-        </Button>
-        {isCurrentUserAuthor && post.isRemoved && (post.canBeReposted !== false) ? (
-            <Button variant="outline" size="sm" onClick={() => onRepostClick(post)}>
-                 <RefreshCcw className="mr-1.5 h-4 w-4" /> Repost
-            </Button>
-        ) : (
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
+          <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{post.content}</p>
+          {/* Removed display of removalReason from here as it's now in the overlay */}
+        </CardContent>
+        <CardFooter className="p-4 pt-2 flex items-center justify-between border-t bg-muted/30">
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
+            <ThumbsUp className="mr-1.5 h-4 w-4" /> {post.vibes || 0}
+          </Button>
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
+            <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
+          </Button>
+          {/* Repost button is now handled by the overlay */}
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
             <SquareArrowUp className="mr-1.5 h-4 w-4" /> Share
-            </Button>
-        )}
-      </CardFooter>
+          </Button>
+        </CardFooter>
+      </div>
     </Card>
   );
 };
@@ -758,3 +768,4 @@ export default function TribeDetailPage() {
   );
 }
     
+
