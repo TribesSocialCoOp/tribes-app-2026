@@ -96,7 +96,7 @@ export default function TribeModQueuePage() {
                 const activePostIds = new Set(
                   initialSampleTribePosts.filter(p => p.tribeId === tribeId && !p.isRemoved).map(p => p.id)
                 );
-                setAllReportsForTribe(mockReportedContentData.filter(report => activeTribePostIds.has(report.postId)));
+                setAllReportsForTribe(mockReportedContentData.filter(report => activePostIds.has(report.postId)));
                 setPostsForThisTribe(initialSampleTribePosts.filter(p => p.tribeId === tribeId).map(p => ({...p})));
             }
         }
