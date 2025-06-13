@@ -119,7 +119,7 @@ export const mockReportedContentData: ReportedPost[] = [
   { postId: "tribe_post_ai_local1", postTitle: "Local Discussion: Ethics in AI Development", reporterName: "Ethicist22", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1), reason: "Heated discussion, potential personal attacks." },
 ];
 
-export interface TribeMember {
+export interface TribeMember { // Exporting this for use in sub-pages
   id: string;
   name: string;
   avatar: string;
@@ -127,7 +127,7 @@ export interface TribeMember {
   tribeAssignedNickname?: string;
 }
 
-export const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname'>[] = [
+export const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname'>[] = [ // Exporting this for use in sub-pages
   { id: 'user1', name: 'Alice Wonderland', avatar: 'https://placehold.co/40x40.png?text=AW', dataAiHint: 'avatar person' },
   { id: 'user2', name: 'Bob The Builder', avatar: 'https://placehold.co/40x40.png?text=BB', dataAiHint: 'avatar character' },
   { id: 'user3', name: 'Charlie Chaplin', avatar: 'https://placehold.co/40x40.png?text=CC', dataAiHint: 'avatar person' },
@@ -509,9 +509,11 @@ export default function TribeDetailPage() {
                             <ListChecks className="mr-2 h-4 w-4"/> Moderation Queue
                         </Button>
                     </Link>
-                     <Button variant="outline" className="w-full flex-1" disabled> 
-                        <Settings className="mr-2 h-4 w-4"/> Tribe Settings
-                    </Button>
+                     <Link href={`/tribes/${tribeId}/settings`} passHref className="flex-1">
+                        <Button variant="outline" className="w-full"> 
+                            <Settings className="mr-2 h-4 w-4"/> Tribe Settings
+                        </Button>
+                    </Link>
                 </div>
             </CardContent>
         </Card>
@@ -526,9 +528,11 @@ export default function TribeDetailPage() {
         </div>
         {isTribeAdmin && (
             <div className="absolute top-4 right-4 z-10">
-            <Button variant="outline" size="icon" className="bg-background/70 hover:bg-background/90 backdrop-blur-sm" disabled> 
-                <Settings className="h-5 w-5" />
-            </Button>
+              <Link href={`/tribes/${tribeId}/settings`} passHref>
+                <Button variant="outline" size="icon" className="bg-background/70 hover:bg-background/90 backdrop-blur-sm"> 
+                    <Settings className="h-5 w-5" />
+                </Button>
+              </Link>
             </div>
         )}
         <div className="relative h-48 md:h-64 w-full">
@@ -637,3 +641,4 @@ export default function TribeDetailPage() {
     </div>
   );
 }
+
