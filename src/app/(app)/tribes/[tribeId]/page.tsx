@@ -45,7 +45,7 @@ export interface TribePost {
 
 const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
-const initialSampleTribePosts: TribePost[] = [ // Renamed for initial state
+const initialSampleTribePosts: TribePost[] = [
   {
     id: "tribe_post_ai_local1", tribeId: "1", authorName: "AI Enthusiast", authorAvatarFallback: "AE",
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2),
@@ -118,7 +118,7 @@ const mockReportedContentData: ReportedPost[] = [
 ];
 
 
-const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMember: boolean; isTribeAdmin: boolean; onPromoteClick: (post: TribePost) => void; onReportClick: (post: TribePost) => void; }> = ({ post, isPromoted, isUserMember, isTribeAdmin, onPromoteClick, onReportClick }) => {
+const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMember: boolean; isTribeAdmin: boolean; isReported: boolean; onPromoteClick: (post: TribePost) => void; onReportClick: (post: TribePost) => void; }> = ({ post, isPromoted, isUserMember, isTribeAdmin, isReported, onPromoteClick, onReportClick }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
 
   useEffect(() => {
@@ -141,7 +141,8 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
   return (
     <Card className={cn(
         "overflow-hidden shadow-lg",
-        isPromoted && "bg-accent/5 hover:bg-accent/10 border-accent/30"
+        isPromoted && "bg-accent/5 hover:bg-accent/10 border-accent/30",
+        isReported && "border-destructive/50 ring-2 ring-destructive/30"
       )}>
       <CardHeader className="p-4 pb-2">
         <div className="flex items-start space-x-3">
@@ -163,6 +164,20 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
                         </TooltipTrigger>
                         <TooltipContent>
                           <p>Promoted to Mood Stream</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                )}
+                {isReported && (
+                   <TooltipProvider delayDuration={100}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                           <div className="flex items-center text-xs text-destructive">
+                             <Flag className="h-3.5 w-3.5" />
+                           </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>This post has been reported and is under review.</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -271,7 +286,7 @@ const EventHighlightCard: React.FC<{ event: Event }> = ({ event }) => {
 
 type FeedItem =
   | { id: string; type: 'event'; timestamp: Date; isPinned: true; data: Event }
-  | { id: string; type: 'post'; timestamp: Date; isPinned: boolean; data: TribePost; isPromoted: boolean };
+  | { id: string; type: 'post'; timestamp: Date; isPinned: boolean; data: TribePost; isPromoted: boolean; isReported: boolean; };
 
 
 export default function TribeDetailPage() {
@@ -303,7 +318,6 @@ export default function TribeDetailPage() {
       const currentTribeData = tribesData.find(t => t.id === tribeId);
       if (currentTribeData) {
         setTribe(currentTribeData);
-        // Initialize currentTribePostsData with all posts, filtering will happen in useMemo
         setCurrentTribePostsData(initialSampleTribePosts);
       } else {
         router.push('/tribes');
@@ -320,10 +334,14 @@ export default function TribeDetailPage() {
 
   const postsInTribe = useMemo(() => {
     if (!tribe) return [];
-    return currentTribePostsData // Use stateful data
+    return currentTribePostsData
         .filter(post => post.tribeId === tribe.id)
         .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }, [tribe, currentTribePostsData]);
+
+  const activeReportedPostIds = useMemo(() => {
+    return new Set(reportedContent.map(report => report.postId));
+  }, [reportedContent]);
 
 
   const combinedFeedItems = useMemo(() => {
@@ -345,7 +363,8 @@ export default function TribeDetailPage() {
         timestamp: post.timestamp,
         isPinned: false,
         data: post,
-        isPromoted: moodStreamPostIds.has(post.id) || locallyPromotedPostIds.has(post.id)
+        isPromoted: moodStreamPostIds.has(post.id) || locallyPromotedPostIds.has(post.id),
+        isReported: activeReportedPostIds.has(post.id),
       }));
 
     const allItems: FeedItem[] = [...eventItems, ...postItems];
@@ -357,7 +376,7 @@ export default function TribeDetailPage() {
     });
 
     return allItems;
-  }, [tribe, tribeEvents, postsInTribe, isUserMember, locallyPromotedPostIds]);
+  }, [tribe, tribeEvents, postsInTribe, isUserMember, locallyPromotedPostIds, activeReportedPostIds]);
 
 
   const handleOpenPromoteDialog = (post: TribePost) => {
@@ -384,33 +403,54 @@ export default function TribeDetailPage() {
   };
 
   const handleUserReportPost = (post: TribePost) => {
+    // In a real app, this would send a report to the backend.
+    // For simulation, we can add it to our local reportedContent if it's not already there.
+    // For now, we just show a toast.
     toast({
       title: "Post Reported (Simulated)",
       description: `Thank you for reporting "${post.title || 'this post'}". An admin will review it.`,
     });
+     // To demonstrate the indicator (optional, can be removed if reports are backend-driven)
+    // if (!activeReportedPostIds.has(post.id)) {
+    //   setReportedContent(prev => [...prev, {
+    //     postId: post.id,
+    //     postTitle: post.title,
+    //     reporterName: "CurrentUser",
+    //     reportedAt: new Date(),
+    //     reason: "User reported via UI"
+    //   }]);
+    // }
   };
 
   const handleAdminViewReportedPost = (postId: string) => {
-    alert(`Admin action: View details for reported post ID: ${postId}. (Simulated)`);
+    const postElement = document.getElementById(`post-${postId}`);
+    if (postElement) {
+      postElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Optionally, add a temporary highlight effect
+      postElement.classList.add('ring-2', 'ring-offset-2', 'ring-primary', 'transition-all', 'duration-1000');
+      setTimeout(() => {
+        postElement.classList.remove('ring-2', 'ring-offset-2', 'ring-primary', 'transition-all', 'duration-1000');
+      }, 3000);
+    } else {
+      alert(`Admin action: Post ID: ${postId} not found in current feed. (Simulated)`);
+    }
   };
   
-  const handleAdminDismissReport = (postId: string) => {
-    setReportedContent(prev => prev.filter(report => report.postId !== postId));
+  const handleAdminDismissReport = (postIdToDismiss: string) => {
+    setReportedContent(prev => prev.filter(report => report.postId !== postIdToDismiss));
     toast({
       title: "Report Dismissed",
-      description: `Report for post ID ${postId} has been dismissed.`,
+      description: `Report for post ID ${postIdToDismiss} has been dismissed.`,
     });
   };
   
-  const handleAdminRemovePost = (postId: string, postTitle?: string) => {
-    // Remove from reported content queue
-    setReportedContent(prev => prev.filter(report => report.postId !== postId));
-    // Remove from the tribe's posts data
-    setCurrentTribePostsData(prevPosts => prevPosts.filter(post => post.id !== postId));
+  const handleAdminRemovePost = (postIdToRemove: string, postTitle?: string) => {
+    setReportedContent(prev => prev.filter(report => report.postId !== postIdToRemove));
+    setCurrentTribePostsData(prevPosts => prevPosts.filter(post => post.id !== postIdToRemove));
     
     toast({
       title: "Post Removed",
-      description: `Post "${postTitle || postId}" has been removed from the tribe feed.`,
+      description: `Post "${postTitle || postIdToRemove}" has been removed from the tribe feed.`,
       variant: "destructive",
     });
   };
@@ -505,20 +545,20 @@ export default function TribeDetailPage() {
                             <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
                                 <div>
                                     <p className="text-sm font-semibold">
-                                        <Link href={`#post-${report.postId}`} className="hover:underline text-primary">
+                                        <button onClick={() => handleAdminViewReportedPost(report.postId)} className="hover:underline text-primary">
                                             {report.postTitle || `Post ID: ${report.postId}`}
-                                        </Link>
+                                        </button>
                                     </p>
                                     <p className="text-xs text-muted-foreground">
                                         Reported by: {report.reporterName} on {format(report.reportedAt, "MMM d, yyyy h:mm a")}
                                     </p>
                                     {report.reason && <p className="text-xs text-destructive italic mt-1">Reason: {report.reason}</p>}
                                 </div>
-                                <div className="flex items-center space-x-1.5 mt-2 sm:mt-0 shrink-0">
-                                    <Button variant="outline" size="xs" onClick={() => handleAdminViewReportedPost(report.postId)}>View</Button>
-                                    <Button variant="outline" size="xs" onClick={() => handleAdminDismissReport(report.postId)}>Dismiss</Button>
-                                    <Button variant="destructive" size="xs" onClick={() => handleAdminRemovePost(report.postId, report.postTitle)}>
-                                        <Trash2 className="h-3 w-3 mr-1"/>Remove Post
+                                <div className="flex items-center space-x-2 mt-2 sm:mt-0 shrink-0"> {/* Adjusted space-x */}
+                                    <Button variant="outline" size="sm" onClick={() => handleAdminViewReportedPost(report.postId)}>View</Button>
+                                    <Button variant="outline" size="sm" onClick={() => handleAdminDismissReport(report.postId)}>Dismiss</Button>
+                                    <Button variant="destructive" size="sm" onClick={() => handleAdminRemovePost(report.postId, report.postTitle)}>
+                                        <Trash2 className="h-3.5 w-3.5 mr-1.5"/>Remove Post {/* Increased icon size slightly and added margin */}
                                     </Button>
                                 </div>
                             </div>
@@ -627,7 +667,8 @@ export default function TribeDetailPage() {
                   post={post} 
                   isPromoted={item.isPromoted} 
                   isUserMember={isUserMember} 
-                  isTribeAdmin={isTribeAdmin} 
+                  isTribeAdmin={isTribeAdmin}
+                  isReported={item.isReported}
                   onPromoteClick={handleOpenPromoteDialog}
                   onReportClick={handleUserReportPost}
                 />
