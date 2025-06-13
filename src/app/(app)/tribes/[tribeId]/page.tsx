@@ -25,7 +25,7 @@ import { moodsData } from '../../moods/page';
 import { allMoodStreamPosts } from '../../moods/[moodSlug]/page';
 import type { Event } from '../../events/[eventId]/page';
 import { sampleEventsData } from '../../events/[eventId]/page';
-import { PromotePostDialog } from '@/components/dialogs/boost-post-dialog'; // Component filename is boost-post-dialog, but exports PromotePostDialog
+import { PromotePostDialog } from '@/components/dialogs/boost-post-dialog';
 
 export interface TribePost {
   id: string;
@@ -116,6 +116,7 @@ export interface ReportedPost {
 export const mockReportedContentData: ReportedPost[] = [
   { postId: "msp2", postTitle: "My Top 5 Productivity Hacks for Deep Work", reporterName: "ConcernedUser1", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 5), reason: "Spamming irrelevant content" },
   { postId: "tribe_post_hikers_local1", postTitle: "Weekend Hike Recap: Mountain Peak (Tribe Exclusive Pics)", reporterName: "SafetyFirst", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2), reason: "Sharing potentially dangerous trail info without proper warnings." },
+  { postId: "tribe_post_ai_local1", postTitle: "Local Discussion: Ethics in AI Development", reporterName: "Ethicist22", reportedAt: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1), reason: "Heated discussion, potential personal attacks." },
 ];
 
 export interface TribeMember {
@@ -126,7 +127,7 @@ export interface TribeMember {
   tribeAssignedNickname?: string;
 }
 
-const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname'>[] = [
+export const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname'>[] = [
   { id: 'user1', name: 'Alice Wonderland', avatar: 'https://placehold.co/40x40.png?text=AW', dataAiHint: 'avatar person' },
   { id: 'user2', name: 'Bob The Builder', avatar: 'https://placehold.co/40x40.png?text=BB', dataAiHint: 'avatar character' },
   { id: 'user3', name: 'Charlie Chaplin', avatar: 'https://placehold.co/40x40.png?text=CC', dataAiHint: 'avatar person' },
@@ -316,19 +317,19 @@ export default function TribeDetailPage() {
   const [locallyPromotedPostIds, setLocallyPromotedPostIds] = useState<Set<string>>(new Set());
   
   const [currentTribePostsData, setCurrentTribePostsData] = useState<TribePost[]>(initialSampleTribePosts);
-  const [reportedContent] = useState<ReportedPost[]>(mockReportedContentData); // Global reports state remains for now
+  const [reportedContent] = useState<ReportedPost[]>(mockReportedContentData); 
   const [currentTribeMembers, setCurrentTribeMembers] = useState<TribeMember[]>([]);
 
 
   const isUserMember = true;
-  const isTribeAdmin = true; // Assuming user is admin for this tribe for now
+  const isTribeAdmin = true; 
 
   useEffect(() => {
     if (tribeId) {
       const currentTribeData = tribesData.find(t => t.id === tribeId);
       if (currentTribeData) {
         setTribe(currentTribeData);
-        const membersForThisTribe = initialMockMembers.map(member => ({
+         const membersForThisTribe = initialMockMembers.map(member => ({
             ...member,
             tribeAssignedNickname: (member.id === 'user1' && tribeId === '1') ? 'AI Lead' : 
                                    (member.id === 'user2' && tribeId === '2') ? 'Trail Master' : undefined
@@ -440,6 +441,23 @@ export default function TribeDetailPage() {
       description: `Thank you for reporting "${post.title || 'this post'}". An admin will review it.`,
     });
   };
+  
+  const handleAdminViewReportedPost = (postId: string) => {
+    const postElement = document.getElementById(`post-${postId}`);
+    if (postElement) {
+      postElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      postElement.classList.add('ring-2', 'ring-offset-2', 'ring-primary', 'transition-all', 'duration-300');
+      setTimeout(() => {
+        postElement.classList.remove('ring-2', 'ring-offset-2', 'ring-primary');
+      }, 2500);
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Post Not Found",
+        description: "The reported post could not be found in the current feed. It might have been removed or is on a different page.",
+      });
+    }
+  };
 
 
   if (!tribe) {
@@ -491,7 +509,7 @@ export default function TribeDetailPage() {
                             <ListChecks className="mr-2 h-4 w-4"/> Moderation Queue
                         </Button>
                     </Link>
-                     <Button variant="outline" className="w-full flex-1" disabled> {/* Placeholder for now */}
+                     <Button variant="outline" className="w-full flex-1" disabled> 
                         <Settings className="mr-2 h-4 w-4"/> Tribe Settings
                     </Button>
                 </div>
@@ -508,7 +526,7 @@ export default function TribeDetailPage() {
         </div>
         {isTribeAdmin && (
             <div className="absolute top-4 right-4 z-10">
-            <Button variant="outline" size="icon" className="bg-background/70 hover:bg-background/90 backdrop-blur-sm" disabled> {/* Placeholder for now */}
+            <Button variant="outline" size="icon" className="bg-background/70 hover:bg-background/90 backdrop-blur-sm" disabled> 
                 <Settings className="h-5 w-5" />
             </Button>
             </div>
