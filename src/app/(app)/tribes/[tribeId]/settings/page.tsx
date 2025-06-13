@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from "@/components/ui/label"; // Added missing import
 import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
@@ -77,7 +78,10 @@ export default function TribeSettingsPage() {
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     if (tribe) {
-        setTribe(prevTribe => prevTribe ? {...prevTribe, ...values} : null);
+        // Simulate updating the tribe data locally (in a real app, this would involve an API call and re-fetching or updating global state)
+        const updatedTribe = { ...tribe, ...values };
+        setTribe(updatedTribe); 
+        // Note: This only updates the local state on this page. The tribesData array in ../../page.tsx is not modified by this.
     }
 
     toast({
