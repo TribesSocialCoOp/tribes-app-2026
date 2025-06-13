@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog, DialogContent as ShadDialogContent, DialogHeader as ShadDialogHeader, DialogTitle as ShadDialogTitle, DialogDescription as ShadDialogDescription, DialogFooter as ShadDialogFooter
 } from "@/components/ui/dialog";
@@ -14,28 +14,37 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { TribePost } from '@/app/(app)/tribes/[tribeId]/page';
-import { moodsData } from '@/app/(app)/moods/page';
+import { moodsData as allMoodsData } from '@/app/(app)/moods/page'; // Renamed to avoid conflict
 import { Rss } from 'lucide-react';
 
-interface PromotePostDialogProps { // Renamed from BoostPostDialogProps
+interface PromotePostDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   post: TribePost | null;
-  onConfirmPromotion: (postId: string, selectedMoodSlugs: string[]) => void; // Renamed from onConfirmBoost
+  onConfirmPromotion: (postId: string, selectedMoodSlugs: string[]) => void;
+  tribeMoodSlugs: string[]; // New prop for tribe's associated mood slugs
 }
 
-export function PromotePostDialog({ // Renamed from BoostPostDialog
+export function PromotePostDialog({
   isOpen,
   onOpenChange,
   post,
-  onConfirmPromotion // Renamed from onConfirmBoost
+  onConfirmPromotion,
+  tribeMoodSlugs
 }: PromotePostDialogProps) {
   const isMobile = useIsMobile();
-  const [selectedMoodSlugs, setSelectedMoodSlugs] = useState<Set<string>>(new Set());
+  const [selectedMoodSlugsSet, setSelectedMoodSlugsSet] = useState<Set<string>>(new Set());
+
+  const availableMoodsToDisplay = useMemo(() => {
+    if (!tribeMoodSlugs || tribeMoodSlugs.length === 0) {
+      return []; // Or allMoodsData if you want to show all as a fallback, though requirement is to limit
+    }
+    return allMoodsData.filter(mood => tribeMoodSlugs.includes(mood.slug));
+  }, [tribeMoodSlugs]);
 
   useEffect(() => {
     if (!isOpen) {
-      setSelectedMoodSlugs(new Set());
+      setSelectedMoodSlugsSet(new Set());
     }
   }, [isOpen]);
 
@@ -44,7 +53,7 @@ export function PromotePostDialog({ // Renamed from BoostPostDialog
   }
 
   const handleMoodSelectionChange = (moodSlug: string, checked: boolean | "indeterminate") => {
-    setSelectedMoodSlugs(prev => {
+    setSelectedMoodSlugsSet(prev => {
       const newSlugs = new Set(prev);
       if (checked) {
         newSlugs.add(moodSlug);
@@ -56,7 +65,7 @@ export function PromotePostDialog({ // Renamed from BoostPostDialog
   };
 
   const handleConfirm = () => {
-    onConfirmPromotion(post.id, Array.from(selectedMoodSlugs)); // Renamed from onConfirmBoost
+    onConfirmPromotion(post.id, Array.from(selectedMoodSlugsSet));
     onOpenChange(false);
   };
 
@@ -74,7 +83,7 @@ export function PromotePostDialog({ // Renamed from BoostPostDialog
           <Rss className="mr-2 h-5 w-5 text-primary" /> Promote Post to Mood Streams
         </DialogTitleComponent>
         <DialogDescriptionComponent>
-          Select the mood streams where you want to feature the post titled: <span className="italic font-semibold">"{post.title || 'this post'}"</span>.
+          Select relevant mood streams for the post: <span className="italic font-semibold">"{post.title || 'this post'}"</span>. Only moods associated with this tribe are shown.
         </DialogDescriptionComponent>
       </DialogHeaderComponent>
 
@@ -88,23 +97,31 @@ export function PromotePostDialog({ // Renamed from BoostPostDialog
 
         <div>
           <Label className="text-sm font-medium text-foreground">Select Moods:</Label>
-          <p className="text-xs text-muted-foreground mb-2">Choose one or more moods to promote this post to.</p>
-          <ScrollArea className="h-[200px] sm:h-[250px] pr-3 border rounded-md p-3">
-            <div className="space-y-2">
-              {moodsData.map(mood => (
-                <div key={mood.slug} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`promote-mood-${mood.slug}`}
-                    checked={selectedMoodSlugs.has(mood.slug)}
-                    onCheckedChange={(checked) => handleMoodSelectionChange(mood.slug, checked)}
-                  />
-                  <Label htmlFor={`promote-mood-${mood.slug}`} className="text-sm font-normal cursor-pointer flex items-center">
-                    <span className="mr-1.5 text-base">{mood.emoji}</span> {mood.name}
-                  </Label>
+          {availableMoodsToDisplay.length > 0 ? (
+            <>
+              <p className="text-xs text-muted-foreground mb-2">Choose one or more moods to promote this post to.</p>
+              <ScrollArea className="h-[200px] sm:h-[250px] pr-3 border rounded-md p-3">
+                <div className="space-y-2">
+                  {availableMoodsToDisplay.map(mood => (
+                    <div key={mood.slug} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`promote-mood-${mood.slug}`}
+                        checked={selectedMoodSlugsSet.has(mood.slug)}
+                        onCheckedChange={(checked) => handleMoodSelectionChange(mood.slug, checked)}
+                      />
+                      <Label htmlFor={`promote-mood-${mood.slug}`} className="text-sm font-normal cursor-pointer flex items-center">
+                        <span className="mr-1.5 text-base">{mood.emoji}</span> {mood.name}
+                      </Label>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </ScrollArea>
+              </ScrollArea>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground p-3 border rounded-md bg-muted/50 text-center">
+              This tribe is not associated with any moods. Add moods to the tribe to enable promotion.
+            </p>
+          )}
         </div>
       </div>
 
@@ -112,10 +129,10 @@ export function PromotePostDialog({ // Renamed from BoostPostDialog
         <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
         <Button
           onClick={handleConfirm}
-          disabled={selectedMoodSlugs.size === 0}
+          disabled={selectedMoodSlugsSet.size === 0 || availableMoodsToDisplay.length === 0}
           className="bg-primary hover:bg-primary/90 text-primary-foreground"
         >
-          Confirm Promotion ({selectedMoodSlugs.size})
+          Confirm Promotion ({selectedMoodSlugsSet.size})
         </Button>
       </DialogFooterComponent>
     </>
@@ -143,3 +160,4 @@ export function PromotePostDialog({ // Renamed from BoostPostDialog
     </RootComponent>
   );
 }
+

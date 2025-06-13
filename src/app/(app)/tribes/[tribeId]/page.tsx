@@ -360,7 +360,7 @@ export default function TribeDetailPage() {
     if (moodStreamPostIds.has(post.id) || locallyPromotedPostIds.has(post.id)) {
       toast({
         title: "Already Promoted",
-        description: `"${post.title || 'This post'}" is already promoted to mood streams.`,
+        description: `"${post.title || 'This post'}" is already in a mood stream.`,
         variant: "default",
       });
       return;
@@ -374,7 +374,7 @@ export default function TribeDetailPage() {
     setLocallyPromotedPostIds(prev => new Set(prev).add(postId));
     toast({
       title: "Post Promoted",
-      description: `Post "${postToPromote?.title || postId}" has been successfully promoted to ${selectedMoodSlugs.length} mood stream(s).`,
+      description: `Post "${postToPromote?.title || postId}" has been successfully promoted to ${selectedMoodSlugs.length} mood stream(s). (Simulated)`,
     });
     setPostToPromote(null);
   };
@@ -384,14 +384,10 @@ export default function TribeDetailPage() {
       title: "Post Reported (Simulated)",
       description: `Thank you for reporting "${post.title || 'this post'}". An admin will review it.`,
     });
-    // In a real app, you'd send this to a backend.
-    // For simulation, we could add it to a local `reportedContent` state if needed for the admin view.
-    // For now, the admin view uses static mock data.
   };
 
   const handleAdminViewReportedPost = (postId: string) => {
     alert(`Admin action: View details for reported post ID: ${postId}. (Simulated)`);
-    // Could scroll to the post or open a modal with post details.
   };
   
   const handleAdminDismissReport = (postId: string) => {
@@ -403,9 +399,6 @@ export default function TribeDetailPage() {
   };
   
   const handleAdminRemovePost = (postId: string) => {
-    // This is more complex as it would need to remove the post from `sampleTribePosts`
-    // and then cause a re-render of `combinedFeedItems`.
-    // For now, just an alert and remove from reported list.
     setReportedContent(prev => prev.filter(report => report.postId !== postId));
     toast({
       title: "Post Removed (Simulated)",
@@ -619,9 +612,9 @@ export default function TribeDetailPage() {
               return <EventHighlightCard key={item.id} event={item.data as Event} />;
             }
             const post = item.data as TribePost;
-            const postKey = `post-${post.id}`; // Ensure unique key for React list
+            const postKey = `post-${post.id}`; 
             return (
-              <div key={postKey} id={postKey}> {/* Add ID for potential scrolling */}
+              <div key={postKey} id={postKey}> 
                 <TribePostCard                 
                   post={post} 
                   isPromoted={item.isPromoted} 
@@ -647,14 +640,16 @@ export default function TribeDetailPage() {
           </Card>
         )}
       </section>
-      {postToPromote && (
+      {postToPromote && tribe && (
         <PromotePostDialog
           isOpen={isPromoteDialogOpen}
           onOpenChange={setIsPromoteDialogOpen}
           post={postToPromote}
           onConfirmPromotion={handleConfirmPromotion}
+          tribeMoodSlugs={tribe.moods || []}
         />
       )}
     </div>
   );
 }
+
