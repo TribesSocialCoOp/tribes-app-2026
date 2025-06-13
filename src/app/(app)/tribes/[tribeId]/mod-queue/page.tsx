@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, ListChecks } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { tribesData, type Tribe } from '../page'; // Assuming tribesData is exported from parent
+import { tribesData, type Tribe } from '../../page'; // Corrected import path
 
 export default function TribeModQueuePage() {
   const router = useRouter();

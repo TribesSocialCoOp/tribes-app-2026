@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, UsersRound } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
-import { tribesData, type Tribe } from '../page'; // Assuming tribesData is exported from parent
+import { tribesData, type Tribe } from '../../page'; // Corrected import path
 
 export default function ManageMembersPage() {
   const router = useRouter();
@@ -56,7 +56,6 @@ export default function ManageMembersPage() {
           <p className="text-muted-foreground mt-2">
             This page is currently a placeholder. Full functionality coming soon!
           </p>
-          {/* Placeholder for member list and actions */}
            <div className="mt-6 p-6 border-2 border-dashed rounded-lg text-center">
                 <UsersRound className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50"/>
                 <p className="text-sm text-muted-foreground">Member management interface under construction.</p>
