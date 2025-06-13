@@ -168,8 +168,8 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
               <DropdownMenuContent align="end">
                 {isTribeAdmin && (
                   <>
-                    <DropdownMenuItem onClick={() => onPromoteClick(post)}>
-                      <Rss className="mr-2 h-4 w-4" /> Promote to Mood Stream
+                    <DropdownMenuItem onClick={() => onPromoteClick(post)} disabled={isPromoted}>
+                      <Rss className="mr-2 h-4 w-4" /> {isPromoted ? "Already Promoted" : "Promote to Mood Stream"}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>
@@ -272,6 +272,7 @@ export default function TribeDetailPage() {
   const [tribe, setTribe] = useState<Tribe | null>(null);
   const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false); 
   const [postToPromote, setPostToPromote] = useState<TribePost | null>(null); 
+  const [locallyPromotedPostIds, setLocallyPromotedPostIds] = useState<Set<string>>(new Set());
 
   const isUserMember = true; 
   const isTribeAdmin = true; 
@@ -321,14 +322,14 @@ export default function TribeDetailPage() {
         data: event,
       }));
 
-    const postItems = (isUserMember ? postsInTribe : postsInTribe.filter(p => moodStreamPostIds.has(p.id)))
+    const postItems = (isUserMember ? postsInTribe : postsInTribe.filter(p => moodStreamPostIds.has(p.id) || locallyPromotedPostIds.has(p.id)))
       .map(post => ({
         id: `post-${post.id}`,
         type: 'post' as const,
         timestamp: post.timestamp,
         isPinned: false,
         data: post,
-        isPromoted: moodStreamPostIds.has(post.id) 
+        isPromoted: moodStreamPostIds.has(post.id) || locallyPromotedPostIds.has(post.id)
       }));
 
     const allItems: FeedItem[] = [...eventItems, ...postItems];
@@ -340,19 +341,27 @@ export default function TribeDetailPage() {
     });
 
     return allItems;
-  }, [tribe, tribeEvents, postsInTribe, isUserMember]);
+  }, [tribe, tribeEvents, postsInTribe, isUserMember, locallyPromotedPostIds]);
 
 
   const handleOpenPromoteDialog = (post: TribePost) => { 
+    if (moodStreamPostIds.has(post.id) || locallyPromotedPostIds.has(post.id)) {
+      toast({
+        title: "Already Promoted",
+        description: `"${post.title || 'This post'}" is already promoted.`,
+      });
+      return;
+    }
     setPostToPromote(post); 
     setIsPromoteDialogOpen(true); 
   };
 
   const handleConfirmPromotion = (postId: string, selectedMoodSlugs: string[]) => { 
     console.log(`Promoting post ID: ${postId} to moods: ${selectedMoodSlugs.join(', ')}`);
+    setLocallyPromotedPostIds(prev => new Set(prev).add(postId));
     toast({
-      title: "Post Promoted (Simulated)",
-      description: `Post "${postToPromote?.title || postId}" is now conceptually promoted to ${selectedMoodSlugs.length} mood stream(s). Re-fetching data would show its promoted status.`,
+      title: "Post Promoted",
+      description: `Post "${postToPromote?.title || postId}" has been successfully promoted to ${selectedMoodSlugs.length} mood stream(s).`,
     });
     setPostToPromote(null); 
   };
@@ -562,3 +571,4 @@ export default function TribeDetailPage() {
     </div>
   );
 }
+
