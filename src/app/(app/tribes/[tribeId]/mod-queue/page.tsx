@@ -260,7 +260,7 @@ export default function TribeModQueuePage() {
                 <div className="flex items-center space-x-3">
                     <ListChecks className="h-7 w-7 text-primary" />
                     <div>
-                        <CardTitle className="text-xl sm:text-2xl font-semibold tracking-normal">Moderation Queue</CardTitle>
+                        <CardTitle className="text-xl sm:text-2xl font-semibold tracking-normal">Moderation Queue - TEST UPDATE</CardTitle>
                         <CardDescription>Review reported content for {tribe.name}. ({sortedAndFilteredReports.length} items)</CardDescription>
                     </div>
                 </div>
@@ -489,4 +489,7 @@ export default function TribeModQueuePage() {
     </div>
   );
 }
+
+    
+
     
