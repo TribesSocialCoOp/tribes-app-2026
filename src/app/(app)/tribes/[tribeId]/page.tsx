@@ -30,7 +30,7 @@ import { PromotePostDialog } from '@/components/dialogs/boost-post-dialog';
 export interface TribePost {
   id: string;
   tribeId: string;
-  authorId: string; // Added for banning
+  authorId: string; 
   authorName: string;
   authorAvatar?: string;
   authorAvatarFallback: string;
@@ -642,7 +642,4 @@ export default function TribeDetailPage() {
     </div>
   );
 }
-
-    
-
     
