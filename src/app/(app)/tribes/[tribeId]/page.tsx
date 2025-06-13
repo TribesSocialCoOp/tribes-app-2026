@@ -17,14 +17,16 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Separator } from '@/components/ui/separator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from '@/lib/utils';
+import { useToast } from "@/hooks/use-toast";
 
 import { tribesData, type Tribe } from '../page';
 import { moodsData } from '../../moods/page';
-import { allMoodStreamPosts } from '../../moods/[moodSlug]/page'; // Renamed for clarity
+import { allMoodStreamPosts } from '../../moods/[moodSlug]/page'; 
 import type { Event } from '../../events/[eventId]/page';
 import { sampleEventsData } from '../../events/[eventId]/page';
+import { BoostPostDialog } from '@/components/dialogs/boost-post-dialog'; // Import the new dialog
 
-interface TribePost {
+export interface TribePost { // Exporting for use in dialog
   id: string;
   tribeId: string;
   authorName: string;
@@ -52,7 +54,7 @@ const sampleTribePosts: TribePost[] = [
     vibes: 30, comments: 5, dataAiHintAvatar: "researcher scientist",
   },
   {
-    id: "msp2", tribeId: "1", authorName: "ProductivePro", authorAvatarFallback: "PP", // Assuming tribeId "1" is AI Innovators / Focus Finders
+    id: "msp2", tribeId: "1", authorName: "ProductivePro", authorAvatarFallback: "PP", 
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 3),
     title: "My Top 5 Productivity Hacks for Deep Work",
     content: "Sharing my secrets to staying in the zone! Tip #1: Time blocking is key. This was also shared to the Focus mood stream.",
@@ -68,7 +70,7 @@ const sampleTribePosts: TribePost[] = [
     vibes: 210, comments: 32, dataAiHintAvatar: "hiker adventurer",
   },
    {
-    id: "msp9", tribeId: "2", authorName: "LocalFoodie", authorAvatarFallback: "LF", // Assuming tribeId "2" is Weekend Hikers
+    id: "msp9", tribeId: "2", authorName: "LocalFoodie", authorAvatarFallback: "LF", 
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 7),
     title: "Post-Hike Find: Amazing Farmers Market!",
     content: "After our hike near Miller's Pond, stumbled upon this fantastic farmers market. Great fuel and cool local crafts! Shared this to Discover stream too.",
@@ -84,7 +86,7 @@ const sampleTribePosts: TribePost[] = [
     vibes: 95, comments: 22, dataAiHintAvatar: "music fan",
   },
   {
-    id: "msp8", tribeId: "7", authorName: "RockstarDev", authorAvatarFallback: "RD", // Assuming tribeId "7" is The Local Gig Circuit
+    id: "msp8", tribeId: "7", authorName: "RockstarDev", authorAvatarFallback: "RD", 
     timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 8),
     title: "My Stage Setup for Tonight's Gig",
     content: "Sound check done! Ready to rock the 'Music Hall' tonight. Who's coming? Also shared to Create mood stream!",
@@ -102,7 +104,7 @@ const sampleTribePosts: TribePost[] = [
 
 const moodStreamPostIds = new Set(allMoodStreamPosts.map(p => p.id));
 
-const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMember: boolean; isTribeAdmin: boolean }> = ({ post, isPromoted, isUserMember, isTribeAdmin }) => {
+const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMember: boolean; isTribeAdmin: boolean; onBoostClick: (post: TribePost) => void; }> = ({ post, isPromoted, isUserMember, isTribeAdmin, onBoostClick }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
 
   useEffect(() => {
@@ -125,11 +127,6 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
     alert(`Post "${post.title || post.id}" reported. (Simulated)`);
   };
 
-  const handleBoostToMoodStream = () => {
-    alert(`Simulating: Open modal to select Mood Stream(s) for post '${post.title || post.id}'.`);
-  };
-
-
   return (
     <Card className={cn(
         "overflow-hidden shadow-lg",
@@ -149,7 +146,7 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
                     <TooltipProvider delayDuration={100}>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                           <div className="flex items-center text-xs text-accent-foreground">
+                           <div className="flex items-center text-xs text-accent"> {/* Changed to text-accent */}
                              <Rss className="h-3.5 w-3.5" />
                            </div>
                         </TooltipTrigger>
@@ -169,9 +166,9 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {isUserMember && isTribeAdmin && (
+                {isTribeAdmin && (
                   <>
-                    <DropdownMenuItem onClick={handleBoostToMoodStream}>
+                    <DropdownMenuItem onClick={() => onBoostClick(post)}>
                       <Rss className="mr-2 h-4 w-4" /> Boost to Mood Stream
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
@@ -270,8 +267,12 @@ export default function TribeDetailPage() {
   const router = useRouter();
   const params = useParams();
   const tribeId = params.tribeId as string;
+  const { toast } = useToast();
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
+  const [isBoostDialogOpen, setIsBoostDialogOpen] = useState(false);
+  const [postToBoost, setPostToBoost] = useState<TribePost | null>(null);
+
   const isUserMember = true; 
   const isTribeAdmin = true; 
 
@@ -316,7 +317,7 @@ export default function TribeDetailPage() {
         id: `event-${event.id}`,
         type: 'event' as const,
         timestamp: event.eventDate,
-        isPinned: true,
+        isPinned: true, // Assuming events are always pinned or shown prominently
         data: event,
       }));
 
@@ -340,6 +341,26 @@ export default function TribeDetailPage() {
 
     return allItems;
   }, [tribe, tribeEvents, postsInTribe, isUserMember]);
+
+
+  const handleOpenBoostDialog = (post: TribePost) => {
+    setPostToBoost(post);
+    setIsBoostDialogOpen(true);
+  };
+
+  const handleConfirmBoost = (postId: string, selectedMoodSlugs: string[]) => {
+    console.log(`Boosting post ID: ${postId} to moods: ${selectedMoodSlugs.join(', ')}`);
+    // Here you would typically call an API to update the backend.
+    // For simulation, we can update the local state if needed or just log.
+    // To simulate the post becoming "promoted", you'd add its ID to `moodStreamPostIds`
+    // or update `allMoodStreamPosts` and trigger a re-render of components that depend on it.
+    // For this example, we'll just show a toast.
+    toast({
+      title: "Post Boosted (Simulated)",
+      description: `Post "${postToBoost?.title || postId}" is now conceptually boosted to ${selectedMoodSlugs.length} mood stream(s). Re-fetching data would show its promoted status.`,
+    });
+    setPostToBoost(null);
+  };
 
 
   if (!tribe) {
@@ -519,7 +540,7 @@ export default function TribeDetailPage() {
               return <EventHighlightCard key={item.id} event={item.data as Event} />;
             }
             const post = item.data as TribePost;
-            return <TribePostCard key={item.id} post={post} isPromoted={item.isPromoted} isUserMember={isUserMember} isTribeAdmin={isTribeAdmin} />;
+            return <TribePostCard key={item.id} post={post} isPromoted={item.isPromoted} isUserMember={isUserMember} isTribeAdmin={isTribeAdmin} onBoostClick={handleOpenBoostDialog} />;
           })
         ) : (
           <Card className="text-center py-12 shadow-md">
@@ -535,6 +556,14 @@ export default function TribeDetailPage() {
           </Card>
         )}
       </section>
+      {postToBoost && (
+        <BoostPostDialog
+          isOpen={isBoostDialogOpen}
+          onOpenChange={setIsBoostDialogOpen}
+          post={postToBoost}
+          onConfirmBoost={handleConfirmBoost}
+        />
+      )}
     </div>
   );
 }
