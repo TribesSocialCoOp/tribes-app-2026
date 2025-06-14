@@ -13,7 +13,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-md shadow-2xl">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
-            <AppLogo className="h-16 w-16 text-primary" />
+            <AppLogo width={64} height={64} />
           </div>
           <CardTitle className="text-3xl font-bold font-mono">Welcome Back</CardTitle>
           <CardDescription>Log in to access your Tribes</CardDescription>

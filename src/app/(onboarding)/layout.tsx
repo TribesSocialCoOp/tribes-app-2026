@@ -9,7 +9,7 @@ export default function OnboardingLayout({
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-muted/40 p-4 sm:p-8">
       <div className="mb-8">
-        <AppLogo className="h-16 w-16 text-primary" />
+        <AppLogo width={64} height={64} />
       </div>
       <Card className="w-full max-w-lg shadow-xl">
         {children}

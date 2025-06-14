@@ -1,19 +1,26 @@
+import Image from 'next/image';
 
-import type { SVGProps } from 'react';
+interface AppLogoProps {
+  className?: string; // For additional styling like margins
+  width?: number;
+  height?: number;
+  alt?: string;
+}
 
-export function AppLogo(props: SVGProps<SVGSVGElement>) {
+export function AppLogo({
+  className,
+  width = 32, // Default width if not specified
+  height = 32, // Default height if not specified
+  alt = "App Logo"
+}: AppLogoProps) {
   return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 100 100"
-      fill="currentColor" // Assuming you want the SVG to inherit color, or you'll style it via props/CSS
-      aria-hidden="true"
-      {...props}
-    >
-      {/* User-provided SVG structure */}
-      <path d="M50,5 L20,25 L20,75 L50,95 L80,75 L80,25 Z" stroke="currentColor" strokeWidth="5" fill="none" />
-      <path d="M50,5 L50,50 M20,25 L50,50 M20,75 L50,50 M80,75 L50,50 M80,25 L50,50" stroke="currentColor" strokeWidth="2" />
-      <circle cx="50" cy="50" r="10" fill="currentColor" />
-    </svg>
+    <Image
+      src="/app-logo.png" // IMPORTANT: Place your PNG at /public/app-logo.png
+      alt={alt}
+      width={width}
+      height={height}
+      className={className}
+      priority // Often good for LCP elements like logos
+    />
   );
 }
