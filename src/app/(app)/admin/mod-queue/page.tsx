@@ -19,9 +19,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ShieldAlert, Inbox, Trash2, Users as TribeIcon, AlertCircle, CheckCircle, Hammer, Search, Filter as FilterIcon, X as XIcon, ChevronLeft, ChevronRight, Ban } from "lucide-react";
+import { ShieldAlert, Inbox, Trash2, Users as TribeIcon, AlertCircle, CheckCircle, Hammer, Search, Filter as FilterIcon, X as XIcon, ChevronLeft, ChevronRight, Ban, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { initialSampleTribePosts, type TribePost, mockReportedContentData } from '../../tribes/[tribeId]/page'; 
 import type { ReportedPost } from '../../tribes/[tribeId]/page';
@@ -65,11 +66,6 @@ export default function ModQueuePage() {
   const [banReason, setBanReason] = useState("");
   const [preventRepostState, setPreventRepostState] = useState<{ [postId: string]: boolean }>({});
 
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentSortValue, setCurrentSortValue] = useState<string>(sortOptions[0].value);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
 
   useEffect(() => {
     const handleFocus = () => {
@@ -460,25 +456,67 @@ export default function ModQueuePage() {
                           )}
 
                           <div className="flex flex-wrap gap-2 pt-4 border-t mt-4">
-                            <Button size="sm" variant="outline" onClick={() => handleDismissReport(report.postId)}>
-                              Dismiss Report
-                            </Button>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button size="icon" variant="outline" onClick={() => handleDismissReport(report.postId)}>
+                                            <CheckCircle className="h-4 w-4" />
+                                            <span className="sr-only">Dismiss Report</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Dismiss Report</p></TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+                            
                             {!post.isRemoved && ( 
-                                <Button size="sm" variant="destructive" onClick={() => handleRemovePostAndNotify(report.postId, report.postTitle || post.title)}>
-                                <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Mark Post as Removed
-                                </Button>
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button size="icon" variant="destructive" onClick={() => handleRemovePostAndNotify(report.postId, report.postTitle || post.title)}>
+                                                <Trash2 className="h-4 w-4"/>
+                                                <span className="sr-only">Mark Post as Removed</span>
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>Mark Post as Removed</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
                             )}
-                            <Button size="sm" variant="destructive" className="bg-red-700 hover:bg-red-800" onClick={() => handleOpenBanDialog(post)}>
-                              <Hammer className="mr-1.5 h-3.5 w-3.5" /> Ban Author
-                            </Button>
+                             <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button size="icon" variant="destructive" className="bg-red-700 hover:bg-red-800" onClick={() => handleOpenBanDialog(post)}>
+                                            <Hammer className="h-4 w-4"/>
+                                            <span className="sr-only">Ban Author</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Ban Author</p></TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
+
                             {tribe && (
-                              <Button size="sm" variant="secondary" onClick={() => handleViewTribe(post.tribeId)}>
-                                <TribeIcon className="mr-1.5 h-3.5 w-3.5" /> View Tribe
-                              </Button>
+                               <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button size="icon" variant="secondary" onClick={() => handleViewTribe(post.tribeId)}>
+                                                <Users className="h-4 w-4"/>
+                                                <span className="sr-only">View Tribe</span>
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent><p>View Tribe</p></TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
                             )}
-                            <Button size="sm" variant="outline" onClick={() => handleEscalate(report.postId)}>
-                              <AlertCircle className="mr-1.5 h-3.5 w-3.5" /> Escalate
-                            </Button>
+                            <TooltipProvider>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <Button size="icon" variant="outline" onClick={() => handleEscalate(report.postId)}>
+                                            <ShieldAlert className="h-4 w-4"/>
+                                            <span className="sr-only">Escalate</span>
+                                        </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent><p>Escalate to Platform Admins</p></TooltipContent>
+                                </Tooltip>
+                            </TooltipProvider>
                           </div>
                         </div>
                       ) : (
@@ -555,4 +593,6 @@ export default function ModQueuePage() {
     </div>
   );
 }
+    
+
     
