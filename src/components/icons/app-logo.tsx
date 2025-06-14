@@ -1,3 +1,4 @@
+
 import type { SVGProps } from 'react';
 
 export function AppLogo(props: SVGProps<SVGSVGElement>) {
@@ -5,20 +6,14 @@ export function AppLogo(props: SVGProps<SVGSVGElement>) {
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 100 100"
-      fill="currentColor"
+      fill="currentColor" // Assuming you want the SVG to inherit color, or you'll style it via props/CSS
       aria-hidden="true"
       {...props}
     >
-      {/* Simplified "T" like shape or abstract connection visual */}
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M20 20 H80 V30 H55 V80 H45 V30 H20 V20Z"
-        className="text-primary"
-      />
-      <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="4" fill="none" className="text-primary opacity-30" />
-       <path d="M40 60 L50 50 L60 60" stroke="currentColor" strokeWidth="5" fill="none" className="text-accent" />
-       <path d="M45 40 L50 50 L55 40" stroke="currentColor" strokeWidth="5" fill="none" className="text-accent" />
+      {/* User-provided SVG structure */}
+      <path d="M50,5 L20,25 L20,75 L50,95 L80,75 L80,25 Z" stroke="currentColor" strokeWidth="5" fill="none" />
+      <path d="M50,5 L50,50 M20,25 L50,50 M20,75 L50,50 M80,75 L50,50 M80,25 L50,50" stroke="currentColor" strokeWidth="2" />
+      <circle cx="50" cy="50" r="10" fill="currentColor" />
     </svg>
   );
 }
