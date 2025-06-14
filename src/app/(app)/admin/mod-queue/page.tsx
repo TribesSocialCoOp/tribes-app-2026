@@ -19,7 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ShieldAlert, Inbox, Trash2, Users as TribeIcon, AlertCircle, CheckCircle, Hammer, Search, Filter as FilterIcon, X as XIcon, ChevronLeft, ChevronRight, Ban, Users } from "lucide-react";
+import { ShieldAlert, Inbox, Trash2, Users as TribeIcon, AlertCircle, CheckCircle, Hammer, Search, Filter as FilterIcon, X as XIcon, ChevronLeft, ChevronRight, Ban, Users, Eye } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -65,6 +65,11 @@ export default function ModQueuePage() {
   const [banDuration, setBanDuration] = useState("permanent");
   const [banReason, setBanReason] = useState("");
   const [preventRepostState, setPreventRepostState] = useState<{ [postId: string]: boolean }>({});
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentSortValue, setCurrentSortValue] = useState<string>(sortOptions[0].value);
+  const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
+  const [currentPage, setCurrentPage] = useState(1);
 
 
   useEffect(() => {
@@ -143,11 +148,16 @@ export default function ModQueuePage() {
             return;
         }
     }
-    const anyPost = reports.find(r => r.postId)?.postId ? allPosts.find(p => p.id === reports.find(r => r.postId)?.postId) : undefined;
-    if (anyPost && anyPost.tribeId === tribeId) {
-        router.push(`/tribes/${anyPost.tribeId}`);
+    // Fallback if the direct report's post doesn't match the tribeId (should be rare)
+    // or to provide a more generic navigation if needed.
+    const anyPostInTribe = allPosts.find(p => p.tribeId === tribeId);
+    if (anyPostInTribe) {
+        router.push(`/tribes/${anyPostInTribe.tribeId}`);
     } else {
-        toast({title: "Error", description: "Could not find a matching post in the specified tribe.", variant: "destructive"});
+        // If no post in current reports or allPosts matches, it's an issue or the tribe has no posts.
+        // Potentially, the tribeId passed to handleViewTribe comes directly from a post object,
+        // ensuring it should exist in allPosts if allPosts is comprehensive.
+        toast({title: "Error", description: "Could not find the specified tribe or it has no content.", variant: "destructive"});
     }
   };
 
@@ -200,7 +210,7 @@ export default function ModQueuePage() {
         (tribe?.name && tribe.name.toLowerCase().includes(lowerSearchTerm))
       );
     });
-  }, [reports, searchTerm, allPosts, allTribes]); 
+  }, [reports, searchTerm, allPosts, allTribes, getPostById, getTribeById]); 
 
   const sortedAndFilteredReports = useMemo(() => {
     const sortConfig = sortOptions.find(opt => opt.value === currentSortValue);
@@ -239,7 +249,7 @@ export default function ModQueuePage() {
       }
       return sortConfig.direction === 'ascending' ? comparison : comparison * -1;
     });
-  }, [filteredReports, currentSortValue, allPosts, allTribes]); 
+  }, [filteredReports, currentSortValue, getPostById, getTribeById]); 
 
   const totalPages = Math.ceil(sortedAndFilteredReports.length / itemsPerPage);
   const paginatedReports = useMemo(() => {
@@ -498,11 +508,11 @@ export default function ModQueuePage() {
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Button size="icon" variant="secondary" onClick={() => handleViewTribe(post.tribeId)}>
-                                                <Users className="h-4 w-4"/>
+                                                <Eye className="h-4 w-4"/>
                                                 <span className="sr-only">View Tribe</span>
                                             </Button>
                                         </TooltipTrigger>
-                                        <TooltipContent><p>View Tribe</p></TooltipContent>
+                                        <TooltipContent><p>View Tribe ({tribe.name})</p></TooltipContent>
                                     </Tooltip>
                                 </TooltipProvider>
                             )}
