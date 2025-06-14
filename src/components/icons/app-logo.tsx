@@ -1,4 +1,6 @@
+
 import Image from 'next/image';
+import logoImageFromFile from '@/app/(app)/images/Tribes_Logo_Threaded.png';
 
 interface AppLogoProps {
   className?: string; // For additional styling like margins
@@ -15,7 +17,7 @@ export function AppLogo({
 }: AppLogoProps) {
   return (
     <Image
-      src="/app-logo.png" // IMPORTANT: Place your PNG at /public/app-logo.png
+      src={logoImageFromFile}
       alt={alt}
       width={width}
       height={height}
