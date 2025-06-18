@@ -18,8 +18,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { CalendarIcon, Image as ImageIcon, Globe, Lock, Sparkles, CalendarPlus, MapPin } from "lucide-react";
+import { CalendarIcon, Image as ImageIcon, Globe, Lock, Sparkles, CalendarPlus, MapPin, Lightbulb } from "lucide-react";
 import { generateEventDescription } from "@/ai/flows/event-description-generator";
+import { generateEventKeywords } from "@/ai/flows/generate-event-keywords"; // New import
 import { useToast } from "@/hooks/use-toast";
 
 
@@ -28,7 +29,7 @@ const eventCreateFormSchema = z.object({
   keywords: z.string().min(3, { message: "Please provide some keywords for your event (e.g., Live Music, Tech Workshop)."}),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(1000, { message: "Description must not exceed 1000 characters." }),
   eventDate: z.date({ required_error: "An event date is required." }),
-  associatedTribe: z.string().min(1, { message: "Associated tribe is required."}), 
+  associatedTribe: z.string().min(1, { message: "Associated tribe is required."}),
   locationName: z.string().min(1, {message: "Please provide a venue name or general location (e.g., Downtown Park, Online)."}),
   locationCityRegion: z.string().min(1, {message: "Please provide the city and region (e.g., San Francisco, CA)."}),
   coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`),
@@ -41,9 +42,10 @@ export default function CreateEventPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
-  const [isAiGenerating, setIsAiGenerating] = React.useState(false);
+  const [isAiGeneratingDesc, setIsAiGeneratingDesc] = React.useState(false);
+  const [isAiSuggestingKeywords, setIsAiSuggestingKeywords] = React.useState(false); // New state
   const [coverPreview, setCoverPreview] = React.useState<string | null>(null);
-  
+
   const form = useForm<EventCreateFormValues>({
     resolver: zodResolver(eventCreateFormSchema),
     defaultValues: {
@@ -60,7 +62,6 @@ export default function CreateEventPage() {
   async function onSubmit(values: EventCreateFormValues) {
     setIsLoading(true);
     console.log("Event Creation Submitted:", values);
-    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1500));
     setIsLoading(false);
     toast({
@@ -69,7 +70,7 @@ export default function CreateEventPage() {
     });
     form.reset();
     setCoverPreview(null);
-    // router.push('/events'); // Or to the newly created event page if it existed
+    // router.push('/events');
   }
 
   async function handleGenerateDescription() {
@@ -77,7 +78,7 @@ export default function CreateEventPage() {
     const keywords = form.getValues("keywords");
     const locationName = form.getValues("locationName");
     const locationCityRegion = form.getValues("locationCityRegion");
-    
+
     let hasError = false;
     if (!eventName) {
       form.setError("name", { type: "manual", message: "Please enter an event name first." });
@@ -98,13 +99,13 @@ export default function CreateEventPage() {
 
     if (hasError) return;
 
-    setIsAiGenerating(true);
+    setIsAiGeneratingDesc(true);
     try {
-      const result = await generateEventDescription({ 
-        name: eventName, 
+      const result = await generateEventDescription({
+        name: eventName,
         keywords,
         locationName,
-        locationCityRegion 
+        locationCityRegion
       });
       form.setValue("description", result.description);
       form.clearErrors("description");
@@ -112,9 +113,57 @@ export default function CreateEventPage() {
       console.error("Failed to generate event description:", error);
       form.setError("description", { type: "manual", message: "AI failed to generate description. Please try again." });
     }
-    setIsAiGenerating(false);
+    setIsAiGeneratingDesc(false);
   }
-  
+
+  async function handleSuggestKeywords() {
+    const eventName = form.getValues("name");
+    const eventDescription = form.getValues("description");
+
+    let hasError = false;
+    if (!eventName) {
+      form.setError("name", { type: "manual", message: "Please enter an event name to suggest keywords." });
+      hasError = true;
+    }
+    if (!eventDescription) {
+      form.setError("description", { type: "manual", message: "Please enter an event description to suggest keywords." });
+      hasError = true;
+    }
+    if (hasError) {
+        toast({
+            variant: "destructive",
+            title: "Missing Information",
+            description: "Please provide an event name and description before suggesting keywords.",
+        });
+        return;
+    }
+
+    setIsAiSuggestingKeywords(true);
+    try {
+      const result = await generateEventKeywords({ eventName, eventDescription });
+      const currentKeywords = form.getValues("keywords").split(',').map(k => k.trim()).filter(k => k);
+      const newKeywords = result.suggestedKeywords;
+
+      const combinedKeywords = new Set([...currentKeywords, ...newKeywords]);
+      const uniqueKeywordsString = Array.from(combinedKeywords).join(', ');
+
+      form.setValue("keywords", uniqueKeywordsString);
+      form.clearErrors("keywords");
+      toast({
+        title: "Keywords Suggested",
+        description: "AI has added new keyword suggestions.",
+      });
+    } catch (error) {
+      console.error("Failed to suggest event keywords:", error);
+      toast({
+        variant: "destructive",
+        title: "AI Error",
+        description: "Failed to suggest keywords. Please try again or enter them manually.",
+      });
+    }
+    setIsAiSuggestingKeywords(false);
+  }
+
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -170,12 +219,15 @@ export default function CreateEventPage() {
                     <FormControl>
                       <Input placeholder="e.g., Live Music, Networking, Technology, Art Show" {...field} className="text-base" />
                     </FormControl>
+                    <Button type="button" variant="outline" size="sm" onClick={handleSuggestKeywords} disabled={isAiSuggestingKeywords || isLoading || isAiGeneratingDesc} className="mt-2">
+                        <Lightbulb className="mr-2 h-4 w-4" /> {isAiSuggestingKeywords ? "Suggesting..." : "Suggest with AI"}
+                    </Button>
                     <FormDescription>Comma-separated keywords that describe your event. Used for AI description and discovery.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-              
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -221,8 +273,8 @@ export default function CreateEventPage() {
                         {...field}
                       />
                     </FormControl>
-                     <Button type="button" variant="outline" size="sm" onClick={handleGenerateDescription} disabled={isAiGenerating || isLoading} className="mt-2">
-                        <Sparkles className="mr-2 h-4 w-4" /> {isAiGenerating ? "Generating..." : "Generate with AI"}
+                     <Button type="button" variant="outline" size="sm" onClick={handleGenerateDescription} disabled={isAiGeneratingDesc || isLoading || isAiSuggestingKeywords} className="mt-2">
+                        <Sparkles className="mr-2 h-4 w-4" /> {isAiGeneratingDesc ? "Generating..." : "Generate with AI"}
                     </Button>
                     <FormDescription>A compelling summary to attract attendees.</FormDescription>
                     <FormMessage />
@@ -261,7 +313,7 @@ export default function CreateEventPage() {
                           selected={field.value}
                           onSelect={field.onChange}
                           disabled={(date) =>
-                            date < new Date(new Date().setHours(0,0,0,0)) // Disable past dates
+                            date < new Date(new Date().setHours(0,0,0,0))
                           }
                           initialFocus
                         />
@@ -294,7 +346,7 @@ export default function CreateEventPage() {
               <FormField
                 control={form.control}
                 name="coverImage"
-                render={({ field }) => ( 
+                render={({ field }) => (
                   <FormItem>
                     <FormLabel className="text-lg">Event Cover Image (Optional)</FormLabel>
                     <FormControl>
@@ -349,7 +401,7 @@ export default function CreateEventPage() {
               />
             </CardContent>
             <CardFooter>
-              <Button type="submit" disabled={isLoading || isAiGenerating} className="w-full md:w-auto bg-primary hover:bg-primary/90 text-lg py-3 px-6">
+              <Button type="submit" disabled={isLoading || isAiGeneratingDesc || isAiSuggestingKeywords} className="w-full md:w-auto bg-primary hover:bg-primary/90 text-lg py-3 px-6">
                 {isLoading ? "Creating Event..." : "Create Event"}
               </Button>
             </CardFooter>
