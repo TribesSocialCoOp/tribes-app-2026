@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label"; // Added import for Label
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -173,7 +173,6 @@ export default function StoryDetailPage() {
   useEffect(() => {
     if (storyId) {
       setIsLoading(true);
-      // Simulate fetching data based on storyId
       const foundStory = mockStoryTopics.find(s => s.id === storyId);
       setStory(foundStory || null);
       setArticles(mockArticlesForStory[storyId] || []);
@@ -184,29 +183,28 @@ export default function StoryDetailPage() {
 
   const categoryIcon = useMemo(() => {
     if (!story) return <BookOpen className="h-5 w-5" />;
+    const iconClass = story.coverImage ? 'text-white h-4 w-4' : 'h-4 w-4';
     switch (story.category) {
-      case 'local': return <Map className="h-5 w-5" />;
-      case 'national': return <Building className="h-5 w-5" />;
-      case 'global': return <Globe className="h-5 w-5" />;
-      default: return <BookOpen className="h-5 w-5" />;
+      case 'local': return <Map className={iconClass} />;
+      case 'national': return <Building className={iconClass} />;
+      case 'global': return <Globe className={iconClass} />;
+      default: return <BookOpen className={iconClass} />;
     }
   }, [story]);
 
   const handlePostComment = () => {
     if (!newComment.trim() || !story) return;
-    // Simulate posting a comment
     const newCommentObj: DiscussionComment = {
         id: `new-com-${Date.now()}`,
-        authorId: "currentUser", // Replace with actual user ID
-        authorName: "You (Current User)", // Replace with actual user name
-        authorAvatarFallback: "ME", // Replace with actual user avatar/fallback
+        authorId: "currentUser",
+        authorName: "You (Current User)",
+        authorAvatarFallback: "ME",
         content: newComment,
         timestamp: new Date(),
         vibes: 0,
     };
     setComments(prev => [newCommentObj, ...prev]);
     setNewComment("");
-    // In a real app, you'd send this to a backend.
   };
 
   if (isLoading) {
@@ -236,13 +234,11 @@ export default function StoryDetailPage() {
         <Button variant="outline" size="sm" onClick={() => router.push('/our-story')}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Our Story
         </Button>
-        {/* Add Share button or other topic-level actions here if needed */}
       </div>
 
-      {/* Story Header Card */}
-      <Card className="shadow-xl overflow-hidden">
+      <Card className="shadow-xl">
         {story.coverImage && (
-          <div className="relative h-56 md:h-72 w-full">
+          <div className="relative h-56 md:h-72 w-full rounded-t-lg overflow-hidden">
             <Image
               src={story.coverImage}
               alt={`${story.title} cover image`}
@@ -252,30 +248,54 @@ export default function StoryDetailPage() {
               priority
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent" />
-          </div>
-        )}
-        <CardHeader className={story.coverImage ? "relative -mt-16 z-10 p-4 md:p-6 bg-transparent" : "p-4 md:p-6"}>
-          <div className="flex items-center space-x-2 mb-1">
-            <Badge variant="outline" className={story.coverImage ? "text-white border-white/70 bg-black/30 backdrop-blur-sm" : "capitalize"}>
-              {React.cloneElement(categoryIcon, { className: `h-4 w-4 ${story.coverImage ? 'text-white' : ''}`})}
-              <span className="ml-1.5 capitalize">{story.category}</span>
-            </Badge>
-          </div>
-          <CardTitle className={`text-2xl md:text-3xl font-bold font-mono tracking-tight ${story.coverImage ? 'text-white drop-shadow-lg' : 'text-foreground'}`}>
-            {story.title}
-          </CardTitle>
-           {story.curator && (
-             <div className={`flex items-center space-x-2 pt-1 ${story.coverImage ? 'text-white/90 drop-shadow-sm' : 'text-muted-foreground'}`}>
-                <Avatar className="h-7 w-7">
+            <div className="absolute bottom-0 left-0 right-0 z-10 p-4 md:p-6">
+              <div className="flex items-center space-x-2 mb-1">
+                <Badge variant="outline" className="text-white border-white/70 bg-black/30 backdrop-blur-sm capitalize py-1 px-2 text-xs">
+                  {categoryIcon}
+                  <span className="ml-1.5">{story.category}</span>
+                </Badge>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-bold font-mono tracking-tight text-white drop-shadow-lg">
+                {story.title}
+              </h1>
+              {story.curator && (
+                <div className="flex items-center space-x-2 pt-1 text-white/90 drop-shadow-sm">
+                  <Avatar className="h-7 w-7">
                     {story.curatorAvatar && <AvatarImage src={story.curatorAvatar} alt={story.curator} data-ai-hint={story.dataAiHintCuratorAvatar || "avatar person"} />}
                     <AvatarFallback className="text-xs">{story.curatorAvatarFallback || story.curator.substring(0,1)}</AvatarFallback>
+                  </Avatar>
+                  <p className="text-xs">
+                    Curated by <span className="font-medium">{story.curator}</span> &bull; Updated: {format(story.lastUpdatedAt, "MMM d, yyyy")}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {!story.coverImage && (
+          <CardHeader className="p-4 md:p-6">
+            <div className="flex items-center space-x-2 mb-1">
+              <Badge variant="outline" className="capitalize py-1 px-2 text-xs">
+                {categoryIcon}
+                <span className="ml-1.5">{story.category}</span>
+              </Badge>
+            </div>
+            <CardTitle className="text-2xl md:text-3xl font-bold font-mono tracking-tight text-foreground">
+              {story.title}
+            </CardTitle>
+            {story.curator && (
+              <div className="flex items-center space-x-2 pt-1 text-muted-foreground">
+                <Avatar className="h-7 w-7">
+                  {story.curatorAvatar && <AvatarImage src={story.curatorAvatar} alt={story.curator} data-ai-hint={story.dataAiHintCuratorAvatar || "avatar person"} />}
+                  <AvatarFallback className="text-xs">{story.curatorAvatarFallback || story.curator.substring(0,1)}</AvatarFallback>
                 </Avatar>
                 <p className="text-xs">
-                    Curated by <span className="font-medium">{story.curator}</span> &bull; Last updated: {format(story.lastUpdatedAt, "MMM d, yyyy")}
+                  Curated by <span className="font-medium">{story.curator}</span> &bull; Updated: {format(story.lastUpdatedAt, "MMM d, yyyy")}
                 </p>
-            </div>
-           )}
-        </CardHeader>
+              </div>
+            )}
+          </CardHeader>
+        )}
         <CardContent className="p-4 md:p-6">
           <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{story.summary}</p>
            <div className="mt-4 flex flex-wrap gap-2">
@@ -286,7 +306,6 @@ export default function StoryDetailPage() {
         </CardContent>
       </Card>
 
-      {/* Tabs for Articles and Discussions */}
       <Tabs defaultValue="articles" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="articles">Sources & Articles ({articles.length})</TabsTrigger>
@@ -337,9 +356,6 @@ export default function StoryDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
     </div>
   );
 }
-
-    
