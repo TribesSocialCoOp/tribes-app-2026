@@ -107,7 +107,8 @@ const StoryTopicCard: React.FC<{ story: StoryTopic }> = ({ story }) => {
   return (
     <Card className="shadow-lg hover:shadow-xl transition-shadow flex flex-col overflow-hidden">
       <Link href={`/our-story/${story.id}`} passHref>
-        <> {/* Use a fragment to ensure Link has one child if not an <a> directly */}
+        {/* This Link now wraps the visual parts of the card only */}
+        <>
           {story.coverImage && (
             <div className="relative h-48 w-full">
               <Image
@@ -150,11 +151,13 @@ const StoryTopicCard: React.FC<{ story: StoryTopic }> = ({ story }) => {
           </CardContent>
         </>
       </Link>
+      {/* CardFooter is now outside the main Link */}
       <CardFooter className="border-t p-3 flex items-center justify-between">
         <div className="text-xs text-muted-foreground">
           Updated: {format(story.lastUpdatedAt, "MMM d, yyyy")}
         </div>
         <Button variant="default" size="sm" asChild className="bg-primary hover:bg-primary/90">
+          {/* This Link is for the button only */}
           <Link href={`/our-story/${story.id}`}>
             View Topic <ArrowRight className="ml-1.5 h-4 w-4" />
           </Link>
