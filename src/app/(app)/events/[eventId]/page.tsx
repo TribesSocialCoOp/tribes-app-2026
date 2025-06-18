@@ -243,7 +243,7 @@ export default function EventDetailPage() {
                 </div>
               </div>
               {event.locationName.toLowerCase() !== "online" && event.latitude && event.longitude && (
-                <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer" className="inline-block">
+                <a href={googleMapsUrl} target="_blank" rel="noopener noreferrer" className="inline-block mb-2">
                     <Button variant="outline" size="sm">
                         <ExternalLink className="mr-2 h-4 w-4" /> View on Map
                     </Button>
