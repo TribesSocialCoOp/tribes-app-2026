@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Lucide Icons
-import { ArrowLeft, BookOpen, Globe, Map, Building, History, Link2, MessageSquare, PlusCircle, Rss, Share2, Filter, ThumbsUp, Send, MessageSquarePlus } from "lucide-react";
+import { ArrowLeft, BookOpen, Globe, Map, Building, History, Link2, MessageSquare, PlusCircle, Rss, Share2, Filter, Smile, Send, MessageSquarePlus } from "lucide-react";
 
 // Data (mock for now)
 import { mockStoryTopics, type StoryTopic } from '../page'; // Import from the parent page
@@ -80,7 +80,7 @@ const mockCommentsForStory: Record<string, DiscussionComment[]> = {
 
 // Helper for Article Card
 const ArticleCard: React.FC<{ article: SourceArticle }> = ({ article }) => (
-  <Card className="shadow-sm hover:shadow-md transition-shadow flex items-stretch overflow-hidden rounded-lg">
+ <Card className="shadow-sm hover:shadow-md transition-shadow flex items-stretch overflow-hidden rounded-lg">
     <div className="w-32 flex-shrink-0 relative bg-muted">
       <Image
         src={`https://placehold.co/150x150.png?text=${encodeURIComponent(article.dataAiHint ? article.dataAiHint.substring(0,10) : 'Source')}`}
@@ -143,7 +143,7 @@ const CommentCard: React.FC<{ comment: DiscussionComment, level?: number }> = ({
       </CardContent>
       <CardFooter className="p-3 pt-1 flex items-center justify-start space-x-3">
         <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary">
-            <ThumbsUp className="mr-1 h-3.5 w-3.5"/> {comment.vibes || 0}
+            <Smile className="mr-1 h-3.5 w-3.5"/> {comment.vibes || 0}
         </Button>
         <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary" onClick={() => setShowReplyInput(!showReplyInput)}>
             <MessageSquare className="mr-1 h-3.5 w-3.5"/> Reply
@@ -227,7 +227,6 @@ export default function StoryDetailPage() {
 
   const handleAddCommentClick = () => {
     setActiveTab("discussions");
-    // Timeout to allow tab content to render before focusing
     setTimeout(() => {
       commentTextareaRef.current?.focus();
     }, 0);
