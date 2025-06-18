@@ -4,7 +4,7 @@
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
 
 // ShadCN UI Imports
@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Lucide Icons
-import { ArrowLeft, BookOpen, Globe, Map, Building, History, Link2, MessageSquare, PlusCircle, Rss, Share2, Filter, ThumbsUp, Send } from "lucide-react";
+import { ArrowLeft, BookOpen, Globe, Map, Building, History, Link2, MessageSquare, PlusCircle, Rss, Share2, Filter, ThumbsUp, Send, MessageSquarePlus } from "lucide-react";
 
 // Data (mock for now)
 import { mockStoryTopics, type StoryTopic } from '../page'; // Import from the parent page
@@ -33,7 +33,7 @@ interface SourceArticle {
   sourceName: string;
   publishedDate: Date;
   summarySnippet?: string;
-  dataAiHint?: string; 
+  dataAiHint?: string;
 }
 
 interface DiscussionComment {
@@ -81,7 +81,6 @@ const mockCommentsForStory: Record<string, DiscussionComment[]> = {
 // Helper for Article Card
 const ArticleCard: React.FC<{ article: SourceArticle }> = ({ article }) => (
   <Card className="shadow-sm hover:shadow-md transition-shadow flex items-stretch overflow-hidden rounded-lg">
-    {/* Image Section */}
     <div className="w-32 flex-shrink-0 relative bg-muted">
       <Image
         src={`https://placehold.co/150x150.png?text=${encodeURIComponent(article.dataAiHint ? article.dataAiHint.substring(0,10) : 'Source')}`}
@@ -92,10 +91,8 @@ const ArticleCard: React.FC<{ article: SourceArticle }> = ({ article }) => (
         data-ai-hint={article.dataAiHint || "news document"}
       />
     </div>
-
-    {/* Text Content Section */}
     <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
-      <div> {/* Wrapper for header and content to push footer down */}
+      <div>
         <CardHeader className="p-0 pb-1">
           <a href={article.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
             <CardTitle className="text-base font-semibold tracking-tight line-clamp-2">{article.title}</CardTitle>
@@ -154,7 +151,7 @@ const CommentCard: React.FC<{ comment: DiscussionComment, level?: number }> = ({
       </CardFooter>
       {showReplyInput && (
         <div className="p-3 border-t">
-            <Textarea 
+            <Textarea
                 placeholder={`Replying to ${comment.authorName}...`}
                 value={replyContent}
                 onChange={(e) => setReplyContent(e.target.value)}
@@ -187,6 +184,9 @@ export default function StoryDetailPage() {
   const [comments, setComments] = useState<DiscussionComment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newComment, setNewComment] = useState("");
+  const [activeTab, setActiveTab] = useState<string>("articles");
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+
 
   useEffect(() => {
     if (storyId) {
@@ -223,6 +223,14 @@ export default function StoryDetailPage() {
     };
     setComments(prev => [newCommentObj, ...prev]);
     setNewComment("");
+  };
+
+  const handleAddCommentClick = () => {
+    setActiveTab("discussions");
+    // Timeout to allow tab content to render before focusing
+    setTimeout(() => {
+      commentTextareaRef.current?.focus();
+    }, 0);
   };
 
   if (isLoading) {
@@ -320,11 +328,14 @@ export default function StoryDetailPage() {
                 <Button variant="outline" size="sm"><Rss className="mr-1.5 h-4 w-4"/>Follow Topic</Button>
                 <Button variant="outline" size="sm"><Share2 className="mr-1.5 h-4 w-4"/>Share</Button>
                 <Button variant="outline" size="sm"><PlusCircle className="mr-1.5 h-4 w-4"/>Add Source</Button>
+                <Button variant="default" size="sm" onClick={handleAddCommentClick} className="bg-accent text-accent-foreground hover:bg-accent/90">
+                    <MessageSquarePlus className="mr-1.5 h-4 w-4"/>Add Comment
+                </Button>
             </div>
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="articles" className="w-full">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="articles">Sources & Articles ({articles.length})</TabsTrigger>
           <TabsTrigger value="discussions">Discussions ({comments.length})</TabsTrigger>
@@ -355,6 +366,7 @@ export default function StoryDetailPage() {
                     <Label htmlFor="new-comment">Add your comment:</Label>
                     <Textarea
                         id="new-comment"
+                        ref={commentTextareaRef}
                         value={newComment}
                         onChange={(e) => setNewComment(e.target.value)}
                         placeholder="What are your thoughts?"
