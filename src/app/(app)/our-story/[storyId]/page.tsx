@@ -80,29 +80,45 @@ const mockCommentsForStory: Record<string, DiscussionComment[]> = {
 
 // Helper for Article Card
 const ArticleCard: React.FC<{ article: SourceArticle }> = ({ article }) => (
-  <Card className="shadow-sm hover:shadow-md transition-shadow">
-    <CardHeader className="p-3 pb-2">
-      <a href={article.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-        <CardTitle className="text-base font-semibold tracking-tight line-clamp-2">{article.title}</CardTitle>
-      </a>
-      <CardDescription className="text-xs">
-        From: {article.sourceName} - Published: {format(article.publishedDate, "MMM d, yyyy")}
-      </CardDescription>
-    </CardHeader>
-    {article.summarySnippet && (
-      <CardContent className="p-3 pt-0">
-        <p className="text-xs text-muted-foreground line-clamp-2">{article.summarySnippet}</p>
-      </CardContent>
-    )}
-     <CardFooter className="p-3 pt-1">
+  <Card className="shadow-sm hover:shadow-md transition-shadow flex items-start p-3 space-x-3">
+    {/* Image Section */}
+    <div className="w-24 h-auto aspect-[4/3] flex-shrink-0 rounded-md overflow-hidden border bg-muted">
+      <Image
+        src={article.dataAiHint ? `https://placehold.co/120x90.png?text=${encodeURIComponent(article.dataAiHint.substring(0,12))}` : `https://placehold.co/120x90.png?text=Source`}
+        alt={article.title}
+        width={120}
+        height={90}
+        className="object-cover w-full h-full"
+        data-ai-hint={article.dataAiHint || "news document"}
+      />
+    </div>
+
+    {/* Text Content Section */}
+    <div className="flex-1 min-w-0">
+      <CardHeader className="p-0 pb-1">
+        <a href={article.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+          <CardTitle className="text-base font-semibold tracking-tight line-clamp-2">{article.title}</CardTitle>
+        </a>
+        <CardDescription className="text-xs mt-0.5">
+          From: {article.sourceName} - Published: {format(article.publishedDate, "MMM d, yyyy")}
+        </CardDescription>
+      </CardHeader>
+      {article.summarySnippet && (
+        <CardContent className="p-0 pt-1">
+          <p className="text-xs text-muted-foreground line-clamp-2">{article.summarySnippet}</p>
+        </CardContent>
+      )}
+      <CardFooter className="p-0 pt-2">
         <Button variant="link" size="sm" asChild className="text-xs p-0 h-auto">
           <a href={article.url} target="_blank" rel="noopener noreferrer">
             Read Full Article <Link2 className="ml-1 h-3 w-3"/>
           </a>
         </Button>
-    </CardFooter>
+      </CardFooter>
+    </div>
   </Card>
 );
+
 
 // Helper for Comment Card
 const CommentCard: React.FC<{ comment: DiscussionComment, level?: number }> = ({ comment, level = 0 }) => {
@@ -249,7 +265,7 @@ export default function StoryDetailPage() {
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 z-10 p-4 md:p-6">
-              <div className="flex items-center space-x-2 mb-2"> {/* Changed mb-1 to mb-2 */}
+              <div className="flex items-center space-x-2 mb-2">
                 <Badge variant="outline" className="text-white border-white/70 bg-black/30 backdrop-blur-sm capitalize py-1 px-2 text-xs">
                   {categoryIcon}
                   <span className="ml-1.5">{story.category}</span>
