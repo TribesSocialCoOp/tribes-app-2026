@@ -13,7 +13,7 @@ export function AppHeader() {
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between px-4 sm:px-8">
+      <div className="flex h-16 w-full items-center justify-between px-4 sm:px-8"> {/* Changed: Removed 'container', added 'w-full' implicitly by parent or explicitly if needed */}
         <div className="flex items-center">
           {/* Always show SidebarTrigger for a consistent collapse/expand control */}
           <SidebarTrigger className="mr-2" />
