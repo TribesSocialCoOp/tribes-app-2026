@@ -33,7 +33,7 @@ interface SourceArticle {
   sourceName: string;
   publishedDate: Date;
   summarySnippet?: string;
-  dataAiHint?: string; // For placeholder images
+  dataAiHint?: string; 
 }
 
 interface DiscussionComment {
@@ -80,34 +80,36 @@ const mockCommentsForStory: Record<string, DiscussionComment[]> = {
 
 // Helper for Article Card
 const ArticleCard: React.FC<{ article: SourceArticle }> = ({ article }) => (
-  <Card className="shadow-sm hover:shadow-md transition-shadow flex items-start p-3 space-x-3">
+  <Card className="shadow-sm hover:shadow-md transition-shadow flex items-stretch overflow-hidden rounded-lg">
     {/* Image Section */}
-    <div className="w-24 h-auto aspect-[4/3] flex-shrink-0 rounded-md overflow-hidden border bg-muted">
+    <div className="w-32 flex-shrink-0 relative bg-muted">
       <Image
-        src={article.dataAiHint ? `https://placehold.co/120x90.png?text=${encodeURIComponent(article.dataAiHint.substring(0,12))}` : `https://placehold.co/120x90.png?text=Source`}
+        src={`https://placehold.co/150x150.png?text=${encodeURIComponent(article.dataAiHint ? article.dataAiHint.substring(0,10) : 'Source')}`}
         alt={article.title}
-        width={120}
-        height={90}
-        className="object-cover w-full h-full"
+        layout="fill"
+        objectFit="cover"
+        className="w-full h-full"
         data-ai-hint={article.dataAiHint || "news document"}
       />
     </div>
 
     {/* Text Content Section */}
-    <div className="flex-1 min-w-0">
-      <CardHeader className="p-0 pb-1">
-        <a href={article.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
-          <CardTitle className="text-base font-semibold tracking-tight line-clamp-2">{article.title}</CardTitle>
-        </a>
-        <CardDescription className="text-xs mt-0.5">
-          From: {article.sourceName} - Published: {format(article.publishedDate, "MMM d, yyyy")}
-        </CardDescription>
-      </CardHeader>
-      {article.summarySnippet && (
-        <CardContent className="p-0 pt-1">
-          <p className="text-xs text-muted-foreground line-clamp-2">{article.summarySnippet}</p>
-        </CardContent>
-      )}
+    <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
+      <div> {/* Wrapper for header and content to push footer down */}
+        <CardHeader className="p-0 pb-1">
+          <a href={article.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+            <CardTitle className="text-base font-semibold tracking-tight line-clamp-2">{article.title}</CardTitle>
+          </a>
+          <CardDescription className="text-xs mt-0.5">
+            From: {article.sourceName} - Published: {format(article.publishedDate, "MMM d, yyyy")}
+          </CardDescription>
+        </CardHeader>
+        {article.summarySnippet && (
+          <CardContent className="p-0 pt-1">
+            <p className="text-xs text-muted-foreground line-clamp-2">{article.summarySnippet}</p>
+          </CardContent>
+        )}
+      </div>
       <CardFooter className="p-0 pt-2">
         <Button variant="link" size="sm" asChild className="text-xs p-0 h-auto">
           <a href={article.url} target="_blank" rel="noopener noreferrer">
