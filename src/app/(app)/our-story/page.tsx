@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookOpen, Search, ArrowRight, MessageSquare, Globe, Map, Building, History } from "lucide-react";
 import { cn } from '@/lib/utils';
 
-interface StoryTopic {
+export interface StoryTopic {
   id: string;
   title: string;
   summary: string;
@@ -32,7 +32,7 @@ interface StoryTopic {
 
 const MOCK_STORY_DATE_MS = new Date("2025-07-15T10:00:00.000Z").getTime();
 
-const mockStoryTopics: StoryTopic[] = [
+export const mockStoryTopics: StoryTopic[] = [
   {
     id: "story1",
     title: "Understanding the New Local Recycling Program",
@@ -250,3 +250,5 @@ export default function OurStoryPage() {
     </div>
   );
 }
+
+    
