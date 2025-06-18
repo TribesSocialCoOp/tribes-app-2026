@@ -249,7 +249,7 @@ export default function StoryDetailPage() {
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent" />
             <div className="absolute bottom-0 left-0 right-0 z-10 p-4 md:p-6">
-              <div className="flex items-center space-x-2 mb-1">
+              <div className="flex items-center space-x-2 mb-2"> {/* Changed mb-1 to mb-2 */}
                 <Badge variant="outline" className="text-white border-white/70 bg-black/30 backdrop-blur-sm capitalize py-1 px-2 text-xs">
                   {categoryIcon}
                   <span className="ml-1.5">{story.category}</span>
@@ -359,3 +359,5 @@ export default function StoryDetailPage() {
     </div>
   );
 }
+
+    
