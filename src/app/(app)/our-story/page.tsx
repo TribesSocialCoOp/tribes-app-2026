@@ -106,58 +106,60 @@ const StoryTopicCard: React.FC<{ story: StoryTopic }> = ({ story }) => {
 
   return (
     <Card className="shadow-lg hover:shadow-xl transition-shadow flex flex-col overflow-hidden">
-      <Link href={`/our-story/${story.id}`} passHref className="flex flex-col flex-grow">
-        {story.coverImage && (
-          <div className="relative h-48 w-full">
-            <Image
-              src={story.coverImage}
-              alt={story.title}
-              fill
-              style={{objectFit:"cover"}}
-              data-ai-hint={story.dataAiHintCover || "topic image"}
-            />
-          </div>
-        )}
-        {!story.coverImage && (
-             <div className="h-48 w-full bg-muted flex items-center justify-center relative">
-                <History className="h-16 w-16 text-muted-foreground opacity-50" />
+      <Link href={`/our-story/${story.id}`} passHref>
+        <> {/* Use a fragment to ensure Link has one child if not an <a> directly */}
+          {story.coverImage && (
+            <div className="relative h-48 w-full">
+              <Image
+                src={story.coverImage}
+                alt={story.title}
+                fill
+                style={{objectFit:"cover"}}
+                data-ai-hint={story.dataAiHintCover || "topic image"}
+              />
             </div>
-        )}
-        <CardHeader className="pb-3">
-          <div className="flex items-center space-x-2 mb-1">
-            <Badge variant="outline" className="capitalize">
-              {categoryIcon} <span className="ml-1.5">{story.category}</span>
-            </Badge>
-          </div>
-          <CardTitle className="text-xl font-semibold tracking-tight line-clamp-2">{story.title}</CardTitle>
-        </CardHeader>
-        <CardContent className="flex-grow pb-3 space-y-2">
-          <CardDescription className="text-sm h-20 overflow-hidden text-ellipsis leading-relaxed line-clamp-4">
-            {story.summary}
-          </CardDescription>
-           {story.curator && (
-             <div className="flex items-center space-x-2 pt-2">
-                <Avatar className="h-7 w-7">
-                    {story.curatorAvatar && <AvatarImage src={story.curatorAvatar} alt={story.curator} data-ai-hint={story.dataAiHintCuratorAvatar || "avatar person"} />}
-                    <AvatarFallback className="text-xs">{story.curatorAvatarFallback || story.curator.substring(0,1)}</AvatarFallback>
-                </Avatar>
-                <p className="text-xs text-muted-foreground">
-                    Curated by <span className="font-medium text-foreground">{story.curator}</span>
-                </p>
+          )}
+          {!story.coverImage && (
+               <div className="h-48 w-full bg-muted flex items-center justify-center relative">
+                  <History className="h-16 w-16 text-muted-foreground opacity-50" />
+              </div>
+          )}
+          <CardHeader className="pb-3">
+            <div className="flex items-center space-x-2 mb-1">
+              <Badge variant="outline" className="capitalize">
+                {categoryIcon} <span className="ml-1.5">{story.category}</span>
+              </Badge>
             </div>
-           )}
-        </CardContent>
-        <CardFooter className="border-t p-3 flex items-center justify-between">
-          <div className="text-xs text-muted-foreground">
-            Updated: {format(story.lastUpdatedAt, "MMM d, yyyy")}
-          </div>
-          <Button variant="default" size="sm" asChild className="bg-primary hover:bg-primary/90">
-            <Link href={`/our-story/${story.id}`}>
-              View Topic <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Link>
-          </Button>
-        </CardFooter>
+            <CardTitle className="text-xl font-semibold tracking-tight line-clamp-2">{story.title}</CardTitle>
+          </CardHeader>
+          <CardContent className="flex-grow pb-3 space-y-2">
+            <CardDescription className="text-sm h-20 overflow-hidden text-ellipsis leading-relaxed line-clamp-4">
+              {story.summary}
+            </CardDescription>
+             {story.curator && (
+               <div className="flex items-center space-x-2 pt-2">
+                  <Avatar className="h-7 w-7">
+                      {story.curatorAvatar && <AvatarImage src={story.curatorAvatar} alt={story.curator} data-ai-hint={story.dataAiHintCuratorAvatar || "avatar person"} />}
+                      <AvatarFallback className="text-xs">{story.curatorAvatarFallback || story.curator.substring(0,1)}</AvatarFallback>
+                  </Avatar>
+                  <p className="text-xs text-muted-foreground">
+                      Curated by <span className="font-medium text-foreground">{story.curator}</span>
+                  </p>
+              </div>
+             )}
+          </CardContent>
+        </>
       </Link>
+      <CardFooter className="border-t p-3 flex items-center justify-between">
+        <div className="text-xs text-muted-foreground">
+          Updated: {format(story.lastUpdatedAt, "MMM d, yyyy")}
+        </div>
+        <Button variant="default" size="sm" asChild className="bg-primary hover:bg-primary/90">
+          <Link href={`/our-story/${story.id}`}>
+            View Topic <ArrowRight className="ml-1.5 h-4 w-4" />
+          </Link>
+        </Button>
+      </CardFooter>
     </Card>
   );
 };
@@ -250,5 +252,4 @@ export default function OurStoryPage() {
     </div>
   );
 }
-
     
