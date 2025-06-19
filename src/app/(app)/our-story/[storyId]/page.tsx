@@ -18,12 +18,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 // Lucide Icons
-import { ArrowLeft, BookOpen, Globe, Map, Building, History, Link2, MessageSquare, PlusCircle, Rss, Share2, Filter, Smile, Send, MessageSquarePlus } from "lucide-react";
+import { ArrowLeft, BookOpen, Globe, Map, Building, History, Link2, MessageSquare, PlusCircle, Rss, Share2, Smile, Send, MessageSquarePlus, MoreVertical, Flag } from "lucide-react";
 
 // Data (mock for now)
 import { mockStoryTopics, type StoryTopic } from '../page'; // Import from the parent page
+import { ReportCommentDialog } from '@/components/dialogs/report-comment-dialog'; // New Import
+import { useToast } from '@/hooks/use-toast';
+
 
 // Interfaces
 interface SourceArticle {
@@ -36,7 +40,7 @@ interface SourceArticle {
   dataAiHint?: string;
 }
 
-interface DiscussionComment {
+export interface DiscussionComment {
   id:string;
   authorId: string;
   authorName: string;
@@ -85,8 +89,8 @@ const ArticleCard: React.FC<{ article: SourceArticle }> = ({ article }) => (
       <Image
         src={`https://placehold.co/150x150.png?text=${encodeURIComponent(article.dataAiHint ? article.dataAiHint.substring(0,10) : 'Source')}`}
         alt={article.title}
-        layout="fill"
-        objectFit="cover"
+        fill
+        style={{objectFit:"cover"}}
         className="w-full h-full"
         data-ai-hint={article.dataAiHint || "news document"}
       />
@@ -120,7 +124,12 @@ const ArticleCard: React.FC<{ article: SourceArticle }> = ({ article }) => (
 
 
 // Helper for Comment Card
-const CommentCard: React.FC<{ comment: DiscussionComment, level?: number }> = ({ comment, level = 0 }) => {
+interface CommentCardProps {
+  comment: DiscussionComment;
+  level?: number;
+  onReportComment: (comment: DiscussionComment) => void;
+}
+const CommentCard: React.FC<CommentCardProps> = ({ comment, level = 0, onReportComment }) => {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyContent, setReplyContent] = useState("");
 
@@ -136,6 +145,19 @@ const CommentCard: React.FC<{ comment: DiscussionComment, level?: number }> = ({
             <p className="text-xs font-semibold">{comment.authorName}</p>
             <p className="text-xs text-muted-foreground">{format(comment.timestamp, "MMM d, yyyy 'at' h:mm a")}</p>
           </div>
+           <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onReportComment(comment)}>
+                <Flag className="mr-2 h-4 w-4" /> Report Comment
+              </DropdownMenuItem>
+              {/* Future actions like Edit/Delete for comment author can be added here */}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </CardHeader>
       <CardContent className="p-3 pt-0">
@@ -166,7 +188,7 @@ const CommentCard: React.FC<{ comment: DiscussionComment, level?: number }> = ({
       )}
       {comment.replies && comment.replies.length > 0 && (
         <div className="p-3 border-t space-y-2 bg-muted/30">
-          {comment.replies.map(reply => <CommentCard key={reply.id} comment={reply} level={level + 1} />)}
+          {comment.replies.map(reply => <CommentCard key={reply.id} comment={reply} level={level + 1} onReportComment={onReportComment} />)}
         </div>
       )}
     </Card>
@@ -178,6 +200,7 @@ export default function StoryDetailPage() {
   const router = useRouter();
   const params = useParams();
   const storyId = params.storyId as string;
+  const { toast } = useToast();
 
   const [story, setStory] = useState<StoryTopic | null>(null);
   const [articles, setArticles] = useState<SourceArticle[]>([]);
@@ -186,6 +209,10 @@ export default function StoryDetailPage() {
   const [newComment, setNewComment] = useState("");
   const [activeTab, setActiveTab] = useState<string>("articles");
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const [isReportCommentDialogOpen, setIsReportCommentDialogOpen] = useState(false);
+  const [commentToReport, setCommentToReport] = useState<DiscussionComment | null>(null);
+  const [reportCommentReason, setReportCommentReason] = useState("");
 
 
   useEffect(() => {
@@ -214,7 +241,7 @@ export default function StoryDetailPage() {
     if (!newComment.trim() || !story) return;
     const newCommentObj: DiscussionComment = {
         id: `new-com-${Date.now()}`,
-        authorId: "currentUser",
+        authorId: "currentUser", // Simulate current user
         authorName: "You (Current User)",
         authorAvatarFallback: "ME",
         content: newComment,
@@ -229,7 +256,26 @@ export default function StoryDetailPage() {
     setActiveTab("discussions");
     setTimeout(() => {
       commentTextareaRef.current?.focus();
-    }, 0);
+    }, 50); // Small delay to ensure tab content is rendered
+  };
+
+  const handleOpenReportCommentDialog = (comment: DiscussionComment) => {
+    setCommentToReport(comment);
+    setReportCommentReason(""); // Reset reason
+    setIsReportCommentDialogOpen(true);
+  };
+
+  const handleConfirmReportComment = () => {
+    if (!commentToReport) return;
+    // In a real app, submit the report (commentToReport.id, reportCommentReason)
+    console.log(`Reporting comment ID: ${commentToReport.id}, Reason: ${reportCommentReason}`);
+    toast({
+        title: "Comment Reported",
+        description: `Thank you for reporting the comment by ${commentToReport.authorName}. An admin will review it.`,
+    });
+    setIsReportCommentDialogOpen(false);
+    setCommentToReport(null);
+    setReportCommentReason("");
   };
 
   if (isLoading) {
@@ -377,7 +423,7 @@ export default function StoryDetailPage() {
                 </div>
                 <Separator />
               {comments.length > 0 ? (
-                comments.map(comment => <CommentCard key={comment.id} comment={comment} />)
+                comments.map(comment => <CommentCard key={comment.id} comment={comment} onReportComment={handleOpenReportCommentDialog} />)
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">No discussions have started on this topic yet. Be the first!</p>
               )}
@@ -385,6 +431,17 @@ export default function StoryDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {commentToReport && (
+        <ReportCommentDialog
+          isOpen={isReportCommentDialogOpen}
+          onOpenChange={setIsReportCommentDialogOpen}
+          comment={commentToReport}
+          reportReason={reportCommentReason}
+          setReportReason={setReportCommentReason}
+          onConfirmReport={handleConfirmReportComment}
+        />
+      )}
     </div>
   );
 }
