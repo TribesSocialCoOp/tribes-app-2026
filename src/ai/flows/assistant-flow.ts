@@ -76,19 +76,6 @@ const getGeneralHelp = ai.defineTool(
   }
 );
 
-
-// Define the main prompt for the assistant
-const assistantPrompt = ai.definePrompt({
-  name: 'assistantPrompt',
-  system: `You are a friendly and helpful AI assistant for an application called Tribes.app.
-Your goal is to assist users with their questions about the app.
-Be concise and clear in your responses.
-Use the tools provided to answer questions about specific tribes or how to use the app's features.
-If you don't know the answer, say so politely. Do not make up information.`,
-  tools: [getTribeInfo, getGeneralHelp],
-});
-
-
 // Define the main flow that orchestrates the chat logic
 const assistantFlow = ai.defineFlow(
   {
@@ -97,10 +84,18 @@ const assistantFlow = ai.defineFlow(
     outputSchema: AssistantOutputSchema,
   },
   async ({message, history}) => {
-    const llmResponse = await assistantPrompt({
-        history,
-        prompt: message,
+    // Call ai.generate() directly for more explicit control
+    const llmResponse = await ai.generate({
+      system: `You are a friendly and helpful AI assistant for an application called Tribes.app.
+Your goal is to assist users with their questions about the app.
+Be concise and clear in your responses.
+Use the tools provided to answer questions about specific tribes or how to use the app's features.
+If you don't know the answer, say so politely. Do not make up information.`,
+      tools: [getTribeInfo, getGeneralHelp],
+      history: history,
+      prompt: message,
     });
+    
     return llmResponse.text;
   }
 );
