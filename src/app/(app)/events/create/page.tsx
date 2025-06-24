@@ -4,7 +4,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 
@@ -16,13 +16,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { CalendarIcon, Image as ImageIcon, Globe, Lock, Sparkles, CalendarPlus, MapPin, Lightbulb } from "lucide-react";
+import { CalendarIcon, Image as ImageIcon, Globe, Lock, Sparkles, CalendarPlus, MapPin, Lightbulb, Users } from "lucide-react";
 import { generateEventDescription } from "@/ai/flows/event-description-generator";
 import { generateEventKeywords } from "@/ai/flows/generate-event-keywords"; // New import
 import { useToast } from "@/hooks/use-toast";
 import { sampleEventsData, type Event } from '../[eventId]/page';
+import { tribesData, type Tribe } from '@/lib/data';
 
 
 const eventCreateFormSchema = z.object({
@@ -30,7 +32,7 @@ const eventCreateFormSchema = z.object({
   keywords: z.string().min(3, { message: "Please provide some keywords for your event (e.g., Live Music, Tech Workshop)."}),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(1000, { message: "Description must not exceed 1000 characters." }),
   eventDate: z.date({ required_error: "An event date is required." }),
-  associatedTribe: z.string().min(1, { message: "Associated tribe is required."}),
+  associatedTribe: z.string().min(1, { message: "Please select an organizing tribe."}),
   locationName: z.string().min(1, {message: "Please provide a venue name or general location (e.g., Downtown Park, Online)."}),
   locationCityRegion: z.string().min(1, {message: "Please provide the city and region (e.g., San Francisco, CA)."}),
   coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`),
@@ -44,8 +46,11 @@ export default function CreateEventPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
   const [isAiGeneratingDesc, setIsAiGeneratingDesc] = React.useState(false);
-  const [isAiSuggestingKeywords, setIsAiSuggestingKeywords] = React.useState(false); // New state
+  const [isAiSuggestingKeywords, setIsAiSuggestingKeywords] = React.useState(false);
   const [coverPreview, setCoverPreview] = React.useState<string | null>(null);
+
+  const [myTribes, setMyTribes] = useState<Tribe[]>([]);
+  const [isClient, setIsClient] = useState(false);
 
   const form = useForm<EventCreateFormValues>({
     resolver: zodResolver(eventCreateFormSchema),
@@ -59,6 +64,16 @@ export default function CreateEventPage() {
       isPublic: true,
     },
   });
+
+  useEffect(() => {
+    setIsClient(true);
+    // This logic mimics the one on the main tribes page to find user's tribes
+    const baseTribeMemberships = ['1', '3', '6', '7'];
+    const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
+    const myTribeIds = [...new Set([...baseTribeMemberships, ...createdTribeIds])];
+    const userTribes = tribesData.filter(t => myTribeIds.includes(t.id));
+    setMyTribes(userTribes);
+  }, []);
 
   async function onSubmit(values: EventCreateFormValues) {
     setIsLoading(true);
@@ -348,19 +363,38 @@ export default function CreateEventPage() {
               />
 
                <FormField
-                control={form.control}
-                name="associatedTribe"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-lg">Organizing Tribe</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Enter the name of the organizing tribe" {...field} className="text-base"/>
-                    </FormControl>
-                    <FormDescription>Which tribe is hosting this event? (Note: In the future, this will be a selection of your managed tribes).</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  control={form.control}
+                  name="associatedTribe"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-lg flex items-center"><Users className="h-4 w-4 mr-2 text-muted-foreground"/>Organizing Tribe</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!isClient || myTribes.length === 0}>
+                        <FormControl>
+                          <SelectTrigger className="text-base">
+                            <SelectValue placeholder="Select one of your tribes..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {isClient && myTribes.length > 0 ? (
+                            myTribes.map(tribe => (
+                              <SelectItem key={tribe.id} value={tribe.name}>
+                                {tribe.name}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="loading" disabled>
+                              {isClient ? 'You are not a member of any tribes.' : 'Loading tribes...'}
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        Which of your tribes is hosting this event?
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
 
               <FormField
