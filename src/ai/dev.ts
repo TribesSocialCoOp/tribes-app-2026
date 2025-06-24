@@ -7,4 +7,5 @@ import '@/ai/flows/mood-based-content-suggestions.ts';
 import '@/ai/flows/summarize-tribe-activity.ts';
 import '@/ai/flows/event-description-generator.ts';
 import '@/ai/flows/generate-event-keywords.ts'; // Added new flow for keywords
+import '@/ai/flows/assistant-flow.ts'; // Add new assistant flow
     

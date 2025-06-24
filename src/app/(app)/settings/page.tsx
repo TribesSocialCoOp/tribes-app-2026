@@ -99,7 +99,12 @@ export default function SettingsPage() {
           <Button variant="outline" className="w-full md:w-auto">Change Password</Button>
           <Button variant="outline" className="w-full md:w-auto">Setup Two-Factor Authentication</Button>
           <div className="flex items-center justify-between p-3 rounded-md border hover:bg-muted/50">
-            <Label htmlFor="dataSharing" className="flex-grow cursor-pointer">Allow Data for AI Personalization</Label>
+            <div>
+              <Label htmlFor="dataSharing" className="font-medium">Allow AI Assistant Access to My Data</Label>
+              <p className="text-xs text-muted-foreground mt-1">
+                Let the AI assistant use your public tribe information to provide more personalized help. Private data is never used.
+              </p>
+            </div>
             <Switch id="dataSharing" />
           </div>
         </CardContent>
