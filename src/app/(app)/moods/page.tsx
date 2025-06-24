@@ -2,7 +2,7 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, ArrowRight, Smile, Target, Sparkles as CreateIcon, Map, ShoppingCart, BookOpen, Gamepad2, Megaphone, Users as ConnectIcon } from "lucide-react";
+import { Search, ArrowRight, Smile, Target, Sparkles as CreateIcon, Map, ShoppingCart, BookOpen, Gamepad2, Megaphone, Users as ConnectIcon, Signal, Landmark } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -15,6 +15,9 @@ export const moodsData = [
   { name: "Shop", slug: "shop", description: "Find deals, artist merch, and share tips.", emoji: "🛍️", bgClass: "bg-pink-100", textClass: "text-pink-700", img: "https://placehold.co/300x200.png?text=Shopping", dataAiHint: "retail store merch", icon: ShoppingCart },
   { name: "Learn", slug: "learn", description: "Expand your knowledge with workshops and skill-sharing.", emoji: "📚", bgClass: "bg-teal-100", textClass: "text-teal-700", img: "https://placehold.co/300x200.png?text=Learn", dataAiHint: "education workshop", icon: BookOpen },
   { name: "Game", slug: "game", description: "Connect with gamers and share experiences.", emoji: "🎮", bgClass: "bg-red-100", textClass: "text-red-700", img: "https://placehold.co/300x200.png?text=Gaming" , dataAiHint: "games console", icon: Gamepad2 },
+  { name: "Pulse", slug: "pulse", description: "Tune into real-time updates, news, and important announcements.", emoji: "📡", bgClass: "bg-slate-100", textClass: "text-slate-700", img: "https://placehold.co/300x200.png?text=Pulse", dataAiHint: "news updates signal", icon: Signal },
+  { name: "Discourse", slug: "discourse", description: "Engage in deep conversations, structured debates, and thoughtful analysis.", emoji: "🏛️", bgClass: "bg-indigo-100", textClass: "text-indigo-700", img: "https://placehold.co/300x200.png?text=Discourse", dataAiHint: "debate discussion forum", icon: Landmark },
+  { name: "Advocate", slug: "advocate", description: "Organize for a cause, find volunteer opportunities, and drive community action.", emoji: "✊", bgClass: "bg-amber-100", textClass: "text-amber-700", img: "https://placehold.co/300x200.png?text=Advocate", dataAiHint: "activism social cause", icon: Megaphone },
 ];
 
 export default function MoodsPage() {
