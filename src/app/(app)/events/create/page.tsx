@@ -22,6 +22,7 @@ import { CalendarIcon, Image as ImageIcon, Globe, Lock, Sparkles, CalendarPlus, 
 import { generateEventDescription } from "@/ai/flows/event-description-generator";
 import { generateEventKeywords } from "@/ai/flows/generate-event-keywords"; // New import
 import { useToast } from "@/hooks/use-toast";
+import { sampleEventsData, type Event } from '../[eventId]/page';
 
 
 const eventCreateFormSchema = z.object({
@@ -61,16 +62,35 @@ export default function CreateEventPage() {
 
   async function onSubmit(values: EventCreateFormValues) {
     setIsLoading(true);
-    console.log("Event Creation Submitted:", values);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Simulate a short delay
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const newEvent: Event = {
+      id: `event-${Date.now()}`,
+      name: values.name,
+      description: values.description,
+      keywords: values.keywords,
+      eventDate: values.eventDate,
+      associatedTribe: values.associatedTribe,
+      locationName: values.locationName,
+      locationCityRegion: values.locationCityRegion,
+      isPublic: values.isPublic,
+      creatorId: 'currentUser', // Mock current user ID
+      coverImage: coverPreview || `https://placehold.co/1200x400.png?text=${encodeURIComponent(values.name.substring(0,15))}`,
+      dataAiHintCover: 'event banner',
+    };
+
+    // Add to the mock data source
+    sampleEventsData.unshift(newEvent);
+
     setIsLoading(false);
     toast({
-      title: "Event Created (Simulated!)",
+      title: "Event Created!",
       description: `Your event "${values.name}" has been successfully created.`,
     });
-    form.reset();
-    setCoverPreview(null);
-    // router.push('/events');
+    
+    router.push('/events');
   }
 
   async function handleGenerateDescription() {

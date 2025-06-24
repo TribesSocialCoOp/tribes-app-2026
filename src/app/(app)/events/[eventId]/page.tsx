@@ -37,7 +37,7 @@ export interface Event {
 const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
 // Sample event data (mimicking what might come from a database)
-export const sampleEventsData: Event[] = [
+export let sampleEventsData: Event[] = [
   {
     id: "event1",
     name: "Summer Music Festival Kick-off",
