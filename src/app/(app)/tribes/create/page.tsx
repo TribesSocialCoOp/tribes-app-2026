@@ -10,17 +10,24 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Users, Image as ImageIcon, Globe, Lock, Sparkles } from "lucide-react";
+import { Users, Image as ImageIcon, Globe, Lock, Sparkles, Tag } from "lucide-react";
 import Image from "next/image";
 import { generateTribeDescription } from "@/ai/flows/tribe-description-generator";
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { tribesData } from "@/lib/data";
+import { moodsData as allMoodsData } from "../../moods/page";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 const createTribeFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
-  moods: z.string().min(3, { message: "Please provide some moods for your tribe (e.g., Chill, Productive)."}),
+  moods: z.array(z.string())
+    .min(1, { message: "Please select at least one mood." })
+    .max(3, { message: "You can select a maximum of 3 moods." }),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
   isPublic: z.boolean().default(true),
   coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`),
@@ -38,7 +45,7 @@ export default function CreateTribePage() {
     resolver: zodResolver(createTribeFormSchema),
     defaultValues: {
       name: "",
-      moods: "",
+      moods: [],
       description: "",
       isPublic: true,
     },
@@ -47,18 +54,17 @@ export default function CreateTribePage() {
   async function onSubmit(values: CreateTribeFormValues) {
     setIsLoading(true);
     
-    // Simulate network delay
     await new Promise(resolve => setTimeout(resolve, 1000));
 
     const newTribe = {
-      id: `tribe-${Date.now()}`, // More unique ID
+      id: `tribe-${Date.now()}`,
       name: values.name,
       description: values.description,
       members: 1,
       isPublic: values.isPublic,
       cover: coverPreview || `https://placehold.co/400x200.png?text=${encodeURIComponent(values.name.substring(0,10))}`,
       dataAiHint: "community group",
-      moods: values.moods.split(',').map(m => m.trim().toLowerCase()).filter(m => m),
+      moods: values.moods,
     };
     
     tribesData.unshift(newTribe);
@@ -75,14 +81,15 @@ export default function CreateTribePage() {
 
   async function handleGenerateDescription() {
     const moods = form.getValues("moods");
-    if (!moods) {
-      form.setError("moods", { type: "manual", message: "Please enter moods to generate a description." });
+    if (!moods || moods.length === 0) {
+      form.setError("moods", { type: "manual", message: "Please select moods to generate a description." });
       return;
     }
     setIsLoading(true);
     try {
-      const result = await generateTribeDescription({ moods });
+      const result = await generateTribeDescription({ moods: moods.join(', ') });
       form.setValue("description", result.description);
+      form.clearErrors("description");
     } catch (error) {
       console.error("Failed to generate description:", error);
       form.setError("description", { type: "manual", message: "AI failed to generate description. Please try again." });
@@ -105,6 +112,7 @@ export default function CreateTribePage() {
     }
   };
 
+  const selectedMoodObjects = form.watch('moods').map(slug => allMoodsData.find(m => m.slug === slug)).filter(Boolean);
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-0 max-w-3xl">
@@ -141,11 +149,60 @@ export default function CreateTribePage() {
                 name="moods"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel className="text-lg">Associated Moods</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Chill Vibes, Focused Work, Creative Spark" {...field} className="text-base" />
-                    </FormControl>
-                    <FormDescription>Comma-separated moods that describe your tribe. Used for discovery and AI suggestions.</FormDescription>
+                    <div className="mb-2">
+                      <FormLabel className="text-lg flex items-center">
+                        <Tag className="mr-2 h-4 w-4 text-muted-foreground"/> Associated Moods
+                      </FormLabel>
+                      <FormDescription className="mt-1">
+                        Select up to 3 moods that best represent your tribe.
+                      </FormDescription>
+                    </div>
+                     {selectedMoodObjects.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {selectedMoodObjects.map(mood => mood && (
+                           <Badge key={mood.slug} variant="outline" className={`border-current ${mood.textClass} ${mood.bgClass}/30`}>
+                             {mood.emoji} {mood.name}
+                           </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 border rounded-md">
+                      {allMoodsData.map((moodOption) => {
+                        const isChecked = field.value?.includes(moodOption.slug);
+                        const isDisabled = !isChecked && (field.value?.length ?? 0) >= 3;
+                        return (
+                          <Label
+                            key={moodOption.slug}
+                            htmlFor={`mood-create-${moodOption.slug}`}
+                            className={cn(
+                              "flex items-center space-x-2 p-2 border rounded-md hover:bg-muted/50 cursor-pointer transition-colors",
+                              isChecked && "bg-accent/70 border-accent",
+                              isDisabled && "cursor-not-allowed opacity-60 hover:bg-transparent"
+                            )}
+                          >
+                            <Checkbox
+                              id={`mood-create-${moodOption.slug}`}
+                              checked={isChecked}
+                              disabled={isDisabled}
+                              onCheckedChange={(checkedClient) => {
+                                const currentSelectedMoods = field.value ? [...field.value] : [];
+                                if (checkedClient) {
+                                  if (currentSelectedMoods.length < 3) {
+                                    field.onChange([...currentSelectedMoods, moodOption.slug]);
+                                  }
+                                } else {
+                                  field.onChange(currentSelectedMoods.filter((slug) => slug !== moodOption.slug));
+                                }
+                              }}
+                              className="shrink-0"
+                            />
+                            <span className={cn("font-normal text-sm", isDisabled && "text-muted-foreground")}>
+                              {moodOption.emoji} {moodOption.name}
+                            </span>
+                          </Label>
+                        );
+                      })}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -164,7 +221,7 @@ export default function CreateTribePage() {
                         {...field}
                       />
                     </FormControl>
-                     <Button type="button" variant="outline" size="sm" onClick={handleGenerateDescription} disabled={isLoading} className="mt-2">
+                     <Button type="button" variant="outline" size="sm" onClick={handleGenerateDescription} disabled={isLoading || form.getValues("moods").length === 0} className="mt-2">
                         <Sparkles className="mr-2 h-4 w-4" /> {isLoading ? "Generating..." : "Generate with AI"}
                     </Button>
                     <FormDescription>A compelling summary to attract new members.</FormDescription>
@@ -241,5 +298,3 @@ export default function CreateTribePage() {
     </div>
   );
 }
-
-    
