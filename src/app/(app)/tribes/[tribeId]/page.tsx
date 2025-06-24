@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Users, MessageSquareText, Smile, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, ListChecks, UsersRound, FileWarning, RefreshCcw } from "lucide-react";
+import { ArrowLeft, Users, MessageSquareText, Smile, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, ListChecks, UsersRound, FileWarning, RefreshCcw, Link2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from '@/components/ui/separator';
@@ -712,6 +712,12 @@ export default function TribeDetailPage() {
             <div className="flex items-center text-sm text-white drop-shadow-md">
               <Users className="h-4 w-4 mr-1.5" /> {tribe.members} members
             </div>
+            {tribe.homepageUrl && (
+                <a href={tribe.homepageUrl} target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-white hover:text-primary-foreground hover:underline drop-shadow-md transition-colors">
+                    <Link2 className="h-4 w-4 mr-1.5" />
+                    Website
+                </a>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-4 md:p-6 pt-2">

@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from "@/components/ui/label"; // Added missing import
-import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag, Link2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 
@@ -26,6 +26,7 @@ import { moodsData as allMoodsData } from '../../../moods/page';
 const tribeSettingsFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
+  homepageUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   isPublic: z.boolean().default(true),
   moods: z.array(z.string())
     .max(3, { message: "You can select a maximum of 3 moods." })
@@ -49,6 +50,7 @@ export default function TribeSettingsPage() {
     defaultValues: {
       name: "",
       description: "",
+      homepageUrl: "",
       isPublic: true,
       moods: [],
     },
@@ -64,6 +66,7 @@ export default function TribeSettingsPage() {
           description: currentTribeData.description,
           isPublic: currentTribeData.isPublic,
           moods: currentTribeData.moods || [],
+          homepageUrl: currentTribeData.homepageUrl || "",
         });
       } else {
         router.push('/tribes'); 
@@ -150,6 +153,23 @@ export default function TribeSettingsPage() {
                       />
                     </FormControl>
                     <FormDescription>A brief description of your tribe's purpose and activities.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="homepageUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-md flex items-center">
+                      <Link2 className="mr-2 h-4 w-4 text-muted-foreground"/> Homepage URL
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder="https://your-tribe-homepage.com" {...field} className="text-base"/>
+                    </FormControl>
+                    <FormDescription>The official website for your tribe.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

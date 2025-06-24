@@ -10,7 +10,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Users, Image as ImageIcon, Globe, Lock, Sparkles, Tag } from "lucide-react";
+import { Users, Image as ImageIcon, Globe, Lock, Sparkles, Tag, Link2 } from "lucide-react";
 import Image from "next/image";
 import { generateTribeDescription } from "@/ai/flows/tribe-description-generator";
 import React from "react";
@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 
 const createTribeFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
+  homepageUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   moods: z.array(z.string())
     .min(1, { message: "Please select at least one mood." })
     .max(3, { message: "You can select a maximum of 3 moods." }),
@@ -45,6 +46,7 @@ export default function CreateTribePage() {
     resolver: zodResolver(createTribeFormSchema),
     defaultValues: {
       name: "",
+      homepageUrl: "",
       moods: [],
       description: "",
       isPublic: true,
@@ -65,6 +67,7 @@ export default function CreateTribePage() {
       cover: coverPreview || `https://placehold.co/400x200.png?text=${encodeURIComponent(values.name.substring(0,10))}`,
       dataAiHint: "community group",
       moods: values.moods,
+      homepageUrl: values.homepageUrl || undefined,
     };
     
     tribesData.unshift(newTribe);
@@ -139,6 +142,23 @@ export default function CreateTribePage() {
                       <Input placeholder="e.g., Weekend Hikers, AI Innovators" {...field} className="text-base"/>
                     </FormControl>
                     <FormDescription>Choose a catchy and descriptive name for your tribe.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="homepageUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-lg flex items-center">
+                      <Link2 className="mr-2 h-4 w-4 text-muted-foreground"/> Homepage URL (Optional)
+                    </FormLabel>
+                    <FormControl>
+                      <Input placeholder="https://your-tribe-homepage.com" {...field} className="text-base"/>
+                    </FormControl>
+                    <FormDescription>An official website for your tribe.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
