@@ -84,8 +84,9 @@ export default function CreateTribePage() {
   }
 
   async function handleGenerateDescription() {
-    const moods = form.getValues("moods");
     const name = form.getValues("name");
+    const moods = form.getValues("moods");
+    const homepageUrl = form.getValues("homepageUrl");
 
     let hasError = false;
     if (!name) {
@@ -100,7 +101,7 @@ export default function CreateTribePage() {
 
     setIsAiGeneratingDesc(true);
     try {
-      const result = await generateTribeDescription({ name, moods: moods.join(', ') });
+      const result = await generateTribeDescription({ name, moods: moods.join(', '), homepageUrl });
       form.setValue("description", result.description);
       form.clearErrors("description");
     } catch (error) {
