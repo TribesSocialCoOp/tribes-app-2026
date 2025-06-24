@@ -16,7 +16,7 @@ import { generateTribeDescription } from "@/ai/flows/tribe-description-generator
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { tribesData } from "@/lib/data";
+import { tribesData, type Tribe } from "@/lib/data";
 import { moodsData as allMoodsData } from "../../moods/page";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -59,7 +59,7 @@ export default function CreateTribePage() {
     
     await new Promise(resolve => setTimeout(resolve, 1000));
 
-    const newTribe = {
+    const newTribe: Tribe = {
       id: `tribe-${Date.now()}`,
       name: values.name,
       description: values.description,
@@ -71,7 +71,14 @@ export default function CreateTribePage() {
       homepageUrl: values.homepageUrl || undefined,
     };
     
+    // Add to mock data source for immediate availability
     tribesData.unshift(newTribe);
+
+    // Persist membership using localStorage
+    const myCreatedTribeIds = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
+    myCreatedTribeIds.push(newTribe.id);
+    localStorage.setItem('myCreatedTribeIds', JSON.stringify(myCreatedTribeIds));
+
 
     setIsLoading(false);
 

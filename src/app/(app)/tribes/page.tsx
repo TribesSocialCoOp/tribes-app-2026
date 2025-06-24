@@ -1,10 +1,11 @@
+
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, Handshake } from "lucide-react";
+import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -41,15 +42,41 @@ const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean }> = ({ tribe, 
 
 export default function TribesPage() {
   const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const [allTribes, setAllTribes] = useState<Tribe[]>([]);
+  const [myTribeIds, setMyTribeIds] = useState<string[]>([]);
+  const [isClient, setIsClient] = useState(false);
 
-  // Mock data for tribe memberships.
-  const myTribeMemberships = ['1', '3', '6', '7'];
+  const baseTribeMemberships = ['1', '3', '6', '7'];
 
-  // "My Tribes" are the ones the user is a member of.
-  const myTribes = tribesData.filter(t => myTribeMemberships.includes(t.id));
+  const syncData = () => {
+    // Combine base memberships with any created in this session from localStorage
+    const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
+    setMyTribeIds([...new Set([...baseTribeMemberships, ...createdTribeIds])]);
+    setAllTribes(tribesData);
+  };
+  
+  useEffect(() => {
+    setIsClient(true);
+    syncData(); // Initial sync
 
-  // "Discover Tribes" are public tribes the user is NOT a member of.
-  const discoverTribes = tribesData.filter(t => !myTribeMemberships.includes(t.id) && t.isPublic);
+    window.addEventListener('focus', syncData);
+    return () => {
+      window.removeEventListener('focus', syncData);
+    };
+  }, []);
+
+  const { myTribes, discoverTribes } = useMemo(() => {
+    if (!isClient) {
+      // Return server-side rendered state initially to avoid hydration mismatch
+      const initialMyTribes = tribesData.filter(t => baseTribeMemberships.includes(t.id));
+      const initialDiscoverTribes = tribesData.filter(t => !baseTribeMemberships.includes(t.id) && t.isPublic);
+      return { myTribes: initialMyTribes, discoverTribes: initialDiscoverTribes };
+    }
+
+    const myTribes = allTribes.filter(t => myTribeIds.includes(t.id));
+    const discoverTribes = allTribes.filter(t => !myTribeIds.includes(t.id) && t.isPublic);
+    return { myTribes, discoverTribes };
+  }, [allTribes, myTribeIds, isClient]);
 
   const renderTribeList = (tribes: Tribe[], isMyTribeList: boolean) => (
     <Card className="shadow-lg">
@@ -166,4 +193,3 @@ export default function TribesPage() {
     </div>
   );
 }
-    
