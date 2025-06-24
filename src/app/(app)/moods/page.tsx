@@ -2,14 +2,14 @@
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, ArrowRight, Smile, Target, Sparkles as CreateIcon, Map, ShoppingCart, BookOpen, Gamepad2, Megaphone, Users as ConnectIcon, Signal, Landmark } from "lucide-react";
+import { Search, ArrowRight, Smile, Target, Sparkles as ShowcaseIcon, Map, ShoppingCart, BookOpen, Gamepad2, Megaphone, Users as ConnectIcon, Signal, Landmark } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 
 export const moodsData = [
   { name: "Chill", slug: "chill", description: "Relax, unwind, and find your calm.", emoji: "😌", bgClass: "bg-blue-100", textClass: "text-blue-700", img: "https://placehold.co/300x200.png?text=Chill" , dataAiHint: "relax meditation", icon: Smile },
   { name: "Focus", slug: "focus", description: "Boost productivity and concentration for your projects.", emoji: "🎯", bgClass: "bg-green-100", textClass: "text-green-700", img: "https://placehold.co/300x200.png?text=Focus" , dataAiHint: "work study", icon: Target },
-  { name: "Create", slug: "create", description: "Showcase your art, performances, and creative projects. Find collaborators.", emoji: "✨", bgClass: "bg-purple-100", textClass: "text-purple-700", img: "https://placehold.co/300x200.png?text=Showcase" , dataAiHint: "art music performance", icon: CreateIcon },
+  { name: "Showcase", slug: "showcase", description: "Showcase your art, performances, and creative projects. Find collaborators.", emoji: "✨", bgClass: "bg-purple-100", textClass: "text-purple-700", img: "https://placehold.co/300x200.png?text=Showcase" , dataAiHint: "art music performance", icon: ShowcaseIcon },
   { name: "Discover", slug: "discover", description: "Explore new ideas, live events, local scenes, and active communities.", emoji: "🗺️", bgClass: "bg-yellow-100", textClass: "text-yellow-700", img: "https://placehold.co/300x200.png?text=Events", dataAiHint: "events local scene", icon: Map  },
   { name: "Connect", slug: "connect", description: "Find and build communities around shared live experiences and passions.", emoji: "🤝", bgClass: "bg-orange-100", textClass: "text-orange-700", img: "https://placehold.co/300x200.png?text=Connect", dataAiHint: "community meetup networking", icon: ConnectIcon },
   { name: "Shop", slug: "shop", description: "Find deals, artist merch, and share tips.", emoji: "🛍️", bgClass: "bg-pink-100", textClass: "text-pink-700", img: "https://placehold.co/300x200.png?text=Shopping", dataAiHint: "retail store merch", icon: ShoppingCart },
