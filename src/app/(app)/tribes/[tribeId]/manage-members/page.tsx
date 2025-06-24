@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import React, { useEffect, useState } from 'react';
-import { tribesData, type Tribe } from '../../page';
+import { tribesData, type Tribe } from '@/lib/data';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 

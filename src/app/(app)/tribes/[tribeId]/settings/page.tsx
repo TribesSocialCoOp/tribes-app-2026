@@ -20,7 +20,7 @@ import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag } from 'lucide-re
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 
-import { tribesData, type Tribe } from '../../page';
+import { tribesData, type Tribe } from '@/lib/data';
 import { moodsData as allMoodsData } from '../../../moods/page';
 
 const tribeSettingsFormSchema = z.object({

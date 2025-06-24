@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, CalendarDays, Users, Globe, Lock, Tag, Info, MapPin, ExternalLink, Radio } from "lucide-react";
 import { cn } from '@/lib/utils';
 import InteractiveMap from '@/components/maps/interactive-map';
-import { tribesData, type Tribe as TribeInfo } from '../../tribes/page';
+import { tribesData, type Tribe as TribeInfo } from '@/lib/data';
 
 
 // Define an interface for an Event

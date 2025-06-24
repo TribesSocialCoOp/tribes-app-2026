@@ -18,7 +18,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 
-import { tribesData, type Tribe } from '../page';
+import { tribesData, type Tribe } from '@/lib/data';
 import { moodsData } from '../../moods/page';
 import { allMoodStreamPosts } from '../../moods/[moodSlug]/page';
 import type { Event } from '../../events/[eventId]/page';

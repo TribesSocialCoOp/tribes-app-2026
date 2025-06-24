@@ -9,7 +9,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import {tribesData} from '@/app/(app)/tribes/page'; // To look up tribe info
+import { tribesData } from '@/lib/data'; // To look up tribe info
 
 // Define input schema for the flow
 const AssistantInputSchema = z.object({
