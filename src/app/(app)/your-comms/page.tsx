@@ -189,7 +189,7 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
 
 
 export default function YourCommsPage() {
-  const defaultSelectedMoods = ['chill', 'focus', 'create', 'discover'];
+  const defaultSelectedMoods = ['chill', 'focus', 'showcase', 'discover'];
   const localStorageKey = 'tribesAppSelectedMoods';
 
   const [selectedMoodSlugs, setSelectedMoodSlugs] = useState<string[]>([]);
@@ -377,5 +377,7 @@ export default function YourCommsPage() {
     </div>
   );
 }
+
+    
 
     
