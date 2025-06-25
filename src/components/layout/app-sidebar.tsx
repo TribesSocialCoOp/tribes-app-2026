@@ -52,22 +52,25 @@ const bottomNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  // Mock user role is now imported from @/lib/data
-  const canCreate = MOCK_USER_ROLE === 'Creator' || MOCK_USER_ROLE === 'Admin';
+  // The `canCreate` logic now checks for any paid or admin tier.
+  const canCreate = MOCK_USER_ROLE === 'Human_Member' || MOCK_USER_ROLE === 'Creator' || MOCK_USER_ROLE === 'Admin';
 
   const visibleNavItems = navItems.filter(item => !item.roles || item.roles.includes(MOCK_USER_ROLE));
 
   const CreateButtonWrapper: React.FC<{ href: string; canDoAction: boolean; tooltipText: string; children: React.ReactNode }> = ({ href, canDoAction, tooltipText, children }) => {
+    const trigger = (
+      <div className={cn(!canDoAction && "cursor-not-allowed w-full")}>
+        <Link href={canDoAction ? href : "#"} passHref legacyBehavior>
+          {children}
+        </Link>
+      </div>
+    );
+
     if (!canDoAction) {
       return (
         <TooltipProvider>
           <Tooltip>
-            <TooltipTrigger asChild>
-              {/* The div is necessary for the tooltip trigger to work correctly with a disabled button. */}
-              <div className="w-full cursor-not-allowed">
-                {children}
-              </div>
-            </TooltipTrigger>
+            <TooltipTrigger asChild>{trigger}</TooltipTrigger>
             <TooltipContent side="right" align="center">
               <p>{tooltipText}</p>
             </TooltipContent>
@@ -76,11 +79,7 @@ export function AppSidebar() {
       );
     }
     
-    return (
-      <Link href={href} passHref>
-        {children}
-      </Link>
-    );
+    return trigger;
   };
 
 
@@ -102,6 +101,7 @@ export function AppSidebar() {
             tooltipText="Upgrade to an Individual Membership to create tribes."
           >
              <Button 
+                as="a"
                 variant="default" 
                 className="w-full justify-start group-data-[collapsible=icon]:justify-center my-1 bg-accent text-accent-foreground hover:bg-accent/90"
                 disabled={!canCreate}
@@ -117,6 +117,7 @@ export function AppSidebar() {
             tooltipText="Upgrade to an Individual Membership to create events."
           >
             <Button 
+              as="a"
               variant="default" 
               className="w-full justify-start group-data-[collapsible=icon]:justify-center my-1 bg-accent text-accent-foreground hover:bg-accent/90"
               disabled={!canCreate}

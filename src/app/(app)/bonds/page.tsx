@@ -210,11 +210,11 @@ export default function BondsPage() {
   }, []);
 
   const MAX_FAMILY_BONDS = useMemo(() => {
-    // Simplified logic: Free users are limited, paid users are not.
-    if (MOCK_USER_ROLE === 'Human') {
+    // Only free users are limited.
+    if (MOCK_USER_ROLE === 'Human_Free') {
       return 5;
     }
-    // For 'Creator' and 'Admin', the limit is high enough to feel unlimited.
+    // All other members (Individual, Org, Admin) have a higher limit.
     return 100;
   }, []);
 
@@ -457,7 +457,7 @@ export default function BondsPage() {
           </div>
           <CardDescription>
             Your current plan allows for {MAX_FAMILY_BONDS} Family Bonds. You are currently using {familyBondsCount}.
-            {MOCK_USER_ROLE === 'Human' && ' Upgrade to an Individual Membership for more capacity.'}
+            {MOCK_USER_ROLE === 'Human_Free' && ' Upgrade to an Individual Membership for more capacity.'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -546,7 +546,7 @@ export default function BondsPage() {
               <TableBody>
                 {paginatedBonds.map((bond) => {
                   const timeBasedProgress = calculateTimeProgress(bond);
-                  const canUpgradeToFamily = MOCK_USER_ROLE !== 'Human' && bond.bondType !== "family" && bond.targetType === "user" && familyBondsCount < MAX_FAMILY_BONDS && bond.keyType === "standard";
+                  const canUpgradeToFamily = MOCK_USER_ROLE !== "Human_Free" && bond.bondType !== "family" && bond.targetType === "user" && familyBondsCount < MAX_FAMILY_BONDS && bond.keyType === "standard";
                   const canIntroduce = bond.targetType === 'user' && !bond.keyType?.startsWith('event_');
                   const isEventBond = bond.keyType === 'event_promo' || bond.keyType === 'event_attendee';
 

@@ -5,16 +5,17 @@
 /**
  * Defines the different user roles within the Tribes.app system, aligned with the business model tiers.
  *
- * - `Admin`: Site administrators with platform-wide powers. This role is separate from user-facing tiers.
- * - `Creator`: Corresponds to **Tier 2 (Individual Member)** and **Tier 3 (Organizational Member)**.
- *   These users can create and manage tribes, organize events, and access creator tools.
- * - `Human`: Corresponds to **Tier 1 (Free User)**. These users can join tribes and participate,
- *   but cannot create their own tribes or events.
+ * - `Admin`: Site administrators with platform-wide powers.
+ * - `Creator`: Corresponds to **Tier 3 (Organizational Member)**. These users are typically brands, businesses,
+ *   or large-scale creators with access to the full Creator Toolkit.
+ * - `Human_Member`: Corresponds to **Tier 2 (Individual Member)**. These are paid users who are part of the Co-Op,
+ *   can create tribes/events, and have unlimited bonds.
+ * - `Human_Free`: Corresponds to **Tier 1 (Free User)**. The foundational tier for community participation with some limits.
  * - `Speaker`: (Moderator) A role *within* a tribe, not a platform-wide tier. Appointed by tribe Creators
  *   to help manage a specific community.
  * - `Bot`: API-driven interfaces with specific rulesets, distinct from human users.
  */
-export type UserRole = "Admin" | "Creator" | "Speaker" | "Human" | "Bot";
+export type UserRole = "Admin" | "Creator" | "Human_Member" | "Human_Free" | "Speaker" | "Bot";
 
 
 // Example of how UserRole might be used on a conceptual user object:
