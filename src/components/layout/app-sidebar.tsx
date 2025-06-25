@@ -56,7 +56,6 @@ export function AppSidebar() {
   const canCreate = userRole === 'Creator' || userRole === 'Admin';
 
   const CreateButtonWrapper: React.FC<{ href: string; canDoAction: boolean; tooltipText: string; children: React.ReactNode }> = ({ href, canDoAction, tooltipText, children }) => {
-    // If the action is not allowed, wrap the disabled button in a tooltip.
     if (!canDoAction) {
       return (
         <TooltipProvider>
@@ -75,9 +74,8 @@ export function AppSidebar() {
       );
     }
     
-    // If the action is allowed, just wrap the button in a Link.
     return (
-      <Link href={href}>
+      <Link href={href} passHref>
         {children}
       </Link>
     );
@@ -105,7 +103,6 @@ export function AppSidebar() {
                 variant="default" 
                 className="w-full justify-start group-data-[collapsible=icon]:justify-center my-1 bg-accent text-accent-foreground hover:bg-accent/90"
                 disabled={!canCreate}
-                aria-disabled={!canCreate}
               >
                 <PlusCircle className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
                 <span className="group-data-[collapsible=icon]:hidden">New Tribe</span>
@@ -121,7 +118,6 @@ export function AppSidebar() {
               variant="default" 
               className="w-full justify-start group-data-[collapsible=icon]:justify-center my-1 bg-accent text-accent-foreground hover:bg-accent/90"
               disabled={!canCreate}
-              aria-disabled={!canCreate}
             >
                 <CalendarPlus className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
                 <span className="group-data-[collapsible=icon]:hidden">New Event</span>
