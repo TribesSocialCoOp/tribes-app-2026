@@ -210,13 +210,12 @@ export default function BondsPage() {
   }, []);
 
   const MAX_FAMILY_BONDS = useMemo(() => {
-    switch (MOCK_USER_ROLE) {
-      case 'Admin': return 100;
-      case 'Creator': return 50;
-      case 'Human':
-      default:
-        return 5;
+    // Simplified logic: Free users are limited, paid users are not.
+    if (MOCK_USER_ROLE === 'Human') {
+      return 5;
     }
+    // For 'Creator' and 'Admin', the limit is high enough to feel unlimited.
+    return 100;
   }, []);
 
   const familyBondsCount = bonds ? bonds.filter(b => b.bondType === "family").length : 0;
@@ -745,5 +744,7 @@ export default function BondsPage() {
     </div>
   );
 }
+
+    
 
     
