@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { UserRole } from "@/lib/types";
+import { MOCK_USER_ROLE } from "@/lib/data";
 
 const navItems: { href: string; icon: React.ElementType; label: string; tooltip: string; roles?: UserRole[] }[] = [
   { href: "/your-comms", icon: LayoutDashboard, label: "Intercom", tooltip: "Intercom" },
@@ -51,11 +52,10 @@ const bottomNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  // Mock user role. Change to 'Creator' or 'Human' to test role-based visibility.
-  const userRole: UserRole = 'Admin';
-  const canCreate = userRole === 'Creator' || userRole === 'Admin';
+  // Mock user role is now imported from @/lib/data
+  const canCreate = MOCK_USER_ROLE === 'Creator' || MOCK_USER_ROLE === 'Admin';
 
-  const visibleNavItems = navItems.filter(item => !item.roles || item.roles.includes(userRole));
+  const visibleNavItems = navItems.filter(item => !item.roles || item.roles.includes(MOCK_USER_ROLE));
 
   const CreateButtonWrapper: React.FC<{ href: string; canDoAction: boolean; tooltipText: string; children: React.ReactNode }> = ({ href, canDoAction, tooltipText, children }) => {
     if (!canDoAction) {
@@ -64,7 +64,7 @@ export function AppSidebar() {
           <Tooltip>
             <TooltipTrigger asChild>
               {/* The div is necessary for the tooltip trigger to work correctly with a disabled button. */}
-              <div className="cursor-not-allowed w-full">
+              <div className="w-full cursor-not-allowed">
                 {children}
               </div>
             </TooltipTrigger>

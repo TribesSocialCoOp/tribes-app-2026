@@ -1,3 +1,5 @@
+import type { UserRole } from '@/lib/types';
+
 export interface Tribe {
   id: string;
   name: string;
@@ -22,3 +24,9 @@ export let tribesData: Tribe[] = [
   { id: "8", name: "Artisan Alley Collective", description: "A space for creators, makers, and artists to share their work, find pop-up opportunities, and support each other.", members: 150, isPublic: true, cover: "https://placehold.co/400x200.png?text=Artisans", dataAiHint: "crafts art market", moods: ["showcase", "shop", "connect"] },
   { id: "9", name: "Open Mic Night Crew", description: "For performers (comedy, poetry, music) and fans of open mic nights. Share your material, find venues, and connect.", members: 62, isPublic: true, cover: "https://placehold.co/400x200.png?text=OpenMic", dataAiHint: "performance comedy poetry", moods: ["showcase", "discover", "connect"] },
 ];
+
+/**
+ * A mock of the currently logged-in user's role.
+ * Change this to 'Creator' or 'Human' to test role-based UI.
+ */
+export const MOCK_USER_ROLE: UserRole = 'Admin';
