@@ -30,7 +30,7 @@ const organizationalTiers = [
         description: "For small creators, vendors, and organizations ready to build.",
         features: [
             "Up to 1,000 members",
-            "Includes all Individual benefits",
+            "Includes all Individual Member benefits",
             "Core Creator Toolkit",
             "Direct commerce with 5% transaction fee",
             "Verified organizational profile",
@@ -131,7 +131,7 @@ export default function BillingPage() {
                 <h2 className="text-3xl font-semibold tracking-normal text-foreground">Organizational Membership</h2>
             </div>
             <p className="text-md text-muted-foreground mt-1 max-w-2xl mx-auto">
-                For businesses, brands, artists, and non-profits seeking professional tools for community engagement and commerce.
+                For businesses, brands, artists, and non-profits. All plans include full Co-Op membership with voting rights, plus professional tools for community engagement and commerce.
             </p>
         </div>
 
