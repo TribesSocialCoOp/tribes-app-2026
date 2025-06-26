@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
+import { useUser } from '@/hooks/use-user';
 
 import { tribesData, type Tribe } from '@/lib/data';
 import { moodsData } from '../../moods/page';
@@ -355,6 +356,7 @@ export default function TribeDetailPage() {
   const params = useParams();
   const tribeId = params.tribeId as string;
   const { toast } = useToast();
+  const { role } = useUser();
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
   const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false);
@@ -374,8 +376,8 @@ export default function TribeDetailPage() {
   const [dataTimestamp, setDataTimestamp] = useState(Date.now());
   const [reportsLastUpdated, setReportsLastUpdated] = useState(Date.now());
 
-  const isUserMember = true;
-  const isTribeAdmin = true;
+  const isUserMember = useMemo(() => role !== 'Human_Free', [role]);
+  const isTribeAdmin = useMemo(() => role === 'Admin' || role === 'Creator', [role]);
 
 
   useEffect(() => {
