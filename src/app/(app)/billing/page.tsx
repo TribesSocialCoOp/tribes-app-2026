@@ -120,7 +120,7 @@ export default function BillingPage() {
             </div>
              <div className="p-4 rounded-lg bg-background border">
                 <h3 className="font-semibold flex items-center mb-1"><Lock className="h-4 w-4 mr-2 text-primary"/>Privacy by Design</h3>
-                <p className="text-muted-foreground">Your private content is always end-to-end encrypted. Bonds, which act as your keys, are designed to be refreshed, respecting that relationships and communities evolve over time.</p>
+                <p className="text-muted-foreground">Your private content is always end-to-end encrypted. Bonds are your key to this content, giving you secure access to your tribes and personal connections—keeping your content yours.</p>
             </div>
           </CardContent>
         </Card>
