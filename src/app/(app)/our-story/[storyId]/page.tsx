@@ -25,8 +25,10 @@ import { ArrowLeft, BookOpen, Globe, Map, Building, History, Link2, MessageSquar
 
 // Data (mock for now)
 import { mockStoryTopics, type StoryTopic } from '../page'; // Import from the parent page
-import { ReportCommentDialog } from '@/components/dialogs/report-comment-dialog'; // New Import
+import { ReportCommentDialog } from '@/components/dialogs/report-comment-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/hooks/use-user'; // New Import
+import type { UserRole } from '@/lib/types';
 
 
 // Interfaces
@@ -132,6 +134,8 @@ interface CommentCardProps {
 const CommentCard: React.FC<CommentCardProps> = ({ comment, level = 0, onReportComment }) => {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyContent, setReplyContent] = useState("");
+  const { role } = useUser();
+  const isUserLoggedIn = !!role;
 
   return (
     <Card className={`shadow-sm ${level > 0 ? 'ml-4 sm:ml-6' : ''} bg-background`}>
@@ -145,32 +149,36 @@ const CommentCard: React.FC<CommentCardProps> = ({ comment, level = 0, onReportC
             <p className="text-xs font-semibold">{comment.authorName}</p>
             <p className="text-xs text-muted-foreground">{format(comment.timestamp, "MMM d, yyyy 'at' h:mm a")}</p>
           </div>
-           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onReportComment(comment)}>
-                <Flag className="mr-2 h-4 w-4" /> Report Comment
-              </DropdownMenuItem>
-              {/* Future actions like Edit/Delete for comment author can be added here */}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {isUserLoggedIn && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onReportComment(comment)}>
+                  <Flag className="mr-2 h-4 w-4" /> Report Comment
+                </DropdownMenuItem>
+                {/* Future actions like Edit/Delete for comment author can be added here */}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-3 pt-0">
         <p className="text-sm whitespace-pre-line">{comment.content}</p>
       </CardContent>
-      <CardFooter className="p-3 pt-1 flex items-center justify-start space-x-3">
-        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary">
-            <Smile className="mr-1 h-3.5 w-3.5"/> {comment.vibes || 0}
-        </Button>
-        <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary" onClick={() => setShowReplyInput(!showReplyInput)}>
-            <MessageSquare className="mr-1 h-3.5 w-3.5"/> Reply
-        </Button>
-      </CardFooter>
+      {isUserLoggedIn && (
+        <CardFooter className="p-3 pt-1 flex items-center justify-start space-x-3">
+          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary">
+              <Smile className="mr-1 h-3.5 w-3.5"/> {comment.vibes || 0}
+          </Button>
+          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary" onClick={() => setShowReplyInput(!showReplyInput)}>
+              <MessageSquare className="mr-1 h-3.5 w-3.5"/> Reply
+          </Button>
+        </CardFooter>
+      )}
       {showReplyInput && (
         <div className="p-3 border-t">
             <Textarea
@@ -201,6 +209,7 @@ export default function StoryDetailPage() {
   const params = useParams();
   const storyId = params.storyId as string;
   const { toast } = useToast();
+  const { role } = useUser();
 
   const [story, setStory] = useState<StoryTopic | null>(null);
   const [articles, setArticles] = useState<SourceArticle[]>([]);
@@ -213,6 +222,9 @@ export default function StoryDetailPage() {
   const [isReportCommentDialogOpen, setIsReportCommentDialogOpen] = useState(false);
   const [commentToReport, setCommentToReport] = useState<DiscussionComment | null>(null);
   const [reportCommentReason, setReportCommentReason] = useState("");
+  
+  const isCreatorOrAdmin = role === 'Creator' || role === 'Admin';
+  const isLoggedIn = !!role;
 
 
   useEffect(() => {
@@ -370,12 +382,16 @@ export default function StoryDetailPage() {
         <CardContent className="p-4 md:p-6">
           <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">{story.summary}</p>
            <div className="mt-4 flex flex-wrap gap-2">
-                <Button variant="outline" size="sm"><Rss className="mr-1.5 h-4 w-4"/>Follow Topic</Button>
+                <Button variant="outline" size="sm" disabled={!isLoggedIn}><Rss className="mr-1.5 h-4 w-4"/>Follow Topic</Button>
                 <Button variant="outline" size="sm"><Share2 className="mr-1.5 h-4 w-4"/>Share</Button>
-                <Button variant="outline" size="sm"><PlusCircle className="mr-1.5 h-4 w-4"/>Add Source</Button>
-                <Button variant="default" size="sm" onClick={handleAddCommentClick} className="bg-accent text-accent-foreground hover:bg-accent/90">
-                    <MessageSquarePlus className="mr-1.5 h-4 w-4"/>Add Comment
-                </Button>
+                {isCreatorOrAdmin && (
+                  <Button variant="outline" size="sm"><PlusCircle className="mr-1.5 h-4 w-4"/>Add Source</Button>
+                )}
+                {isLoggedIn && (
+                  <Button variant="default" size="sm" onClick={handleAddCommentClick} className="bg-accent text-accent-foreground hover:bg-accent/90">
+                      <MessageSquarePlus className="mr-1.5 h-4 w-4"/>Add Comment
+                  </Button>
+                )}
             </div>
         </CardContent>
       </Card>
@@ -407,21 +423,25 @@ export default function StoryDetailPage() {
               <CardDescription>Share your thoughts and engage with others on this topic.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className="space-y-3">
-                    <Label htmlFor="new-comment">Add your comment:</Label>
-                    <Textarea
-                        id="new-comment"
-                        ref={commentTextareaRef}
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="What are your thoughts?"
-                        className="min-h-[80px]"
-                    />
-                    <div className="flex justify-end">
-                        <Button onClick={handlePostComment} disabled={!newComment.trim()}>Post Comment</Button>
-                    </div>
-                </div>
-                <Separator />
+              {isLoggedIn && (
+                <>
+                  <div className="space-y-3">
+                      <Label htmlFor="new-comment">Add your comment:</Label>
+                      <Textarea
+                          id="new-comment"
+                          ref={commentTextareaRef}
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          placeholder="What are your thoughts?"
+                          className="min-h-[80px]"
+                      />
+                      <div className="flex justify-end">
+                          <Button onClick={handlePostComment} disabled={!newComment.trim()}>Post Comment</Button>
+                      </div>
+                  </div>
+                  <Separator />
+                </>
+              )}
               {comments.length > 0 ? (
                 comments.map(comment => <CommentCard key={comment.id} comment={comment} onReportComment={handleOpenReportCommentDialog} />)
               ) : (
@@ -445,5 +465,3 @@ export default function StoryDetailPage() {
     </div>
   );
 }
-
-    
