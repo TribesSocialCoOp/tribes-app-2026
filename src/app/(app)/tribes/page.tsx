@@ -5,15 +5,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, HeartHandshake } from "lucide-react";
+import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, HeartHandshake, Loader2 } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { cn } from '@/lib/utils';
 import { tribesData, type Tribe } from '@/lib/data';
 import { useUser } from '@/hooks/use-user';
+import { useToast } from '@/hooks/use-toast';
 
-const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean }> = ({ tribe, isMyTribe }) => (
+const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean; onJoin: (tribe: Tribe) => void; isJoining: boolean }> = ({ tribe, isMyTribe, onJoin, isJoining }) => (
   <div className="flex items-center justify-between p-3 hover:bg-muted/50 border-b last:border-b-0">
     <div className="flex items-center space-x-3">
       <Image src={tribe.cover} alt={tribe.name} width={40} height={40} className="rounded-md object-cover h-10 w-10" data-ai-hint={tribe.dataAiHint} />
@@ -34,8 +35,9 @@ const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean }> = ({ tribe, 
         </Button>
       </Link>
     ) : (
-      <Button variant="outline" size="sm">
-        <UserPlus className="mr-1.5 h-3.5 w-3.5" /> Join
+      <Button variant="outline" size="sm" onClick={() => onJoin(tribe)} disabled={isJoining}>
+        {isJoining ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin"/> : <UserPlus className="mr-1.5 h-3.5 w-3.5" />}
+        {isJoining ? 'Joining...' : 'Join'}
       </Button>
     )}
   </div>
@@ -46,7 +48,9 @@ export default function TribesPage() {
   const [allTribes, setAllTribes] = useState<Tribe[]>([]);
   const [myTribeIds, setMyTribeIds] = useState<string[]>([]);
   const [isClient, setIsClient] = useState(false);
+  const [joiningStates, setJoiningStates] = useState<Record<string, boolean>>({});
   const { role } = useUser();
+  const { toast } = useToast();
   const canCreate = role !== 'Human_Free';
 
   const baseTribeMemberships = ['1', '3', '6', '7'];
@@ -67,6 +71,25 @@ export default function TribesPage() {
       window.removeEventListener('focus', syncData);
     };
   }, []);
+  
+  const handleJoinTribe = (tribeToJoin: Tribe) => {
+    if (!tribeToJoin) return;
+    setJoiningStates(prev => ({ ...prev, [tribeToJoin.id]: true }));
+
+    // Simulate API call
+    setTimeout(() => {
+        if (tribeToJoin.joinMechanism === 'approval') {
+            toast({ title: "Request Sent", description: `Your request to join ${tribeToJoin.name} is pending approval.` });
+        } else {
+            const currentMyTribeIds = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
+            currentMyTribeIds.push(tribeToJoin.id);
+            localStorage.setItem('myCreatedTribeIds', JSON.stringify([...new Set(currentMyTribeIds)]));
+            syncData(); // Re-sync data to update the lists
+            toast({ title: "Welcome!", description: `You have successfully joined ${tribeToJoin.name}.` });
+        }
+        setJoiningStates(prev => ({ ...prev, [tribeToJoin.id]: false }));
+    }, 1000);
+  };
 
   const { myTribes, discoverTribes } = useMemo(() => {
     if (!isClient) {
@@ -85,7 +108,7 @@ export default function TribesPage() {
     <Card className="shadow-lg">
       <CardContent className="p-0">
         {tribes.length > 0 ? (
-          tribes.map(tribe => <TribeListItem key={tribe.id} tribe={tribe} isMyTribe={isMyTribeList} />)
+          tribes.map(tribe => <TribeListItem key={tribe.id} tribe={tribe} isMyTribe={isMyTribeList} onJoin={handleJoinTribe} isJoining={!!joiningStates[tribe.id]} />)
         ) : (
           <p className="p-4 text-center text-muted-foreground">No tribes in this category.</p>
         )}
@@ -124,8 +147,9 @@ export default function TribesPage() {
                 </Button>
               </Link>
             ) : (
-              <Button variant="outline" className="w-full">
-                Join Tribe
+              <Button variant="outline" className="w-full" onClick={() => handleJoinTribe(tribe)} disabled={joiningStates[tribe.id]}>
+                {joiningStates[tribe.id] ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <UserPlus className="mr-2 h-4 w-4" />}
+                {joiningStates[tribe.id] ? 'Joining...' : 'Join Tribe'}
               </Button>
             )}
           </CardFooter>

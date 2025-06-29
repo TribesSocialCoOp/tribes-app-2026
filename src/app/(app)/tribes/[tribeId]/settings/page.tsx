@@ -16,10 +16,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag, Link2, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag, Link2, ShieldAlert, Copy, Check, Info } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
+import { Separator } from '@/components/ui/separator';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 import { tribesData, type Tribe } from '@/lib/data';
 import { moodsData as allMoodsData } from '../../../moods/page';
@@ -33,6 +35,7 @@ const tribeSettingsFormSchema = z.object({
     .max(3, { message: "You can select a maximum of 3 moods." })
     .optional()
     .default([]),
+  joinMechanism: z.enum(['instant', 'approval']).default('instant'),
 });
 
 type TribeSettingsFormValues = z.infer<typeof tribeSettingsFormSchema>;
@@ -47,6 +50,7 @@ export default function TribeSettingsPage() {
   const [tribe, setTribe] = useState<Tribe | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasAccess, setHasAccess] = useState<boolean | undefined>(undefined);
+  const [isCopied, setIsCopied] = useState(false);
 
   useEffect(() => {
     // Determine access based on role
@@ -62,6 +66,7 @@ export default function TribeSettingsPage() {
       homepageUrl: "",
       isPublic: true,
       moods: [],
+      joinMechanism: 'instant',
     },
   });
 
@@ -76,6 +81,7 @@ export default function TribeSettingsPage() {
           isPublic: currentTribeData.isPublic,
           moods: currentTribeData.moods || [],
           homepageUrl: currentTribeData.homepageUrl || "",
+          joinMechanism: currentTribeData.joinMechanism || 'instant',
         });
       } else {
         router.push('/tribes'); 
@@ -89,19 +95,29 @@ export default function TribeSettingsPage() {
     
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    if (tribe) {
-        // Simulate updating the tribe data locally (in a real app, this would involve an API call and re-fetching or updating global state)
-        const updatedTribe = { ...tribe, ...values };
-        setTribe(updatedTribe); 
-        // Note: This only updates the local state on this page. The tribesData array in ../../page.tsx is not modified by this.
+    // In a real app, you'd send 'values' to your backend to update the tribe data.
+    // For this prototype, we update the mock data source directly.
+    const tribeIndex = tribesData.findIndex(t => t.id === tribeId);
+    if (tribeIndex !== -1) {
+        tribesData[tribeIndex] = { ...tribesData[tribeIndex], ...values };
     }
+    setTribe(prev => prev ? { ...prev, ...values } : null);
 
     toast({
       title: "Settings Saved (Simulated)",
-      description: `Settings for tribe "${values.name}" have been updated. Moods selected: ${values.moods?.join(', ') || 'None'}.`,
+      description: `Settings for tribe "${values.name}" have been updated.`,
     });
     setIsLoading(false);
   }
+
+  const handleCopyLink = () => {
+    if (!tribe) return;
+    const inviteLink = `${window.location.origin}/join?tribe=${tribe.id}`;
+    navigator.clipboard.writeText(inviteLink);
+    setIsCopied(true);
+    toast({ title: "Copied!", description: "Invite link copied to clipboard." });
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   if (hasAccess === undefined) {
     return (
@@ -264,38 +280,87 @@ export default function TribeSettingsPage() {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="isPublic"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base font-semibold">
-                        Tribe Visibility
-                      </FormLabel>
-                      <FormDescription>
-                        {field.value ? (
-                          <>
-                            <Globe className="inline-block mr-1 h-4 w-4 text-green-500" />
-                            Public: Discoverable by anyone on the platform.
-                          </>
-                        ) : (
-                          <>
-                            <Lock className="inline-block mr-1 h-4 w-4 text-red-500" />
-                            Private: Only users with a direct link or invite can see this tribe.
-                          </>
-                        )}
-                      </FormDescription>
+              <Separator />
+
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="isPublic"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                      <div className="space-y-0.5">
+                        <FormLabel className="text-base font-semibold">
+                          Tribe Visibility
+                        </FormLabel>
+                        <FormDescription>
+                          {field.value ? (
+                            <>
+                              <Globe className="inline-block mr-1 h-4 w-4 text-green-500" />
+                              Public: Discoverable by anyone on the platform.
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="inline-block mr-1 h-4 w-4 text-red-500" />
+                              Private: Only users with a direct link or invite can see this tribe.
+                            </>
+                          )}
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="joinMechanism"
+                  render={({ field }) => (
+                    <FormItem className="rounded-lg border p-4 shadow-sm">
+                      <FormLabel className="text-base font-semibold">Join Mechanism</FormLabel>
+                      <FormDescription className="pb-2">How new members can join this tribe.</FormDescription>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={field.onChange}
+                          value={field.value}
+                          className="space-y-2"
+                        >
+                          <Label className="flex items-center space-x-3 p-3 border rounded-md hover:bg-muted/50 cursor-pointer has-[:checked]:bg-accent/70 has-[:checked]:border-accent">
+                            <RadioGroupItem value="instant" id="join-instant" />
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">Instant Join</p>
+                              <p className="text-xs text-muted-foreground">Users can join immediately.</p>
+                            </div>
+                          </Label>
+                          <Label className="flex items-center space-x-3 p-3 border rounded-md hover:bg-muted/50 cursor-pointer has-[:checked]:bg-accent/70 has-[:checked]:border-accent">
+                            <RadioGroupItem value="approval" id="join-approval" />
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">Approval Required</p>
+                              <p className="text-xs text-muted-foreground">Admins must approve requests to join.</p>
+                            </div>
+                          </Label>
+                        </RadioGroup>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <div className="rounded-lg border p-4 shadow-sm">
+                    <h3 className="text-base font-semibold text-foreground mb-1">Invite Link</h3>
+                    <p className="text-sm text-muted-foreground mb-3">Share this link to invite users to your tribe. It will respect your chosen join mechanism.</p>
+                    <div className="flex items-center space-x-2">
+                        <Input value={`${typeof window !== 'undefined' ? window.location.origin : ''}/join?tribe=${tribe.id}`} readOnly className="text-sm" />
+                        <Button type="button" variant="secondary" onClick={handleCopyLink} size="icon">
+                            {isCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                            <span className="sr-only">{isCopied ? "Copied" : "Copy"}</span>
+                        </Button>
                     </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
+                </div>
+              </div>
+
             </CardContent>
             <CardFooter>
               <Button type="submit" disabled={isLoading} className="w-full md:w-auto bg-primary hover:bg-primary/90 text-lg py-3 px-6">

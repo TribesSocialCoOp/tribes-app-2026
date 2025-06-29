@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Users, MessageSquareText, Smile, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, ListChecks, UsersRound, FileWarning, RefreshCcw, Link2, BarChart2 } from "lucide-react";
+import { ArrowLeft, Users, MessageSquareText, Smile, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, ListChecks, UsersRound, FileWarning, RefreshCcw, Link2, BarChart2, UserPlus, Loader2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from '@/components/ui/separator';
@@ -151,7 +151,7 @@ export const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname'>[] = 
 ];
 
 
-const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMember: boolean; isTribeAdmin: boolean; isReported: boolean; isCurrentUserAuthor: boolean; onPromoteClick: (post: TribePost) => void; onReportClick: (post: TribePost) => void; onRepostClick: (post: TribePost) => void; }> = ({ post, isPromoted, isUserMember, isTribeAdmin, isReported, isCurrentUserAuthor, onPromoteClick, onReportClick, onRepostClick }) => {
+const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isMember: boolean; isTribeAdmin: boolean; isReported: boolean; isCurrentUserAuthor: boolean; onPromoteClick: (post: TribePost) => void; onReportClick: (post: TribePost) => void; onRepostClick: (post: TribePost) => void; }> = ({ post, isPromoted, isMember, isTribeAdmin, isReported, isCurrentUserAuthor, onPromoteClick, onReportClick, onRepostClick }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
 
   useEffect(() => {
@@ -213,7 +213,7 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
               <CardTitle className="text-md font-semibold tracking-normal">{post.authorName}</CardTitle>
               <div className="flex items-center space-x-2">
                   <CardDescription className="text-xs">{displayTime}</CardDescription>
-                  {isUserMember && isPromoted && !post.isRemoved && (
+                  {isMember && isPromoted && !post.isRemoved && (
                       <TooltipProvider delayDuration={100}>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -243,7 +243,7 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isUserMemb
                   )}
               </div>
             </div>
-            {(isUserMember || isCurrentUserAuthor) && !post.isRemoved && (
+            {(isMember || isCurrentUserAuthor) && !post.isRemoved && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
@@ -376,8 +376,17 @@ export default function TribeDetailPage() {
   const [dataTimestamp, setDataTimestamp] = useState(Date.now());
   const [reportsLastUpdated, setReportsLastUpdated] = useState(Date.now());
 
-  const isUserMember = useMemo(() => role !== 'Human_Free', [role]);
+  const [isMember, setIsMember] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
+  const baseTribeMemberships = ['1', '3', '6', '7'];
+
   const isTribeAdmin = useMemo(() => role === 'Admin' || role === 'Creator', [role]);
+  
+  useEffect(() => {
+    const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
+    const myTribeIds = [...new Set([...baseTribeMemberships, ...createdTribeIds])];
+    setIsMember(myTribeIds.includes(tribeId));
+  }, [tribeId, dataTimestamp]);
 
 
   useEffect(() => {
@@ -409,6 +418,26 @@ export default function TribeDetailPage() {
         window.removeEventListener('focus', handleFocus);
     };
   }, []);
+  
+  const handleJoinTribe = () => {
+    if (!tribe) return;
+    setIsJoining(true);
+
+    // Simulate API call
+    setTimeout(() => {
+        if (tribe.joinMechanism === 'approval') {
+            toast({ title: "Request Sent", description: `Your request to join ${tribe.name} is pending approval.` });
+        } else {
+            const currentMyTribeIds = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
+            currentMyTribeIds.push(tribe.id);
+            localStorage.setItem('myCreatedTribeIds', JSON.stringify([...new Set(currentMyTribeIds)]));
+            setIsMember(true); // Manually set state to trigger re-render
+            setDataTimestamp(Date.now()); // Force refresh of data-dependent memos
+            toast({ title: "Welcome!", description: `You have successfully joined ${tribe.name}.` });
+        }
+        setIsJoining(false);
+    }, 1000);
+  };
 
 
   const tribeEvents = useMemo(() => {
@@ -448,7 +477,7 @@ export default function TribeDetailPage() {
   const combinedFeedItems = useMemo(() => {
     if (!tribe) return [];
 
-    const eventItems = (isUserMember ? tribeEvents : [])
+    const eventItems = (isMember ? tribeEvents : [])
       .map(event => ({
         id: `event-${event.id}`,
         type: 'event' as const,
@@ -457,7 +486,7 @@ export default function TribeDetailPage() {
         data: event,
       }));
 
-    const postItems = (isUserMember ? postsInTribe : postsInTribe.filter(p => moodStreamPostIds.has(p.id) || locallyPromotedPostIds.has(p.id)))
+    const postItems = (isMember ? postsInTribe : postsInTribe.filter(p => moodStreamPostIds.has(p.id) || locallyPromotedPostIds.has(p.id)))
       .map(post => ({
         id: `post-${post.id}`,
         type: 'post' as const,
@@ -478,7 +507,7 @@ export default function TribeDetailPage() {
     });
 
     return allItems;
-  }, [tribe, tribeEvents, postsInTribe, isUserMember, locallyPromotedPostIds, activeReportedPostIds, dataTimestamp]);
+  }, [tribe, tribeEvents, postsInTribe, isMember, locallyPromotedPostIds, activeReportedPostIds, dataTimestamp]);
 
 
   const handleOpenPromoteDialog = (post: TribePost) => {
@@ -738,10 +767,21 @@ export default function TribeDetailPage() {
               ))}
             </div>
           )}
+           {!isMember && tribe.isPublic && (
+            <div className="mt-4 pt-4 border-t">
+              <Button onClick={handleJoinTribe} disabled={isJoining}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                {isJoining ? 'Joining...' : 'Join Tribe'}
+              </Button>
+              <p className="text-xs text-muted-foreground mt-2">
+                {tribe.joinMechanism === 'approval' ? 'Your request will be sent to the tribe admins for approval.' : 'You can join this tribe immediately.'}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {isUserMember && (
+      {isMember && (
         <Card className="shadow-lg">
             <CardHeader className="p-4 flex-row items-center space-x-3">
                 <Avatar>
@@ -762,7 +802,7 @@ export default function TribeDetailPage() {
 
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-foreground tracking-normal px-1">
-            {isUserMember ? "Feed" : "Featured Posts in Mood Streams"}
+            {isMember ? "Feed" : "Featured Posts in Mood Streams"}
         </h2>
         {combinedFeedItems.length > 0 ? (
           combinedFeedItems.map(item => {
@@ -776,7 +816,7 @@ export default function TribeDetailPage() {
                 <TribePostCard
                   post={post}
                   isPromoted={item.isPromoted}
-                  isUserMember={isUserMember}
+                  isMember={isMember}
                   isTribeAdmin={isTribeAdmin}
                   isReported={item.isReported}
                   isCurrentUserAuthor={item.isCurrentUserAuthor}
@@ -792,10 +832,10 @@ export default function TribeDetailPage() {
             <CardContent className="flex flex-col items-center justify-center">
               <MessageSquareText className="h-16 w-16 text-muted-foreground opacity-50 mb-4" />
               <h3 className="text-xl font-semibold text-foreground mb-1">
-                {isUserMember ? `No Posts Yet in ${tribe.name}` : `No Featured Posts from ${tribe.name} in Mood Streams`}
+                {isMember ? `No Posts Yet in ${tribe.name}` : `No Featured Posts from ${tribe.name} in Mood Streams`}
               </h3>
               <p className="text-muted-foreground">
-                {isUserMember ? `Be the first to share something!` : "Check back later for promoted content from this tribe."}
+                {isMember ? `Be the first to share something!` : "Check back later for promoted content from this tribe."}
               </p>
             </CardContent>
           </Card>
