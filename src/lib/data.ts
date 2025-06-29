@@ -30,4 +30,4 @@ export let tribesData: Tribe[] = [
  * A mock of the currently logged-in user's role.
  * Change this to 'Admin', 'Creator', 'Human_Member', or 'Human_Free' to test role-based UI.
  */
-export const MOCK_USER_ROLE: UserRole = 'Human_Free';
+export const MOCK_USER_ROLE: UserRole = 'Creator';

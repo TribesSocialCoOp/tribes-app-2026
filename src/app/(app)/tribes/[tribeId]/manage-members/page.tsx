@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, UsersRound, Pencil, UserCheck, UserX, Hammer, MoreVertical, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, UsersRound, Pencil, UserCheck, UserX, Hammer, MoreVertical, ShieldAlert, Check, X } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +35,19 @@ export interface TribeMember {
   role?: 'member' | 'speaker';
 }
 
+export interface PendingMember {
+  id: string;
+  name: string;
+  avatar: string;
+  dataAiHint: string;
+  requestTimestamp: Date;
+}
+
+const mockPendingMembersData: PendingMember[] = [
+    { id: 'pending1', name: 'Frank Frankenstein', avatar: 'https://placehold.co/40x40.png?text=FF', dataAiHint: 'avatar character', requestTimestamp: new Date() },
+    { id: 'pending2', name: 'Grace Hopper', avatar: 'https://placehold.co/40x40.png?text=GH', dataAiHint: 'avatar scientist', requestTimestamp: new Date(new Date().getTime() - 86400000) },
+];
+
 const initialMockMembers: Omit<TribeMember, 'tribeAssignedNickname' | 'role'>[] = [
   { id: 'user1', name: 'Alice Wonderland', avatar: 'https://placehold.co/40x40.png?text=AW', dataAiHint: 'avatar person' },
   { id: 'user2', name: 'Bob The Builder', avatar: 'https://placehold.co/40x40.png?text=BB', dataAiHint: 'avatar character' },
@@ -53,6 +66,7 @@ export default function ManageMembersPage() {
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
   const [currentTribeMembers, setCurrentTribeMembers] = useState<TribeMember[]>([]);
+  const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([]);
   const [isNicknameDialogOpen, setIsNicknameDialogOpen] = useState(false);
   const [memberToEditNickname, setMemberToEditNickname] = useState<TribeMember | null>(null);
   const [nicknameInputValue, setNicknameInputValue] = useState("");
@@ -82,6 +96,12 @@ export default function ManageMembersPage() {
             role: (member.id === 'user1' && tribeId === '1') ? 'speaker' : 'member' as 'member' | 'speaker'
         }));
         setCurrentTribeMembers(membersForThisTribe);
+
+        if (currentTribeData.id === '1' && currentTribeData.joinMechanism === 'approval') {
+          setPendingMembers(mockPendingMembersData);
+        } else {
+          setPendingMembers([]);
+        }
       }
     }
   }, [tribeId]);
@@ -168,6 +188,32 @@ export default function ManageMembersPage() {
     setBanReason("");
   };
 
+  const handleApproveRequest = (pendingMember: PendingMember) => {
+      setPendingMembers(prev => prev.filter(p => p.id !== pendingMember.id));
+      const newMember: TribeMember = {
+        id: pendingMember.id,
+        name: pendingMember.name,
+        avatar: pendingMember.avatar,
+        dataAiHint: pendingMember.dataAiHint,
+        role: 'member',
+      };
+      setCurrentTribeMembers(prev => [...prev, newMember]);
+
+      toast({
+        title: "Member Approved",
+        description: `${pendingMember.name} has been added to the tribe.`,
+      });
+  };
+
+  const handleDenyRequest = (pendingMemberId: string, memberName: string) => {
+      setPendingMembers(prev => prev.filter(p => p.id !== pendingMemberId));
+      toast({
+        title: "Request Denied",
+        description: `The request from ${memberName} has been denied.`,
+        variant: 'destructive'
+      });
+  };
+
 
   if (hasAccess === undefined) {
     return (
@@ -210,6 +256,41 @@ export default function ManageMembersPage() {
           Back to {tribe.name}
         </Button>
       </div>
+
+      {tribe.joinMechanism === 'approval' && pendingMembers.length > 0 && (
+          <Card className="shadow-lg border-amber-500/50">
+              <CardHeader>
+                  <CardTitle className="text-xl tracking-normal">Pending Join Requests ({pendingMembers.length})</CardTitle>
+                  <CardDescription>Approve or deny requests to join {tribe.name}.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                  <div className="space-y-2">
+                      {pendingMembers.map(member => (
+                          <div key={member.id} className="flex items-center justify-between p-2 border rounded-md">
+                            <div className="flex items-center space-x-3">
+                                  <Avatar className="h-9 w-9">
+                                      <AvatarImage src={member.avatar} alt={member.name} data-ai-hint={member.dataAiHint} />
+                                      <AvatarFallback>{member.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                      <p className="font-semibold text-sm">{member.name}</p>
+                                      <p className="text-xs text-muted-foreground">Requested {new Date(member.requestTimestamp).toLocaleDateString()}</p>
+                                  </div>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                  <Button size="icon" variant="outline" className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDenyRequest(member.id, member.name)}>
+                                      <X className="h-4 w-4" />
+                                  </Button>
+                                  <Button size="icon" variant="outline" className="h-8 w-8 text-green-600 hover:bg-green-500/10 hover:text-green-600" onClick={() => handleApproveRequest(member)}>
+                                      <Check className="h-4 w-4" />
+                                  </Button>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              </CardContent>
+          </Card>
+      )}
 
       <Card className="shadow-xl">
         <CardHeader>
