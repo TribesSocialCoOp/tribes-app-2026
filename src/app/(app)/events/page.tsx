@@ -9,9 +9,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Search, PlusCircle, ArrowRight, Globe, Lock, Users, MapPin } from "lucide-react";
+import { CalendarDays, Search, PlusCircle, ArrowRight, Globe, Lock, Users, MapPin, Sparkles } from "lucide-react";
 import { sampleEventsData, type Event } from './[eventId]/page'; 
 import { cn } from '@/lib/utils';
+import { useUser } from '@/hooks/use-user';
 
 const EventCard: React.FC<{ event: Event }> = ({ event }) => {
   return (
@@ -75,6 +76,8 @@ const EventCard: React.FC<{ event: Event }> = ({ event }) => {
 
 export default function EventsPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const { role } = useUser();
+  const canCreate = role !== 'Human_Free';
 
   const filteredEvents = sampleEventsData.filter(event =>
     event.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -94,9 +97,14 @@ export default function EventsPage() {
             Find upcoming gatherings, workshops, and more from all tribes.
           </p>
         </div>
-        <Link href="/events/create" passHref>
+        <Link href={canCreate ? "/events/create" : "/billing"} passHref>
           <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            <PlusCircle className="mr-2 h-5 w-5" /> Create New Event
+            {canCreate ? (
+              <PlusCircle className="mr-2 h-5 w-5" />
+            ) : (
+              <Sparkles className="mr-2 h-5 w-5" />
+            )}
+            {canCreate ? "Create New Event" : "Upgrade to Create"}
           </Button>
         </Link>
       </header>

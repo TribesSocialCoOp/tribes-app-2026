@@ -5,12 +5,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus } from "lucide-react";
+import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, Sparkles } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { cn } from '@/lib/utils';
 import { tribesData, type Tribe } from '@/lib/data';
+import { useUser } from '@/hooks/use-user';
 
 const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean }> = ({ tribe, isMyTribe }) => (
   <div className="flex items-center justify-between p-3 hover:bg-muted/50 border-b last:border-b-0">
@@ -45,6 +46,8 @@ export default function TribesPage() {
   const [allTribes, setAllTribes] = useState<Tribe[]>([]);
   const [myTribeIds, setMyTribeIds] = useState<string[]>([]);
   const [isClient, setIsClient] = useState(false);
+  const { role } = useUser();
+  const canCreate = role !== 'Human_Free';
 
   const baseTribeMemberships = ['1', '3', '6', '7'];
 
@@ -141,9 +144,14 @@ export default function TribesPage() {
             Manage your existing tribes or discover new ones to join.
           </p>
         </div>
-        <Link href="/tribes/create" passHref>
+        <Link href={canCreate ? "/tribes/create" : "/billing"} passHref>
           <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            <PlusCircle className="mr-2 h-5 w-5" /> Create New Tribe
+            {canCreate ? (
+              <PlusCircle className="mr-2 h-5 w-5" />
+            ) : (
+              <Sparkles className="mr-2 h-5 w-5" />
+            )}
+            {canCreate ? "Create New Tribe" : "Upgrade to Create"}
           </Button>
         </Link>
       </header>

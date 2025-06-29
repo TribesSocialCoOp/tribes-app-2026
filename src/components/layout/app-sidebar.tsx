@@ -20,19 +20,18 @@ import {
   Bot,
   Settings,
   Sparkles,
-  FileText,
+  BookOpen,
   PlusCircle,
   Link2,
   CalendarPlus,
   CalendarDays,
   ShieldAlert,
-  BookOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { UserRole } from "@/lib/types";
-import { useUser } from "@/hooks/use-user"; // Import the new hook
+import { useUser } from "@/hooks/use-user";
 
 const navItems: { href: string; icon: React.ElementType; label: string; tooltip: string; roles?: UserRole[] }[] = [
   { href: "/your-comms", icon: LayoutDashboard, label: "Intercom", tooltip: "Intercom" },
@@ -51,38 +50,11 @@ const bottomNavItems = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { role: userRole } = useUser(); // Get user role from the hook
+  const { role: userRole } = useUser();
   
-  // The `canCreate` logic now checks for any paid or admin tier.
-  const canCreate = userRole === 'Human_Member' || userRole === 'Creator' || userRole === 'Admin';
+  const canCreate = userRole !== 'Human_Free';
 
   const visibleNavItems = navItems.filter(item => !item.roles || item.roles.includes(userRole));
-
-  const CreateButtonWrapper: React.FC<{ href: string; canDoAction: boolean; tooltipText: string; children: React.ReactNode }> = ({ href, canDoAction, tooltipText, children }) => {
-    const trigger = (
-      <div className={cn(!canDoAction && "cursor-not-allowed w-full")}>
-        <Link href={canDoAction ? href : "#"} passHref>
-            {children}
-        </Link>
-      </div>
-    );
-    
-    if (!canDoAction) {
-      return (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>{trigger}</TooltipTrigger>
-            <TooltipContent side="right" align="center">
-              <p>{tooltipText}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
-    }
-    
-    return trigger;
-  };
-
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" side="left" className="border-r">
@@ -96,36 +68,61 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent className="flex-1 p-2">
         <SidebarMenu className="space-y-1">
-          <CreateButtonWrapper 
-            href="/tribes/create" 
-            canDoAction={canCreate} 
-            tooltipText="Upgrade to an Individual Membership to create tribes."
-          >
-             <Button 
-                variant="default" 
-                className="w-full justify-start group-data-[collapsible=icon]:justify-center my-1 bg-accent text-accent-foreground hover:bg-accent/90"
-                disabled={!canCreate}
-              >
-                <PlusCircle className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
-                <span className="group-data-[collapsible=icon]:hidden">New Tribe</span>
-            </Button>
-          </CreateButtonWrapper>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link href={canCreate ? "/tribes/create" : "/billing"} passHref>
+                  <Button
+                    variant={canCreate ? "default" : "outline"}
+                    className={cn(
+                      "w-full justify-start group-data-[collapsible=icon]:justify-center my-1",
+                       canCreate && "bg-accent text-accent-foreground hover:bg-accent/90"
+                    )}
+                  >
+                    {canCreate ? (
+                      <PlusCircle className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
+                    ) : (
+                      <Sparkles className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
+                    )}
+                    <span className="group-data-[collapsible=icon]:hidden">New Tribe</span>
+                  </Button>
+                </Link>
+              </TooltipTrigger>
+              {!canCreate && (
+                <TooltipContent side="right" align="center">
+                  <p>Upgrade to create a new tribe.</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
           
-           <CreateButtonWrapper 
-            href="/events/create" 
-            canDoAction={canCreate} 
-            tooltipText="Upgrade to an Individual Membership to create events."
-          >
-            <Button 
-              variant="default" 
-              className="w-full justify-start group-data-[collapsible=icon]:justify-center my-1 bg-accent text-accent-foreground hover:bg-accent/90"
-              disabled={!canCreate}
-            >
-                <CalendarPlus className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
-                <span className="group-data-[collapsible=icon]:hidden">New Event</span>
-            </Button>
-          </CreateButtonWrapper>
-
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link href={canCreate ? "/events/create" : "/billing"} passHref>
+                  <Button
+                    variant={canCreate ? "default" : "outline"}
+                    className={cn(
+                      "w-full justify-start group-data-[collapsible=icon]:justify-center my-1",
+                       canCreate && "bg-accent text-accent-foreground hover:bg-accent/90"
+                    )}
+                  >
+                    {canCreate ? (
+                      <CalendarPlus className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
+                    ) : (
+                      <Sparkles className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
+                    )}
+                    <span className="group-data-[collapsible=icon]:hidden">New Event</span>
+                  </Button>
+                </Link>
+              </TooltipTrigger>
+              {!canCreate && (
+                <TooltipContent side="right" align="center">
+                  <p>Upgrade to create a new event.</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
 
           {visibleNavItems.map((item) => (
             <SidebarMenuItem key={item.href}>
