@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, Star, User, Briefcase, HeartHandshake, Building, BarChart, Rocket, ShieldCheck, Vote, Annoyed, UserPlus } from "lucide-react";
+import { Check, Star, User, Briefcase, HeartHandshake, Building, BarChart, Rocket, ShieldCheck, Vote, Annoyed, UserPlus, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const freeTier = {
@@ -16,7 +16,7 @@ const freeTier = {
         "Join public Tribes",
         "Follow Mood Streams",
         "Form up to 10 personal Bonds",
-        "Secure, end-to-end encrypted messaging",
+        "End-to-end encrypted content in your tribes & bonds",
     ],
     cta: "Start with a Free Account",
 };
@@ -105,7 +105,7 @@ export default function BillingPage() {
                 On other platforms, you aren't the customer—you are the product. Our mission is to build a sustainable digital public square that serves its community.
              </CardDescription>
           </CardHeader>
-          <CardContent className="grid md:grid-cols-3 gap-6 text-sm">
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-sm">
             <div className="p-4 rounded-lg bg-background border">
                 <h3 className="font-semibold flex items-center mb-1"><Annoyed className="h-4 w-4 mr-2 text-destructive"/>No Ads & No Data Selling</h3>
                 <p className="text-muted-foreground">Your membership directly funds our platform. We never need to sell your data or fill your feed with ads. Your attention is yours.</p>
@@ -117,6 +117,10 @@ export default function BillingPage() {
              <div className="p-4 rounded-lg bg-background border">
                 <h3 className="font-semibold flex items-center mb-1"><Building className="h-4 w-4 mr-2 text-accent"/>Sustainable & Independent</h3>
                 <p className="text-muted-foreground">Member support keeps us independent and accountable only to our community, not to venture capitalists or advertisers.</p>
+            </div>
+             <div className="p-4 rounded-lg bg-background border">
+                <h3 className="font-semibold flex items-center mb-1"><Lock className="h-4 w-4 mr-2 text-primary"/>Privacy by Design</h3>
+                <p className="text-muted-foreground">Your private content is always end-to-end encrypted. Bonds, which act as your keys, are designed to be refreshed, respecting that relationships and communities evolve over time.</p>
             </div>
           </CardContent>
         </Card>
