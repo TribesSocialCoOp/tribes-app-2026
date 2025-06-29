@@ -3,7 +3,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, Star, User, Briefcase, HeartHandshake, Building, BarChart, Rocket } from "lucide-react";
+import { Check, Star, User, Briefcase, HeartHandshake, Building, BarChart, Rocket, ShieldCheck, Vote, Annoyed } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const individualTier = {
@@ -72,11 +72,39 @@ export default function BillingPage() {
   return (
     <div className="space-y-12 max-w-6xl mx-auto">
       <header className="text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-foreground font-mono">Pricing & Tiers</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-foreground font-mono">Join the First Social Media Co-Op</h1>
         <p className="text-lg text-muted-foreground mt-2 max-w-3xl mx-auto">
-          A simple, fair, and scalable model designed to support our community. From individual builders to large organizations.
+          We're building a platform owned and governed by its members, not advertisers. Your contribution powers an ad-free, privacy-focused community where you have a real stake.
         </p>
       </header>
+
+      <section>
+        <Card className="shadow-lg bg-muted/50">
+          <CardHeader>
+             <div className="flex items-center space-x-3 mb-2">
+                <ShieldCheck className="h-8 w-8 text-primary"/>
+                <CardTitle className="text-2xl tracking-normal">A Different Model for Social Media</CardTitle>
+             </div>
+             <CardDescription>
+                On other platforms, you aren't the customer—you are the product. Our mission is to build a sustainable digital public square that serves its community.
+             </CardDescription>
+          </CardHeader>
+          <CardContent className="grid md:grid-cols-3 gap-6 text-sm">
+            <div className="p-4 rounded-lg bg-background border">
+                <h3 className="font-semibold flex items-center mb-1"><Annoyed className="h-4 w-4 mr-2 text-destructive"/>No Ads & No Data Selling</h3>
+                <p className="text-muted-foreground">Your membership directly funds our platform. We never need to sell your data or fill your feed with ads. Your attention is yours.</p>
+            </div>
+             <div className="p-4 rounded-lg bg-background border">
+                <h3 className="font-semibold flex items-center mb-1"><Vote className="h-4 w-4 mr-2 text-primary"/>Community Governance</h3>
+                <p className="text-muted-foreground">As a member, you get a vote on key platform decisions. This is your community, and you help shape its future.</p>
+            </div>
+             <div className="p-4 rounded-lg bg-background border">
+                <h3 className="font-semibold flex items-center mb-1"><Building className="h-4 w-4 mr-2 text-accent"/>Sustainable & Independent</h3>
+                <p className="text-muted-foreground">Member support keeps us independent and accountable only to our community, not to venture capitalists or advertisers.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
 
       {/* Individual Membership Section */}
       <section>
