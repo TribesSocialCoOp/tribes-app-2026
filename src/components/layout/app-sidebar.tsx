@@ -19,7 +19,7 @@ import {
   Smile,
   Bot,
   Settings,
-  Sparkles,
+  HeartHandshake,
   BookOpen,
   PlusCircle,
   Link2,
@@ -82,9 +82,9 @@ export function AppSidebar() {
                     {canCreate ? (
                       <PlusCircle className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
                     ) : (
-                      <Sparkles className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
+                      <HeartHandshake className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
                     )}
-                    <span className="group-data-[collapsible=icon]:hidden">New Tribe</span>
+                    <span className="group-data-[collapsible=icon]:hidden">{canCreate ? 'New Tribe' : 'Upgrade to Create'}</span>
                   </Button>
                 </Link>
               </TooltipTrigger>
@@ -110,9 +110,9 @@ export function AppSidebar() {
                     {canCreate ? (
                       <CalendarPlus className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
                     ) : (
-                      <Sparkles className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
+                      <HeartHandshake className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
                     )}
-                    <span className="group-data-[collapsible=icon]:hidden">New Event</span>
+                    <span className="group-data-[collapsible=icon]:hidden">{canCreate ? 'New Event' : 'Upgrade to Create'}</span>
                   </Button>
                 </Link>
               </TooltipTrigger>

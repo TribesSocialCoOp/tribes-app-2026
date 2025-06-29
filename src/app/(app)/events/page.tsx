@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Search, PlusCircle, ArrowRight, Globe, Lock, Users, MapPin, Sparkles } from "lucide-react";
+import { CalendarDays, Search, PlusCircle, ArrowRight, Globe, Lock, Users, MapPin, HeartHandshake } from "lucide-react";
 import { sampleEventsData, type Event } from './[eventId]/page'; 
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
@@ -102,7 +102,7 @@ export default function EventsPage() {
             {canCreate ? (
               <PlusCircle className="mr-2 h-5 w-5" />
             ) : (
-              <Sparkles className="mr-2 h-5 w-5" />
+              <HeartHandshake className="mr-2 h-5 w-5" />
             )}
             {canCreate ? "Create New Event" : "Upgrade to Create"}
           </Button>

@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, Sparkles } from "lucide-react";
+import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, HeartHandshake } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -149,7 +149,7 @@ export default function TribesPage() {
             {canCreate ? (
               <PlusCircle className="mr-2 h-5 w-5" />
             ) : (
-              <Sparkles className="mr-2 h-5 w-5" />
+              <HeartHandshake className="mr-2 h-5 w-5" />
             )}
             {canCreate ? "Create New Tribe" : "Upgrade to Create"}
           </Button>
