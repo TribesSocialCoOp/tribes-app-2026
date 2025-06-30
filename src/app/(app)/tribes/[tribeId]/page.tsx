@@ -19,7 +19,8 @@ import { cn } from '@/lib/utils';
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from '@/hooks/use-user';
 
-import { tribesData, type Tribe } from '@/lib/data';
+import { getTribeById } from '@/lib/data-access/tribes';
+import type { Tribe } from '@/lib/data';
 import { moodsData } from '../../moods/page';
 import { allMoodStreamPosts } from '../../moods/[moodSlug]/page';
 import type { Event } from '../../events/[eventId]/page';
@@ -359,6 +360,7 @@ export default function TribeDetailPage() {
   const { role } = useUser();
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
+  const [isLoadingTribe, setIsLoadingTribe] = useState(true);
   const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false);
   const [postToPromote, setPostToPromote] = useState<TribePost | null>(null);
   const [locallyPromotedPostIds, setLocallyPromotedPostIds] = useState<Set<string>>(new Set());
@@ -391,20 +393,25 @@ export default function TribeDetailPage() {
 
   useEffect(() => {
     if (tribeId) {
-      const currentTribeData = tribesData.find(t => t.id === tribeId);
-      if (currentTribeData) {
-        setTribe(currentTribeData);
-         const membersForThisTribe = initialMockMembers.map(member => ({
+      const fetchTribeData = async () => {
+        setIsLoadingTribe(true);
+        const currentTribeData = await getTribeById(tribeId);
+        if (currentTribeData) {
+          setTribe(currentTribeData);
+          const membersForThisTribe = initialMockMembers.map(member => ({
             ...member,
             tribeAssignedNickname: (member.id === 'user1' && tribeId === '1') ? 'AI Lead' :
                                    (member.id === 'user2' && tribeId === '2') ? 'Trail Master' : undefined
-        }));
-        setCurrentTribeMembers(membersForThisTribe);
-        setDataTimestamp(Date.now());
-        setReportsLastUpdated(Date.now());
-      } else {
-        router.push('/tribes');
-      }
+          }));
+          setCurrentTribeMembers(membersForThisTribe);
+          setDataTimestamp(Date.now());
+          setReportsLastUpdated(Date.now());
+        } else {
+          router.push('/tribes');
+        }
+        setIsLoadingTribe(false);
+      };
+      fetchTribeData();
     }
   }, [tribeId, router]);
 
@@ -648,7 +655,7 @@ export default function TribeDetailPage() {
     setIsCreatePostDialogOpen(false);
   };
 
-  if (!tribe) {
+  if (isLoadingTribe || !tribe) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
         <p className="text-muted-foreground">Loading tribe details...</p>

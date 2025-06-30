@@ -34,9 +34,25 @@ export async function getTribeById(tribeId: string): Promise<Tribe | null> {
         setTimeout(() => {
             const tribe = tribesData.find(t => t.id === tribeId);
             resolve(tribe || null);
+        }, 250); // Simulate network latency
+    });
+}
+
+/**
+ * Finds a single tribe by its name (case-insensitive).
+ * Note: In a real backend, you'd want an index on the name field for performance.
+ * @param name The name of the tribe to find.
+ * @returns A promise that resolves to the tribe, or null if not found.
+ */
+export async function findTribeByName(name: string): Promise<Tribe | null> {
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const tribe = tribesData.find(t => t.name.toLowerCase() === name.toLowerCase());
+            resolve(tribe || null);
         }, 250);
     });
 }
+
 
 // Future functions could include:
 // export async function createTribe(tribeData: Omit<Tribe, 'id'>): Promise<Tribe> { ... }

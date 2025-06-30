@@ -10,7 +10,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { tribesData } from '@/lib/data'; // To look up tribe info
+import { findTribeByName } from '@/lib/data-access/tribes'; // Import from data access layer
 
 // Define input schema for the flow
 const AssistantInputSchema = z.object({
@@ -40,7 +40,8 @@ const getTribeInfo = ai.defineTool(
     outputSchema: z.string(),
   },
   async ({tribeName}) => {
-    const tribe = tribesData.find(t => t.name.toLowerCase() === tribeName.toLowerCase());
+    // Use the new async data access function
+    const tribe = await findTribeByName(tribeName);
     if (tribe) {
       return `Tribe '${tribe.name}' is a ${tribe.isPublic ? 'public' : 'private'} tribe with ${tribe.members} members. Its description is: "${tribe.description}"`;
     }

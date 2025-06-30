@@ -24,7 +24,8 @@ import { generateEventDescription } from "@/ai/flows/event-description-generator
 import { generateEventKeywords } from "@/ai/flows/generate-event-keywords"; // New import
 import { useToast } from "@/hooks/use-toast";
 import { sampleEventsData, type Event } from '../[eventId]/page';
-import { tribesData, type Tribe } from '@/lib/data';
+import { getTribes } from "@/lib/data-access/tribes";
+import type { Tribe } from '@/lib/data';
 
 
 const eventCreateFormSchema = z.object({
@@ -67,12 +68,18 @@ export default function CreateEventPage() {
 
   useEffect(() => {
     setIsClient(true);
-    // This logic mimics the one on the main tribes page to find user's tribes
-    const baseTribeMemberships = ['1', '3', '6', '7'];
-    const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
-    const myTribeIds = [...new Set([...baseTribeMemberships, ...createdTribeIds])];
-    const userTribes = tribesData.filter(t => myTribeIds.includes(t.id));
-    setMyTribes(userTribes);
+    const fetchUserTribes = async () => {
+      // In a real app, this would be a query like getMyTribes(userId)
+      // For the prototype, we use a hardcoded list of IDs + localStorage for created ones
+      const baseTribeMemberships = ['1', '3', '6', '7'];
+      const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
+      const myTribeIds = [...new Set([...baseTribeMemberships, ...createdTribeIds])];
+      
+      const allTribes = await getTribes();
+      const userTribes = allTribes.filter(t => myTribeIds.includes(t.id));
+      setMyTribes(userTribes);
+    };
+    fetchUserTribes();
   }, []);
 
   async function onSubmit(values: EventCreateFormValues) {

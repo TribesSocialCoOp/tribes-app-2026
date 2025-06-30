@@ -23,6 +23,7 @@ import { useUser } from '@/hooks/use-user';
 import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
+import { getTribeById } from '@/lib/data-access/tribes';
 import { tribesData, type Tribe } from '@/lib/data';
 import { moodsData as allMoodsData } from '../../../moods/page';
 
@@ -49,6 +50,7 @@ export default function TribeSettingsPage() {
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isPageLoading, setIsPageLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState<boolean | undefined>(undefined);
   const [isCopied, setIsCopied] = useState(false);
 
@@ -72,20 +74,25 @@ export default function TribeSettingsPage() {
 
   useEffect(() => {
     if (tribeId) {
-      const currentTribeData = tribesData.find(t => t.id === tribeId);
-      if (currentTribeData) {
-        setTribe(currentTribeData);
-        form.reset({
-          name: currentTribeData.name,
-          description: currentTribeData.description,
-          isPublic: currentTribeData.isPublic,
-          moods: currentTribeData.moods || [],
-          homepageUrl: currentTribeData.homepageUrl || "",
-          joinMechanism: currentTribeData.joinMechanism || 'instant',
-        });
-      } else {
-        router.push('/tribes'); 
-      }
+      const fetchTribeData = async () => {
+        setIsPageLoading(true);
+        const currentTribeData = await getTribeById(tribeId);
+        if (currentTribeData) {
+          setTribe(currentTribeData);
+          form.reset({
+            name: currentTribeData.name,
+            description: currentTribeData.description,
+            isPublic: currentTribeData.isPublic,
+            moods: currentTribeData.moods || [],
+            homepageUrl: currentTribeData.homepageUrl || "",
+            joinMechanism: currentTribeData.joinMechanism || 'instant',
+          });
+        } else {
+          router.push('/tribes');
+        }
+        setIsPageLoading(false);
+      };
+      fetchTribeData();
     }
   }, [tribeId, form, router]);
 
@@ -119,10 +126,10 @@ export default function TribeSettingsPage() {
     setTimeout(() => setIsCopied(false), 2000);
   };
 
-  if (hasAccess === undefined) {
+  if (hasAccess === undefined || isPageLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
-        <p className="text-muted-foreground">Checking permissions...</p>
+        <p className="text-muted-foreground">Loading tribe settings...</p>
       </div>
     );
   }
@@ -145,9 +152,10 @@ export default function TribeSettingsPage() {
   }
   
   if (!tribe) {
+    // This case is handled by the loading state, but as a fallback
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
-        <p className="text-muted-foreground">Loading tribe information...</p>
+        <p className="text-muted-foreground">Could not find tribe information.</p>
       </div>
     );
   }
