@@ -1,4 +1,4 @@
-import type { UserRole } from '@/lib/types';
+import type { UserRole, Event } from '@/lib/types';
 import type { MoodStreamPost } from '@/app/(app)/moods/[moodSlug]/page';
 import { allMoodStreamPosts } from '@/app/(app)/moods/[moodSlug]/page';
 
@@ -36,7 +36,76 @@ export const MOCK_USER_ROLE: UserRole = 'Creator';
 export const MOCK_CURRENT_USER_ID = "authorAE"; // Alice Example is our test user
 
 
-// --- Centralized Mock Data for Posts, Reports, etc. ---
+// --- Centralized Mock Data for Events, Posts, Reports, etc. ---
+
+const MOCK_EVENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
+// Changed from const to let to allow mutation for mock data simulation
+export let sampleEventsData: Event[] = [
+  {
+    id: "event1",
+    name: "Summer Music Festival Kick-off",
+    keywords: "Live Music, Outdoor, Summer, Festival",
+    description: "Join us for the grand opening of the Summer Music Festival! Featuring top local bands, food trucks, and amazing vibes. Don't miss out on the biggest party of the summer. Get ready to dance and celebrate with us under the stars. This is an event you won't want to miss, filled with great music and fun for everyone.",
+    eventDate: new Date(MOCK_EVENT_DATE_MS + 86400000 * 30), // Approx 30 days from now
+    associatedTribe: "The Local Gig Circuit", // Matches Tribe Name
+    coverImage: "https://placehold.co/1200x400.png",
+    dataAiHintCover: "music festival concert",
+    isPublic: true,
+    creatorId: "user123",
+    locationName: "Downtown Park Amphitheater",
+    locationCityRegion: "Springfield, IL",
+    latitude: 39.7817, 
+    longitude: -89.6501,
+  },
+  {
+    id: "event2",
+    name: "Tech Innovators Summit - AI Edition",
+    keywords: "Technology, AI, Networking, Workshop",
+    description: "A deep dive into the latest advancements in Artificial Intelligence. Network with industry leaders, attend insightful workshops, and discover the future of tech. This summit is perfect for developers, researchers, and tech enthusiasts.",
+    eventDate: new Date(MOCK_EVENT_DATE_MS + 86400000 * 60), // Approx 60 days from now
+    associatedTribe: "AI Innovators", // Matches Tribe Name
+    coverImage: "https://placehold.co/1200x400.png",
+    dataAiHintCover: "technology conference abstract",
+    isPublic: true,
+    creatorId: "user456",
+    locationName: "Grand Tech Convention Center",
+    locationCityRegion: "New York, NY",
+    latitude: 40.7128,
+    longitude: -74.0060,
+  },
+  {
+    id: "event3",
+    name: "Artisan Craft Fair - Members Preview",
+    keywords: "Crafts, Art, Local, Shopping",
+    description: "A special preview night for members of the Artisan Alley Collective. Get first dibs on unique handmade items before the public opening. Support local artists and find beautiful crafts. Light refreshments will be served.",
+    eventDate: new Date(MOCK_EVENT_DATE_MS + 86400000 * 15), // Approx 15 days from now
+    associatedTribe: "Artisan Alley Collective", // Matches Tribe Name
+    // No cover image for this one
+    isPublic: false, // Private event
+    creatorId: "user789",
+    locationName: "The Artful Space Gallery",
+    locationCityRegion: "Portland, OR",
+    latitude: 45.5051,
+    longitude: -122.6750,
+  },
+  {
+    id: "event4",
+    name: "AI Ethics Debate Night",
+    keywords: "AI, Ethics, Discussion, Debate",
+    description: "Join AI Innovators for a lively debate on the ethical implications of current AI trends. Featuring guest speakers and an open Q&A session.",
+    eventDate: new Date(MOCK_EVENT_DATE_MS + 86400000 * 40), 
+    associatedTribe: "AI Innovators", // Another event for AI Innovators
+    coverImage: "https://placehold.co/1200x400.png",
+    dataAiHintCover: "debate discussion abstract",
+    isPublic: true,
+    creatorId: "user456",
+    locationName: "University Lecture Hall B",
+    locationCityRegion: "Cambridge, MA",
+    latitude: 42.3736,
+    longitude: -71.1097,
+  },
+];
+
 
 export interface TribePost {
   id: string;

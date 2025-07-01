@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, Search, PlusCircle, ArrowRight, Globe, Lock, Users, MapPin, HeartHandshake } from "lucide-react";
-import { sampleEventsData, type Event } from './[eventId]/page'; 
+import { sampleEventsData } from '@/lib/data'; 
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
+import type { Event } from '@/lib/types';
 
 const EventCard: React.FC<{ event: Event }> = ({ event }) => {
   return (

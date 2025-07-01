@@ -23,9 +23,10 @@ import { CalendarIcon, Image as ImageIcon, Globe, Lock, Sparkles, CalendarPlus, 
 import { generateEventDescription } from "@/ai/flows/event-description-generator";
 import { generateEventKeywords } from "@/ai/flows/generate-event-keywords"; // New import
 import { useToast } from "@/hooks/use-toast";
-import { sampleEventsData, type Event } from '../[eventId]/page';
+import { createEvent } from "@/lib/services/event-service";
 import { getTribes } from "@/lib/data-access/tribes";
 import type { Tribe } from '@/lib/data';
+import type { Event } from '@/lib/types';
 
 
 const eventCreateFormSchema = z.object({
@@ -84,35 +85,24 @@ export default function CreateEventPage() {
 
   async function onSubmit(values: EventCreateFormValues) {
     setIsLoading(true);
-    
-    // Simulate a short delay
-    await new Promise(resolve => setTimeout(resolve, 500));
 
-    const newEvent: Event = {
-      id: `event-${Date.now()}`,
-      name: values.name,
-      description: values.description,
-      keywords: values.keywords,
-      eventDate: values.eventDate,
-      associatedTribe: values.associatedTribe,
-      locationName: values.locationName,
-      locationCityRegion: values.locationCityRegion,
-      isPublic: values.isPublic,
-      creatorId: 'currentUser', // Mock current user ID
-      coverImage: coverPreview || `https://placehold.co/1200x400.png?text=${encodeURIComponent(values.name.substring(0,15))}`,
-      dataAiHintCover: 'event banner',
-    };
-
-    // Add to the mock data source
-    sampleEventsData.unshift(newEvent);
-
-    setIsLoading(false);
-    toast({
-      title: "Event Created!",
-      description: `Your event "${values.name}" has been successfully created.`,
-    });
-    
-    router.push('/events');
+    try {
+      await createEvent({ ...values, coverPreview });
+      toast({
+        title: "Event Created!",
+        description: `Your event "${values.name}" has been successfully created.`,
+      });
+      router.push('/events');
+    } catch (error) {
+      console.error("Failed to create event:", error);
+      toast({
+        variant: "destructive",
+        title: "Creation Failed",
+        description: "There was an error creating your event. Please try again."
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   async function handleGenerateDescription() {

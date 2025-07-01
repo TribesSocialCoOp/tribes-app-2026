@@ -21,11 +21,10 @@ import { useUser } from '@/hooks/use-user';
 
 import { getTribeById } from '@/lib/data-access/tribes';
 import type { Tribe, TribePost, ReportedPost } from '@/lib/data';
-import { initialSampleTribePosts, mockReportedContentData, MOCK_CURRENT_USER_ID, moodStreamPostIds } from '@/lib/data';
+import { initialSampleTribePosts, mockReportedContentData, MOCK_CURRENT_USER_ID, moodStreamPostIds, sampleEventsData } from '@/lib/data';
 
 import { moodsData } from '../../moods/page';
-import type { Event } from '../../events/[eventId]/page';
-import { sampleEventsData } from '../../events/[eventId]/page';
+import type { Event } from '@/lib/types';
 import { PromotePostDialog } from '@/components/dialogs/boost-post-dialog';
 import { ReportPostDialog } from '@/components/dialogs/report-post-dialog';
 import { RepostDialog } from '@/components/dialogs/repost-dialog';

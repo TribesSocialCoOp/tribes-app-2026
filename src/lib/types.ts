@@ -58,4 +58,25 @@ export interface Bond {
   isTribeNicknameReported?: boolean; // Flag if the nickname has been reported
 }
 
+/**
+ * Defines the structure for an event.
+ */
+export interface Event {
+  id: string;
+  name: string;
+  keywords: string;
+  description: string;
+  eventDate: Date;
+  associatedTribe: string; // This is the tribe's NAME for now for matching
+  coverImage?: string; // URL or path to the image
+  dataAiHintCover?: string;
+  isPublic: boolean;
+  creatorId: string; // User ID of the event creator
+  locationName: string; // e.g., "Community Hall", "Zoom Online"
+  locationCityRegion: string; // e.g., "Springfield, IL", "Online"
+  latitude?: number;
+  longitude?: number;
+}
+
+
 // Other shared types can be added here as the application grows.
