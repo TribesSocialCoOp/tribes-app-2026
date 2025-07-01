@@ -24,8 +24,10 @@ import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 import { getTribeById } from '@/lib/data-access/tribes';
-import { tribesData, type Tribe } from '@/lib/data';
+import type { Tribe } from '@/lib/data';
 import { moodsData as allMoodsData } from '../../../moods/page';
+import { updateTribeSettings } from '@/lib/services/tribe-service';
+
 
 const tribeSettingsFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
@@ -98,23 +100,24 @@ export default function TribeSettingsPage() {
 
   async function onSubmit(values: TribeSettingsFormValues) {
     setIsLoading(true);
-    console.log("Tribe Settings Update Submitted:", values);
     
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    // In a real app, you'd send 'values' to your backend to update the tribe data.
-    // For this prototype, we update the mock data source directly.
-    const tribeIndex = tribesData.findIndex(t => t.id === tribeId);
-    if (tribeIndex !== -1) {
-        tribesData[tribeIndex] = { ...tribesData[tribeIndex], ...values };
+    try {
+        await updateTribeSettings(tribeId, values);
+        setTribe(prev => prev ? { ...prev, ...values } : null);
+        toast({
+            title: "Settings Saved",
+            description: `Settings for tribe "${values.name}" have been updated.`,
+        });
+    } catch (error) {
+        console.error("Failed to update tribe settings:", error);
+        toast({
+            variant: "destructive",
+            title: "Update Failed",
+            description: "There was an error saving your tribe settings. Please try again."
+        });
+    } finally {
+        setIsLoading(false);
     }
-    setTribe(prev => prev ? { ...prev, ...values } : null);
-
-    toast({
-      title: "Settings Saved (Simulated)",
-      description: `Settings for tribe "${values.name}" have been updated.`,
-    });
-    setIsLoading(false);
   }
 
   const handleCopyLink = () => {
@@ -381,3 +384,5 @@ export default function TribeSettingsPage() {
     </div>
   );
 }
+
+    

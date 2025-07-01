@@ -16,12 +16,12 @@ import { generateTribeDescription } from "@/ai/flows/tribe-description-generator
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { tribesData, type Tribe } from "@/lib/data";
 import { moodsData as allMoodsData } from "../../moods/page";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { createTribe } from "@/lib/services/tribe-service";
 
 const createTribeFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
@@ -57,37 +57,30 @@ export default function CreateTribePage() {
   async function onSubmit(values: CreateTribeFormValues) {
     setIsLoading(true);
     
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    try {
+      const newTribe = await createTribe({ ...values, coverPreview });
 
-    const newTribe: Tribe = {
-      id: `tribe-${Date.now()}`,
-      name: values.name,
-      description: values.description,
-      members: 1,
-      isPublic: values.isPublic,
-      cover: coverPreview || `https://placehold.co/400x200.png?text=${encodeURIComponent(values.name.substring(0,10))}`,
-      dataAiHint: "community group",
-      moods: values.moods,
-      homepageUrl: values.homepageUrl || undefined,
-    };
-    
-    // Add to mock data source for immediate availability
-    tribesData.unshift(newTribe);
+      // Persist membership using localStorage for the prototype
+      const myCreatedTribeIds = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
+      myCreatedTribeIds.push(newTribe.id);
+      localStorage.setItem('myCreatedTribeIds', JSON.stringify(myCreatedTribeIds));
 
-    // Persist membership using localStorage
-    const myCreatedTribeIds = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
-    myCreatedTribeIds.push(newTribe.id);
-    localStorage.setItem('myCreatedTribeIds', JSON.stringify(myCreatedTribeIds));
+      toast({
+        title: "Tribe Created!",
+        description: `Your new tribe "${values.name}" is now live.`,
+      });
 
-
-    setIsLoading(false);
-
-    toast({
-      title: "Tribe Created!",
-      description: `Your new tribe "${values.name}" is now live.`,
-    });
-
-    router.push('/tribes');
+      router.push('/tribes');
+    } catch (error) {
+       console.error("Failed to create tribe:", error);
+       toast({
+        variant: "destructive",
+        title: "Creation Failed",
+        description: "There was an error creating your tribe. Please try again."
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   async function handleGenerateDescription() {
@@ -336,3 +329,5 @@ export default function CreateTribePage() {
     </div>
   );
 }
+
+    
