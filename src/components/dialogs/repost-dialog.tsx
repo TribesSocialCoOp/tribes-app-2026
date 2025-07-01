@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { TribePost } from '@/app/(app)/tribes/[tribeId]/page';
+import type { TribePost } from '@/lib/data';
 import { RefreshCcw } from 'lucide-react';
 
 interface RepostDialogProps {
@@ -46,7 +46,6 @@ export function RepostDialog({
 
   const handleConfirm = () => {
     onConfirmRepost(editedContent, postToRepost.title);
-    onOpenChange(false);
   };
 
   const DialogContentComponent = isMobile ? ShadSheetContent : ShadDialogContent;

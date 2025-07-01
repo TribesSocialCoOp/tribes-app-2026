@@ -30,6 +30,7 @@ import { ReportPostDialog } from '@/components/dialogs/report-post-dialog';
 import { RepostDialog } from '@/components/dialogs/repost-dialog';
 import { CreatePostDialog, type PostFormValues } from '@/components/dialogs/create-post-dialog';
 import { reportPost } from '@/lib/services/moderation-service';
+import { createTribePost, promotePostToMoods, repost } from '@/lib/services/post-service';
 
 
 export interface TribeMember {
@@ -279,53 +280,51 @@ export default function TribeDetailPage() {
 
   const isTribeAdmin = useMemo(() => role === 'Admin' || role === 'Creator', [role]);
   
-  useEffect(() => {
+  const syncAllData = async () => {
+    // Sync membership status
     const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
     const myTribeIds = [...new Set([...baseTribeMemberships, ...createdTribeIds])];
     setIsMember(myTribeIds.includes(tribeId));
-  }, [tribeId, dataTimestamp]);
 
-
-  useEffect(() => {
+    // Sync tribe data
     if (tribeId) {
-      const fetchTribeData = async () => {
         setIsLoadingTribe(true);
         const currentTribeData = await getTribeById(tribeId);
         if (currentTribeData) {
-          setTribe(currentTribeData);
-          const membersForThisTribe = initialMockMembers.map(member => ({
-            ...member,
-            tribeAssignedNickname: (member.id === 'user1' && tribeId === '1') ? 'AI Lead' :
+            setTribe(currentTribeData);
+            const membersForThisTribe = initialMockMembers.map(member => ({
+                ...member,
+                tribeAssignedNickname: (member.id === 'user1' && tribeId === '1') ? 'AI Lead' :
                                    (member.id === 'user2' && tribeId === '2') ? 'Trail Master' : undefined
-          }));
-          setCurrentTribeMembers(membersForThisTribe);
-          setDataTimestamp(Date.now());
-          setReportsLastUpdated(Date.now());
+            }));
+            setCurrentTribeMembers(membersForThisTribe);
         } else {
-          router.push('/tribes');
+            router.push('/tribes');
         }
         setIsLoadingTribe(false);
-      };
-      fetchTribeData();
     }
+    
+    // Sync post/report data by updating timestamp
+    setDataTimestamp(Date.now());
+    setReportsLastUpdated(Date.now());
+  };
+
+  useEffect(() => {
+    syncAllData();
   }, [tribeId, router]);
 
   useEffect(() => {
-    const handleFocus = () => {
-        setDataTimestamp(Date.now());
-        setReportsLastUpdated(Date.now());
-    };
+    const handleFocus = () => syncAllData();
     window.addEventListener('focus', handleFocus);
     return () => {
         window.removeEventListener('focus', handleFocus);
     };
-  }, []);
+  }, [tribeId]);
   
   const handleJoinTribe = () => {
     if (!tribe) return;
     setIsJoining(true);
 
-    // Simulate API call
     setTimeout(() => {
         if (tribe.joinMechanism === 'approval') {
             toast({ title: "Request Sent", description: `Your request to join ${tribe.name} is pending approval.` });
@@ -333,8 +332,7 @@ export default function TribeDetailPage() {
             const currentMyTribeIds = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
             currentMyTribeIds.push(tribe.id);
             localStorage.setItem('myCreatedTribeIds', JSON.stringify([...new Set(currentMyTribeIds)]));
-            setIsMember(true); // Manually set state to trigger re-render
-            setDataTimestamp(Date.now()); // Force refresh of data-dependent memos
+            syncAllData(); // Re-sync all data after joining
             toast({ title: "Welcome!", description: `You have successfully joined ${tribe.name}.` });
         }
         setIsJoining(false);
@@ -424,12 +422,13 @@ export default function TribeDetailPage() {
     setIsPromoteDialogOpen(true);
   };
 
-  const handleConfirmPromotion = (postId: string, selectedMoodSlugs: string[]) => {
-    console.log(`User confirmed promotion: Post ID ${postId} to moods: ${selectedMoodSlugs.join(', ')}`);
-    setLocallyPromotedPostIds(prev => new Set(prev).add(postId));
+  const handleConfirmPromotion = async (postId: string, selectedMoodSlugs: string[]) => {
+    if (!postToPromote) return;
+    await promotePostToMoods(postId, selectedMoodSlugs);
+    setLocallyPromotedPostIds(prev => new Set(prev).add(postId)); // For optimistic UI update
     toast({
       title: "Post Promoted",
-      description: `Post "${postToPromote?.title || postId}" has been successfully promoted to ${selectedMoodSlugs.length} mood stream(s). (Simulated)`,
+      description: `Post "${postToPromote.title || postId}" has been promoted to ${selectedMoodSlugs.length} mood stream(s).`,
     });
     setPostToPromote(null);
     setIsPromoteDialogOpen(false);
@@ -451,16 +450,13 @@ export default function TribeDetailPage() {
 
   const handleConfirmReport = async () => {
     if (!postToReport) return;
-
     await reportPost({
       postId: postToReport.id,
       postTitle: postToReport.title,
       reporterName: "You (Current User)",
       reason: reportReason.trim() || "No reason provided.",
     });
-
     setReportsLastUpdated(Date.now());
-
     toast({
       title: "Post Reported",
       description: `Thank you for reporting "${postToReport.title || 'this post'}". An admin will review it.`,
@@ -475,41 +471,10 @@ export default function TribeDetailPage() {
     setIsRepostDialogOpen(true);
   };
 
-  const handleConfirmRepost = (editedContent: string, originalPostTitle?: string) => {
+  const handleConfirmRepost = async (editedContent: string, originalPostTitle?: string) => {
     if (!postBeingReposted || !tribe) return;
-
-    const newPost: TribePost = {
-      id: `repost-${postBeingReposted.id}-${Date.now()}`,
-      tribeId: tribe.id,
-      authorId: postBeingReposted.authorId,
-      authorName: postBeingReposted.authorName,
-      authorAvatar: postBeingReposted.authorAvatar,
-      authorAvatarFallback: postBeingReposted.authorAvatarFallback,
-      dataAiHintAvatar: postBeingReposted.dataAiHintAvatar,
-      timestamp: new Date(),
-      title: originalPostTitle ? `Repost: ${originalPostTitle}` : `Repost: ${postBeingReposted.title || "Untitled"}`,
-      content: editedContent,
-      imageUrl: postBeingReposted.imageUrl,
-      imageAlt: postBeingReposted.imageAlt,
-      dataAiHintImage: postBeingReposted.dataAiHintImage,
-      vibes: 0,
-      comments: 0,
-      isRemoved: false,
-      canBeReposted: true, // A new repost is itself repostable unless removed again
-      originalPostId: postBeingReposted.id,
-    };
-
-    const originalPostIndex = initialSampleTribePosts.findIndex(p => p.id === postBeingReposted.id);
-    if (originalPostIndex > -1) {
-      initialSampleTribePosts[originalPostIndex] = {
-        ...initialSampleTribePosts[originalPostIndex],
-        canBeReposted: false, // Original can no longer be reposted
-      };
-    }
-
-    initialSampleTribePosts.unshift(newPost); // Add new post to the top
-
-    setDataTimestamp(Date.now()); // Trigger re-render
+    await repost(postBeingReposted, editedContent);
+    syncAllData();
     toast({
       title: "Post Reposted",
       description: `Your post has been successfully reposted to ${tribe.name}.`,
@@ -518,31 +483,10 @@ export default function TribeDetailPage() {
     setPostBeingReposted(null);
   };
 
-  const handlePostCreated = (newPostData: PostFormValues) => {
+  const handlePostCreated = async (newPostData: PostFormValues) => {
     if (!tribe) return;
-
-    const newPost: TribePost = {
-        id: `new-post-${Date.now()}`,
-        tribeId: tribe.id,
-        authorId: MOCK_CURRENT_USER_ID,
-        authorName: "You (Current User)",
-        authorAvatarFallback: "ME",
-        timestamp: new Date(),
-        title: newPostData.title || undefined,
-        content: newPostData.content,
-        // This is a simulation. In a real app, you'd handle file upload separately and get a URL.
-        imageUrl: newPostData.image ? URL.createObjectURL(newPostData.image) : undefined,
-        imageAlt: newPostData.image ? "User uploaded image" : undefined,
-        dataAiHintImage: newPostData.image ? "user upload" : undefined,
-        vibes: 0,
-        comments: 0,
-        isRemoved: false,
-        canBeReposted: true,
-    };
-
-    initialSampleTribePosts.unshift(newPost);
-    setDataTimestamp(Date.now()); // Trigger re-render of the feed
-
+    await createTribePost(tribe.id, newPostData);
+    syncAllData();
     toast({
         title: "Post Created!",
         description: "Your post has been added to the tribe feed.",

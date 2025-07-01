@@ -66,7 +66,7 @@ export function CreatePostDialog({
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      form.setValue("image", file);
+      form.setValue("image", file, { shouldValidate: true });
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
@@ -78,7 +78,7 @@ export function CreatePostDialog({
     }
   };
 
-  async function onSubmit(values: PostFormValues) {
+  function onSubmit(values: PostFormValues) {
     onPostCreated(values);
     // The parent component will close the dialog and show the toast.
   }
@@ -190,4 +190,3 @@ export function CreatePostDialog({
     </RootComponent>
   );
 }
-

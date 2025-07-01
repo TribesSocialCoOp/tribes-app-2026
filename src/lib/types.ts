@@ -1,3 +1,4 @@
+
 /**
  * @fileOverview Defines shared TypeScript types for the application.
  */
@@ -79,4 +80,45 @@ export interface Event {
 }
 
 
-// Other shared types can be added here as the application grows.
+export interface TribePost {
+  id: string;
+  tribeId: string;
+  authorId: string;
+  authorName: string;
+  authorAvatar?: string;
+  authorAvatarFallback: string;
+  timestamp: Date;
+  title?: string;
+  content: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  dataAiHintAvatar?: string;
+  dataAiHintImage?: string;
+  vibes?: number;
+  comments?: number;
+  isRemoved?: boolean;
+  canBeReposted?: boolean;
+  removalReason?: string;
+  originalPostId?: string;
+}
+
+export interface ReportedPost {
+  postId: string;
+  postTitle?: string;
+  reporterName: string;
+  reportedAt: Date;
+  reason?: string;
+}
+
+export interface DiscussionComment {
+  id:string;
+  authorId: string;
+  authorName: string;
+  authorAvatar?: string;
+  authorAvatarFallback: string;
+  content: string;
+  timestamp: Date;
+  vibes?: number;
+  replies?: DiscussionComment[];
+  dataAiHintAvatar?: string;
+}

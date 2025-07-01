@@ -1,6 +1,5 @@
 
-import type { UserRole, Event, Bond } from '@/lib/types';
-import type { MoodStreamPost } from '@/app/(app)/moods/[moodSlug]/page';
+import type { UserRole, Event, Bond, TribePost, ReportedPost, DiscussionComment } from '@/lib/types';
 import { allMoodStreamPosts } from '@/app/(app)/moods/[moodSlug]/page';
 
 export interface Tribe {
@@ -107,29 +106,6 @@ export let sampleEventsData: Event[] = [
   },
 ];
 
-
-export interface TribePost {
-  id: string;
-  tribeId: string;
-  authorId: string;
-  authorName: string;
-  authorAvatar?: string;
-  authorAvatarFallback: string;
-  timestamp: Date;
-  title?: string;
-  content: string;
-  imageUrl?: string;
-  imageAlt?: string;
-  dataAiHintAvatar?: string;
-  dataAiHintImage?: string;
-  vibes?: number;
-  comments?: number;
-  isRemoved?: boolean;
-  canBeReposted?: boolean;
-  removalReason?: string;
-  originalPostId?: string;
-}
-
 const MOCK_POST_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
 export let initialSampleTribePosts: TribePost[] = [
@@ -197,15 +173,7 @@ export let initialSampleTribePosts: TribePost[] = [
   },
 ];
 
-export const moodStreamPostIds = new Set(allMoodStreamPosts.map(p => p.id));
-
-export interface ReportedPost {
-  postId: string;
-  postTitle?: string;
-  reporterName: string;
-  reportedAt: Date;
-  reason?: string;
-}
+export let moodStreamPostIds = new Set(allMoodStreamPosts.map(p => p.id));
 
 export let mockReportedContentData: ReportedPost[] = [
   { postId: "msp2", postTitle: "My Top 5 Productivity Hacks for Deep Work", reporterName: "ConcernedUser42", reportedAt: new Date(MOCK_POST_DATE_MS - 3600000 * 1), reason: "This post seems off-topic for the AI Innovators tribe." },
@@ -213,19 +181,6 @@ export let mockReportedContentData: ReportedPost[] = [
   { postId: "tribe_post_ai_local1", postTitle: "Local Discussion: Ethics in AI Development", reporterName: "RuleFollower99", reportedAt: new Date(MOCK_POST_DATE_MS - 3600000 * 0.5), reason: "A standard report for a non-removed item, to test queue visibility." },
   { postId: "post7", postTitle: "Seeking Beta Testers for New Puzzle Game (Tribe Only)", reporterName: "QualityAssuranceBot", reportedAt: new Date(MOCK_POST_DATE_MS - 3600000 * 1), reason: "Post content violated beta testing guidelines." }
 ];
-
-export interface DiscussionComment {
-  id:string;
-  authorId: string;
-  authorName: string;
-  authorAvatar?: string;
-  authorAvatarFallback: string;
-  content: string;
-  timestamp: Date;
-  vibes?: number;
-  replies?: DiscussionComment[];
-  dataAiHintAvatar?: string;
-}
 
 const MOCK_COMMENT_DATE_MS = new Date("2025-07-15T12:00:00.000Z").getTime();
 
