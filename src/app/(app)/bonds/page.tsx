@@ -22,35 +22,20 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from '@/lib/utils';
-import type { Bond, UserRole } from '@/lib/types'; // Import Bond and UserRole
+import type { Bond } from '@/lib/types';
 import { BondSettingsDialog } from '@/components/dialogs/bond-settings-dialog';
 import { IntroductionDialog } from '@/components/dialogs/introduction-dialog';
 import { useUser } from '@/hooks/use-user';
-
+import { bondsData } from '@/lib/data'; // Import centralized data
+import {
+  refreshBond,
+  revokeBond,
+  upgradeToFamilyBond,
+  saveBondSettings,
+} from '@/lib/services/bond-service'; // Import new service functions
+import { useToast } from '@/hooks/use-toast';
 
 const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
-
-const generateInitialBondsData = (): Bond[] => [
-  { id: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 30), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: false, keyType: "standard", pseudonym: "TechWatcher", tribeAssignedNickname: "SynthMind" },
-  { id: "2", targetName: "Alice Wonderland", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 5), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 25), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true, keyType: "standard", pseudonym: "WonderBuddy", targetPseudonymForMe: "MadHatter" },
-  { id: "3", targetName: "Weekend Hikers", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 80), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 10), reconnectsCount: 0, showInIntercom: false, allowChatInitiation: false, keyType: "standard" },
-  { id: "4", targetName: "Bob The Builder", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "expired", expiresAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 2), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 62), reconnectsCount: 3, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "5", targetName: "Mom", targetType: "user", bondType: "family", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 10), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 365 * 86400000), reconnectsCount: 5, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "6", targetName: "Design Masters", targetType: "tribe", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 180), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: false, keyType: "standard", pseudonym: "PixelPusher", tribeAssignedNickname: "The Visionary" },
-  { id: "7", targetName: "Project Collab", targetType: "tribe", bondType: "collaborator", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 15), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 15), reconnectsCount: 7, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "8", targetName: "Art Patronage Inc.", targetType: "tribe", bondType: "supporter", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 15), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (45)), reconnectsCount: 4, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "9", targetName: "Book Club Collective", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 12), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 18), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "10", targetName: "John Doe (Dev)", targetType: "user", bondType: "collaborator", formationMethod: "rfid_tap", passkeyStatus: "needs_refresh", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 90), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (30)), reconnectsCount: 10, showInIntercom: false, allowChatInitiation: false, keyType: "standard", pseudonym: "CodeNinja", targetPseudonymForMe: "TheArchitect" },
-  { id: "11", targetName: "Charlie Chaplin", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 5), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (25)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "12", targetName: "David Copperfield", targetType: "user", bondType: "collaborator", formationMethod: "digital_introduction", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 2), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (28)), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "13", targetName: "Emily Elephant", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", passkeyStatus: "expires_soon", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 3), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 27), reconnectsCount: 1, showInIntercom: false, allowChatInitiation: true, keyType: "standard" },
-  { id: "14", targetName: "Fiona Fox", targetType: "user", bondType: "follower", formationMethod: "virtual_request", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 10), expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * (20)), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: true, keyType: "standard" },
-  { id: "15", targetName: "George Gorilla", targetType: "user", bondType: "friend", formationMethod: "rfid_tap", passkeyStatus: "expired", expiresAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 5), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS - 86400000 * 35), reconnectsCount: 5, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "16", targetName: "Summer Fest Pass", targetType: "user", bondType: "follower", formationMethod: "virtual_request", keyType: "event_promo", eventId: "summerfest2024", accessTier: "spectator", passkeyStatus: "active", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 60), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), reconnectsCount: 0, showInIntercom: true, allowChatInitiation: false },
-  { id: "17", targetName: "Concert VIP Access", targetType: "user", bondType: "supporter", formationMethod: "rfid_tap", keyType: "event_attendee", eventId: "bandlive2024", accessTier: "vip", passkeyStatus: "active", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 1), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), reconnectsCount: 1, showInIntercom: true, allowChatInitiation: true },
-  { id: "18", targetName: "Tech Conference Day Pass", targetType: "user", bondType: "professional", formationMethod: "rfid_tap", keyType: "event_attendee", eventId: "devcon2024", accessTier: "attendee", passkeyStatus: "active", expiresAt: new Date(MOCK_CURRENT_DATE_MS + 86400000 * 0.5), lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS), reconnectsCount: 0, showInIntercom: false, allowChatInitiation: false },
-];
-
 
 const DEFAULT_ITEMS_PER_PAGE = 8;
 
@@ -194,7 +179,8 @@ const passkeySortOrder: Record<Bond["passkeyStatus"], number> = {
 
 export default function BondsPage() {
   const { role: userRole } = useUser();
-  const [bonds, setBonds] = useState<Bond[] | null>(null);
+  const { toast } = useToast();
+  const [bonds, setBonds] = useState<Bond[]>([]);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [selectedBondForSettings, setSelectedBondForSettings] = useState<Bond | null>(null);
   const [isIntroductionDialogOpen, setIsIntroductionDialogOpen] = useState(false);
@@ -204,10 +190,16 @@ export default function BondsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: 'ascending' });
+  const [isClient, setIsClient] = useState(false);
 
-
+  const reloadData = () => {
+    // In a real app, this would be an async fetch. Here we just re-read the mock data.
+    setBonds([...bondsData]);
+  };
+  
   useEffect(() => {
-    setBonds(generateInitialBondsData());
+    setIsClient(true);
+    reloadData();
   }, []);
 
   const MAX_FAMILY_BONDS = useMemo(() => {
@@ -222,52 +214,47 @@ export default function BondsPage() {
   const familyBondsCount = bonds ? bonds.filter(b => b.bondType === "family").length : 0;
 
   const formatDate = (date: Date) => {
-    if (!date) return "N/A";
+    if (!date || !(date instanceof Date) || isNaN(date.getTime())) return "N/A";
     return date.toLocaleDateString();
   };
 
-  const handleRefreshBond = (bondId: string) => {
-    setBonds(prevBonds => prevBonds ? prevBonds.map(bond =>
-      bond.id === bondId ? {
-        ...bond,
-        passkeyStatus: "active",
-        lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS),
-        expiresAt: new Date(MOCK_CURRENT_DATE_MS + (bond.bondType === 'family' ? 365 : 30) * 86400000),
-        reconnectsCount: (bond.reconnectsCount || 0) + 1,
-      } : bond
-    ) : null);
+  const handleRefreshBond = async (bondId: string) => {
+    await refreshBond(bondId);
+    reloadData(); // Simulate refetching data
+    toast({ title: "Bond Refreshed", description: "The bond's passkey has been successfully refreshed." });
   };
 
-  const handleRevokeBond = (bondId: string) => {
-    setBonds(prevBonds => prevBonds ? prevBonds.filter(bond => bond.id !== bondId) : null);
+  const handleRevokeBond = async (bondId: string) => {
+    await revokeBond(bondId);
+    reloadData(); // Simulate refetching data
+    toast({ title: "Bond Revoked", description: "The bond has been removed.", variant: "destructive" });
   };
 
-  const handleUpgradeToFamilyBond = (bondId: string) => {
+  const handleUpgradeToFamilyBond = async (bondId: string) => {
     if (familyBondsCount >= MAX_FAMILY_BONDS) {
-      alert("Maximum number of family bonds reached.");
+      toast({ title: "Family Bond Limit Reached", description: "Upgrade your plan to add more family bonds.", variant: "destructive" });
       return;
     }
-    setBonds(prevBonds => prevBonds ? prevBonds.map(bond =>
-      (bond.id === bondId && bond.targetType === 'user') ? {
-        ...bond,
-        bondType: "family",
-        passkeyStatus: "active",
-        lastRefreshedAt: new Date(MOCK_CURRENT_DATE_MS),
-        expiresAt: new Date(MOCK_CURRENT_DATE_MS + 365 * 86400000),
-        reconnectsCount: (bond.reconnectsCount || 0) + 1,
-      } : bond
-    ) : null);
+    await upgradeToFamilyBond(bondId);
+    reloadData(); // Simulate refetching data
+    toast({ title: "Bond Upgraded", description: "The bond has been upgraded to a Family Bond." });
   };
 
   const handleToggleShowInIntercom = (bondId: string, checked: boolean) => {
-    setBonds(prevBonds => prevBonds ? prevBonds.map(bond =>
+    // This action is purely client-side preference and doesn't need a service yet,
+    // but could be moved to a service if it needed to be persisted.
+    setBonds(prevBonds => prevBonds.map(bond =>
       bond.id === bondId ? { ...bond, showInIntercom: checked } : bond
-    ) : null);
+    ));
   };
 
   const handleBlockBond = (bondId: string, targetName: string) => {
     console.log(`Block action initiated for bond ID: ${bondId}, Target: ${targetName}`);
-    alert(`Simulating block for ${targetName}. In a real app, this bond might be hidden or marked as blocked.`);
+    toast({
+        title: "Bond Blocked (Simulated)",
+        description: `You have blocked all communication with ${targetName}.`,
+        variant: "destructive"
+    });
   };
 
   const handleOpenBondSettings = (bond: Bond) => {
@@ -275,8 +262,10 @@ export default function BondsPage() {
     setIsSettingsModalOpen(true);
   };
 
-  const handleSaveBondSettings = (updatedBond: Bond) => {
-    setBonds(prevBonds => prevBonds ? prevBonds.map(b => b.id === updatedBond.id ? updatedBond : b) : null);
+  const handleSaveBondSettings = async (updatedBond: Bond) => {
+    await saveBondSettings(updatedBond);
+    reloadData();
+    toast({ title: "Settings Saved", description: `Your settings for the bond with ${updatedBond.targetName} have been updated.` });
   };
 
   const handleInitiateIntroduction = (bond: Bond) => {
@@ -287,7 +276,10 @@ export default function BondsPage() {
   const handleConfirmIntroduction = (bondToIntroduceTo: Bond) => {
     if (bondToIntroduceFrom) {
         console.log(`User confirmed introduction: ${bondToIntroduceFrom.targetName} to ${bondToIntroduceTo.targetName}`);
-        alert(`Simulating introduction of ${bondToIntroduceFrom.targetName} to ${bondToIntroduceTo.targetName}.`);
+        toast({
+            title: "Introduction Sent (Simulated)",
+            description: `An introduction request between ${bondToIntroduceFrom.targetName} and ${bondToIntroduceTo.targetName} has been sent.`
+        });
     }
     setIsIntroductionDialogOpen(false);
     setBondToIntroduceFrom(null);
@@ -438,6 +430,14 @@ export default function BondsPage() {
     );
   };
 
+  if (!isClient) {
+     return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
+        <p className="text-muted-foreground">Loading bonds...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <header className="mb-8">
@@ -470,7 +470,7 @@ export default function BondsPage() {
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex-1">
-              <CardTitle className="tracking-normal">Current Bonds</CardTitle>
+              <CardTitle className="tracking-normal">Current Bonds ({bonds.length})</CardTitle>
               <CardDescription>View and manage your bonds. Use pseudonyms for specific interactions.</CardDescription>
             </div>
             <Popover>
