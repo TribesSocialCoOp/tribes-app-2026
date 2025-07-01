@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from "next/link";
 import Image from "next/image";
 import { format } from 'date-fns';
@@ -9,8 +9,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Search, PlusCircle, ArrowRight, Globe, Lock, Users, MapPin, HeartHandshake } from "lucide-react";
-import { sampleEventsData } from '@/lib/data'; 
+import { CalendarDays, Search, PlusCircle, ArrowRight, Globe, Lock, Users, MapPin, HeartHandshake, Loader2 } from "lucide-react";
+import { getEvents } from '@/lib/services/event-service';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import type { Event } from '@/lib/types';
@@ -24,8 +24,8 @@ const EventCard: React.FC<{ event: Event }> = ({ event }) => {
             <Image
               src={event.coverImage}
               alt={event.name}
-              layout="fill"
-              objectFit="cover"
+              fill
+              style={{objectFit:"cover"}}
               data-ai-hint={event.dataAiHintCover || "event image"}
             />
             <Badge variant={event.isPublic ? "secondary" : "destructive"} className="absolute top-2 right-2 text-xs py-1 px-2 backdrop-blur-sm bg-black/40 text-white border-white/30">
@@ -77,10 +77,22 @@ const EventCard: React.FC<{ event: Event }> = ({ event }) => {
 
 export default function EventsPage() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [events, setEvents] = useState<Event[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const { role } = useUser();
   const canCreate = role !== 'Human_Free';
 
-  const filteredEvents = sampleEventsData.filter(event =>
+  useEffect(() => {
+    const fetchEvents = async () => {
+      setIsLoading(true);
+      const fetchedEvents = await getEvents();
+      setEvents(fetchedEvents);
+      setIsLoading(false);
+    };
+    fetchEvents();
+  }, []);
+
+  const filteredEvents = events.filter(event =>
     event.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     event.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
     event.keywords.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -122,7 +134,11 @@ export default function EventsPage() {
         </div>
       </div>
 
-      {filteredEvents.length > 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+      ) : filteredEvents.length > 0 ? (
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredEvents.map((event) => (
             <EventCard key={event.id} event={event} />

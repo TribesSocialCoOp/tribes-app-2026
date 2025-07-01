@@ -52,3 +52,31 @@ export async function createEvent(payload: EventCreatePayload): Promise<Event> {
     }, 500);
   });
 }
+
+/**
+ * Fetches all events.
+ * @returns A promise that resolves to an array of all events.
+ */
+export async function getEvents(): Promise<Event[]> {
+  console.log("Service: Fetching all events");
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve([...sampleEventsData]); // Return a copy to prevent mutation
+    }, 250);
+  });
+}
+
+/**
+ * Fetches a single event by its ID.
+ * @param eventId The ID of the event to fetch.
+ * @returns A promise that resolves to the event, or null if not found.
+ */
+export async function getEventById(eventId: string): Promise<Event | null> {
+    console.log(`Service: Fetching event ${eventId}`);
+    return new Promise(resolve => {
+        setTimeout(() => {
+            const event = sampleEventsData.find(e => e.id === eventId);
+            resolve(event || null);
+        }, 250);
+    });
+}

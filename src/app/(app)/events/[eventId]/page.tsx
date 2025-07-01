@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import InteractiveMap from '@/components/maps/interactive-map';
 import type { Tribe as TribeInfo } from '@/lib/data';
 import { findTribeByName } from '@/lib/data-access/tribes';
-import { sampleEventsData } from '@/lib/data';
+import { getEventById } from '@/lib/services/event-service';
 import type { Event } from '@/lib/types';
 
 
@@ -32,8 +32,7 @@ export default function EventDetailPage() {
     if (eventId) {
       const fetchData = async () => {
         setIsLoading(true);
-        // Simulate fetching event data from its mock source
-        const foundEvent = sampleEventsData.find(e => e.id === eventId);
+        const foundEvent = await getEventById(eventId);
         if (foundEvent) {
           setEvent(foundEvent);
           // Fetch tribe data asynchronously using the data access layer
