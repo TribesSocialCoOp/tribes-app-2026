@@ -749,7 +749,7 @@ export default function TribeDetailPage() {
                     </Card>
                 </div>
                  <Separator />
-                <div className="flex flex-col sm:flex-row gap-3">
+                <div className="flex flex-wrap gap-3">
                     <Link href={`/tribes/${tribeId}/manage-members`} passHref className="flex-1">
                         <Button variant="outline" className="w-full">
                             <UsersRound className="mr-2 h-4 w-4"/> Manage Members
