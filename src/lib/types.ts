@@ -1,4 +1,5 @@
 
+
 /**
  * @fileOverview Defines shared TypeScript types for the application.
  */
@@ -18,17 +19,15 @@
  */
 export type UserRole = "Admin" | "Creator" | "Human_Member" | "Human_Free" | "Speaker" | "Bot";
 
-
-// Example of how UserRole might be used on a conceptual user object:
-/*
 export interface UserProfile {
   id: string;
-  name: string;
+  name: string; // This is the "Given Name"
   email: string;
   role: UserRole;
-  // ... other profile properties
+  aliases: string[];
+  bio?: string;
+  avatar?: string;
 }
-*/
 
 // Bond related types, centralized here
 export type BondType = "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";

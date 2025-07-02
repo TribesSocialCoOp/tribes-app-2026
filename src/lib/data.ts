@@ -1,6 +1,6 @@
 
 
-import type { UserRole, Event, Bond, TribePost, ReportedPost, DiscussionComment, TribeMember, PendingMember, MoodStreamPost } from '@/lib/types';
+import type { UserRole, Event, Bond, TribePost, ReportedPost, DiscussionComment, TribeMember, PendingMember, MoodStreamPost, UserProfile } from '@/lib/types';
 
 export interface Tribe {
   id: string;
@@ -34,6 +34,16 @@ export let tribesData: Tribe[] = [
  */
 export const MOCK_USER_ROLE: UserRole = 'Creator';
 export const MOCK_CURRENT_USER_ID = "authorAE"; // Alice Example is our test user
+
+export let mockUserProfile: UserProfile = {
+  id: MOCK_CURRENT_USER_ID,
+  name: "Alice Example",
+  email: "alice@example.com",
+  role: MOCK_USER_ROLE,
+  bio: "Lover of tech, hiking, and indie games.",
+  avatar: "https://placehold.co/100x100.png",
+  aliases: ["WonderlandCoder", "HikerGal", "PixelPioneer"],
+};
 
 
 // --- Centralized Mock Data for Events, Posts, Reports, etc. ---
