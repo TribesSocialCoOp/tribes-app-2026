@@ -95,7 +95,7 @@ const CommentCard: React.FC<{
                     size="sm" 
                     className={cn(
                         "px-1 text-muted-foreground hover:text-primary h-6 text-xs",
-                        selectedVibe && "bg-primary/10 text-primary rounded-full px-2"
+                        selectedVibe && "bg-blue-100 border border-blue-300 text-blue-700 hover:bg-blue-200 rounded-full px-2"
                     )}
                 >
                 {selectedVibe ? (
@@ -302,7 +302,7 @@ const TribePostCard: React.FC<{
           )}
           <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{post.content}</p>
            {(post.commentsData && post.commentsData.length > 0) && (
-            <div className="mt-4 pt-3 border-t">
+            <div className="mt-4 pt-3 border-t pb-2">
               {post.commentsData.map(comment => 
                 <CommentCard
                   key={comment.id}
@@ -962,5 +962,3 @@ export default function TribeDetailPage() {
     </div>
   );
 }
-
-    
