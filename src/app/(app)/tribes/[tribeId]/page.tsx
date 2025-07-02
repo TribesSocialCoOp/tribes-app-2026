@@ -35,25 +35,18 @@ import { ReportPostDialog } from '@/components/dialogs/report-post-dialog';
 import { RepostDialog } from '@/components/dialogs/repost-dialog';
 import { CreatePostDialog, type PostFormValues } from '@/components/dialogs/create-post-dialog';
 import { ReportCommentDialog } from '@/components/dialogs/report-comment-dialog';
+import { CommentDialog } from '@/components/dialogs/comment-dialog';
 
 // Helper for rendering a single comment and its replies
 const CommentCard: React.FC<{
   comment: DiscussionComment;
+  postId: string;
   level?: number;
   onReportComment: (comment: DiscussionComment) => void;
-  onPostReply: (content: string, parentCommentId: string) => void;
+  onOpenReplyDialog: (context: { postId: string; parentCommentId: string; parentAuthorName: string }) => void;
   isLoggedIn: boolean;
-}> = ({ comment, level = 0, onReportComment, onPostReply, isLoggedIn }) => {
-  const [showReplyInput, setShowReplyInput] = useState(false);
-  const [replyContent, setReplyContent] = useState("");
+}> = ({ comment, postId, level = 0, onReportComment, onOpenReplyDialog, isLoggedIn }) => {
   const isCurrentUserAuthor = comment.authorId === MOCK_CURRENT_USER_ID;
-
-  const handleReplySubmit = () => {
-    if (!replyContent.trim()) return;
-    onPostReply(replyContent, comment.id);
-    setReplyContent("");
-    setShowReplyInput(false);
-  };
   
   return (
     <div className={`ml-${level * 2} sm:ml-${level * 4}`}>
@@ -91,26 +84,9 @@ const CommentCard: React.FC<{
           <Button variant="ghost" size="sm" className="px-1 text-muted-foreground hover:text-primary h-6 text-xs">
             <Smile className="mr-1 h-3.5 w-3.5"/> {comment.vibes || 0}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => setShowReplyInput(!showReplyInput)} className="px-1 text-muted-foreground hover:text-primary h-6 text-xs">
+          <Button variant="ghost" size="sm" onClick={() => onOpenReplyDialog({ postId, parentCommentId: comment.id, parentAuthorName: comment.authorName })} className="px-1 text-muted-foreground hover:text-primary h-6 text-xs">
             Reply
           </Button>
-        </div>
-      )}
-
-      {showReplyInput && (
-        <div className="ml-11 mt-2 space-y-2">
-            <Textarea
-                placeholder={`Replying to ${comment.authorName}...`}
-                value={replyContent}
-                onChange={(e) => setReplyContent(e.target.value)}
-                className="min-h-[60px] text-sm"
-            />
-            <div className="flex justify-end space-x-2">
-                <Button size="sm" variant="ghost" onClick={() => setShowReplyInput(false)}>Cancel</Button>
-                <Button size="sm" disabled={!replyContent.trim()} onClick={handleReplySubmit}>
-                    Post Reply
-                </Button>
-            </div>
         </div>
       )}
 
@@ -120,9 +96,10 @@ const CommentCard: React.FC<{
             <CommentCard
               key={reply.id}
               comment={reply}
+              postId={postId}
               level={level + 1}
               onReportComment={onReportComment}
-              onPostReply={onPostReply}
+              onOpenReplyDialog={onOpenReplyDialog}
               isLoggedIn={isLoggedIn}
             />
           ))}
@@ -145,17 +122,10 @@ const TribePostCard: React.FC<{
   onReportClick: (post: TribePost) => void; 
   onRepostClick: (post: TribePost) => void; 
   onReportComment: (comment: DiscussionComment) => void;
-  onPostComment: (postId: string, content: string, parentCommentId?: string) => void;
-}> = ({ post, isPromoted, isMember, isTribeAdmin, isReported, isCurrentUserAuthor, isLoggedIn, onPromoteClick, onReportClick, onRepostClick, onReportComment, onPostComment }) => {
+  onOpenCommentDialog: (context: { postId: string; postTitle?: string; parentCommentId?: string; parentAuthorName?: string; }) => void;
+}> = ({ post, isPromoted, isMember, isTribeAdmin, isReported, isCurrentUserAuthor, isLoggedIn, onPromoteClick, onReportClick, onRepostClick, onReportComment, onOpenCommentDialog }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
   const [showComments, setShowComments] = useState(false);
-  const [newCommentContent, setNewCommentContent] = useState("");
-
-  const handlePostComment = () => {
-    if (!newCommentContent.trim()) return;
-    onPostComment(post.id, newCommentContent);
-    setNewCommentContent("");
-  };
 
   useEffect(() => {
     const timeSince = (date: Date): string => {
@@ -288,26 +258,15 @@ const TribePostCard: React.FC<{
            {(post.commentsData && post.commentsData.length > 0) && (
             <div className="mt-4 pt-3 border-t">
               {post.commentsData.map(comment => 
-                <CommentCard key={comment.id} comment={comment} onReportComment={onReportComment} onPostReply={onPostComment} isLoggedIn={isLoggedIn} />
-              )}
-            </div>
-          )}
-           {isLoggedIn && (
-            <div className="mt-4 flex items-start space-x-3">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback>ME</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 space-y-2">
-                <Textarea
-                  placeholder="Add a comment..."
-                  value={newCommentContent}
-                  onChange={(e) => setNewCommentContent(e.target.value)}
-                  className="text-sm min-h-[40px]"
+                <CommentCard
+                  key={comment.id}
+                  comment={comment}
+                  postId={post.id}
+                  onReportComment={onReportComment}
+                  onOpenReplyDialog={onOpenCommentDialog}
+                  isLoggedIn={isLoggedIn}
                 />
-                <Button size="sm" onClick={handlePostComment} disabled={!newCommentContent.trim()}>
-                  Post Comment <Send className="ml-1.5 h-3.5 w-3.5"/>
-                </Button>
-              </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -315,7 +274,7 @@ const TribePostCard: React.FC<{
           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
             <Smile className="mr-1.5 h-4 w-4" /> {post.vibes || 0}
           </Button>
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => setShowComments(!showComments)}>
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => isLoggedIn && onOpenCommentDialog({ postId: post.id, postTitle: post.title })}>
             <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
           </Button>
            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
@@ -403,6 +362,9 @@ export default function TribeDetailPage() {
   
   const [isReportCommentDialogOpen, setIsReportCommentDialogOpen] = useState(false);
   const [commentToReport, setCommentToReport] = useState<DiscussionComment | null>(null);
+
+  const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
+  const [commentContext, setCommentContext] = useState<{ postId: string; postTitle?: string; parentCommentId?: string; parentAuthorName?: string; } | null>(null);
 
 
   const [isRepostDialogOpen, setIsRepostDialogOpen] = useState(false);
@@ -620,10 +582,17 @@ export default function TribeDetailPage() {
     setPostBeingReposted(null);
   };
   
-  const handlePostComment = (postId: string, content: string, parentCommentId?: string) => {
+  const handleOpenCommentDialog = (context: { postId: string; postTitle?: string; parentCommentId?: string; parentAuthorName?: string; }) => {
+    setCommentContext(context);
+    setIsCommentDialogOpen(true);
+  };
+
+  const handleConfirmComment = (content: string) => {
+    if (!commentContext) return;
+
     // This is a simulation. A real implementation would call a service.
     // For now, we'll update the local state to show the new comment.
-    const targetPostIndex = postsInTribe.findIndex(p => p.id === postId);
+    const targetPostIndex = postsInTribe.findIndex(p => p.id === commentContext.postId);
     if (targetPostIndex === -1) return;
 
     const newComment: DiscussionComment = {
@@ -640,11 +609,11 @@ export default function TribeDetailPage() {
     const targetPost = { ...updatedPosts[targetPostIndex] };
     targetPost.commentsData = targetPost.commentsData ? [...targetPost.commentsData] : [];
 
-    if (parentCommentId) {
+    if (commentContext.parentCommentId) {
       // Find the parent comment and add the reply (this is a simplified search)
       const findAndAddReply = (comments: DiscussionComment[]): boolean => {
         for (let i = 0; i < comments.length; i++) {
-          if (comments[i].id === parentCommentId) {
+          if (comments[i].id === commentContext.parentCommentId) {
             comments[i].replies = [...(comments[i].replies || []), newComment];
             return true;
           }
@@ -855,7 +824,7 @@ export default function TribeDetailPage() {
                   onReportClick={handleOpenReportPostDialog}
                   onRepostClick={handleOpenRepostDialog}
                   onReportComment={handleOpenReportCommentDialog}
-                  onPostComment={handlePostComment}
+                  onOpenCommentDialog={handleOpenCommentDialog}
                 />
               </div>
             );
@@ -919,6 +888,13 @@ export default function TribeDetailPage() {
             tribeName={tribe.name}
         />
       )}
+       <CommentDialog
+        isOpen={isCommentDialogOpen}
+        onOpenChange={setIsCommentDialogOpen}
+        onConfirmComment={handleConfirmComment}
+        postTitle={commentContext?.postTitle}
+        parentAuthorName={commentContext?.parentAuthorName}
+      />
     </div>
   );
 }
