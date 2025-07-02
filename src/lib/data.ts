@@ -114,7 +114,12 @@ export let initialSampleTribePosts: TribePost[] = [
     timestamp: new Date(MOCK_POST_DATE_MS - 3600000 * 2),
     title: "Local Discussion: Ethics in AI Development",
     content: "Starting a thread specifically for our tribe members on the ethical considerations of recent AI breakthroughs. What are your immediate thoughts?",
-    vibes: 30, comments: 5, dataAiHintAvatar: "researcher scientist",
+    vibes: 30, comments: 2, dataAiHintAvatar: "researcher scientist",
+    commentsData: [
+        { id: "comment-ai-1", authorId: "authorAE", authorName: "You (Current User)", authorAvatarFallback: "ME", content: "Great topic. My main concern is data privacy and how these new models are trained.", timestamp: new Date(MOCK_POST_DATE_MS - 3600000 * 1.5), vibes: 5, replies: [
+            { id: "comment-ai-1-1", authorId: "authorXY", authorName: "AI Ethicist", authorAvatarFallback: "AE", content: "Absolutely. We need more transparency in the training process.", timestamp: new Date(MOCK_POST_DATE_MS - 3600000 * 1), vibes: 2, dataAiHintAvatar: "researcher scientist" }
+        ], dataAiHintAvatar: "current user" }
+    ],
     isRemoved: false, 
     canBeReposted: true,
   },
@@ -135,7 +140,7 @@ export let initialSampleTribePosts: TribePost[] = [
     title: "Weekend Hike Recap: Mountain Peak (Tribe Exclusive Pics)",
     content: "The views from Mountain Peak trail were absolutely stunning this weekend! Sharing some extra photos just for our tribe. Highly recommend this route.",
     imageUrl: "https://placehold.co/600x450.png", imageAlt: "Mountain landscape", dataAiHintImage: "mountain landscape",
-    vibes: 210, comments: 32, dataAiHintAvatar: "hiker adventurer",
+    vibes: 210, comments: 0, dataAiHintAvatar: "hiker adventurer",
   },
    {
     id: "msp9", tribeId: "2", authorId: "authorLF", authorName: "LocalFoodie", authorAvatarFallback: "LF",
@@ -151,7 +156,10 @@ export let initialSampleTribePosts: TribePost[] = [
     title: "Last Night's Show Was Epic! (Tribe Thoughts)",
     content: "The Local Band absolutely crushed it at The Underground! What did our tribe members think of the new songs?",
     imageUrl: "https://placehold.co/600x380.png", imageAlt: "Concert crowd", dataAiHintImage: "concert crowd",
-    vibes: 95, comments: 22, dataAiHintAvatar: "music fan",
+    vibes: 95, comments: 1, dataAiHintAvatar: "music fan",
+    commentsData: [
+       { id: "comment-music-1", authorId: "authorRD", authorName: "RockstarDev", authorAvatarFallback: "RD", content: "The new single is going to be a hit!", timestamp: new Date(MOCK_POST_DATE_MS - 3600000 * 0.5), vibes: 10, dataAiHintAvatar: "musician band" }
+    ]
   },
   {
     id: "msp8", tribeId: "7", authorId: "authorRD", authorName: "RockstarDev", authorAvatarFallback: "RD",

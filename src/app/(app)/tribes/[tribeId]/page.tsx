@@ -11,7 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Users, MessageSquareText, Smile, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, ListChecks, UsersRound, FileWarning, RefreshCcw, Link2, BarChart2, UserPlus, Loader2 } from "lucide-react";
+import { Textarea } from '@/components/ui/textarea';
+import { ArrowLeft, Users, MessageSquareText, Smile, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, ListChecks, UsersRound, FileWarning, RefreshCcw, Link2, BarChart2, UserPlus, Loader2, Send } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from '@/components/ui/separator';
@@ -24,20 +25,137 @@ import { getTribeById } from '@/lib/data-access/tribes';
 import { getTribeMembers } from '@/lib/services/tribe-service';
 import { getEventsForTribe } from '@/lib/services/event-service';
 import { getPostsForTribe, promotePostToMoods, repost, createTribePost } from '@/lib/services/post-service';
-import { getActiveReportedPostIds, getActiveReportsForTribe, reportPost } from '@/lib/services/moderation-service';
+import { getActiveReportedPostIds, getActiveReportsForTribe, reportPost, reportComment } from '@/lib/services/moderation-service';
 import { MOCK_CURRENT_USER_ID, moodStreamPostIds } from '@/lib/data';
 
 import { moodsData } from '../../moods/page';
-import type { Event, TribePost, ReportedPost, Tribe, TribeMember, MoodStreamPost } from '@/lib/types';
+import type { Event, TribePost, ReportedPost, Tribe, TribeMember, MoodStreamPost, DiscussionComment } from '@/lib/types';
 import { PromotePostDialog } from '@/components/dialogs/boost-post-dialog';
 import { ReportPostDialog } from '@/components/dialogs/report-post-dialog';
 import { RepostDialog } from '@/components/dialogs/repost-dialog';
 import { CreatePostDialog, type PostFormValues } from '@/components/dialogs/create-post-dialog';
+import { ReportCommentDialog } from '@/components/dialogs/report-comment-dialog';
+
+// Helper for rendering a single comment and its replies
+const CommentCard: React.FC<{
+  comment: DiscussionComment;
+  level?: number;
+  onReportComment: (comment: DiscussionComment) => void;
+  onPostReply: (content: string, parentCommentId: string) => void;
+  isLoggedIn: boolean;
+}> = ({ comment, level = 0, onReportComment, onPostReply, isLoggedIn }) => {
+  const [showReplyInput, setShowReplyInput] = useState(false);
+  const [replyContent, setReplyContent] = useState("");
+  const isCurrentUserAuthor = comment.authorId === MOCK_CURRENT_USER_ID;
+
+  const handleReplySubmit = () => {
+    if (!replyContent.trim()) return;
+    onPostReply(replyContent, comment.id);
+    setReplyContent("");
+    setShowReplyInput(false);
+  };
+  
+  return (
+    <div className={`ml-${level * 2} sm:ml-${level * 4}`}>
+      <div className="flex items-start space-x-3 mt-3">
+        <Avatar className="h-8 w-8">
+          {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} data-ai-hint={comment.dataAiHintAvatar || "avatar"} />}
+          <AvatarFallback className="text-xs">{comment.authorAvatarFallback}</AvatarFallback>
+        </Avatar>
+        <div className="flex-1 bg-muted/50 rounded-lg p-2.5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold">{comment.authorName}</p>
+            <div className="flex items-center space-x-2">
+              <p className="text-xs text-muted-foreground">{format(comment.timestamp, "MMM d, h:mm a")}</p>
+              {isLoggedIn && !isCurrentUserAuthor && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
+                      <MoreVertical className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onReportComment(comment)}>
+                      <Flag className="mr-2 h-4 w-4" /> Report
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+          </div>
+          <p className="text-sm whitespace-pre-line mt-1">{comment.content}</p>
+        </div>
+      </div>
+      {isLoggedIn && (
+        <div className="ml-11 flex items-center space-x-2 text-xs">
+          <Button variant="ghost" size="sm" className="px-1 text-muted-foreground hover:text-primary h-6 text-xs">
+            <Smile className="mr-1 h-3.5 w-3.5"/> {comment.vibes || 0}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowReplyInput(!showReplyInput)} className="px-1 text-muted-foreground hover:text-primary h-6 text-xs">
+            Reply
+          </Button>
+        </div>
+      )}
+
+      {showReplyInput && (
+        <div className="ml-11 mt-2 space-y-2">
+            <Textarea
+                placeholder={`Replying to ${comment.authorName}...`}
+                value={replyContent}
+                onChange={(e) => setReplyContent(e.target.value)}
+                className="min-h-[60px] text-sm"
+            />
+            <div className="flex justify-end space-x-2">
+                <Button size="sm" variant="ghost" onClick={() => setShowReplyInput(false)}>Cancel</Button>
+                <Button size="sm" disabled={!replyContent.trim()} onClick={handleReplySubmit}>
+                    Post Reply
+                </Button>
+            </div>
+        </div>
+      )}
+
+      {comment.replies && comment.replies.length > 0 && (
+        <div className="border-l-2 ml-5 pl-1">
+          {comment.replies.map(reply => (
+            <CommentCard
+              key={reply.id}
+              comment={reply}
+              level={level + 1}
+              onReportComment={onReportComment}
+              onPostReply={onPostReply}
+              isLoggedIn={isLoggedIn}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 
-const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isMember: boolean; isTribeAdmin: boolean; isReported: boolean; isCurrentUserAuthor: boolean; onPromoteClick: (post: TribePost) => void; onReportClick: (post: TribePost) => void; onRepostClick: (post: TribePost) => void; }> = ({ post, isPromoted, isMember, isTribeAdmin, isReported, isCurrentUserAuthor, onPromoteClick, onReportClick, onRepostClick }) => {
+const TribePostCard: React.FC<{ 
+  post: TribePost; 
+  isPromoted: boolean; 
+  isMember: boolean; 
+  isTribeAdmin: boolean; 
+  isReported: boolean; 
+  isCurrentUserAuthor: boolean;
+  isLoggedIn: boolean;
+  onPromoteClick: (post: TribePost) => void; 
+  onReportClick: (post: TribePost) => void; 
+  onRepostClick: (post: TribePost) => void; 
+  onReportComment: (comment: DiscussionComment) => void;
+  onPostComment: (postId: string, content: string, parentCommentId?: string) => void;
+}> = ({ post, isPromoted, isMember, isTribeAdmin, isReported, isCurrentUserAuthor, isLoggedIn, onPromoteClick, onReportClick, onRepostClick, onReportComment, onPostComment }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
-  const emoticons = ["👍", "❤️", "😂", "🤔", "😢", "😠"];
+  const [showComments, setShowComments] = useState(false);
+  const [newCommentContent, setNewCommentContent] = useState("");
+
+  const handlePostComment = () => {
+    if (!newCommentContent.trim()) return;
+    onPostComment(post.id, newCommentContent);
+    setNewCommentContent("");
+  };
 
   useEffect(() => {
     const timeSince = (date: Date): string => {
@@ -54,11 +172,6 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isMember: 
     };
     setDisplayTime(timeSince(post.timestamp));
   }, [post.timestamp]);
-
-  const handleVibeSelection = (vibe: string) => {
-    console.log(`User vibed with: ${vibe} on post ${post.id}`);
-  };
-
 
   return (
     <Card className={cn(
@@ -172,31 +285,37 @@ const TribePostCard: React.FC<{ post: TribePost; isPromoted: boolean; isMember: 
             </div>
           )}
           <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{post.content}</p>
+           {(post.commentsData && post.commentsData.length > 0) && (
+            <div className="mt-4 pt-3 border-t">
+              {post.commentsData.map(comment => 
+                <CommentCard key={comment.id} comment={comment} onReportComment={onReportComment} onPostReply={onPostComment} isLoggedIn={isLoggedIn} />
+              )}
+            </div>
+          )}
+           {isLoggedIn && (
+            <div className="mt-4 flex items-start space-x-3">
+              <Avatar className="h-8 w-8">
+                <AvatarFallback>ME</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 space-y-2">
+                <Textarea
+                  placeholder="Add a comment..."
+                  value={newCommentContent}
+                  onChange={(e) => setNewCommentContent(e.target.value)}
+                  className="text-sm min-h-[40px]"
+                />
+                <Button size="sm" onClick={handlePostComment} disabled={!newCommentContent.trim()}>
+                  Post Comment <Send className="ml-1.5 h-3.5 w-3.5"/>
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
         <CardFooter className="p-4 pt-2 flex items-center justify-between border-t bg-muted/30">
-          <Popover>
-            <PopoverTrigger asChild>
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
-                <Smile className="mr-1.5 h-4 w-4" /> {post.vibes || 0}
-            </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-2 bg-card border shadow-xl rounded-lg">
-            <div className="flex space-x-1">
-                {emoticons.map((emo, index) => (
-                <Button 
-                    key={index} 
-                    variant="ghost" 
-                    size="icon" 
-                    className="text-xl p-1.5 h-auto w-auto rounded-md hover:bg-accent"
-                    onClick={() => handleVibeSelection(emo)}
-                >
-                    {emo}
-                </Button>
-                ))}
-            </div>
-            </PopoverContent>
-        </Popover>
           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
+            <Smile className="mr-1.5 h-4 w-4" /> {post.vibes || 0}
+          </Button>
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => setShowComments(!showComments)}>
             <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
           </Button>
            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
@@ -265,6 +384,7 @@ export default function TribeDetailPage() {
   const tribeId = params.tribeId as string;
   const { toast } = useToast();
   const { role } = useUser();
+  const isLoggedIn = !!role;
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
   const [tribeEvents, setTribeEvents] = useState<Event[]>([]);
@@ -277,9 +397,13 @@ export default function TribeDetailPage() {
   const [postToPromote, setPostToPromote] = useState<TribePost | null>(null);
   const [locallyPromotedPostIds, setLocallyPromotedPostIds] = useState<Set<string>>(new Set());
 
-  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [isReportPostDialogOpen, setIsReportPostDialogOpen] = useState(false);
   const [postToReport, setPostToReport] = useState<TribePost | null>(null);
   const [reportReason, setReportReason] = useState("");
+  
+  const [isReportCommentDialogOpen, setIsReportCommentDialogOpen] = useState(false);
+  const [commentToReport, setCommentToReport] = useState<DiscussionComment | null>(null);
+
 
   const [isRepostDialogOpen, setIsRepostDialogOpen] = useState(false);
   const [postBeingReposted, setPostBeingReposted] = useState<TribePost | null>(null);
@@ -423,7 +547,7 @@ export default function TribeDetailPage() {
     setIsPromoteDialogOpen(false);
   };
 
-  const handleOpenReportDialog = (post: TribePost) => {
+  const handleOpenReportPostDialog = (post: TribePost) => {
     const alreadyReported = activeReportedPostIds.has(post.id);
     if(alreadyReported && !post.isRemoved){
          toast({
@@ -434,10 +558,10 @@ export default function TribeDetailPage() {
     }
     setPostToReport(post);
     setReportReason("");
-    setIsReportDialogOpen(true);
+    setIsReportPostDialogOpen(true);
   };
 
-  const handleConfirmReport = async () => {
+  const handleConfirmReportPost = async () => {
     if (!postToReport) return;
     await reportPost({
       postId: postToReport.id,
@@ -450,8 +574,32 @@ export default function TribeDetailPage() {
       title: "Post Reported",
       description: `Thank you for reporting "${postToReport.title || 'this post'}". An admin will review it.`,
     });
-    setIsReportDialogOpen(false);
+    setIsReportPostDialogOpen(false);
     setPostToReport(null);
+    setReportReason("");
+  };
+  
+  const handleOpenReportCommentDialog = (comment: DiscussionComment) => {
+    setCommentToReport(comment);
+    setReportReason(""); // Reset reason
+    setIsReportCommentDialogOpen(true);
+  };
+
+  const handleConfirmReportComment = async () => {
+    if (!commentToReport) return;
+    
+    await reportComment({
+      commentId: commentToReport.id,
+      commentAuthor: commentToReport.authorName,
+      reason: reportReason,
+    });
+    
+    toast({
+        title: "Comment Reported",
+        description: `Thank you for reporting the comment by ${commentToReport.authorName}. An admin will review it.`,
+    });
+    setIsReportCommentDialogOpen(false);
+    setCommentToReport(null);
     setReportReason("");
   };
 
@@ -471,6 +619,53 @@ export default function TribeDetailPage() {
     setIsRepostDialogOpen(false);
     setPostBeingReposted(null);
   };
+  
+  const handlePostComment = (postId: string, content: string, parentCommentId?: string) => {
+    // This is a simulation. A real implementation would call a service.
+    // For now, we'll update the local state to show the new comment.
+    const targetPostIndex = postsInTribe.findIndex(p => p.id === postId);
+    if (targetPostIndex === -1) return;
+
+    const newComment: DiscussionComment = {
+      id: `new-comment-${Date.now()}`,
+      authorId: MOCK_CURRENT_USER_ID,
+      authorName: "You (Current User)",
+      authorAvatarFallback: "ME",
+      content: content,
+      timestamp: new Date(),
+      vibes: 0,
+    };
+    
+    const updatedPosts = [...postsInTribe];
+    const targetPost = { ...updatedPosts[targetPostIndex] };
+    targetPost.commentsData = targetPost.commentsData ? [...targetPost.commentsData] : [];
+
+    if (parentCommentId) {
+      // Find the parent comment and add the reply (this is a simplified search)
+      const findAndAddReply = (comments: DiscussionComment[]): boolean => {
+        for (let i = 0; i < comments.length; i++) {
+          if (comments[i].id === parentCommentId) {
+            comments[i].replies = [...(comments[i].replies || []), newComment];
+            return true;
+          }
+          if (comments[i].replies && findAndAddReply(comments[i].replies!)) {
+            return true;
+          }
+        }
+        return false;
+      };
+      findAndAddReply(targetPost.commentsData);
+    } else {
+      // Add as a root comment
+      targetPost.commentsData.unshift(newComment);
+    }
+
+    updatedPosts[targetPostIndex] = targetPost;
+    setPostsInTribe(updatedPosts);
+    
+    toast({ title: "Comment Posted!", description: "Your comment has been added." });
+  };
+
 
   const handlePostCreated = async (newPostData: PostFormValues) => {
     if (!tribe) return;
@@ -655,9 +850,12 @@ export default function TribeDetailPage() {
                   isTribeAdmin={isTribeAdmin}
                   isReported={item.isReported}
                   isCurrentUserAuthor={item.isCurrentUserAuthor}
+                  isLoggedIn={isLoggedIn}
                   onPromoteClick={handleOpenPromoteDialog}
-                  onReportClick={handleOpenReportDialog}
+                  onReportClick={handleOpenReportPostDialog}
                   onRepostClick={handleOpenRepostDialog}
+                  onReportComment={handleOpenReportCommentDialog}
+                  onPostComment={handlePostComment}
                 />
               </div>
             );
@@ -687,12 +885,22 @@ export default function TribeDetailPage() {
       )}
        {postToReport && (
         <ReportPostDialog
-          isOpen={isReportDialogOpen}
-          onOpenChange={setIsReportDialogOpen}
+          isOpen={isReportPostDialogOpen}
+          onOpenChange={setIsReportPostDialogOpen}
           post={postToReport}
           reportReason={reportReason}
           setReportReason={setReportReason}
-          onConfirmReport={handleConfirmReport}
+          onConfirmReport={handleConfirmReportPost}
+        />
+      )}
+      {commentToReport && (
+        <ReportCommentDialog
+          isOpen={isReportCommentDialogOpen}
+          onOpenChange={setIsReportCommentDialogOpen}
+          comment={commentToReport}
+          reportReason={reportReason}
+          setReportReason={setReportReason}
+          onConfirmReport={handleConfirmReportComment}
         />
       )}
       {postBeingReposted && tribe && (

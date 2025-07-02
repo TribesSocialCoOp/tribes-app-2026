@@ -96,6 +96,7 @@ export interface TribePost {
   dataAiHintImage?: string;
   vibes?: number;
   comments?: number;
+  commentsData?: DiscussionComment[]; // Array of root-level comments
   isRemoved?: boolean;
   canBeReposted?: boolean;
   removalReason?: string;
