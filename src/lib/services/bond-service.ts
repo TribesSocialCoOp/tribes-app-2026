@@ -10,6 +10,20 @@ import type { Bond } from '@/lib/types';
 const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 
 /**
+ * Simulates fetching all of the user's bonds.
+ */
+export async function getBonds(): Promise<Bond[]> {
+  console.log(`Service: Fetching all bonds for current user`);
+  return new Promise(resolve => {
+    setTimeout(() => {
+      // In a real app, this would be a database query for bonds related to the current user ID.
+      // Here, we return a copy of the mock data.
+      resolve([...bondsData]);
+    }, 250);
+  });
+}
+
+/**
  * Simulates refreshing a bond's passkey.
  * @param bondId The ID of the bond to refresh.
  */

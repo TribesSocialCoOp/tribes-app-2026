@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, Settings, Share2, Search, ChevronLeft, ChevronRight, Filter as FilterIcon, X as XIcon, Ticket, Star, PartyPopper, ArrowUp, ArrowDown, ChevronsUpDown, AtSign, UserCheck, UserCog } from "lucide-react";
+import { Link2, RefreshCw, Trash2, Users, User, HeartHandshake, Rss, CheckCircle2, AlertTriangle, XCircle, Info, MoreVertical, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, Ban, Settings, Share2, Search, ChevronLeft, ChevronRight, Filter as FilterIcon, X as XIcon, Ticket, Star, PartyPopper, ArrowUp, ArrowDown, ChevronsUpDown, AtSign, UserCheck, UserCog, Loader2 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,13 +26,7 @@ import type { Bond } from '@/lib/types';
 import { BondSettingsDialog } from '@/components/dialogs/bond-settings-dialog';
 import { IntroductionDialog } from '@/components/dialogs/introduction-dialog';
 import { useUser } from '@/hooks/use-user';
-import { bondsData } from '@/lib/data'; // Import centralized data
-import {
-  refreshBond,
-  revokeBond,
-  upgradeToFamilyBond,
-  saveBondSettings,
-} from '@/lib/services/bond-service'; // Import new service functions
+import { getBonds, refreshBond, revokeBond, upgradeToFamilyBond, saveBondSettings } from '@/lib/services/bond-service';
 import { useToast } from '@/hooks/use-toast';
 
 const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
@@ -190,15 +184,16 @@ export default function BondsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: null, direction: 'ascending' });
-  const [isClient, setIsClient] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const reloadData = () => {
-    // In a real app, this would be an async fetch. Here we just re-read the mock data.
-    setBonds([...bondsData]);
+  const reloadData = async () => {
+    setIsLoading(true);
+    const fetchedBonds = await getBonds();
+    setBonds(fetchedBonds);
+    setIsLoading(false);
   };
   
   useEffect(() => {
-    setIsClient(true);
     reloadData();
   }, []);
 
@@ -430,10 +425,10 @@ export default function BondsPage() {
     );
   };
 
-  if (!isClient) {
+  if (isLoading) {
      return (
       <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
-        <p className="text-muted-foreground">Loading bonds...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }

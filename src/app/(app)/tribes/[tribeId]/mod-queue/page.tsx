@@ -2,7 +2,6 @@
 "use client";
 
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import Image from 'next/image';
 import React, { useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
@@ -22,11 +21,8 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUser } from '@/hooks/use-user';
-
-
-import { type Tribe, type TribePost, type ReportedPost, initialSampleTribePosts, mockReportedContentData } from '@/lib/data';
-import { getTribeById } from '@/lib/data-access/tribes';
-import { dismissReport, removePost } from '@/lib/services/moderation-service';
+import { dismissReport, removePost, getActiveReportsForTribe } from '@/lib/services/moderation-service';
+import type { Tribe, TribePost, ReportedPost } from '@/lib/types';
 
 
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 15];
@@ -68,20 +64,18 @@ export default function TribeModQueuePage() {
   const [currentSortValue, setCurrentSortValue] = useState<string>(sortOptionsTribe[0].value);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
+  const [isLoading, setIsLoading] = useState(true);
   const [isTakingAction, setIsTakingAction] = useState<string | null>(null);
 
 
   const reloadData = async () => {
     if (tribeId) {
-        const currentTribeData = await getTribeById(tribeId);
-        if (currentTribeData) {
-            setTribe(currentTribeData);
-            const activePostIds = new Set(
-              initialSampleTribePosts.filter(p => p.tribeId === tribeId && !p.isRemoved).map(p => p.id)
-            );
-            setAllReportsForTribe(mockReportedContentData.filter(report => activePostIds.has(report.postId)));
-            setPostsForThisTribe(initialSampleTribePosts.filter(p => p.tribeId === tribeId).map(p => ({...p})));
-        }
+        setIsLoading(true);
+        const { tribe, reports, posts } = await getActiveReportsForTribe(tribeId);
+        setTribe(tribe);
+        setAllReportsForTribe(reports);
+        setPostsForThisTribe(posts);
+        setIsLoading(false);
     }
   };
 
@@ -223,7 +217,7 @@ export default function TribeModQueuePage() {
   if (hasAccess === undefined) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
-        <p className="text-muted-foreground">Checking permissions...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -245,10 +239,18 @@ export default function TribeModQueuePage() {
     );
   }
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+  
   if (!tribe) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
-        <p className="text-muted-foreground">Loading tribe information...</p>
+        <p className="text-muted-foreground">Could not find tribe information.</p>
       </div>
     );
   }

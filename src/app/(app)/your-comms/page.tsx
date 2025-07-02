@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MessageSquareText, Users, User, HeartHandshake, Rss, Filter as FilterIcon, PlusCircle } from "lucide-react";
+import { MessageSquareText, Users, User, HeartHandshake, Rss, Filter as FilterIcon, PlusCircle, Loader2 } from "lucide-react";
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -13,100 +13,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
 import { moodsData as allMoods } from '../moods/page';
-import { allMoodStreamPosts as globalMoodPosts } from '../moods/[moodSlug]/page';
-
-interface CommunicationItem {
-  id: string;
-  type: "family-bond" | "regular-bond" | "mood-stream";
-  sender?: string;
-  bondName?: string;
-  tribeName?: string;
-  message?: string;
-  content?: string;
-  moodSlug?: string;
-  moodName?: string;
-  avatarSrc?: string;
-  avatarFallback?: string;
-  timestamp: Date;
-  dataAiHint?: string;
-  imageUrl?: string;
-  imageAlt?: string;
-  dataAiHintImage?: string;
-}
-
-const MOCK_CURRENT_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
-
-const familyBondMessages: CommunicationItem[] = [
-  { id: "fb1", type: "family-bond", sender: "Mom", bondName: "Family Link", message: "Don't forget dinner on Sunday! Bringing your favorite pie. 🥧", avatarSrc: "https://placehold.co/40x40.png?text=M", avatarFallback: "M", timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 1), dataAiHint: "mother family" },
-  {
-    id: "fb3",
-    type: "family-bond",
-    sender: "Dad",
-    bondName: "Family Link",
-    message: "Check out this photo from our fishing trip last weekend!",
-    imageUrl: "https://placehold.co/600x400.png",
-    imageAlt: "Fishing trip photo",
-    avatarSrc: "https://placehold.co/40x40.png?text=D",
-    avatarFallback: "D",
-    timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 8),
-    dataAiHint: "father family",
-    dataAiHintImage: "fishing nature"
-  },
-  { id: "fb2", type: "family-bond", sender: "Alex (Best Friend)", bondName: "Closest Allies", message: "Hey, are we still on for the game night this Friday? Got the new board game!", avatarSrc: "https://placehold.co/40x40.png?text=A", avatarFallback: "A", timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 10), dataAiHint: "friend person" },
-];
-
-const regularBondMessages: CommunicationItem[] = [
-  { id: "rb1", type: "regular-bond", sender: "Work Group Chat", bondName: "Project Phoenix", message: "Reminder: Project Phoenix sprint review at 2 PM today.", avatarSrc: "https://placehold.co/40x40.png?text=PG", avatarFallback: "PG", timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 2), dataAiHint: "work group" },
-  {
-    id: "rb3",
-    type: "regular-bond",
-    sender: "Travel Buddies Tribe",
-    bondName: "Adventure Seekers",
-    message: "Just booked flights for the Bali trip! Who's in for a villa?",
-    imageUrl: "https://placehold.co/600x350.png",
-    imageAlt: "Bali beach",
-    avatarSrc: "https://placehold.co/40x40.png?text=TB",
-    avatarFallback: "TB",
-    timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 20),
-    dataAiHint: "travel group",
-    dataAiHintImage: "beach travel"
-  },
-  { id: "rb2", type: "regular-bond", sender: "Sarah (Tech Meetup)", bondName: "Tech Connects", message: "Great talk last night! Here's the link to the slides I mentioned.", avatarSrc: "https://placehold.co/40x40.png?text=S", avatarFallback: "S", timestamp: new Date(MOCK_CURRENT_DATE_MS - 3600000 * 25), dataAiHint: "colleague professional" },
-];
-
-const moodStreamItems: CommunicationItem[] = globalMoodPosts.map(post => {
-  const primaryMoodSlug = post.moodTags[0];
-  const moodDetails = allMoods.find(m => m.slug === primaryMoodSlug);
-
-  return {
-    id: post.id,
-    type: "mood-stream",
-    tribeName: post.tribeName,
-    content: post.content,
-    moodSlug: primaryMoodSlug,
-    moodName: moodDetails?.name || primaryMoodSlug,
-    avatarSrc: post.authorAvatarSrc,
-    avatarFallback: post.authorAvatarFallback || post.author?.substring(0,2),
-    timestamp: post.timestamp, // Timestamps from globalMoodPosts are already fixed
-    dataAiHint: post.dataAiHintAvatar,
-    imageUrl: post.imageUrl,
-    imageAlt: post.imageAlt,
-    dataAiHintImage: post.dataAiHintImage,
-    sender: post.author,
-  };
-});
-
-
-const allCommsData = [...familyBondMessages, ...regularBondMessages, ...moodStreamItems].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+import type { MoodStreamPost, Bond, CommunicationItem } from '@/lib/types';
+import { getBonds } from '@/lib/services/bond-service';
+import { getMoodStreamPosts } from '@/lib/services/post-service';
 
 const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
 
   useEffect(() => {
     const timeSince = (date: Date): string => {
-      const now = new Date(); // This 'now' is client-side and okay for display formatting
+      const now = new Date();
       const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
       if (seconds < 5) return "just now";
@@ -192,11 +109,14 @@ export default function YourCommsPage() {
   const defaultSelectedMoods = ['chill', 'focus', 'showcase', 'discover'];
   const localStorageKey = 'tribesAppSelectedMoods';
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [allCommsData, setAllCommsData] = useState<CommunicationItem[]>([]);
   const [selectedMoodSlugs, setSelectedMoodSlugs] = useState<string[]>([]);
   const [isTunerOpen, setIsTunerOpen] = useState(false);
   const [hasLoadedFromStorage, setHasLoadedFromStorage] = useState(false);
 
   useEffect(() => {
+    // This effect runs once to load initial filter state from localStorage
     const storedMoods = localStorage.getItem(localStorageKey);
     if (storedMoods) {
       try {
@@ -216,10 +136,60 @@ export default function YourCommsPage() {
   }, []);
 
   useEffect(() => {
+    // This effect saves filter state to localStorage whenever it changes
     if (hasLoadedFromStorage) {
       localStorage.setItem(localStorageKey, JSON.stringify(selectedMoodSlugs));
     }
   }, [selectedMoodSlugs, hasLoadedFromStorage]);
+  
+  useEffect(() => {
+    const fetchAllData = async () => {
+        setIsLoading(true);
+        // Fetch all data sources in parallel
+        const [bonds, moodPosts] = await Promise.all([getBonds(), getMoodStreamPosts()]);
+
+        // Transform fetched data into a unified CommunicationItem format
+        // This logic is a placeholder for real message fetching from bonds
+        const bondMessages: CommunicationItem[] = bonds
+            .filter(b => b.bondType === 'family' || b.bondType === 'friend')
+            .map(b => ({
+                id: `bond-msg-${b.id}`,
+                type: b.bondType === 'family' ? 'family-bond' : 'regular-bond',
+                sender: b.targetName,
+                bondName: b.targetName,
+                message: `This is a placeholder message from your bond with ${b.targetName}.`,
+                timestamp: b.lastRefreshedAt, // Using lastRefreshedAt as a mock timestamp
+                avatarFallback: b.targetName.substring(0, 2),
+            }));
+
+        const moodStreamItems: CommunicationItem[] = moodPosts.map(post => {
+            const primaryMoodSlug = post.moodTags[0];
+            const moodDetails = allMoods.find(m => m.slug === primaryMoodSlug);
+            return {
+                id: post.id,
+                type: "mood-stream",
+                tribeName: post.tribeName,
+                content: post.content,
+                moodSlug: primaryMoodSlug,
+                moodName: moodDetails?.name || primaryMoodSlug,
+                avatarSrc: post.authorAvatarSrc,
+                avatarFallback: post.authorAvatarFallback || post.author?.substring(0,2),
+                timestamp: post.timestamp,
+                dataAiHint: post.dataAiHintAvatar,
+                imageUrl: post.imageUrl,
+                imageAlt: post.imageAlt,
+                dataAiHintImage: post.dataAiHintImage,
+                sender: post.author,
+            };
+        });
+
+        const combinedData = [...bondMessages, ...moodStreamItems].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+        setAllCommsData(combinedData);
+        setIsLoading(false);
+    };
+
+    fetchAllData();
+  }, []);
 
 
   const handleMoodSelectionChange = (moodSlug: string, checked: boolean | "indeterminate") => {
@@ -228,8 +198,8 @@ export default function YourCommsPage() {
     );
   };
 
-  const familyComms = useMemo(() => allCommsData.filter(c => c.type === 'family-bond'), []);
-  const regularComms = useMemo(() => allCommsData.filter(c => c.type === 'regular-bond'), []);
+  const familyComms = useMemo(() => allCommsData.filter(c => c.type === 'family-bond'), [allCommsData]);
+  const regularComms = useMemo(() => allCommsData.filter(c => c.type === 'regular-bond'), [allCommsData]);
 
   const highlightsFromYourMoods = useMemo(() => {
     if (selectedMoodSlugs.length === 0 && hasLoadedFromStorage) return [];
@@ -239,7 +209,7 @@ export default function YourCommsPage() {
       .filter(c => c.type === 'mood-stream' && c.moodSlug && slugsToFilter.includes(c.moodSlug))
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
       .slice(0, 5);
-  }, [selectedMoodSlugs, hasLoadedFromStorage]);
+  }, [selectedMoodSlugs, hasLoadedFromStorage, allCommsData]);
 
 
   return (
@@ -305,79 +275,81 @@ export default function YourCommsPage() {
         </Popover>
       </header>
 
-      <div className="grid grid-cols-1 gap-6">
-        {familyComms.length > 0 && (
-          <section>
-            <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center tracking-normal">
-              <HeartHandshake className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-pink-500" /> Family Bond Updates
-            </h2>
-            <div className="space-y-4">
-              {familyComms.map(item => <YourCommsItem key={item.id} item={item} />)}
-            </div>
-          </section>
-        )}
-
-
-        {regularComms.length > 0 && (
-          <section>
-            <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center tracking-normal">
-              <Users className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-primary" /> Your Bonds
-            </h2>
-            <div className="space-y-4">
-              {regularComms.map(item => <YourCommsItem key={item.id} item={item} />)}
-            </div>
-          </section>
-        )}
-
-
-        <section>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-6 mb-3 gap-2">
-                <h2 className="text-xl md:text-2xl font-semibold text-foreground flex items-center tracking-normal">
-                    <Rss className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-accent" /> Highlights from Your Moods
+      {isLoading ? (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-6">
+            {familyComms.length > 0 && (
+            <section>
+                <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center tracking-normal">
+                <HeartHandshake className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-pink-500" /> Family Bond Updates
                 </h2>
-            </div>
-            {highlightsFromYourMoods.length > 0 ? (
                 <div className="space-y-4">
-                {highlightsFromYourMoods.map(item => <YourCommsItem key={item.id} item={item} />)}
+                {familyComms.map(item => <YourCommsItem key={item.id} item={item} />)}
                 </div>
-            ) : (
-                 <Card className="text-center py-8 shadow-none border border-dashed">
-                    <CardContent className="p-4">
-                        <Rss className="mx-auto h-10 w-10 text-muted-foreground opacity-60 mb-3" />
-                        <p className="text-muted-foreground">
-                          {(selectedMoodSlugs.length > 0 || !hasLoadedFromStorage) ? "No posts from your selected moods yet." : "Select some moods to see highlights here!"}
+            </section>
+            )}
+
+
+            {regularComms.length > 0 && (
+            <section>
+                <h2 className="text-xl md:text-2xl font-semibold text-foreground mt-6 mb-3 flex items-center tracking-normal">
+                <Users className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-primary" /> Your Bonds
+                </h2>
+                <div className="space-y-4">
+                {regularComms.map(item => <YourCommsItem key={item.id} item={item} />)}
+                </div>
+            </section>
+            )}
+
+
+            <section>
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mt-6 mb-3 gap-2">
+                    <h2 className="text-xl md:text-2xl font-semibold text-foreground flex items-center tracking-normal">
+                        <Rss className="mr-2 md:mr-3 h-5 w-5 md:h-6 md:w-6 text-accent" /> Highlights from Your Moods
+                    </h2>
+                </div>
+                {highlightsFromYourMoods.length > 0 ? (
+                    <div className="space-y-4">
+                    {highlightsFromYourMoods.map(item => <YourCommsItem key={item.id} item={item} />)}
+                    </div>
+                ) : (
+                    <Card className="text-center py-8 shadow-none border border-dashed">
+                        <CardContent className="p-4">
+                            <Rss className="mx-auto h-10 w-10 text-muted-foreground opacity-60 mb-3" />
+                            <p className="text-muted-foreground">
+                            {(selectedMoodSlugs.length > 0 || !hasLoadedFromStorage) ? "No posts from your selected moods yet." : "Select some moods to see highlights here!"}
+                            </p>
+                            {(selectedMoodSlugs.length === 0 && hasLoadedFromStorage) && (
+                                <Button variant="link" onClick={() => setIsTunerOpen(true)} className="mt-1">
+                                    Tune Your Feed
+                                </Button>
+                            )}
+                        </CardContent>
+                    </Card>
+                )}
+                <CardFooter className="pt-6 justify-center">
+                    <Link href="/moods" passHref>
+                        <Button variant="link">Explore All Mood Streams</Button>
+                    </Link>
+                </CardFooter>
+            </section>
+
+            {allCommsData.length === 0 && (
+                <Card className="text-center py-12 shadow-none sm:shadow-lg">
+                    <CardContent className="p-4 sm:p-6">
+                        <MessageSquareText className="mx-auto h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground opacity-50 mb-4 sm:mb-6" />
+                        <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2 tracking-normal">It's quiet in here...</h3>
+                        <p className="text-muted-foreground text-sm sm:text-base">
+                            Your communications feed is empty. Connect with friends, join tribes, or explore mood streams to get started!
                         </p>
-                        {(selectedMoodSlugs.length === 0 && hasLoadedFromStorage) && (
-                            <Button variant="link" onClick={() => setIsTunerOpen(true)} className="mt-1">
-                                Tune Your Feed
-                            </Button>
-                        )}
                     </CardContent>
                 </Card>
             )}
-            <CardFooter className="pt-6 justify-center">
-                <Link href="/moods" passHref>
-                    <Button variant="link">Explore All Mood Streams</Button>
-                </Link>
-            </CardFooter>
-        </section>
-
-        {allCommsData.length === 0 && (
-            <Card className="text-center py-12 shadow-none sm:shadow-lg">
-                <CardContent className="p-4 sm:p-6">
-                    <MessageSquareText className="mx-auto h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground opacity-50 mb-4 sm:mb-6" />
-                    <h3 className="text-lg sm:text-xl font-semibold text-foreground mb-2 tracking-normal">It's quiet in here...</h3>
-                    <p className="text-muted-foreground text-sm sm:text-base">
-                        Your communications feed is empty. Connect with friends, join tribes, or explore mood streams to get started!
-                    </p>
-                </CardContent>
-            </Card>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
-
-    
-
-    

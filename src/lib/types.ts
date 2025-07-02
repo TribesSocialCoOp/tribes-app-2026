@@ -141,3 +141,41 @@ export interface PendingMember {
   requestTimestamp: Date;
   tribeId: string; // Which tribe they are requesting to join
 }
+
+export interface MoodStreamPost {
+  id: string;
+  title?: string;
+  content: string;
+  author: string;
+  authorAvatarSrc?: string;
+  authorAvatarFallback?: string;
+  tribeName?: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  moodTags: string[];
+  timestamp: Date;
+  vibes?: number;
+  comments?: number;
+  dataAiHintAvatar?: string;
+  dataAiHintImage?: string;
+}
+
+// For YourCommsPage
+export interface CommunicationItem {
+  id: string;
+  type: "family-bond" | "regular-bond" | "mood-stream";
+  sender?: string;
+  bondName?: string;
+  tribeName?: string;
+  message?: string;
+  content?: string;
+  moodSlug?: string;
+  moodName?: string;
+  avatarSrc?: string;
+  avatarFallback?: string;
+  timestamp: Date;
+  dataAiHint?: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  dataAiHintImage?: string;
+}

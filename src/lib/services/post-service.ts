@@ -2,8 +2,8 @@
 /**
  * @fileoverview Service layer for post-related actions.
  */
-import { initialSampleTribePosts, MOCK_CURRENT_USER_ID, moodStreamPostIds } from '@/lib/data';
-import type { TribePost } from '@/lib/types';
+import { initialSampleTribePosts, allMoodStreamPosts, MOCK_CURRENT_USER_ID, moodStreamPostIds } from '@/lib/data';
+import type { TribePost, MoodStreamPost } from '@/lib/types';
 import type { PostFormValues } from '@/components/dialogs/create-post-dialog';
 
 /**
@@ -21,6 +21,18 @@ export async function getPostsForTribe(tribeId: string): Promise<TribePost[]> {
   });
 }
 
+/**
+ * Fetches all mood stream posts.
+ * @returns A promise that resolves to an array of all mood stream posts.
+ */
+export async function getMoodStreamPosts(): Promise<MoodStreamPost[]> {
+  console.log(`Service: Fetching all mood stream posts`);
+  return new Promise(resolve => {
+    setTimeout(() => {
+      resolve([...allMoodStreamPosts]);
+    }, 250);
+  });
+}
 
 /**
  * Simulates creating a new post in a tribe.

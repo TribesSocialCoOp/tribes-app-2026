@@ -24,11 +24,9 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUser } from '@/hooks/use-user';
-
-import { initialSampleTribePosts, type TribePost, mockReportedContentData, type ReportedPost } from '@/lib/data'; 
-import { getTribes } from '@/lib/data-access/tribes';
-import type { Tribe } from '@/lib/data';
-import { dismissReport, removePost } from '@/lib/services/moderation-service';
+import { dismissReport, removePost, getActiveGlobalReports } from '@/lib/services/moderation-service';
+import { getTribeById } from '@/lib/data-access/tribes';
+import type { Tribe, TribePost, ReportedPost } from '@/lib/types';
 
 
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 15, 20];
@@ -59,7 +57,7 @@ export default function ModQueuePage() {
 
   const [reports, setReports] = useState<ReportedPost[]>([]);
   const [allPosts, setAllPosts] = useState<TribePost[]>([]); 
-  const [allTribes, setAllTribes] = useState<Tribe[]>([]); 
+  const [allTribes, setAllTribes] = useState<Tribe[]>([]);
 
   const [isBanDialogOpen, setIsBanDialogOpen] = useState(false);
   const [userToBanDetails, setUserToBanDetails] = useState<{ userId: string; userName: string; postId: string } | null>(null);
@@ -71,17 +69,18 @@ export default function ModQueuePage() {
   const [currentSortValue, setCurrentSortValue] = useState<string>(sortOptions[0].value);
   const [itemsPerPage, setItemsPerPage] = useState(DEFAULT_ITEMS_PER_PAGE);
   const [currentPage, setCurrentPage] = useState(1);
-  const [isClient, setIsClient] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState<boolean | undefined>(undefined);
   const [isTakingAction, setIsTakingAction] = useState<string | null>(null);
 
 
   const reloadData = async () => {
-    const activePostIds = new Set(initialSampleTribePosts.filter(p => !p.isRemoved).map(p => p.id));
-    setReports(mockReportedContentData.filter(report => activePostIds.has(report.postId)));
-    setAllPosts(initialSampleTribePosts.map(p => ({...p}))); 
-    const fetchedTribes = await getTribes();
-    setAllTribes(fetchedTribes);
+    setIsLoading(true);
+    const { reports, posts, tribes } = await getActiveGlobalReports();
+    setReports(reports);
+    setAllPosts(posts);
+    setAllTribes(tribes);
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -90,7 +89,6 @@ export default function ModQueuePage() {
   }, [role]);
 
   useEffect(() => {
-    setIsClient(true);
     reloadData(); // Initial load
 
     const handleFocus = () => reloadData(); // Reload data on window focus
@@ -284,7 +282,7 @@ export default function ModQueuePage() {
   if (hasAccess === undefined) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
-        <p className="text-muted-foreground">Checking permissions...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -306,10 +304,10 @@ export default function ModQueuePage() {
     );
   }
 
-  if (!reports || !allPosts || !allTribes) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
-        <p className="text-muted-foreground">Loading moderation data...</p>
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -441,7 +439,7 @@ export default function ModQueuePage() {
                         {report.reason && <p className="text-xs text-destructive italic mt-1">Reason: {report.reason}</p>}
                       </div>
                       <Badge variant="outline" className="ml-auto mr-2 whitespace-nowrap text-xs">
-                        {isClient ? format(new Date(report.reportedAt), "MMM d, h:mm a") : ""}
+                        {format(new Date(report.reportedAt), "MMM d, h:mm a")}
                       </Badge>
                       {isThisPostBeingActioned && <Loader2 className="h-4 w-4 animate-spin ml-2" />}
                     </AccordionTrigger>
@@ -458,7 +456,7 @@ export default function ModQueuePage() {
                                 </Avatar>
                                 <div>
                                   <p className="text-xs font-semibold">{post.authorName}</p>
-                                  <p className="text-xs text-muted-foreground">{isClient ? format(new Date(post.timestamp), "MMM d, yyyy 'at' h:mm a") : ""}</p>
+                                  <p className="text-xs text-muted-foreground">{format(new Date(post.timestamp), "MMM d, yyyy 'at' h:mm a")}</p>
                                 </div>
                               </div>
                               {post.title && <h5 className="font-semibold text-sm mb-1">{post.title}</h5>}

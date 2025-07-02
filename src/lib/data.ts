@@ -1,7 +1,6 @@
 
 
-import type { UserRole, Event, Bond, TribePost, ReportedPost, DiscussionComment, TribeMember, PendingMember } from '@/lib/types';
-import { allMoodStreamPosts } from '@/app/(app)/moods/[moodSlug]/page';
+import type { UserRole, Event, Bond, TribePost, ReportedPost, DiscussionComment, TribeMember, PendingMember, MoodStreamPost } from '@/lib/types';
 
 export interface Tribe {
   id: string;
@@ -172,6 +171,149 @@ export let initialSampleTribePosts: TribePost[] = [
     canBeReposted: false,
     removalReason: "Content removed due to policy violation (Simulated). Reposting not allowed."
   },
+];
+
+
+export let allMoodStreamPosts: MoodStreamPost[] = [
+  {
+    id: "msp1",
+    title: "The perfect lofi beat for a rainy day",
+    content: "Just found this amazing lofi hip hop mix on YouTube. It's been on repeat all morning. Pure bliss and perfect for coding.",
+    author: "ChillCoder",
+    authorAvatarSrc: "https://placehold.co/40x40.png?text=CC",
+    authorAvatarFallback: "CC",
+    tribeName: "AI Innovators",
+    imageUrl: "https://placehold.co/600x400.png?text=Lofi",
+    imageAlt: "Aesthetic image of a desk with a laptop and a cup of coffee on a rainy day",
+    moodTags: ["chill", "focus"],
+    timestamp: new Date(MOCK_POST_DATE_MS - 3600000), // 1 hour ago
+    vibes: 152,
+    comments: 12,
+    dataAiHintAvatar: "coder chill",
+    dataAiHintImage: "lofi desk",
+  },
+  {
+    id: "msp2",
+    title: "My Top 5 Productivity Hacks for Deep Work",
+    content: "Sharing my secrets to staying in the zone! Tip #1: Time blocking is key.",
+    author: "ProductivePro",
+    authorAvatarSrc: "https://placehold.co/40x40.png?text=PP",
+    authorAvatarFallback: "PP",
+    tribeName: "AI Innovators",
+    imageUrl: "https://placehold.co/600x400.png?text=FocusHacks",
+    imageAlt: "A well-organized desk with planners and a computer",
+    moodTags: ["focus"],
+    timestamp: new Date(MOCK_POST_DATE_MS - 3600000 * 3), // 3 hours ago
+    vibes: 125,
+    comments: 18,
+    dataAiHintAvatar: "work professional",
+    dataAiHintImage: "productivity office",
+  },
+  {
+    id: "msp3",
+    title: "Finally finished my latest painting!",
+    content: "Spent the last month on this piece. It's an abstract acrylic on canvas. What do you all think? Feedback is welcome!",
+    author: "ArtsyAnna",
+    authorAvatarSrc: "https://placehold.co/40x40.png?text=AA",
+    authorAvatarFallback: "AA",
+    tribeName: "Artisan Alley Collective",
+    imageUrl: "https://placehold.co/600x600.png",
+    imageAlt: "Abstract painting with bold colors",
+    moodTags: ["showcase"],
+    timestamp: new Date(MOCK_POST_DATE_MS - 3600000 * 5), // 5 hours ago
+    vibes: 340,
+    comments: 45,
+    dataAiHintAvatar: "artist painter",
+    dataAiHintImage: "abstract painting",
+  },
+  {
+    id: "msp4",
+    title: "New Cafe Downtown - 'The Grind'",
+    content: "Has anyone tried the new coffee shop that opened on Main Street? Their espresso is top-notch. Great place to work from.",
+    author: "CityExplorer",
+    authorAvatarSrc: "https://placehold.co/40x40.png?text=CE",
+    authorAvatarFallback: "CE",
+    moodTags: ["discover"],
+    timestamp: new Date(MOCK_POST_DATE_MS - 86400000), // 1 day ago
+    vibes: 98,
+    comments: 22,
+    dataAiHintAvatar: "explorer urban",
+  },
+  {
+    id: "msp5",
+    title: "Planning a community garden project",
+    content: "Looking for volunteers to help start a community garden in the North Park area. We have the space, just need the people! Let's connect and make our neighborhood greener.",
+    author: "GreenThumb",
+    authorAvatarSrc: "https://placehold.co/40x40.png?text=GT",
+    authorAvatarFallback: "GT",
+    tribeName: "Sustainable Living Hub",
+    moodTags: ["connect", "discover"],
+    timestamp: new Date(MOCK_POST_DATE_MS - 86400000 * 2), // 2 days ago
+    vibes: 215,
+    comments: 31,
+    dataAiHintAvatar: "gardener community",
+  },
+  {
+    id: "msp6",
+    content: "Meditation helps me a lot with coding challenges. Just 10 minutes can clear my head.",
+    author: "ZenDev",
+    authorAvatarSrc: "https://placehold.co/40x40.png?text=ZD",
+    authorAvatarFallback: "ZD",
+    moodTags: ["chill", "focus"],
+    timestamp: new Date(MOCK_POST_DATE_MS - 3600000 * 6), // 6 hours ago
+    vibes: 78,
+    comments: 9,
+    dataAiHintAvatar: "meditation developer",
+  },
+  {
+    id: "msp7",
+    title: "My Game is on Steam Greenlight!",
+    content: "So excited to announce that my indie game 'Pixel Odyssey' is now on Steam Greenlight. Would mean the world if you could check it out and vote!",
+    author: "IndieGamerIO",
+    authorAvatarSrc: "https://placehold.co/40x40.png?text=IG",
+    authorAvatarFallback: "IG",
+    tribeName: "Indie Game Devs",
+    imageUrl: "https://placehold.co/600x338.png?text=PixelOdyssey",
+    imageAlt: "Pixel art landscape from the game Pixel Odyssey",
+    moodTags: ["game", "showcase"],
+    timestamp: new Date(MOCK_POST_DATE_MS - 86400000 * 3), // 3 days ago
+    vibes: 450,
+    comments: 88,
+    dataAiHintAvatar: "developer gamer",
+    dataAiHintImage: "pixel art game",
+  },
+  {
+    id: "msp8",
+    title: "My Stage Setup for Tonight's Gig",
+    content: "Sound check done! Ready to rock the 'Music Hall' tonight. Who's coming?",
+    author: "RockstarDev",
+    authorAvatarFallback: "RD",
+    tribeName: "The Local Gig Circuit",
+    imageUrl: "https://placehold.co/600x380.png",
+    imageAlt: "Stage setup with instruments",
+    moodTags: ["showcase", "connect"],
+    timestamp: new Date(MOCK_POST_DATE_MS - 3600000 * 8), // 8 hours ago
+    vibes: 150,
+    comments: 18,
+    dataAiHintImage: "stage music",
+    dataAiHintAvatar: "musician band"
+  },
+  {
+    id: "msp9",
+    title: "Post-Hike Find: Amazing Farmers Market!",
+    content: "After our hike near Miller's Pond, stumbled upon this fantastic farmers market. Great fuel and cool local crafts!",
+    author: "LocalFoodie",
+    authorAvatarFallback: "LF",
+    tribeName: "Weekend Hikers Club",
+    imageUrl: "https://placehold.co/600x420.png",
+    imageAlt: "Farmers market produce",
+    moodTags: ["discover"],
+    timestamp: new Date(MOCK_POST_DATE_MS - 3600000 * 7), // 7 hours ago
+    vibes: 85,
+    comments: 12,
+    dataAiHintImage: "market food",
+    dataAiHintAvatar: "foodie person"
+  }
 ];
 
 export let moodStreamPostIds = new Set(allMoodStreamPosts.map(p => p.id));
