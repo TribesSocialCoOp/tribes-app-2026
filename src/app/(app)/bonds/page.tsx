@@ -555,6 +555,11 @@ export default function BondsPage() {
                         </span>
                         <div className="flex-grow min-w-0">
                           <span className="block">{bond.targetName}</span>
+                          <div className="sm:hidden mt-1">
+                            <Badge className={cn(getBondTypeBadgeClasses(bond), "whitespace-nowrap")}>
+                                {getBondTypeDisplay(bond)}
+                            </Badge>
+                          </div>
                           {bond.pseudonym && (
                             <div className="text-xs text-muted-foreground flex items-center">
                               <AtSign className="h-3 w-3 mr-1 text-primary" /> Your alias: {bond.pseudonym}
