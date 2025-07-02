@@ -148,19 +148,33 @@ export default function YourCommsPage() {
         // Fetch all data sources in parallel
         const [bonds, moodPosts] = await Promise.all([getBonds(), getMoodStreamPosts()]);
 
-        // Transform fetched data into a unified CommunicationItem format
-        // This logic is a placeholder for real message fetching from bonds
         const bondMessages: CommunicationItem[] = bonds
             .filter(b => b.bondType === 'family' || b.bondType === 'friend')
-            .map(b => ({
-                id: `bond-msg-${b.id}`,
-                type: b.bondType === 'family' ? 'family-bond' : 'regular-bond',
-                sender: b.targetName,
-                bondName: b.targetName,
-                message: `This is a placeholder message from your bond with ${b.targetName}.`,
-                timestamp: b.lastRefreshedAt, // Using lastRefreshedAt as a mock timestamp
-                avatarFallback: b.targetName.substring(0, 2),
-            }));
+            .map(b => {
+                const getMessage = (name: string) => {
+                    switch(name) {
+                        case "Mom": return "Can't wait for dinner on Sunday! I'll bring dessert. ❤️";
+                        case "Alice Wonderland": return "Hey! Found this cool article about quantum computing, thought you might like it: https://example.com/quantum";
+                        case "Charlie Chaplin": return "Just sent you the final draft for the script. Let me know what you think!";
+                        case "George Gorilla": return "The hiking trip was awesome! We should definitely do that again soon. I'll send you some pictures.";
+                        default: return `Let's catch up soon!`
+                    }
+                };
+                const getFallback = (name: string) => {
+                    const initials = name.split(" ").map(n => n[0]).join('');
+                    return initials.substring(0, 2).toUpperCase();
+                };
+
+                return {
+                    id: `bond-msg-${b.id}`,
+                    type: b.bondType === 'family' ? 'family-bond' : 'regular-bond',
+                    sender: b.targetName,
+                    bondName: b.targetName,
+                    message: getMessage(b.targetName),
+                    timestamp: b.lastRefreshedAt,
+                    avatarFallback: getFallback(b.targetName),
+                };
+            });
 
         const moodStreamItems: CommunicationItem[] = moodPosts.map(post => {
             const primaryMoodSlug = post.moodTags[0];
