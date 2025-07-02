@@ -129,7 +129,6 @@ export default function MoodStreamPage() {
   const [allPosts, setAllPosts] = useState<MoodStreamPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMoodSlugs, setSelectedMoodSlugs] = useState<string[]>(moodSlugFromUrl ? [moodSlugFromUrl] : []);
-  const [isTunerOpen, setIsTunerOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -146,14 +145,6 @@ export default function MoodStreamPage() {
       setSelectedMoodSlugs([moodSlugFromUrl]);
     }
   }, [moodSlugFromUrl, selectedMoodSlugs]);
-
-
-  const handleMoodSelectionChange = (moodSlug: string, checked: boolean | "indeterminate") => {
-    setSelectedMoodSlugs(prev => {
-        const newSlugs = checked ? [...prev, moodSlug] : prev.filter(slug => slug !== moodSlug);
-        return newSlugs;
-    });
-  };
 
   const filteredPosts = useMemo(() => {
     if (selectedMoodSlugs.length === 0) return [];
@@ -190,49 +181,6 @@ export default function MoodStreamPage() {
 
   return (
     <div className="space-y-4 md:space-y-6 relative">
-      <Card className="sticky top-2 sm:top-4 left-0 right-0 z-10 shadow-xl bg-background/95 backdrop-blur-sm border">
-        <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3 flex flex-row items-center justify-between">
-          <div className='flex items-center'>
-            <Settings2 className="h-5 w-5 mr-2 text-primary" />
-            <CardTitle className="text-md sm:text-lg font-semibold tracking-normal">Tune Your Feed</CardTitle>
-          </div>
-           <Popover open={isTunerOpen} onOpenChange={setIsTunerOpen}>
-            <PopoverTrigger asChild>
-                <Button variant="outline" size="sm">
-                    <FilterIcon className="mr-2 h-4 w-4" /> Moods ({selectedMoodSlugs.length})
-                </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 p-0 max-h-[60vh] flex flex-col">
-                <div className="p-3 border-b">
-                    <h4 className="font-medium leading-none text-sm">Select Moods</h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                        Filter posts by your preferred moods.
-                    </p>
-                </div>
-                <ScrollArea className="flex-1 p-3">
-                    <div className="space-y-2">
-                        {moodsData.map(mood => (
-                            <div key={mood.slug} className="flex items-center space-x-2">
-                                <Checkbox
-                                    id={`mood-check-${mood.slug}`}
-                                    checked={selectedMoodSlugs.includes(mood.slug)}
-                                    onCheckedChange={(checked) => handleMoodSelectionChange(mood.slug, checked)}
-                                />
-                                <Label htmlFor={`mood-check-${mood.slug}`} className="text-sm font-normal cursor-pointer flex items-center">
-                                   <span className="mr-1.5 text-base">{mood.emoji}</span> {mood.name}
-                                </Label>
-                            </div>
-                        ))}
-                    </div>
-                </ScrollArea>
-                <div className="p-3 border-t">
-                    <Button size="sm" onClick={() => setIsTunerOpen(false)} className="w-full">Done</Button>
-                </div>
-            </PopoverContent>
-        </Popover>
-        </CardHeader>
-      </Card>
-
       <header className="mb-4 md:mb-6 pt-4"> 
         <div className="flex items-center space-x-2 mb-1">
             <HeaderIcon className="h-7 w-7 md:h-8 md:w-8 text-primary" /> 
