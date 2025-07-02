@@ -11,6 +11,7 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
   SidebarFooter,
+  useSidebar, // Import the hook
 } from "@/components/ui/sidebar";
 import { AppLogo } from "@/components/icons/app-logo";
 import {
@@ -51,15 +52,22 @@ const bottomNavItems = [
 export function AppSidebar() {
   const pathname = usePathname();
   const { role: userRole } = useUser();
+  const { isMobile, setOpenMobile } = useSidebar();
   
   const canCreate = userRole !== 'Human_Free';
 
   const visibleNavItems = navItems.filter(item => !item.roles || item.roles.includes(userRole));
+  
+  const handleLinkClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" side="left" className="border-r">
       <SidebarHeader className="flex items-center justify-between p-3 border-b">
-        <Link href="/your-comms" className="flex items-center gap-2">
+        <Link href="/your-comms" className="flex items-center gap-2" onClick={handleLinkClick}>
           <AppLogo width={32} height={32} />
           <span className="font-semibold text-lg font-mono text-sidebar-foreground group-data-[collapsible=icon]:hidden tracking-normal">
             Tribes.app
@@ -73,6 +81,7 @@ export function AppSidebar() {
               <TooltipTrigger asChild>
                 <Link href={canCreate ? "/tribes/create" : "/billing"} passHref>
                   <Button
+                    onClick={handleLinkClick}
                     variant={canCreate ? "default" : "outline"}
                     className={cn(
                       "w-full justify-start group-data-[collapsible=icon]:justify-center my-1",
@@ -101,6 +110,7 @@ export function AppSidebar() {
               <TooltipTrigger asChild>
                 <Link href={canCreate ? "/events/create" : "/billing"} passHref>
                   <Button
+                    onClick={handleLinkClick}
                     variant={canCreate ? "default" : "outline"}
                     className={cn(
                       "w-full justify-start group-data-[collapsible=icon]:justify-center my-1",
@@ -128,6 +138,7 @@ export function AppSidebar() {
             <SidebarMenuItem key={item.href}>
               <Link href={item.href} passHref legacyBehavior>
                 <SidebarMenuButton
+                  onClick={handleLinkClick}
                   isActive={pathname.startsWith(item.href) && (item.href === "/" ? pathname === "/" : true) } 
                   tooltip={item.tooltip}
                   className={cn(
@@ -149,6 +160,7 @@ export function AppSidebar() {
                 <SidebarMenuItem key={item.href}>
                 <Link href={item.href} passHref legacyBehavior>
                     <SidebarMenuButton
+                    onClick={handleLinkClick}
                     isActive={pathname.startsWith(item.href)}
                     tooltip={item.tooltip}
                     className={cn(
