@@ -126,6 +126,9 @@ const TribePostCard: React.FC<{
 }> = ({ post, isPromoted, isMember, isTribeAdmin, isReported, isCurrentUserAuthor, isLoggedIn, onPromoteClick, onReportClick, onRepostClick, onReportComment, onOpenCommentDialog }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
   const [showComments, setShowComments] = useState(false);
+  const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
+  const emoticons = ["👍", "❤️", "😂", "🤔", "😢", "😠"];
+
 
   useEffect(() => {
     const timeSince = (date: Date): string => {
@@ -142,6 +145,11 @@ const TribePostCard: React.FC<{
     };
     setDisplayTime(timeSince(post.timestamp));
   }, [post.timestamp]);
+
+  const handleVibeSelection = (vibe: string) => {
+    console.log(`User vibed with: ${vibe} on post ${post.id}`);
+    setSelectedVibe(vibe);
+  };
 
   return (
     <Card className={cn(
@@ -270,10 +278,28 @@ const TribePostCard: React.FC<{
             </div>
           )}
         </CardContent>
-        <CardFooter className="p-4 pt-2 flex items-center justify-between border-t bg-muted/30">
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
-            <Smile className="mr-1.5 h-4 w-4" /> {post.vibes || 0}
-          </Button>
+        <CardFooter className="p-4 pt-2 flex items-center justify-start space-x-4 border-t bg-muted/30">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
+                {selectedVibe ? (
+                  <span className="text-lg mr-1.5">{selectedVibe}</span>
+                ) : (
+                  <Smile className="mr-1.5 h-4 w-4" />
+                )}
+                {post.vibes || 0}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-2">
+              <div className="flex space-x-1">
+                {emoticons.map((emo) => (
+                  <Button key={emo} variant="ghost" size="icon" className="text-xl p-1.5 h-auto w-auto rounded-md hover:bg-accent" onClick={() => handleVibeSelection(emo)}>
+                    {emo}
+                  </Button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => isLoggedIn && onOpenCommentDialog({ postId: post.id, postTitle: post.title })}>
             <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
           </Button>

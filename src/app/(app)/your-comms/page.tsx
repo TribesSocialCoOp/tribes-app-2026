@@ -20,6 +20,7 @@ import { getMoodStreamPosts } from '@/lib/services/post-service';
 
 const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
+  const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
   const emoticons = ["👍", "❤️", "😂", "🤔", "😢", "😠"];
 
   useEffect(() => {
@@ -52,6 +53,7 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   
   const handleVibeSelection = (vibe: string) => {
     console.log(`User vibed with: ${vibe} on item ${item.id}`);
+    setSelectedVibe(vibe);
   };
 
   let icon = <MessageSquareText className="h-5 w-5 text-primary" />;
@@ -110,14 +112,19 @@ const YourCommsItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
-                  <Smile className="mr-1.5 h-4 w-4" /> {item.vibes}
+                  {selectedVibe ? (
+                    <span className="text-lg mr-1.5">{selectedVibe}</span>
+                  ) : (
+                    <Smile className="mr-1.5 h-4 w-4" />
+                  )}
+                  {item.vibes}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-2 bg-card border shadow-xl rounded-lg">
+              <PopoverContent className="w-auto p-2">
                 <div className="flex space-x-1">
-                  {emoticons.map((emo, index) => (
+                  {emoticons.map((emo) => (
                     <Button 
-                      key={index} 
+                      key={emo} 
                       variant="ghost" 
                       size="icon" 
                       className="text-xl p-1.5 h-auto w-auto rounded-md hover:bg-accent"
