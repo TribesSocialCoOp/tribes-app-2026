@@ -531,11 +531,11 @@ export default function BondsPage() {
                 <TableRow>{/*
                 */}<SortableHeaderCell columnKey="targetName" title="Target" />{/*
                 */}<TableHead className="hidden md:table-cell w-[80px]" />{/* Tier column header */}{/*
-                */}<SortableHeaderCell columnKey="bondType" title="Type" />{/*
+                */}<SortableHeaderCell columnKey="bondType" title="Type" className="hidden sm:table-cell" />{/*
                 */}<SortableHeaderCell columnKey="passkeyStatus" title="Passkey Status" className="text-center"/>{/*
                 */}<TableHead className="text-center hidden md:table-cell">Connect Vibe</TableHead>{/*
-                */}<SortableHeaderCell columnKey="expiresAt" title="Expires" className="hidden lg:table-cell"/>{/*
-                */}<TableHead>Intercom Feed</TableHead>{/*
+                */}<SortableHeaderCell columnKey="expiresAt" title="Expires" className="hidden md:table-cell"/>{/*
+                */}<TableHead className="hidden sm:table-cell">Intercom Feed</TableHead>{/*
                 */}<TableHead className="text-right">Actions</TableHead>{/*
               */}</TableRow>
               </TableHeader>
@@ -585,7 +585,7 @@ export default function BondsPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       <Badge className={cn(getBondTypeBadgeClasses(bond), "whitespace-nowrap")}>
                         {getBondTypeDisplay(bond)}
                       </Badge>
@@ -596,11 +596,11 @@ export default function BondsPage() {
                     <TableCell className="hidden md:table-cell text-center">
                        <ConnectVibeIcon bond={bond} />
                     </TableCell>
-                    <TableCell className="hidden lg:table-cell text-muted-foreground">
+                    <TableCell className="hidden md:table-cell text-muted-foreground">
                       {bond.passkeyStatus === "expired" ? `Expired: ${formatDate(bond.expiresAt)}` :
                        `Expires: ${formatDate(bond.expiresAt)}`}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden sm:table-cell">
                       <div className="flex items-center space-x-2">
                         <Switch
                           id={`intercom-switch-${bond.id}`}
@@ -740,3 +740,5 @@ export default function BondsPage() {
     </div>
   );
 }
+
+    
