@@ -130,7 +130,7 @@ const CommentCard: React.FC<{
       )}
 
       {comment.replies && comment.replies.length > 0 && (
-        <div className="border-l-2 ml-5 pl-1">
+        <div className="border-l-2 ml-5 pl-1 pb-2">
           {comment.replies.map(reply => (
             <CommentCard
               key={reply.id}
@@ -302,7 +302,7 @@ const TribePostCard: React.FC<{
           )}
           <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{post.content}</p>
            {(post.commentsData && post.commentsData.length > 0) && (
-            <div className="mt-4 pt-3 border-t pb-2">
+            <div className="mt-4 pt-3 border-t">
               {post.commentsData.map(comment => 
                 <CommentCard
                   key={comment.id}
