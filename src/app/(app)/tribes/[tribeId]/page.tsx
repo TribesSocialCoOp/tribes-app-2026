@@ -25,7 +25,7 @@ import { getTribeById } from '@/lib/data-access/tribes';
 import { getTribeMembers } from '@/lib/services/tribe-service';
 import { getEventsForTribe } from '@/lib/services/event-service';
 import { getPostsForTribe, promotePostToMoods, repost, createTribePost } from '@/lib/services/post-service';
-import { getActiveReportedPostIds, getActiveReportsForTribe, reportPost, reportComment } from '@/lib/services/moderation-service';
+import { getActiveReportedPostIds, reportPost, reportComment } from '@/lib/services/moderation-service';
 import { MOCK_CURRENT_USER_ID, moodStreamPostIds } from '@/lib/data';
 
 import { moodsData } from '../../moods/page';
@@ -47,6 +47,13 @@ const CommentCard: React.FC<{
   isLoggedIn: boolean;
 }> = ({ comment, postId, level = 0, onReportComment, onOpenReplyDialog, isLoggedIn }) => {
   const isCurrentUserAuthor = comment.authorId === MOCK_CURRENT_USER_ID;
+  const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
+  const emoticons = ["👍", "❤️", "😂", "🤔", "😢", "😠"];
+
+  const handleVibeSelection = (vibe: string) => {
+    console.log(`User vibed with: ${vibe} on comment ${comment.id}`);
+    setSelectedVibe(vibe);
+  };
   
   return (
     <div className={`ml-${level * 2} sm:ml-${level * 4}`}>
@@ -81,9 +88,41 @@ const CommentCard: React.FC<{
       </div>
       {isLoggedIn && (
         <div className="ml-11 flex items-center space-x-2 text-xs">
-          <Button variant="ghost" size="sm" className="px-1 text-muted-foreground hover:text-primary h-6 text-xs">
-            <Smile className="mr-1 h-3.5 w-3.5"/> {comment.vibes || 0}
-          </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+                <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className={cn(
+                        "px-1 text-muted-foreground hover:text-primary h-6 text-xs",
+                        selectedVibe && "bg-primary/10 text-primary rounded-full px-2"
+                    )}
+                >
+                {selectedVibe ? (
+                  <span className="text-base mr-1">{selectedVibe}</span>
+                ) : (
+                  <Smile className="mr-1 h-3.5 w-3.5" />
+                )}
+                {comment.vibes || 0}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-2">
+              <div className="flex space-x-1">
+                {emoticons.map((emo) => (
+                  <Button
+                    key={emo}
+                    variant="ghost"
+                    size="icon"
+                    className="text-xl p-1.5 h-auto w-auto rounded-md hover:bg-accent"
+                    onClick={() => handleVibeSelection(emo)}
+                  >
+                    {emo}
+                  </Button>
+                ))}
+              </div>
+            </PopoverContent>
+          </Popover>
+
           <Button variant="ghost" size="sm" onClick={() => onOpenReplyDialog({ postId, parentCommentId: comment.id, parentAuthorName: comment.authorName })} className="px-1 text-muted-foreground hover:text-primary h-6 text-xs">
             Reply
           </Button>
@@ -125,7 +164,6 @@ const TribePostCard: React.FC<{
   onOpenCommentDialog: (context: { postId: string; postTitle?: string; parentCommentId?: string; parentAuthorName?: string; }) => void;
 }> = ({ post, isPromoted, isMember, isTribeAdmin, isReported, isCurrentUserAuthor, isLoggedIn, onPromoteClick, onReportClick, onRepostClick, onReportComment, onOpenCommentDialog }) => {
   const [displayTime, setDisplayTime] = useState<string>(' ');
-  const [showComments, setShowComments] = useState(false);
   const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
   const emoticons = ["👍", "❤️", "😂", "🤔", "😢", "😠"];
 
