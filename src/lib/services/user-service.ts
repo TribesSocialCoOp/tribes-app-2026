@@ -33,8 +33,8 @@ export async function updateUserProfile(userId: string, updates: Partial<Omit<Us
   if (userId === mockUserProfile.id) {
     return new Promise(resolve => {
       setTimeout(() => {
-        // Update the mock data object
-        mockUserProfile = { ...mockUserProfile, ...updates };
+        // Update the mock data object by mutating its properties, not reassigning the import.
+        Object.assign(mockUserProfile, updates);
         resolve({ ...mockUserProfile });
       }, 300);
     });

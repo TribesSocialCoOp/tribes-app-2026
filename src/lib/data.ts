@@ -423,7 +423,7 @@ export interface SourceArticle {
 
 const MOCK_STORY_DATE_MS = new Date("2025-07-15T10:00:00.000Z").getTime();
 
-export const mockStoryTopics: StoryTopic[] = [
+export let mockStoryTopics: StoryTopic[] = [
   {
     id: "story1",
     title: "Understanding the New Local Recycling Program",
@@ -485,7 +485,7 @@ export const mockStoryTopics: StoryTopic[] = [
   },
 ];
 
-export const mockArticlesForStory: Record<string, SourceArticle[]> = {
+export let mockArticlesForStory: Record<string, SourceArticle[]> = {
   "story1": [
     { id: "art1-1", title: "City Announces New Recycling Pickup Schedule", url: "#", sourceName: "City Herald", publishedDate: new Date(MOCK_COMMENT_DATE_MS - 86400000 * 0.5), summarySnippet: "The city council has officially released the updated schedule for recycling pickups, effective next month...", dataAiHint: "newspaper article" },
     { id: "art1-2", title: "Understanding Contamination in Recycling Bins", url: "#", sourceName: "EcoWatch Org", publishedDate: new Date(MOCK_COMMENT_DATE_MS - 86400000 * 1), summarySnippet: "A common issue hindering recycling efforts is contamination. Learn what can and cannot be recycled.", dataAiHint: "environment infographic" },
@@ -498,3 +498,5 @@ export const mockArticlesForStory: Record<string, SourceArticle[]> = {
     { id: "art4-2", title: "Community Feedback Session on Bike Lane Project", url: "#", sourceName: "City Planning Dept.", publishedDate: new Date(MOCK_COMMENT_DATE_MS - 86400000 * 1.5), summarySnippet: "The city is seeking public input on the new interconnected bike lane project. Attend the session next Tuesday.", dataAiHint: "people meeting" },
   ]
 };
+
+    
