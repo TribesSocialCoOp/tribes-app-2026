@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -9,11 +8,13 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
-import { Bell, UserCircle, Shield, Palette, LogOut, Trash2, CreditCard, Loader2, PlusCircle, AtSign, X } from "lucide-react";
+import { Bell, UserCircle, ShieldCheck, Palette, LogOut, Trash2, CreditCard, Loader2, PlusCircle, AtSign, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { UserProfile } from '@/lib/types';
 import { getUserProfile, updateUserProfile } from '@/lib/services/user-service';
 import { MOCK_CURRENT_USER_ID } from '@/lib/data';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -109,7 +110,7 @@ export default function SettingsPage() {
         <CardHeader>
           <div className="flex items-center space-x-3">
             <UserCircle className="h-7 w-7 text-primary" />
-            <CardTitle className="text-xl">Identity & Profile</CardTitle>
+            <CardTitle className="text-xl">Identity &amp; Profile</CardTitle>
           </div>
           <CardDescription>Update your personal details, profile picture, and manage your aliases.</CardDescription>
         </CardHeader>
@@ -178,6 +179,45 @@ export default function SettingsPage() {
 
       <Separator />
 
+      {/* Reputation & Trust */}
+      <Card className="shadow-lg">
+        <CardHeader>
+          <div className="flex items-center space-x-3">
+            <ShieldCheck className="h-7 w-7 text-primary" />
+            <CardTitle className="text-xl">Reputation &amp; Trust</CardTitle>
+          </div>
+          <CardDescription>Your community standing, based on positive interactions and adherence to guidelines.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+            <div className="flex items-center justify-between p-3 rounded-md border bg-card">
+                <div>
+                    <Label className="text-xs text-muted-foreground">Reputation Status</Label>
+                    {profile.reputationStatus && (
+                        <Badge variant={
+                            profile.reputationStatus === 'Excellent' || profile.reputationStatus === 'Good' ? 'default' :
+                            profile.reputationStatus === 'Poor' || profile.reputationStatus === 'At Risk' ? 'destructive' :
+                            'outline'
+                        } className="mt-1 block w-fit">
+                            {profile.reputationStatus}
+                        </Badge>
+                    )}
+                </div>
+                 <div className="text-right">
+                    <Label className="text-xs text-muted-foreground">Score</Label>
+                    <p className="text-2xl font-bold">{profile.reputationScore || 'N/A'}</p>
+                 </div>
+            </div>
+             <div className="px-1">
+                <Progress value={profile.reputationScore ? (profile.reputationScore / 1000) * 100 : 0} aria-label={`${profile.reputationScore} out of 1000 reputation score`} />
+                <p className="text-xs text-muted-foreground mt-2">
+                    Your reputation score is a reflection of your interactions across the platform. Positive contributions increase your score, while moderation actions may decrease it.
+                </p>
+             </div>
+        </CardContent>
+      </Card>
+      
+      <Separator />
+
       {/* Notification Settings */}
       <Card className="shadow-lg">
         <CardHeader>
@@ -212,8 +252,8 @@ export default function SettingsPage() {
       <Card className="shadow-lg">
         <CardHeader>
           <div className="flex items-center space-x-3">
-            <Shield className="h-7 w-7 text-primary" />
-            <CardTitle className="text-xl">Security & Privacy</CardTitle>
+            <ShieldCheck className="h-7 w-7 text-primary" />
+            <CardTitle className="text-xl">Security &amp; Privacy</CardTitle>
           </div>
           <CardDescription>Manage your password, two-factor authentication, and privacy settings.</CardDescription>
         </CardHeader>
@@ -259,7 +299,7 @@ export default function SettingsPage() {
         <CardHeader>
           <div className="flex items-center space-x-3">
             <CreditCard className="h-7 w-7 text-primary" />
-            <CardTitle className="text-xl">Billing & Subscription</CardTitle>
+            <CardTitle className="text-xl">Billing &amp; Subscription</CardTitle>
           </div>
           <CardDescription>Manage your subscription plan and payment methods.</CardDescription>
         </CardHeader>

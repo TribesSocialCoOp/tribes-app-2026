@@ -1,5 +1,4 @@
 
-
 /**
  * @fileOverview Defines shared TypeScript types for the application.
  */
@@ -27,6 +26,8 @@ export interface UserProfile {
   aliases: string[];
   bio?: string;
   avatar?: string;
+  reputationScore?: number;
+  reputationStatus?: 'Excellent' | 'Good' | 'Fair' | 'Poor' | 'At Risk';
 }
 
 // Bond related types, centralized here

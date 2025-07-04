@@ -1,5 +1,4 @@
 
-
 import type { UserRole, Event, Bond, TribePost, ReportedPost, DiscussionComment, TribeMember, PendingMember, MoodStreamPost, UserProfile } from '@/lib/types';
 
 export interface Tribe {
@@ -43,6 +42,8 @@ export let mockUserProfile: UserProfile = {
   bio: "Lover of tech, hiking, and indie games.",
   avatar: "https://placehold.co/100x100.png",
   aliases: ["WonderlandCoder", "HikerGal", "PixelPioneer"],
+  reputationScore: 875,
+  reputationStatus: 'Good',
 };
 
 
@@ -444,7 +445,7 @@ export let mockStoryTopics: StoryTopic[] = [
   },
   {
     id: "story2",
-    title: "National Debate on Universal Basic Income: Pros & Cons",
+    title: "National Debate on Universal Basic Income: Pros &amp; Cons",
     summary: "A comprehensive overview of the ongoing national discussion around UBI, featuring arguments from leading economists, social scientists, and policymakers. Explore the potential impacts and challenges.",
     category: "national",
     lastUpdatedAt: new Date(MOCK_STORY_DATE_MS - 86400000 * 3), // 3 days ago
