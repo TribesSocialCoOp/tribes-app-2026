@@ -120,21 +120,21 @@ export default function DashboardPage() {
                 <div className="flex items-center space-x-3">
                     <Sparkles className="h-8 w-8 text-primary"/>
                     <div>
-                        <CardTitle className="text-xl tracking-normal">Welcome to Tribes.app!</CardTitle>
-                        <CardDescription>Complete your first step to build your reputation.</CardDescription>
+                        <CardTitle className="text-xl tracking-normal">Welcome to The Trials!</CardTitle>
+                        <CardDescription>Complete onboarding to build your reputation and unlock the platform.</CardDescription>
                     </div>
                 </div>
             </CardHeader>
             <CardContent>
                 <p className="text-sm text-muted-foreground">
-                    Our community is built on trust and constructive engagement. A great way to start is by exploring a topic in 'Our Story' and sharing your perspective by adding to the discussion. This is your first chance to build your reputation. Once you've participated, you can mark this task as complete.
+                    Our community is built on trust. Your first step is to visit 'The Trials' tribe, engage with the pinned "Getting Started" posts by replying and leaving a vibe. This proves you're ready to be a constructive member of the community.
                 </p>
             </CardContent>
             <CardFooter className="flex-col sm:flex-row items-start sm:items-center gap-4">
-                <Link href="/our-story" passHref>
-                    <Button variant="outline">Explore 'Our Story' <ArrowRight className="ml-2 h-4 w-4" /></Button>
+                <Link href="/tribes/0" passHref>
+                    <Button variant="outline">Go to The Trials <ArrowRight className="ml-2 h-4 w-4" /></Button>
                 </Link>
-                <Button onClick={handleCompleteOnboarding}>Mark as Complete</Button>
+                <Button onClick={handleCompleteOnboarding}>I Have Completed The Trials</Button>
             </CardFooter>
         </Card>
       )}

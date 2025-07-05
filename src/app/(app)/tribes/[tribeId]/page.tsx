@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowLeft, Users, MessageSquareText, Smile, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, ListChecks, UsersRound, FileWarning, RefreshCcw, Link2, BarChart2, UserPlus, Loader2, Send } from "lucide-react";
+import { ArrowLeft, Users, MessageSquareText, Smile, SquareArrowUp, Edit3, Settings, Rss, CalendarDays, MapPin, ShieldAlert, UserCog, MoreVertical, Flag, Eye, ChevronDown, Inbox, Trash2, ListChecks, UsersRound, FileWarning, RefreshCcw, Link2, BarChart2, UserPlus, Loader2, Send, Pin } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Separator } from '@/components/ui/separator';
@@ -138,7 +138,7 @@ const CommentCard: React.FC<{
               postId={postId}
               level={level + 1}
               onReportComment={onReportComment}
-              onOpenReplyDialog={onOpenReplyDialog}
+              onOpenReplyDialog={onOpenCommentDialog}
               isLoggedIn={isLoggedIn}
             />
           ))}
@@ -231,6 +231,20 @@ const TribePostCard: React.FC<{
               <CardTitle className="text-md font-semibold tracking-normal">{post.authorName}</CardTitle>
               <div className="flex items-center space-x-2">
                   <CardDescription className="text-xs">{displayTime}</CardDescription>
+                  {post.isPinned && (
+                      <TooltipProvider delayDuration={100}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center text-xs text-amber-600">
+                              <Pin className="h-3.5 w-3.5" />
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Pinned Post</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                  )}
                   {isMember && isPromoted && !post.isRemoved && (
                       <TooltipProvider delayDuration={100}>
                         <Tooltip>
@@ -451,7 +465,7 @@ export default function TribeDetailPage() {
 
     const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
     const myTribeIds = [...new Set([...baseTribeMemberships, ...createdTribeIds])];
-    setIsMember(myTribeIds.includes(tribeId));
+    setIsMember(myTribeIds.includes(tribeId) || tribeId === '0'); // All users are "members" of The Trials
 
     const [
         tribeData, 
@@ -525,12 +539,12 @@ export default function TribeDetailPage() {
         data: event,
       }));
 
-    const postItems = (isMember ? postsInTribe : postsInTribe.filter(p => moodStreamPostIds.has(p.id) || locallyPromotedPostIds.has(p.id)))
+    const postItems = (isMember ? postsInTribe : postsInTribe.filter(p => p.isPinned || moodStreamPostIds.has(p.id) || locallyPromotedPostIds.has(p.id)))
       .map(post => ({
         id: `post-${post.id}`,
         type: 'post' as const,
         timestamp: post.timestamp,
-        isPinned: false,
+        isPinned: !!post.isPinned,
         data: post,
         isPromoted: moodStreamPostIds.has(post.id) || locallyPromotedPostIds.has(post.id),
         isReported: activeReportedPostIds.has(post.id) && !post.isRemoved,

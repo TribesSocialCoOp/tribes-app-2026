@@ -101,6 +101,7 @@ export interface TribePost {
   canBeReposted?: boolean;
   removalReason?: string;
   originalPostId?: string;
+  isPinned?: boolean;
 }
 
 export interface ReportedPost {
