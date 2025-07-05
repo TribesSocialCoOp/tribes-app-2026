@@ -194,6 +194,7 @@ const TribePostCard: React.FC<{
         "overflow-hidden shadow-lg relative",
         isPromoted && "bg-accent/5 hover:bg-accent/10 border-accent/30",
         isReported && !post.isRemoved && "border-destructive/50 ring-2 ring-destructive/30",
+        post.isPinned && "border-primary/50 ring-2 ring-primary/30"
       )}>
       {post.isRemoved && (
         <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-10 p-4 space-y-2">
@@ -235,7 +236,7 @@ const TribePostCard: React.FC<{
                       <TooltipProvider delayDuration={100}>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <div className="flex items-center text-xs text-amber-600">
+                            <div className="flex items-center text-xs text-primary">
                               <Pin className="h-3.5 w-3.5" />
                             </div>
                           </TooltipTrigger>
