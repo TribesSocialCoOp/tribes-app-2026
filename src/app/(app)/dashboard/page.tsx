@@ -127,7 +127,7 @@ export default function DashboardPage() {
             </CardHeader>
             <CardContent>
                 <p className="text-sm text-muted-foreground">
-                    Our community is built on trust and constructive engagement. A great way to start is by exploring a curated topic in our "Our Story" section. Reading different perspectives is the first step to meaningful contribution.
+                    Our community is built on trust and constructive engagement. A great way to start is by exploring a topic in 'Our Story' and sharing your perspective by adding to the discussion. This is your first chance to build your reputation. Once you've participated, you can mark this task as complete.
                 </p>
             </CardContent>
             <CardFooter className="flex-col sm:flex-row items-start sm:items-center gap-4">
