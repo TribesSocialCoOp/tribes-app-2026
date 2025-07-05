@@ -16,18 +16,22 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag, Link2, ShieldAlert, Copy, Check, Info } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag, Link2, ShieldAlert, Copy, Check, Info, ShieldCheck as ReputationIcon } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 import { getTribeById } from '@/lib/data-access/tribes';
 import type { Tribe } from '@/lib/data';
 import { moodsData as allMoodsData } from '../../../moods/page';
 import { updateTribeSettings } from '@/lib/services/tribe-service';
+import type { UserProfile } from '@/lib/types';
 
+
+const reputationLevels: Exclude<UserProfile['reputationStatus'], undefined | 'Poor' | 'At Risk'>[] = ['Fair', 'Good', 'Excellent'];
 
 const tribeSettingsFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
@@ -39,6 +43,7 @@ const tribeSettingsFormSchema = z.object({
     .optional()
     .default([]),
   joinMechanism: z.enum(['instant', 'approval']).default('instant'),
+  minimumReputation: z.string().optional(),
 });
 
 type TribeSettingsFormValues = z.infer<typeof tribeSettingsFormSchema>;
@@ -71,6 +76,7 @@ export default function TribeSettingsPage() {
       isPublic: true,
       moods: [],
       joinMechanism: 'instant',
+      minimumReputation: "None",
     },
   });
 
@@ -88,6 +94,7 @@ export default function TribeSettingsPage() {
             moods: currentTribeData.moods || [],
             homepageUrl: currentTribeData.homepageUrl || "",
             joinMechanism: currentTribeData.joinMechanism || 'instant',
+            minimumReputation: currentTribeData.minimumReputation || "None",
           });
         } else {
           router.push('/tribes');
@@ -100,10 +107,17 @@ export default function TribeSettingsPage() {
 
   async function onSubmit(values: TribeSettingsFormValues) {
     setIsLoading(true);
+
+    const payload = {
+        ...values,
+        minimumReputation: values.minimumReputation && reputationLevels.includes(values.minimumReputation as any)
+            ? values.minimumReputation as UserProfile['reputationStatus']
+            : undefined,
+    };
     
     try {
-        await updateTribeSettings(tribeId, values);
-        setTribe(prev => prev ? { ...prev, ...values } : null);
+        await updateTribeSettings(tribeId, payload);
+        setTribe(prev => prev ? { ...prev, ...payload } : null);
         toast({
             title: "Settings Saved",
             description: `Settings for tribe "${values.name}" have been updated.`,
@@ -294,6 +308,7 @@ export default function TribeSettingsPage() {
               <Separator />
 
               <div className="space-y-4">
+                 <h3 className="text-lg font-semibold text-foreground">Access Control</h3>
                 <FormField
                   control={form.control}
                   name="isPublic"
@@ -359,6 +374,35 @@ export default function TribeSettingsPage() {
                     </FormItem>
                   )}
                 />
+
+                <FormField
+                    control={form.control}
+                    name="minimumReputation"
+                    render={({ field }) => (
+                        <FormItem className="rounded-lg border p-4 shadow-sm">
+                            <FormLabel className="text-base font-semibold flex items-center">
+                                <ReputationIcon className="mr-2 h-4 w-4 text-blue-500" /> Minimum Reputation to Join
+                            </FormLabel>
+                            <FormDescription className="pb-2">Set a minimum reputation level for new members. This applies to public tribes with instant join.</FormDescription>
+                            <Select onValueChange={field.onChange} value={field.value || "None"}>
+                                <FormControl>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select a reputation level..." />
+                                    </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                    <SelectItem value="None">None (Open to all)</SelectItem>
+                                    <Separator className="my-1" />
+                                    {reputationLevels.map(level => (
+                                        <SelectItem key={level} value={level}>{level}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
+
                  <div className="rounded-lg border p-4 shadow-sm">
                     <h3 className="text-base font-semibold text-foreground mb-1">Invite Link</h3>
                     <p className="text-sm text-muted-foreground mb-3">Share this link to invite users to your tribe. It will respect your chosen join mechanism.</p>
@@ -384,5 +428,3 @@ export default function TribeSettingsPage() {
     </div>
   );
 }
-
-    

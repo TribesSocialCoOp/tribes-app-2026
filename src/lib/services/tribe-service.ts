@@ -6,7 +6,7 @@
 import * as z from "zod";
 import { tribesData, mockMembers, mockPendingMembers } from '@/lib/data';
 import type { Tribe, TribeMember } from '@/lib/data';
-import type { PendingMember as PendingMemberType } from '@/lib/types';
+import type { PendingMember as PendingMemberType, UserProfile } from '@/lib/types';
 
 
 // From create/page.tsx
@@ -56,6 +56,7 @@ const tribeSettingsFormSchema = z.object({
   isPublic: z.boolean(),
   moods: z.array(z.string()).max(3).optional().default([]),
   joinMechanism: z.enum(['instant', 'approval']),
+  minimumReputation: z.enum(['Excellent', 'Good', 'Fair', 'Poor', 'At Risk']).optional(),
 });
 type UpdateTribeSettingsPayload = z.infer<typeof tribeSettingsFormSchema>;
 
