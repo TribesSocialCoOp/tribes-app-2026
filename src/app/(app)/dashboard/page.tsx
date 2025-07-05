@@ -1,41 +1,34 @@
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+"use client";
+
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Activity, Users, Zap, Rss } from "lucide-react";
+import { Activity, Users, Zap, Rss, Loader2, Sparkles, ArrowRight, CheckCircle } from "lucide-react";
 import Image from "next/image";
 import Link from 'next/link';
-import { getTribes } from "@/lib/data-access/tribes";
-import { getMoodStreamPosts } from "@/lib/services/post-service";
-import { MOCK_CURRENT_USER_ID } from "@/lib/data";
 import { formatDistanceToNow } from 'date-fns';
 
-// A simple function to get a user's tribes based on mock data logic
-// In a real app, this would be part of a user service: `getUserTribes(userId)`
+import { getTribes } from "@/lib/data-access/tribes";
+import { getMoodStreamPosts } from "@/lib/services/post-service";
+import { useUser } from '@/hooks/use-user';
+import { useToast } from '@/hooks/use-toast';
+import { graduateUserFromOnboarding } from '@/lib/services/user-service';
+
+import type { Tribe } from '@/lib/data';
+import type { MoodStreamPost } from '@/lib/types';
+
+
+// Helper functions, moved from the original server component
 const getMyTribeIds = () => {
   const baseTribeMemberships = ['1', '3', '6', '7'];
-  // In a real app, you wouldn't use localStorage on the server.
-  // This is a stand-in for a database call to get user's tribes.
-  // We are omitting the localStorage part here for server-side rendering.
-  const myTribeIds = [...new Set(baseTribeMemberships)];
-  return myTribeIds;
+  if (typeof window !== 'undefined') {
+    const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
+    return [...new Set([...baseTribeMemberships, ...createdTribeIds])];
+  }
+  return [...new Set(baseTribeMemberships)];
 };
 
-// A simplified version to get some recent activity for the dashboard
-async function getDashboardActivity(myTribeIds: string[]) {
-    const allPosts = await getMoodStreamPosts(); // Using mood stream as a proxy for all posts
-    const recentActivity = allPosts
-        .filter(post => myTribeIds.includes(post.tribeName ? getTribeIdByName(post.tribeName) : ''))
-        .slice(0, 3) // Get the 3 most recent posts from user's tribes
-        .map(post => ({
-            user: post.author,
-            tribe: post.tribeName || 'Unknown Tribe',
-            action: post.title ? `posted: "${post.title}"` : 'shared a post',
-            time: formatDistanceToNow(post.timestamp, { addSuffix: true }),
-        }));
-    return recentActivity;
-}
-
-// Helper to map tribe name back to ID for filtering, as our mock data is inconsistent
 const getTribeIdByName = (name: string): string => {
     const tribeMap: Record<string, string> = {
         "AI Innovators": "1",
@@ -46,23 +39,106 @@ const getTribeIdByName = (name: string): string => {
         "Sustainable Living Hub": "5",
     };
     return tribeMap[name] || '';
+};
+
+async function getDashboardActivity(myTribeIds: string[]) {
+    const allPosts = await getMoodStreamPosts();
+    return allPosts
+        .filter(post => myTribeIds.includes(post.tribeName ? getTribeIdByName(post.tribeName) : ''))
+        .slice(0, 3)
+        .map(post => ({
+            user: post.author,
+            tribe: post.tribeName || 'Unknown Tribe',
+            action: post.title ? `posted: "${post.title}"` : 'shared a post',
+            time: formatDistanceToNow(new Date(post.timestamp), { addSuffix: true }),
+        }));
 }
 
+interface ActivityItem {
+    user: string;
+    tribe: string;
+    action: string;
+    time: string;
+}
 
-export default async function DashboardPage() {
-  const myTribeIds = getMyTribeIds();
-  const allTribes = await getTribes();
-  const myTribes = allTribes.filter(t => myTribeIds.includes(t.id));
+export default function DashboardPage() {
+  const { user } = useUser();
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(user.reputationStatus === 'Onboarding');
+
+  const [myTribes, setMyTribes] = useState<Tribe[]>([]);
+  const [recentMoodPostsCount, setRecentMoodPostsCount] = useState(0);
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      
+      const myTribeIds = getMyTribeIds();
+      const allTribes = await getTribes();
+      const userTribes = allTribes.filter(t => myTribeIds.includes(t.id));
+      setMyTribes(userTribes);
+
+      const allMoodPosts = await getMoodStreamPosts();
+      const recentPostsCount = allMoodPosts.filter(
+        p => (new Date().getTime() - new Date(p.timestamp).getTime()) < (7 * 24 * 60 * 60 * 1000)
+      ).length;
+      setRecentMoodPostsCount(recentPostsCount);
+
+      const activityData = await getDashboardActivity(myTribeIds);
+      setRecentActivity(activityData);
+      
+      setIsLoading(false);
+    };
+
+    fetchData();
+  }, []);
   
-  const allMoodPosts = await getMoodStreamPosts();
-  const recentMoodPostsCount = allMoodPosts.filter(
-    p => (new Date().getTime() - p.timestamp.getTime()) < (7 * 24 * 60 * 60 * 1000) // last 7 days
-  ).length;
-
-  const recentActivity = await getDashboardActivity(myTribeIds);
+  const handleCompleteOnboarding = async () => {
+      await graduateUserFromOnboarding(user.id);
+      toast({
+          title: "Onboarding Complete!",
+          description: "Your reputation has been established. You can now join more tribes.",
+      });
+      setShowOnboarding(false);
+  };
+  
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
+      {showOnboarding && (
+        <Card className="mb-6 shadow-lg border-primary/50 bg-primary/5">
+            <CardHeader>
+                <div className="flex items-center space-x-3">
+                    <Sparkles className="h-8 w-8 text-primary"/>
+                    <div>
+                        <CardTitle className="text-xl tracking-normal">Welcome to Tribes.app!</CardTitle>
+                        <CardDescription>Complete your first step to build your reputation.</CardDescription>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <p className="text-sm text-muted-foreground">
+                    Our community is built on trust and constructive engagement. A great way to start is by exploring a curated topic in our "Our Story" section. Reading different perspectives is the first step to meaningful contribution.
+                </p>
+            </CardContent>
+            <CardFooter className="flex-col sm:flex-row items-start sm:items-center gap-4">
+                <Link href="/our-story" passHref>
+                    <Button variant="outline">Explore 'Our Story' <ArrowRight className="ml-2 h-4 w-4" /></Button>
+                </Link>
+                <Button onClick={handleCompleteOnboarding}>Mark as Complete</Button>
+            </CardFooter>
+        </Card>
+      )}
+      
       <header className="mb-8">
         <h1 className="text-4xl font-bold tracking-normal text-foreground font-mono">Welcome to Tribes.app</h1>
         <p className="text-lg text-muted-foreground mt-2">

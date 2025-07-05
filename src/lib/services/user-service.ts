@@ -41,3 +41,24 @@ export async function updateUserProfile(userId: string, updates: Partial<Omit<Us
   }
   return Promise.resolve(null);
 }
+
+/**
+ * Simulates graduating a user from the 'Onboarding' status.
+ * @param userId The ID of the user to graduate.
+ */
+export async function graduateUserFromOnboarding(userId: string): Promise<UserProfile | null> {
+  console.log(`Service: Graduating user ${userId} from onboarding.`);
+  if (userId === mockUserProfile.id && mockUserProfile.reputationStatus === 'Onboarding') {
+    return new Promise(resolve => {
+      setTimeout(() => {
+        Object.assign(mockUserProfile, {
+          reputationStatus: 'Fair',
+          reputationScore: 250, // Give them a starting score
+        });
+        resolve({ ...mockUserProfile });
+      }, 300);
+    });
+  }
+  // If user is not in onboarding or not found, do nothing.
+  return Promise.resolve(null);
+}
