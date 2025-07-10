@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from 'next/link';
@@ -13,7 +14,7 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CreditCard, LogOut, Settings, User } from "lucide-react";
+import { CreditCard, LayoutDashboard, LogOut, Settings, User } from "lucide-react";
 
 export function UserNav() {
   // Placeholder user data
@@ -48,6 +49,13 @@ export function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+           <Link href="/dashboard" passHref>
+            <DropdownMenuItem>
+              <LayoutDashboard className="mr-2 h-4 w-4" />
+              <span>Dashboard</span>
+              <DropdownMenuShortcut>⇧⌘D</DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </Link>
           <Link href="/profile" passHref>
             <DropdownMenuItem>
               <User className="mr-2 h-4 w-4" />
