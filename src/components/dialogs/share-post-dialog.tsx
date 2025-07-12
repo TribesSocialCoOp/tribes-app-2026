@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useForm } from "react-hook-form";
 import {
   Dialog, DialogContent as ShadDialogContent, DialogHeader as ShadDialogHeader, DialogTitle as ShadDialogTitle, DialogDescription as ShadDialogDescription, DialogFooter as ShadDialogFooter
 } from "@/components/ui/dialog";
@@ -37,6 +38,9 @@ export function SharePostDialog({
   const { toast } = useToast();
   const [myTribes, setMyTribes] = useState<Tribe[]>([]);
   const [selectedTribes, setSelectedTribes] = useState<string[]>([]);
+
+  // Create a dummy form instance to satisfy the Form provider context.
+  const form = useForm();
 
   useEffect(() => {
     if (isOpen) {
@@ -74,63 +78,65 @@ export function SharePostDialog({
   const RootComponent = isMobile ? Sheet : Dialog;
 
   const commonContent = (
-    <div className="flex flex-col h-full overflow-hidden">
-      <div className="p-4 sm:p-6 border-b">
-        <DialogHeaderComponent>
-          <DialogTitleComponent className="flex items-center">
-            <Share2 className="mr-2 h-5 w-5 text-primary" /> Share Post
-          </DialogTitleComponent>
-          <DialogDescriptionComponent>
-            Select which tribes you'd like to share "<span className="italic font-semibold">{post.title || "this post"}</span>" with.
-          </DialogDescriptionComponent>
-        </DialogHeaderComponent>
+    <Form {...form}>
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="p-4 sm:p-6 border-b">
+          <DialogHeaderComponent>
+            <DialogTitleComponent className="flex items-center">
+              <Share2 className="mr-2 h-5 w-5 text-primary" /> Share Post
+            </DialogTitleComponent>
+            <DialogDescriptionComponent>
+              Select which tribes you'd like to share "<span className="italic font-semibold">{post.title || "this post"}</span>" with.
+            </DialogDescriptionComponent>
+          </DialogHeaderComponent>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <ScrollArea className="h-full">
+              <div className="mb-2">
+                  <FormLabel className="text-md flex items-center">
+                      <UsersIcon className="mr-2 h-4 w-4 text-muted-foreground"/> Share with Tribes
+                  </FormLabel>
+                  <FormDescription>Select tribes to share this post with.</FormDescription>
+              </div>
+              <div className="max-h-64 overflow-y-auto space-y-2 rounded-md border p-3">
+              {myTribes.length > 0 ? (
+                  myTribes.map((item) => (
+                      <FormItem
+                          key={item.id}
+                          className="flex flex-row items-start space-x-3 space-y-0"
+                      >
+                          <FormControl>
+                          <Checkbox
+                              checked={selectedTribes.includes(item.name)}
+                              onCheckedChange={(checked) => {
+                                  const newSelection = checked
+                                      ? [...selectedTribes, item.name]
+                                      : selectedTribes.filter((name) => name !== item.name);
+                                  setSelectedTribes(newSelection);
+                              }}
+                          />
+                          </FormControl>
+                          <FormLabel className="font-normal">
+                          {item.name}
+                          </FormLabel>
+                      </FormItem>
+                  ))
+              ) : (
+                  <p className="text-sm text-muted-foreground text-center py-2">You are not a member of any tribes.</p>
+              )}
+              </div>
+          </ScrollArea>
+        </div>
+        <div className="p-4 sm:p-6 border-t">
+          <DialogFooterComponent>
+            <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" onClick={handleShare} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              Update Sharing
+            </Button>
+          </DialogFooterComponent>
+        </div>
       </div>
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-        <ScrollArea className="h-full">
-            <div className="mb-2">
-                <FormLabel className="text-md flex items-center">
-                    <UsersIcon className="mr-2 h-4 w-4 text-muted-foreground"/> Share with Tribes
-                </FormLabel>
-                <FormDescription>Select tribes to share this post with.</FormDescription>
-            </div>
-            <div className="max-h-64 overflow-y-auto space-y-2 rounded-md border p-3">
-            {myTribes.length > 0 ? (
-                myTribes.map((item) => (
-                    <FormItem
-                        key={item.id}
-                        className="flex flex-row items-start space-x-3 space-y-0"
-                    >
-                        <FormControl>
-                        <Checkbox
-                            checked={selectedTribes.includes(item.name)}
-                            onCheckedChange={(checked) => {
-                                const newSelection = checked
-                                    ? [...selectedTribes, item.name]
-                                    : selectedTribes.filter((name) => name !== item.name);
-                                setSelectedTribes(newSelection);
-                            }}
-                        />
-                        </FormControl>
-                        <FormLabel className="font-normal">
-                        {item.name}
-                        </FormLabel>
-                    </FormItem>
-                ))
-            ) : (
-                <p className="text-sm text-muted-foreground text-center py-2">You are not a member of any tribes.</p>
-            )}
-            </div>
-        </ScrollArea>
-      </div>
-      <div className="p-4 sm:p-6 border-t">
-        <DialogFooterComponent>
-          <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="button" onClick={handleShare} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            Update Sharing
-          </Button>
-        </DialogFooterComponent>
-      </div>
-    </div>
+    </Form>
   );
 
   if (isMobile) {
