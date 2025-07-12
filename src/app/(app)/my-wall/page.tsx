@@ -54,25 +54,18 @@ export default function MyWallPage() {
 
 
     const handlePostCreated = (newPostData: PostFormValues) => {
-        const sharedWithData: Record<string, string> = {};
-        if (newPostData.tribes) {
-            newPostData.tribes.forEach(tribeName => {
-                sharedWithData[tribeName] = "main_profile"; // Default to main profile on creation
-            });
-        }
-
         const newPost: Partial<TribePost> & { id: string, sharedWith?: Record<string, string> } = {
             id: `wall-post-${Date.now()}`,
             title: newPostData.title,
             content: newPostData.content,
             imageUrl: newPostData.image ? URL.createObjectURL(newPostData.image) : undefined,
             dataAiHintImage: newPostData.image ? 'user upload' : undefined,
-            sharedWith: sharedWithData,
+            sharedWith: {}, // New posts are private by default
         };
 
         setWallPosts(prev => [newPost, ...prev]);
         
-        console.log(`Post created. Shared with tribes:`, sharedWithData);
+        console.log(`Post created privately on wall.`);
         
         setIsCreatePostDialogOpen(false);
     };
