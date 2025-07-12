@@ -10,22 +10,24 @@ import {
   Sheet, SheetContent as ShadSheetContent, SheetHeader as ShadSheetHeader, SheetTitle as ShadSheetTitle, SheetDescription as ShadSheetDescription, SheetFooter as ShadSheetFooter
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormItem, FormLabel, FormDescription } from "@/components/ui/form";
+import { Form, FormControl, FormItem, FormLabel } from "@/components/ui/form";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Share2, Users as UsersIcon } from 'lucide-react';
+import { Share2, Users as UsersIcon, UserCircle, AtSign, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getTribes } from '@/lib/data-access/tribes';
 import type { Tribe } from '@/lib/data';
-import type { TribePost } from '@/lib/types';
-
+import type { TribePost, UserProfile } from '@/lib/types';
+import { getUserProfile } from '@/lib/services/user-service';
+import { MOCK_CURRENT_USER_ID } from '@/lib/data';
 
 interface SharePostDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  post: (Partial<TribePost> & { id: string, sharedWith?: string[] }) | null;
-  onConfirmShare: (postId: string, updatedTribeList: string[]) => void;
+  post: (Partial<TribePost> & { id: string, sharedWith?: Record<string, string> }) | null;
+  onConfirmShare: (postId: string, updatedTribeShares: Record<string, string>) => void;
 }
 
 export function SharePostDialog({
@@ -37,38 +39,63 @@ export function SharePostDialog({
   const isMobile = useIsMobile();
   const { toast } = useToast();
   const [myTribes, setMyTribes] = useState<Tribe[]>([]);
-  const [selectedTribes, setSelectedTribes] = useState<string[]>([]);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  const [selectedTribeShares, setSelectedTribeShares] = useState<Record<string, string>>({});
 
-  // Create a dummy form instance to satisfy the Form provider context.
   const form = useForm();
 
   useEffect(() => {
     if (isOpen) {
-      const fetchUserTribes = async () => {
+      const fetchUserData = async () => {
+        setIsLoadingProfile(true);
+        const [profile, allTribes] = await Promise.all([
+          getUserProfile(MOCK_CURRENT_USER_ID),
+          getTribes()
+        ]);
+        setUserProfile(profile);
+
         const baseTribeMemberships = ['1', '3', '6', '7'];
         const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
         const myTribeIds = [...new Set([...baseTribeMemberships, ...createdTribeIds])];
-        
-        const allTribes = await getTribes();
         const userTribes = allTribes.filter(t => myTribeIds.includes(t.id));
         setMyTribes(userTribes);
+        
+        setIsLoadingProfile(false);
       };
-      fetchUserTribes();
-
-      // Set initial selected state from the post prop
-      setSelectedTribes(post?.sharedWith || []);
+      fetchUserData();
+      setSelectedTribeShares(post?.sharedWith || {});
     }
   }, [isOpen, post]);
 
   if (!post) return null;
 
   const handleShare = () => {
-    onConfirmShare(post.id, selectedTribes);
+    onConfirmShare(post.id, selectedTribeShares);
     toast({
-        title: "Sharing Updated",
-        description: `Your post "${post.title || 'Untitled Post'}" sharing settings have been saved.`,
+      title: "Sharing Updated",
+      description: `Your post "${post.title || 'Untitled Post'}" sharing settings have been saved.`,
     });
   };
+  
+  const handleTribeCheckChange = (checked: boolean | 'indeterminate', tribeName: string) => {
+    const newSelection = { ...selectedTribeShares };
+    if (checked) {
+      newSelection[tribeName] = "main_profile"; // Default to main profile
+    } else {
+      delete newSelection[tribeName];
+    }
+    setSelectedTribeShares(newSelection);
+  };
+  
+  const handleAliasChange = (tribeName: string, alias: string) => {
+    setSelectedTribeShares(prev => ({ ...prev, [tribeName]: alias }));
+  };
+  
+  const identityOptions = [
+    { value: "main_profile", label: userProfile?.name || "Main Profile", icon: UserCircle },
+    ...(userProfile?.aliases?.map(alias => ({ value: alias, label: alias, icon: AtSign })) || [])
+  ];
 
   const DialogContentComponent = isMobile ? ShadSheetContent : ShadDialogContent;
   const DialogHeaderComponent = isMobile ? ShadSheetHeader : ShadDialogHeader;
@@ -86,46 +113,64 @@ export function SharePostDialog({
               <Share2 className="mr-2 h-5 w-5 text-primary" /> Share Post
             </DialogTitleComponent>
             <DialogDescriptionComponent>
-              Select which tribes you'd like to share "<span className="italic font-semibold">{post.title || "this post"}</span>" with.
+              Choose which tribes to share "<span className="italic font-semibold">{post.title || "this post"}</span>" with, and which persona to use.
             </DialogDescriptionComponent>
           </DialogHeaderComponent>
         </div>
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <ScrollArea className="h-full">
-              <div className="mb-2">
-                  <FormLabel className="text-md flex items-center">
-                      <UsersIcon className="mr-2 h-4 w-4 text-muted-foreground"/> Share with Tribes
-                  </FormLabel>
-                  <FormDescription>Select tribes to share this post with.</FormDescription>
-              </div>
-              <div className="max-h-64 overflow-y-auto space-y-2 rounded-md border p-3">
-              {myTribes.length > 0 ? (
-                  myTribes.map((item) => (
-                      <FormItem
-                          key={item.id}
-                          className="flex flex-row items-start space-x-3 space-y-0"
-                      >
-                          <FormControl>
-                          <Checkbox
-                              checked={selectedTribes.includes(item.name)}
-                              onCheckedChange={(checked) => {
-                                  const newSelection = checked
-                                      ? [...selectedTribes, item.name]
-                                      : selectedTribes.filter((name) => name !== item.name);
-                                  setSelectedTribes(newSelection);
-                              }}
-                          />
-                          </FormControl>
-                          <FormLabel className="font-normal">
-                          {item.name}
-                          </FormLabel>
-                      </FormItem>
-                  ))
-              ) : (
-                  <p className="text-sm text-muted-foreground text-center py-2">You are not a member of any tribes.</p>
-              )}
-              </div>
-          </ScrollArea>
+          {isLoadingProfile ? (
+            <div className="flex items-center justify-center h-40">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <ScrollArea className="h-full">
+                <div className="space-y-4">
+                  {myTribes.length > 0 ? (
+                    myTribes.map((tribe) => {
+                      const isChecked = Object.keys(selectedTribeShares).includes(tribe.name);
+                      return (
+                        <div key={tribe.id} className="p-3 border rounded-lg transition-colors data-[checked=true]:bg-muted/50" data-checked={isChecked}>
+                          <div className="flex items-center space-x-3">
+                            <Checkbox
+                              id={`tribe-check-${tribe.id}`}
+                              checked={isChecked}
+                              onCheckedChange={(checked) => handleTribeCheckChange(!!checked, tribe.name)}
+                            />
+                            <FormLabel htmlFor={`tribe-check-${tribe.id}`} className="font-medium flex-1 cursor-pointer">
+                              {tribe.name}
+                            </FormLabel>
+                          </div>
+                          {isChecked && (
+                            <div className="pl-8 pt-2">
+                              <Select
+                                value={selectedTribeShares[tribe.name]}
+                                onValueChange={(value) => handleAliasChange(tribe.name, value)}
+                              >
+                                <SelectTrigger className="h-9">
+                                  <SelectValue placeholder="Select persona..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {identityOptions.map(opt => (
+                                    <SelectItem key={opt.value} value={opt.value}>
+                                      <div className="flex items-center">
+                                        <opt.icon className="mr-2 h-4 w-4 text-muted-foreground" />
+                                        <span>{opt.label}</span>
+                                      </div>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">You are not a member of any tribes.</p>
+                  )}
+                </div>
+            </ScrollArea>
+          )}
         </div>
         <div className="p-4 sm:p-6 border-t">
           <DialogFooterComponent>
