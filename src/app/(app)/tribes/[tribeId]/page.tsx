@@ -33,7 +33,6 @@ import type { Event, TribePost, ReportedPost, Tribe, TribeMember, MoodStreamPost
 import { PromotePostDialog } from '@/components/dialogs/boost-post-dialog';
 import { ReportPostDialog } from '@/components/dialogs/report-post-dialog';
 import { RepostDialog } from '@/components/dialogs/repost-dialog';
-import { CreatePostDialog, type PostFormValues } from '@/components/dialogs/create-post-dialog';
 import { ReportCommentDialog } from '@/components/dialogs/report-comment-dialog';
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
 
@@ -449,8 +448,6 @@ export default function TribeDetailPage() {
   const [isRepostDialogOpen, setIsRepostDialogOpen] = useState(false);
   const [postBeingReposted, setPostBeingReposted] = useState<TribePost | null>(null);
   
-  const [isCreatePostDialogOpen, setIsCreatePostDialogOpen] = useState(false);
-
   const [currentTribeMembers, setCurrentTribeMembers] = useState<TribeMember[]>([]);
 
   const [isMember, setIsMember] = useState(false);
@@ -714,18 +711,6 @@ export default function TribeDetailPage() {
     toast({ title: "Comment Posted!", description: "Your comment has been added." });
   };
 
-
-  const handlePostCreated = async (newPostData: PostFormValues) => {
-    if (!tribe) return;
-    await createTribePost(tribe.id, newPostData);
-    syncAllData();
-    toast({
-        title: "Post Created!",
-        description: "Your post has been added to the tribe feed.",
-    });
-    setIsCreatePostDialogOpen(false);
-  };
-
   if (isLoading || !tribe) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
@@ -859,25 +844,6 @@ export default function TribeDetailPage() {
         </CardContent>
       </Card>
 
-      {isMember && (
-        <Card className="shadow-lg">
-            <CardHeader className="p-4 flex-row items-center space-x-3">
-                <Avatar>
-                    <AvatarImage src="https://placehold.co/40x40.png" alt="User" data-ai-hint="current user avatar"/>
-                    <AvatarFallback>ME</AvatarFallback>
-                </Avatar>
-                <Button variant="outline" className="flex-1 justify-start text-muted-foreground" onClick={() => setIsCreatePostDialogOpen(true)}>
-                    What's on your mind, User?
-                </Button>
-            </CardHeader>
-            <CardFooter className="p-4 pt-0 flex justify-end">
-                <Button className="bg-primary hover:bg-primary/90" onClick={() => setIsCreatePostDialogOpen(true)}>
-                    <Edit3 className="mr-2 h-4 w-4" /> Create Post
-                </Button>
-            </CardFooter>
-        </Card>
-      )}
-
       <section className="space-y-4">
         <h2 className="text-xl font-semibold text-foreground tracking-normal px-1">
             {isMember ? "Feed" : "Featured Posts in Mood Streams"}
@@ -957,14 +923,6 @@ export default function TribeDetailPage() {
           onOpenChange={setIsRepostDialogOpen}
           postToRepost={postBeingReposted}
           onConfirmRepost={handleConfirmRepost}
-        />
-      )}
-      {tribe && (
-        <CreatePostDialog
-            isOpen={isCreatePostDialogOpen}
-            onOpenChange={setIsCreatePostDialogOpen}
-            onPostCreated={handlePostCreated}
-            tribeName={tribe.name}
         />
       )}
        <CommentDialog
