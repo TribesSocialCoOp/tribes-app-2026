@@ -4,15 +4,16 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Globe, Lock, PlusCircle, Settings, Share2, Users } from "lucide-react";
+import { PlusCircle, Share2 } from "lucide-react";
 import Image from "next/image";
 import { CreatePostDialog, type PostFormValues } from '@/components/dialogs/create-post-dialog';
+import { SharePostDialog } from '@/components/dialogs/share-post-dialog'; // New import
 import type { TribePost } from '@/lib/types';
 import { Badge } from '@/components/ui/badge';
 
 
 // Placeholder for a Wall Item Card
-const WallItemCard = ({ post }: { post: Partial<TribePost> & { sharedWith?: string[] } }) => (
+const WallItemCard = ({ post, onShare }: { post: Partial<TribePost> & { id: string, sharedWith?: string[] }, onShare: (post: Partial<TribePost> & { id: string, sharedWith?: string[] }) => void }) => (
   <Card className="overflow-hidden shadow-lg hover:shadow-xl transition-shadow flex flex-col">
     <CardHeader>
       <CardTitle className="tracking-normal text-xl">{post.title}</CardTitle>
@@ -32,7 +33,7 @@ const WallItemCard = ({ post }: { post: Partial<TribePost> & { sharedWith?: stri
       <CardDescription>{post.content}</CardDescription>
     </CardContent>
     <CardFooter className="flex-col items-start gap-3">
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" onClick={() => onShare(post)}>
             <Share2 className="mr-2 h-4 w-4" /> Share
         </Button>
         {post.sharedWith && post.sharedWith.length > 0 && (
@@ -52,20 +53,24 @@ const WallItemCard = ({ post }: { post: Partial<TribePost> & { sharedWith?: stri
 
 export default function MyWallPage() {
     const [isCreatePostDialogOpen, setIsCreatePostDialogOpen] = useState(false);
-    const [wallPosts, setWallPosts] = useState<(Partial<TribePost> & { sharedWith?: string[] })[]>([
-        { title: "My Latest Project", content: "Proud to share the launch of my new website! Let me know what you think.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "website project design", sharedWith: ["AI Innovators", "Indie Game Devs"] },
-        { title: "Thoughts on AI", content: "A blog post I wrote about the future of artificial intelligence.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "artificial intelligence brain", sharedWith: ["AI Innovators"] },
-        { title: "Hiking Adventure", content: "Some photos from my recent trip to the mountains. This is a private post, only visible to me.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "mountain landscape hiking", sharedWith: [] },
+    const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+    const [postToShare, setPostToShare] = useState<(Partial<TribePost> & { id: string, sharedWith?: string[] }) | null>(null);
+
+    const [wallPosts, setWallPosts] = useState<(Partial<TribePost> & { id: string, sharedWith?: string[] })[]>([
+        { id: "post1", title: "My Latest Project", content: "Proud to share the launch of my new website! Let me know what you think.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "website project design", sharedWith: ["AI Innovators", "Indie Game Devs"] },
+        { id: "post2", title: "Thoughts on AI", content: "A blog post I wrote about the future of artificial intelligence.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "artificial intelligence brain", sharedWith: ["AI Innovators"] },
+        { id: "post3", title: "Hiking Adventure", content: "Some photos from my recent trip to the mountains. This is a private post, only visible to me.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "mountain landscape hiking", sharedWith: [] },
     ]);
 
 
     const handlePostCreated = (newPostData: PostFormValues) => {
-        const newPost: Partial<TribePost> & { sharedWith?: string[] } = {
+        const newPost: Partial<TribePost> & { id: string, sharedWith?: string[] } = {
+            id: `wall-post-${Date.now()}`,
             title: newPostData.title,
             content: newPostData.content,
             imageUrl: newPostData.image ? URL.createObjectURL(newPostData.image) : undefined,
             dataAiHintImage: newPostData.image ? 'user upload' : undefined,
-            sharedWith: newPostData.tribes, // For now, we'll just use the tribe IDs as names
+            sharedWith: newPostData.tribes, 
         };
 
         setWallPosts(prev => [newPost, ...prev]);
@@ -73,6 +78,21 @@ export default function MyWallPage() {
         console.log(`Post created. Shared with tribes: ${newPostData.tribes?.join(', ')}`);
         
         setIsCreatePostDialogOpen(false);
+    };
+
+    const handleShareClick = (post: Partial<TribePost> & { id: string, sharedWith?: string[] }) => {
+        setPostToShare(post);
+        setIsShareDialogOpen(true);
+    };
+
+    const handleConfirmShare = (postId: string, updatedTribeList: string[]) => {
+        setWallPosts(prevPosts => 
+            prevPosts.map(p => 
+                p.id === postId ? { ...p, sharedWith: updatedTribeList } : p
+            )
+        );
+        console.log(`Post ${postId} share settings updated to: ${updatedTribeList.join(', ')}`);
+        setIsShareDialogOpen(false);
     };
 
 
@@ -88,7 +108,6 @@ export default function MyWallPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={() => setIsCreatePostDialogOpen(true)}><PlusCircle className="mr-2 h-4 w-4" /> Add to Wall</Button>
-                    {/* Add filters button here in a future step */}
                 </div>
             </header>
         
@@ -99,8 +118,8 @@ export default function MyWallPage() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {wallPosts.length > 0 ? (
-                        wallPosts.map((post, index) => (
-                            <WallItemCard key={`wall-post-${index}`} post={post} />
+                        wallPosts.map((post) => (
+                            <WallItemCard key={post.id} post={post} onShare={handleShareClick} />
                         ))
                      ) : (
                         <div className="col-span-full text-center py-12">
@@ -115,6 +134,12 @@ export default function MyWallPage() {
             isOpen={isCreatePostDialogOpen}
             onOpenChange={setIsCreatePostDialogOpen}
             onPostCreated={handlePostCreated}
+        />
+        <SharePostDialog
+            isOpen={isShareDialogOpen}
+            onOpenChange={setIsShareDialogOpen}
+            post={postToShare}
+            onConfirmShare={handleConfirmShare}
         />
     </>
   );
