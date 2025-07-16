@@ -2,70 +2,63 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Share2, Users } from "lucide-react";
-import Image from "next/image";
+import { PlusCircle, Brush } from "lucide-react";
+
 import { CreatePostDialog, type PostFormValues } from '@/components/dialogs/create-post-dialog';
 import { SharePostDialog } from '@/components/dialogs/share-post-dialog';
+import { AddBlockDialog } from '@/components/dialogs/add-block-dialog'; 
+
 import type { TribePost } from '@/lib/types';
-import { Badge } from '@/components/ui/badge';
+import MyPostsBlock from '@/components/wall-blocks/my-posts-block';
+import HtmlBlock from '@/components/wall-blocks/html-block';
+import MusicBlock from '@/components/wall-blocks/music-block';
+import VideoBlock from '@/components/wall-blocks/video-block';
 
 
-// Placeholder for a Wall Item Card
-const WallItemCard = ({ post, onShare }: { post: Partial<TribePost> & { id: string, sharedWith?: Record<string, string> }, onShare: (post: Partial<TribePost> & { id: string, sharedWith?: Record<string, string> }) => void }) => {
-  const sharedTribes = post.sharedWith ? Object.keys(post.sharedWith) : [];
+// Define the structure for a block on the wall
+export interface WallBlock {
+    id: string;
+    type: 'my-posts' | 'html' | 'music' | 'video';
+    content: any; // This will vary based on the block type
+}
 
-  return (
-    <Card className="overflow-hidden shadow-lg hover:shadow-xl transition-shadow flex flex-col">
-      <CardHeader>
-        <CardTitle className="tracking-normal text-xl">{post.title}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex-grow">
-        {post.imageUrl &&
-          <div className="relative aspect-video w-full overflow-hidden rounded-md border mb-4">
-            <Image 
-              src={post.imageUrl}
-              alt={post.title || "Wall post image"}
-              fill
-              style={{ objectFit: 'cover' }}
-              data-ai-hint={post.dataAiHintImage || "user content"}
-            />
-          </div>
+// Initial state for the wall, now block-based
+const initialWallBlocks: WallBlock[] = [
+    {
+        id: 'block-1',
+        type: 'my-posts',
+        content: {
+            posts: [
+                { id: "post1", title: "My Latest Project", content: "Proud to share the launch of my new website! Let me know what you think.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "website project design", sharedWith: {"AI Innovators": "main_profile", "Indie Game Devs": "PixelPioneer"} },
+                { id: "post2", title: "Thoughts on AI", content: "A blog post I wrote about the future of artificial intelligence.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "artificial intelligence brain", sharedWith: {"AI Innovators": "WonderlandCoder"} },
+                { id: "post3", title: "Hiking Adventure", content: "Some photos from my recent trip to the mountains. This is a private post, only visible to me.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "mountain landscape hiking", sharedWith: {} },
+            ]
         }
-        <CardDescription>{post.content}</CardDescription>
-      </CardContent>
-      <CardFooter className="flex-col items-start gap-3">
-        {sharedTribes.length > 0 && (
-          <div className="w-full">
-            <h4 className="text-xs font-semibold text-muted-foreground mb-1.5 flex items-center">
-              <Users className="h-3 w-3 mr-1.5" />
-              Shared with:
-            </h4>
-            <ul className="list-disc list-inside text-sm text-foreground">
-              {sharedTribes.map(tribeName => <li key={tribeName}>{tribeName}</li>)}
-            </ul>
-          </div>
-        )}
-        <Button variant="outline" size="sm" onClick={() => onShare(post)}>
-            <Share2 className="mr-2 h-4 w-4" /> Share
-        </Button>
-      </CardFooter>
-    </Card>
-  );
-};
-
+    },
+    {
+        id: 'block-2',
+        type: 'html',
+        content: {
+            html: `<h2>Welcome to My Space!</h2><p>This is a custom HTML block. You can put <strong>any</strong> markup you want here. It's a great way to personalize your page.</p>`
+        }
+    },
+    {
+        id: 'block-3',
+        type: 'music',
+        content: {
+            trackUrl: 'https://soundcloud.com/your-track'
+        }
+    },
+];
 
 export default function MyWallPage() {
+    const [blocks, setBlocks] = useState<WallBlock[]>(initialWallBlocks);
+
     const [isCreatePostDialogOpen, setIsCreatePostDialogOpen] = useState(false);
     const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
     const [postToShare, setPostToShare] = useState<(Partial<TribePost> & { id: string, sharedWith?: Record<string, string> }) | null>(null);
-
-    const [wallPosts, setWallPosts] = useState<(Partial<TribePost> & { id: string, sharedWith?: Record<string, string> })[]>([
-        { id: "post1", title: "My Latest Project", content: "Proud to share the launch of my new website! Let me know what you think.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "website project design", sharedWith: {"AI Innovators": "main_profile", "Indie Game Devs": "PixelPioneer"} },
-        { id: "post2", title: "Thoughts on AI", content: "A blog post I wrote about the future of artificial intelligence.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "artificial intelligence brain", sharedWith: {"AI Innovators": "WonderlandCoder"} },
-        { id: "post3", title: "Hiking Adventure", content: "Some photos from my recent trip to the mountains. This is a private post, only visible to me.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "mountain landscape hiking", sharedWith: {} },
-    ]);
+    const [isAddBlockDialogOpen, setIsAddBlockDialogOpen] = useState(false);
 
 
     const handlePostCreated = (newPostData: PostFormValues) => {
@@ -75,12 +68,21 @@ export default function MyWallPage() {
             content: newPostData.content,
             imageUrl: newPostData.image ? URL.createObjectURL(newPostData.image) : undefined,
             dataAiHintImage: newPostData.image ? 'user upload' : undefined,
-            sharedWith: {}, // New posts are private by default
+            sharedWith: {},
         };
 
-        setWallPosts(prev => [newPost, ...prev]);
-        
-        console.log(`Post created privately on wall.`);
+        setBlocks(prevBlocks => prevBlocks.map(block => {
+            if (block.type === 'my-posts') {
+                return {
+                    ...block,
+                    content: {
+                        ...block.content,
+                        posts: [newPost, ...block.content.posts]
+                    }
+                };
+            }
+            return block;
+        }));
         
         setIsCreatePostDialogOpen(false);
     };
@@ -91,13 +93,61 @@ export default function MyWallPage() {
     };
 
     const handleConfirmShare = (postId: string, updatedTribeShares: Record<string, string>) => {
-        setWallPosts(prevPosts => 
-            prevPosts.map(p => 
-                p.id === postId ? { ...p, sharedWith: updatedTribeShares } : p
-            )
-        );
+        setBlocks(prevBlocks => prevBlocks.map(block => {
+            if (block.type === 'my-posts') {
+                return {
+                    ...block,
+                    content: {
+                        ...block.content,
+                        posts: block.content.posts.map((p: any) => 
+                            p.id === postId ? { ...p, sharedWith: updatedTribeShares } : p
+                        )
+                    }
+                };
+            }
+            return block;
+        }));
         console.log(`Post ${postId} share settings updated to:`, updatedTribeShares);
         setIsShareDialogOpen(false);
+    };
+
+    const handleAddBlock = (blockType: 'html' | 'music' | 'video') => {
+        let newBlock: WallBlock;
+        switch(blockType) {
+            case 'html':
+                newBlock = { id: `block-${Date.now()}`, type: 'html', content: { html: '<p>New HTML Block - Edit me!</p>' } };
+                break;
+            case 'music':
+                newBlock = { id: `block-${Date.now()}`, type: 'music', content: { trackUrl: '' } };
+                break;
+            case 'video':
+                newBlock = { id: `block-${Date.now()}`, type: 'video', content: { videoUrl: '' } };
+                break;
+            default:
+                return;
+        }
+        setBlocks(prev => [...prev, newBlock]);
+        setIsAddBlockDialogOpen(false);
+    };
+    
+    const renderBlock = (block: WallBlock) => {
+        switch (block.type) {
+            case 'my-posts':
+                return <MyPostsBlock 
+                            key={block.id} 
+                            posts={block.content.posts} 
+                            onShare={handleShareClick} 
+                            onCreatePost={() => setIsCreatePostDialogOpen(true)}
+                        />;
+            case 'html':
+                return <HtmlBlock key={block.id} content={block.content} />;
+            case 'music':
+                return <MusicBlock key={block.id} content={block.content} />;
+            case 'video':
+                return <VideoBlock key={block.id} content={block.content} />;
+            default:
+                return null;
+        }
     };
 
 
@@ -112,27 +162,16 @@ export default function MyWallPage() {
                 </p>
                 </div>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" onClick={() => setIsCreatePostDialogOpen(true)}><PlusCircle className="mr-2 h-4 w-4" /> Add to Wall</Button>
+                    <Button variant="outline" onClick={() => setIsAddBlockDialogOpen(true)}><PlusCircle className="mr-2 h-4 w-4" /> Add Block</Button>
+                    <Button variant="outline"><Brush className="mr-2 h-4 w-4" /> Customize Wall</Button>
                 </div>
             </header>
         
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {wallPosts.length > 0 ? (
-                    wallPosts.map((post) => (
-                        <WallItemCard key={post.id} post={post} onShare={handleShareClick} />
-                    ))
-                 ) : (
-                    <div className="col-span-full text-center py-12">
-                        <Card className="inline-block p-8 shadow-md">
-                            <CardContent className="flex flex-col items-center justify-center">
-                                <p className="text-muted-foreground">Your wall is empty.</p>
-                                <Button variant="link" className="mt-2" onClick={() => setIsCreatePostDialogOpen(true)}>Create your first post</Button>
-                            </CardContent>
-                        </Card>
-                    </div>
-                 )}
+            <div className="space-y-8">
+                {blocks.map(block => renderBlock(block))}
             </div>
         </div>
+
         <CreatePostDialog
             isOpen={isCreatePostDialogOpen}
             onOpenChange={setIsCreatePostDialogOpen}
@@ -143,6 +182,11 @@ export default function MyWallPage() {
             onOpenChange={setIsShareDialogOpen}
             post={postToShare}
             onConfirmShare={handleConfirmShare}
+        />
+        <AddBlockDialog
+            isOpen={isAddBlockDialogOpen}
+            onOpenChange={setIsAddBlockDialogOpen}
+            onAddBlock={handleAddBlock}
         />
     </>
   );
