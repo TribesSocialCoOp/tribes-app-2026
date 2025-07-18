@@ -8,12 +8,14 @@ import { PlusCircle, Brush } from "lucide-react";
 import { CreatePostDialog, type PostFormValues } from '@/components/dialogs/create-post-dialog';
 import { SharePostDialog } from '@/components/dialogs/share-post-dialog';
 import { AddBlockDialog } from '@/components/dialogs/add-block-dialog'; 
+import { CustomizeWallSheet } from '@/components/sheets/customize-wall-sheet';
 
 import type { TribePost } from '@/lib/types';
 import MyPostsBlock from '@/components/wall-blocks/my-posts-block';
 import HtmlBlock from '@/components/wall-blocks/html-block';
 import MusicBlock from '@/components/wall-blocks/music-block';
 import VideoBlock from '@/components/wall-blocks/video-block';
+import { cn } from '@/lib/utils';
 
 
 // Define the structure for a block on the wall
@@ -21,6 +23,11 @@ export interface WallBlock {
     id: string;
     type: 'my-posts' | 'html' | 'music' | 'video';
     content: any; // This will vary based on the block type
+}
+
+export interface WallStyles {
+    backgroundColor: string;
+    layout: 'single-column' | 'two-column';
 }
 
 // Initial state for the wall, now block-based
@@ -54,11 +61,16 @@ const initialWallBlocks: WallBlock[] = [
 
 export default function MyWallPage() {
     const [blocks, setBlocks] = useState<WallBlock[]>(initialWallBlocks);
+    const [styles, setStyles] = useState<WallStyles>({
+        backgroundColor: 'bg-background',
+        layout: 'single-column'
+    });
 
     const [isCreatePostDialogOpen, setIsCreatePostDialogOpen] = useState(false);
     const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
     const [postToShare, setPostToShare] = useState<(Partial<TribePost> & { id: string, sharedWith?: Record<string, string> }) | null>(null);
     const [isAddBlockDialogOpen, setIsAddBlockDialogOpen] = useState(false);
+    const [isCustomizeSheetOpen, setIsCustomizeSheetOpen] = useState(false);
 
 
     const handlePostCreated = (newPostData: PostFormValues) => {
@@ -130,6 +142,11 @@ export default function MyWallPage() {
         setIsAddBlockDialogOpen(false);
     };
     
+    const handleSaveStyles = (newStyles: WallStyles) => {
+        setStyles(newStyles);
+        setIsCustomizeSheetOpen(false);
+    };
+
     const renderBlock = (block: WallBlock) => {
         switch (block.type) {
             case 'my-posts':
@@ -152,8 +169,8 @@ export default function MyWallPage() {
 
 
   return (
-    <>
-        <div className="space-y-8">
+    <div className={cn("p-4 md:p-6 rounded-lg transition-colors", styles.backgroundColor)}>
+        <div className="space-y-8 max-w-7xl mx-auto">
             <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                 <h1 className="text-4xl font-bold tracking-normal text-foreground font-mono">My Wall</h1>
@@ -163,11 +180,14 @@ export default function MyWallPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" onClick={() => setIsAddBlockDialogOpen(true)}><PlusCircle className="mr-2 h-4 w-4" /> Add Block</Button>
-                    <Button variant="outline"><Brush className="mr-2 h-4 w-4" /> Customize Wall</Button>
+                    <Button variant="outline" onClick={() => setIsCustomizeSheetOpen(true)}><Brush className="mr-2 h-4 w-4" /> Customize Wall</Button>
                 </div>
             </header>
         
-            <div className="space-y-8">
+            <div className={cn(
+                "space-y-8",
+                styles.layout === 'two-column' && "md:grid md:grid-cols-2 md:gap-8 md:space-y-0"
+            )}>
                 {blocks.map(block => renderBlock(block))}
             </div>
         </div>
@@ -188,6 +208,12 @@ export default function MyWallPage() {
             onOpenChange={setIsAddBlockDialogOpen}
             onAddBlock={handleAddBlock}
         />
-    </>
+        <CustomizeWallSheet
+            isOpen={isCustomizeSheetOpen}
+            onOpenChange={setIsCustomizeSheetOpen}
+            currentStyles={styles}
+            onSave={handleSaveStyles}
+        />
+    </div>
   );
 }
