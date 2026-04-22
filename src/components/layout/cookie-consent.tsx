@@ -15,6 +15,7 @@ interface ConsentState {
 }
 
 const CONSENT_STORAGE_KEY = 'tribes_cookie_consent';
+const CONSENT_COOKIE_NAME = 'tribes_consent_v1';
 const CONSENT_VERSION = 1;
 
 const DEFAULT_CONSENT: ConsentState = {
@@ -25,25 +26,40 @@ const DEFAULT_CONSENT: ConsentState = {
 };
 
 // ============================================================
-// PERSISTENCE
+// PERSISTENCE (localStorage + cookie fallback)
 // ============================================================
 
 function loadConsent(): ConsentState | null {
   if (typeof window === 'undefined') return null;
   try {
+    // Try localStorage first
     const raw = localStorage.getItem(CONSENT_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed: ConsentState = JSON.parse(raw);
-    // Re-surface if consent version is outdated
-    if (parsed.version < CONSENT_VERSION) return null;
-    return parsed;
+    if (raw) {
+      const parsed: ConsentState = JSON.parse(raw);
+      if (parsed.version >= CONSENT_VERSION) return parsed;
+    }
+    // Fallback: check cookie (survives localStorage clears)
+    const cookieMatch = document.cookie.match(/(?:^|;\s*)tribes_consent_v1=([^;]*)/);
+    if (cookieMatch) {
+      const parsed: ConsentState = JSON.parse(decodeURIComponent(cookieMatch[1]));
+      if (parsed.version >= CONSENT_VERSION) {
+        // Re-populate localStorage from cookie
+        localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(parsed));
+        return parsed;
+      }
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
 function saveConsent(consent: ConsentState): void {
+  // Persist to localStorage
   localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(consent));
+  // Also persist to cookie (1 year expiry)
+  const encoded = encodeURIComponent(JSON.stringify(consent));
+  document.cookie = `${CONSENT_COOKIE_NAME}=${encoded}; path=/; max-age=${365 * 24 * 60 * 60}; SameSite=Lax`;
 }
 
 // ============================================================
@@ -213,33 +229,35 @@ function ConsentBanner({
   onManage: () => void;
 }) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 p-4 animate-in slide-in-from-bottom-4 duration-300">
-      <div className="max-w-4xl mx-auto bg-background/95 backdrop-blur-md border border-border rounded-xl shadow-2xl p-5">
-        <div className="flex items-start gap-4">
-          <div className="shrink-0 mt-0.5">
-            <Cookie className="h-6 w-6 text-primary" />
+    <div className="fixed bottom-0 left-0 right-0 z-50 p-3 sm:p-4 animate-in slide-in-from-bottom-4 duration-300">
+      <div className="max-w-4xl mx-auto bg-background/95 backdrop-blur-md border border-border rounded-xl shadow-2xl p-4 sm:p-5">
+        <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            <div className="shrink-0 mt-0.5">
+              <Cookie className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-foreground">We value your privacy</h3>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                We use essential cookies for authentication and security. Optional cookies help us
+                improve the platform.{' '}
+                <a href="/cookies" className="underline underline-offset-2 hover:text-foreground transition-colors">
+                  Cookie Policy
+                </a>
+              </p>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold text-foreground">We value your privacy</h3>
-            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-              We use essential cookies for authentication and security. Optional cookies help us
-              improve the platform. You can customize your preferences at any time.{' '}
-              <a href="/cookies" className="underline underline-offset-2 hover:text-foreground transition-colors">
-                Cookie Policy
-              </a>
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
             <button
               onClick={onManage}
-              className="px-4 py-2 text-sm font-medium rounded-lg border border-border bg-muted hover:bg-accent text-foreground transition-colors flex items-center gap-1.5"
+              className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium rounded-lg border border-border bg-muted hover:bg-accent text-foreground transition-colors flex items-center justify-center gap-1.5"
             >
               <Settings2 className="h-3.5 w-3.5" />
               Manage
             </button>
             <button
               onClick={onAcceptAll}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             >
               Accept All
             </button>
