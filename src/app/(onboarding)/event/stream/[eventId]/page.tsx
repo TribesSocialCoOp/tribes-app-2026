@@ -3,95 +3,35 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import React, { useState, useEffect }
-from "react";
+import React, { useState, useEffect, Suspense, useCallback } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Radio, MessageSquareText, Send, UserCircle } from "lucide-react"; // Using Radio as a placeholder for live icon
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Radio, MessageSquareText, Send, Loader2 } from "lucide-react";
+import { useTimeSince } from '@/hooks/use-time-since';
+import { getEventStreamPosts, createEventStreamPost } from '@/lib/actions/event-actions';
 
-// Define an interface for an Event Stream Post
-interface EventStreamPost {
+interface StreamPost {
   id: string;
+  eventId: string;
   authorNickname: string;
-  authorAvatar?: string; // Optional: could be a generic event icon or user-chosen temp avatar
   authorAvatarFallback: string;
   content: string;
-  timestamp: Date;
   imageUrl?: string;
   imageAlt?: string;
-  dataAiHintAvatar?: string;
-  dataAiHintImage?: string;
+  timestamp: Date;
 }
 
-const MOCK_EVENT_STREAM_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
-
-// Sample event stream posts
-const sampleEventPosts: EventStreamPost[] = [
-  {
-    id: "evp1",
-    authorNickname: "EventOrganizer",
-    authorAvatarFallback: "EO",
-    content: "Welcome to 'Tech Innovators Summit'! We're thrilled to have you. Check the schedule for today's keynote at 10 AM.",
-    timestamp: new Date(MOCK_EVENT_STREAM_DATE_MS - 3600000 * 2), // 2 hours ago
-    dataAiHintAvatar: "organizer official"
-  },
-  {
-    id: "evp2",
-    authorNickname: "AI_Explorer_77",
-    authorAvatarFallback: "AI",
-    content: "Excited for the AI ethics panel! Anyone know if there will be a Q&A session afterwards?",
-    timestamp: new Date(MOCK_EVENT_STREAM_DATE_MS - 3600000 * 1.5), // 1.5 hours ago
-    dataAiHintAvatar: "attendee user"
-  },
-  {
-    id: "evp3",
-    authorNickname: "EventOrganizer",
-    authorAvatarFallback: "EO",
-    content: "Quick update: The workshop on 'Next-Gen AI Tools' in Room B is starting in 15 minutes.",
-    imageUrl: "https://placehold.co/600x200.png",
-    imageAlt: "Workshop reminder banner",
-    timestamp: new Date(MOCK_EVENT_STREAM_DATE_MS - 3600000 * 1), // 1 hour ago
-    dataAiHintAvatar: "organizer official",
-    dataAiHintImage: "event schedule"
-  },
-  {
-    id: "evp4",
-    authorNickname: "DevDude_Online",
-    authorAvatarFallback: "DD",
-    content: "Is anyone else having trouble connecting to the event Wi-Fi? SSID: EventGuest",
-    timestamp: new Date(MOCK_EVENT_STREAM_DATE_MS - 3600000 * 0.5), // 30 mins ago
-    dataAiHintAvatar: "attendee help"
-  },
-];
-
-const EventPostCard: React.FC<{ post: EventStreamPost }> = ({ post }) => {
-  const [displayTime, setDisplayTime] = useState<string>(' ');
-
-  useEffect(() => {
-    const timeSince = (date: Date): string => {
-      const now = new Date();
-      const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-      if (seconds < 5) return "just now";
-      if (seconds < 60) return `${Math.floor(seconds)}s ago`;
-      let interval = Math.floor(seconds / 60);
-      if (interval < 60) return `${interval}m ago`;
-      interval = Math.floor(seconds / 3600);
-      if (interval < 24) return `${interval}h ago`;
-      interval = Math.floor(seconds / 86400);
-      return `${interval}d ago`;
-    };
-    setDisplayTime(timeSince(post.timestamp));
-  }, [post.timestamp]);
+const EventPostCard: React.FC<{ post: StreamPost }> = ({ post }) => {
+  const displayTime = useTimeSince(post.timestamp);
 
   return (
     <Card className="shadow-sm">
       <CardHeader className="p-3 pb-2">
         <div className="flex items-start space-x-3">
           <Avatar className="h-9 w-9">
-            {post.authorAvatar && <AvatarImage src={post.authorAvatar} alt={post.authorNickname} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
             <AvatarFallback>{post.authorAvatarFallback}</AvatarFallback>
           </Avatar>
           <div>
@@ -103,12 +43,11 @@ const EventPostCard: React.FC<{ post: EventStreamPost }> = ({ post }) => {
       <CardContent className="p-3 pt-1">
         {post.imageUrl && (
           <div className="mb-2 relative aspect-video w-full overflow-hidden rounded-md border">
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src={post.imageUrl}
               alt={post.imageAlt || "Event stream media"}
-              fill
-              style={{ objectFit: 'cover' }}
-              data-ai-hint={post.dataAiHintImage || "event media"}
+              className="w-full h-full object-cover"
             />
           </div>
         )}
@@ -119,15 +58,29 @@ const EventPostCard: React.FC<{ post: EventStreamPost }> = ({ post }) => {
 };
 
 
-export default function EventStreamPage() {
+function EventStreamContent() {
   const params = useParams();
   const searchParams = useSearchParams();
 
   const eventId = params.eventId as string;
   const [eventName, setEventName] = useState("this Event");
   const [nickname, setNickname] = useState("Guest");
-  const [posts, setPosts] = useState<EventStreamPost[]>(sampleEventPosts); // Initialize with sample posts
+  const [posts, setPosts] = useState<StreamPost[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+
+  // Load posts from DB
+  const loadPosts = useCallback(async () => {
+    try {
+      const data = await getEventStreamPosts(eventId);
+      setPosts(data.map(p => ({ ...p, timestamp: new Date(p.timestamp) })));
+    } catch (err) {
+      console.error('Failed to load stream posts:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [eventId]);
 
   useEffect(() => {
     const nameParam = searchParams.get("eventName");
@@ -136,20 +89,33 @@ export default function EventStreamPage() {
     if (nickParam) setNickname(nickParam);
   }, [searchParams]);
 
-  const handlePostMessage = () => {
-    if (newMessage.trim() === "") return;
-    const newPost: EventStreamPost = {
-      id: `evp${Date.now()}`,
-      authorNickname: nickname,
-      authorAvatarFallback: nickname.substring(0, 2).toUpperCase() || "ME",
-      content: newMessage,
-      timestamp: new Date(),
-      // Add dataAiHintAvatar: "current user event" if desired
-    };
-    setPosts(prevPosts => [newPost, ...prevPosts]); // Add new post to the top
-    setNewMessage("");
-  };
+  useEffect(() => {
+    loadPosts();
+  }, [loadPosts]);
 
+  const handlePostMessage = async () => {
+    if (newMessage.trim() === "" || isSending) return;
+    setIsSending(true);
+    try {
+      const newPost = await createEventStreamPost(eventId, nickname, newMessage);
+      setPosts(prevPosts => [{ ...newPost, timestamp: new Date(newPost.timestamp) }, ...prevPosts]);
+      setNewMessage("");
+    } catch {
+      // Optimistic fallback: show locally even if write fails (e.g. guest)
+      const localPost: StreamPost = {
+        id: `local-${Date.now()}`,
+        eventId,
+        authorNickname: nickname,
+        authorAvatarFallback: nickname.substring(0, 2).toUpperCase() || "ME",
+        content: newMessage,
+        timestamp: new Date(),
+      };
+      setPosts(prevPosts => [localPost, ...prevPosts]);
+      setNewMessage("");
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   return (
     <>
@@ -165,9 +131,13 @@ export default function EventStreamPage() {
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="p-0 flex-1 flex flex-col"> {/* p-0 to allow ScrollArea to manage padding */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-3"> {/* Scrollable feed area */}
-          {posts.length > 0 ? (
+      <CardContent className="p-0 flex-1 flex flex-col">
+        <div className="flex-1 overflow-y-auto p-3 space-y-3">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : posts.length > 0 ? (
             posts.map(post => <EventPostCard key={post.id} post={post} />)
           ) : (
             <div className="text-center py-10">
@@ -178,7 +148,6 @@ export default function EventStreamPage() {
           )}
         </div>
 
-        {/* Post Input Area */}
         <div className="p-3 border-t bg-card">
           <div className="flex items-center space-x-2">
             <Avatar className="h-9 w-9">
@@ -196,8 +165,8 @@ export default function EventStreamPage() {
                 }
               }}
             />
-            <Button size="icon" onClick={handlePostMessage} disabled={newMessage.trim() === ""}>
-              <Send className="h-4 w-4" />
+            <Button size="icon" onClick={handlePostMessage} disabled={newMessage.trim() === "" || isSending}>
+              {isSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>
         </div>
@@ -219,4 +188,14 @@ export default function EventStreamPage() {
   );
 }
 
-    
+export default function EventStreamPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[200px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <EventStreamContent />
+    </Suspense>
+  );
+}

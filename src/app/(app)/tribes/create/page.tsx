@@ -16,12 +16,13 @@ import { generateTribeDescription } from "@/ai/flows/tribe-description-generator
 import React from "react";
 import { useRouter } from "next/navigation";
 import { useToast } from "@/hooks/use-toast";
-import { moodsData as allMoodsData } from "../../moods/page";
+import { moodsData as allMoodsData } from '@/lib/moods-data';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { createTribe } from "@/lib/services/tribe-service";
+import { createTribe } from '@/lib/actions/tribe-actions';
+import { uploadFile } from '@/lib/upload';
 
 const createTribeFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
@@ -58,12 +59,20 @@ export default function CreateTribePage() {
     setIsLoading(true);
     
     try {
-      const newTribe = await createTribe({ ...values, coverPreview });
+      // Upload cover image to S3 if provided
+      let coverUrl = coverPreview;
+      if (values.coverImage) {
+        try {
+          coverUrl = await uploadFile(values.coverImage, 'tribes/covers');
+        } catch (uploadErr: any) {
+          toast({ variant: 'destructive', title: 'Image Upload Failed', description: uploadErr.message });
+          setIsLoading(false);
+          return;
+        }
+      }
 
-      // Persist membership using localStorage for the prototype
-      const myCreatedTribeIds = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
-      myCreatedTribeIds.push(newTribe.id);
-      localStorage.setItem('myCreatedTribeIds', JSON.stringify(myCreatedTribeIds));
+      const newTribe = await createTribe({ ...values, coverPreview: coverUrl });
+
 
       toast({
         title: "Tribe Created!",

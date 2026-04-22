@@ -1,78 +1,58 @@
 'use server';
 
 /**
- * @fileOverview AI agent that suggests relevant threads from within the tribe that align with the current mood.
- *
- * - suggestThreadsForMood - A function that suggests threads based on the current mood.
- * - MoodBasedContentSuggestionsInput - The input type for the suggestThreadsForMood function.
- * - MoodBasedContentSuggestionsOutput - The return type for the suggestThreadsForMood function.
+ * @fileOverview AI agent that suggests relevant threads based on mood.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { chatCompletion } from '@/lib/ai-client';
+import { z } from 'zod';
 
-const MoodBasedContentSuggestionsInputSchema = z.object({
-  currentMood: z
-    .string()
-    .describe('The current mood of the user, e.g., happy, sad, excited.'),
-  tribeThreads: z
-    .array(z.string())
-    .describe('A list of thread titles from within the tribe.'),
-  userInterests: z
-    .array(z.string())
-    .describe('A list of the users interests, e.g., sports, technology, art.'),
-});
-export type MoodBasedContentSuggestionsInput = z.infer<
-  typeof MoodBasedContentSuggestionsInputSchema
->;
+export interface MoodBasedContentSuggestionsInput {
+  currentMood: string;
+  tribeThreads: string[];
+  userInterests: string[];
+}
 
-const MoodBasedContentSuggestionsOutputSchema = z.object({
-  suggestedThreads: z
-    .array(z.string())
-    .describe(
-      'A list of thread titles that are relevant to the current mood and user interests.'
-    ),
-  reasoning: z
-    .string()
-    .describe(
-      'A brief explanation of why these threads were suggested, considering the mood and interests.'
-    ),
+export interface MoodBasedContentSuggestionsOutput {
+  suggestedThreads: string[];
+  reasoning: string;
+}
+
+const MoodResponseSchema = z.object({
+  suggestedThreads: z.array(z.string()).default([]),
+  reasoning: z.string().default(''),
 });
-export type MoodBasedContentSuggestionsOutput = z.infer<
-  typeof MoodBasedContentSuggestionsOutputSchema
->;
 
 export async function suggestThreadsForMood(
   input: MoodBasedContentSuggestionsInput
 ): Promise<MoodBasedContentSuggestionsOutput> {
-  return moodBasedContentSuggestionsFlow(input);
-}
+  const threadList = input.tribeThreads.map(t => `- ${t}`).join('\n');
+  const interests = input.userInterests.join(', ');
 
-const prompt = ai.definePrompt({
-  name: 'moodBasedContentSuggestionsPrompt',
-  input: {schema: MoodBasedContentSuggestionsInputSchema},
-  output: {schema: MoodBasedContentSuggestionsOutputSchema},
-  prompt: `You are an AI assistant designed to suggest relevant threads from a tribe to a user based on their current mood and interests.
+  const prompt = `Current Mood: ${input.currentMood}
+User Interests: ${interests}
 
-  Current Mood: {{{currentMood}}}
-  User Interests: {{#each userInterests}}{{{this}}}{{#unless @last}}, {{/unless}}{{/each}}
+Tribe Threads:
+${threadList}
 
-  Tribe Threads:
-  {{#each tribeThreads}}
-  - {{{this}}}
-  {{/each}}
+Based on the user's current mood and interests, suggest 3 threads from the tribe that would be most relevant. Provide a brief explanation of why these threads were suggested.
 
-  Based on the user's current mood and interests, suggest 3 threads from the tribe that would be most relevant. Provide a brief explanation of why these threads were suggested. Return the list of suggested threads and reasoning in the JSON format.`,
-});
+Return ONLY a JSON object with keys "suggestedThreads" (array of thread titles) and "reasoning" (string). Example:
+{"suggestedThreads": ["Thread A", "Thread B", "Thread C"], "reasoning": "These threads match because..."}`;
 
-const moodBasedContentSuggestionsFlow = ai.defineFlow(
-  {
-    name: 'moodBasedContentSuggestionsFlow',
-    inputSchema: MoodBasedContentSuggestionsInputSchema,
-    outputSchema: MoodBasedContentSuggestionsOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
+  const response = await chatCompletion({
+    system: 'You are an AI assistant designed to suggest relevant threads from a tribe to a user based on their current mood and interests. Return only valid JSON.',
+    prompt,
+    temperature: 0.7,
+    jsonMode: true,
+  });
+
+  try {
+    const parsed = JSON.parse(response);
+    const validated = MoodResponseSchema.safeParse(parsed);
+    if (validated.success) return validated.data;
+    return { suggestedThreads: [], reasoning: 'Unable to generate suggestions at this time.' };
+  } catch {
+    return { suggestedThreads: [], reasoning: 'Unable to generate suggestions at this time.' };
   }
-);
+}

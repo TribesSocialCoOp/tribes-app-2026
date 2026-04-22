@@ -2,21 +2,18 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Dialog, DialogContent as ShadDialogContent, DialogHeader as ShadDialogHeader, DialogTitle as ShadDialogTitle, DialogDescription as ShadDialogDescription, DialogFooter as ShadDialogFooter
-} from "@/components/ui/dialog";
-import {
-  Sheet, SheetContent as ShadSheetContent, SheetHeader as ShadSheetHeader, SheetTitle as ShadSheetTitle, SheetDescription as ShadSheetDescription, SheetFooter as ShadSheetFooter
-} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
-import { useIsMobile } from "@/hooks/use-mobile";
-import type { Bond } from '@/app/(app)/bonds/page';
+import type { Bond } from '@/lib/types';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { User, Search } from 'lucide-react';
+import {
+  ResponsiveDialog, ResponsiveDialogHeader, ResponsiveDialogTitle,
+  ResponsiveDialogDescription, ResponsiveDialogFooter
+} from "@/components/ui/responsive-dialog";
 
 interface IntroductionDialogProps {
   isOpen: boolean;
@@ -33,7 +30,6 @@ export function IntroductionDialog({
   allBonds,
   onConfirmIntroduction
 }: IntroductionDialogProps) {
-  const isMobile = useIsMobile();
   const [selectedBondId, setSelectedBondId] = useState<string | undefined>(undefined);
   const [introSearchTerm, setIntroSearchTerm] = useState("");
 
@@ -53,9 +49,7 @@ export function IntroductionDialog({
     );
   }, [allBonds, introducingBond, introSearchTerm]);
 
-  if (!introducingBond) {
-    return null;
-  }
+  if (!introducingBond) return null;
 
   const handleConfirm = () => {
     const bondToIntroduceTo = displayableEligibleBonds.find(b => b.id === selectedBondId);
@@ -64,21 +58,14 @@ export function IntroductionDialog({
     }
   };
 
-  const DialogContentComponent = isMobile ? ShadSheetContent : ShadDialogContent;
-  const DialogHeaderComponent = isMobile ? ShadSheetHeader : ShadDialogHeader;
-  const DialogTitleComponent = isMobile ? ShadSheetTitle : ShadDialogTitle;
-  const DialogDescriptionComponent = isMobile ? ShadSheetDescription : ShadDialogDescription;
-  const DialogFooterComponent = isMobile ? ShadSheetFooter : ShadDialogFooter;
-  const RootComponent = isMobile ? Sheet : Dialog;
-
-  const commonContent = (
-    <>
-      <DialogHeaderComponent>
-        <DialogTitleComponent>Introduce <span className="italic font-semibold">{introducingBond.targetName}</span> to...</DialogTitleComponent>
-        <DialogDescriptionComponent>
+  return (
+    <ResponsiveDialog open={isOpen} onOpenChange={onOpenChange} className="sm:max-w-xl">
+      <ResponsiveDialogHeader>
+        <ResponsiveDialogTitle>Introduce <span className="italic font-semibold">{introducingBond.targetName}</span> to...</ResponsiveDialogTitle>
+        <ResponsiveDialogDescription>
           Select another user bond to facilitate an introduction.
-        </DialogDescriptionComponent>
-      </DialogHeaderComponent>
+        </ResponsiveDialogDescription>
+      </ResponsiveDialogHeader>
 
       <div className="py-4 space-y-4">
         <div className="relative">
@@ -104,7 +91,6 @@ export function IntroductionDialog({
                   >
                     <RadioGroupItem value={bond.id} id={`bond-intro-${bond.id}`} className="sr-only" />
                     <Avatar className="h-8 w-8">
-                       {/* Using a generic User icon for now, ideally bond.targetAvatar or similar */}
                       <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
                     <span className="font-medium text-xs">{bond.targetName}</span>
@@ -120,7 +106,7 @@ export function IntroductionDialog({
         )}
       </div>
 
-      <DialogFooterComponent className="pt-2">
+      <ResponsiveDialogFooter className="pt-2">
         <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
         <Button
           onClick={handleConfirm}
@@ -129,27 +115,7 @@ export function IntroductionDialog({
         >
           Confirm Introduction
         </Button>
-      </DialogFooterComponent>
-    </>
-  );
-
-  if (isMobile) {
-    return (
-      <RootComponent open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContentComponent side="bottom" className="h-auto max-h-[80vh] flex flex-col p-0">
-          <div className="p-4 sm:p-6 overflow-y-auto">
-            {commonContent}
-          </div>
-        </DialogContentComponent>
-      </RootComponent>
-    );
-  }
-
-  return (
-    <RootComponent open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContentComponent className="sm:max-w-xl p-6">
-        {commonContent}
-      </DialogContentComponent>
-    </RootComponent>
+      </ResponsiveDialogFooter>
+    </ResponsiveDialog>
   );
 }

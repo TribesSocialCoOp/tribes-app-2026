@@ -19,13 +19,14 @@ import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { CalendarIcon, Image as ImageIcon, Globe, Lock, Sparkles, CalendarPlus, MapPin, Lightbulb, Users } from "lucide-react";
+import { CalendarIcon, Image as ImageIcon, Globe, Lock, Sparkles, CalendarPlus, MapPin, Lightbulb, Users, Star } from "lucide-react";
 import { generateEventDescription } from "@/ai/flows/event-description-generator";
 import { generateEventKeywords } from "@/ai/flows/generate-event-keywords"; // New import
 import { useToast } from "@/hooks/use-toast";
-import { createEvent } from "@/lib/services/event-service";
-import { getTribes } from "@/lib/data-access/tribes";
-import type { Tribe } from '@/lib/data';
+import { createEvent, getMaxRsvpPoints } from '@/lib/actions/event-actions';
+import { getMyTribes } from '@/lib/actions/tribe-actions';
+import { uploadFile } from '@/lib/upload';
+import type { Tribe } from '@/lib/types';
 import type { Event } from '@/lib/types';
 
 
@@ -34,11 +35,13 @@ const eventCreateFormSchema = z.object({
   keywords: z.string().min(3, { message: "Please provide some keywords for your event (e.g., Live Music, Tech Workshop)."}),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(1000, { message: "Description must not exceed 1000 characters." }),
   eventDate: z.date({ required_error: "An event date is required." }),
+  eventTime: z.string().default("12:00"),
   associatedTribe: z.string().min(1, { message: "Please select an organizing tribe."}),
   locationName: z.string().min(1, {message: "Please provide a venue name or general location (e.g., Downtown Park, Online)."}),
   locationCityRegion: z.string().min(1, {message: "Please provide the city and region (e.g., San Francisco, CA)."}),
   coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`),
   isPublic: z.boolean().default(true),
+  rsvpPointsReward: z.coerce.number().min(0).max(50).default(0),
 });
 
 type EventCreateFormValues = z.infer<typeof eventCreateFormSchema>;
@@ -53,6 +56,7 @@ export default function CreateEventPage() {
 
   const [myTribes, setMyTribes] = useState<Tribe[]>([]);
   const [isClient, setIsClient] = useState(false);
+  const [rsvpCap, setRsvpCap] = useState<{ max: number; reputation: number }>({ max: 10, reputation: 0 });
 
   const form = useForm<EventCreateFormValues>({
     resolver: zodResolver(eventCreateFormSchema),
@@ -60,34 +64,51 @@ export default function CreateEventPage() {
       name: "",
       keywords: "",
       description: "",
+      eventTime: "12:00",
       associatedTribe: "",
       locationName: "",
       locationCityRegion: "",
       isPublic: true,
+      rsvpPointsReward: 0,
     },
   });
 
   useEffect(() => {
     setIsClient(true);
     const fetchUserTribes = async () => {
-      // In a real app, this would be a query like getMyTribes(userId)
-      // For the prototype, we use a hardcoded list of IDs + localStorage for created ones
-      const baseTribeMemberships = ['1', '3', '6', '7'];
-      const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
-      const myTribeIds = [...new Set([...baseTribeMemberships, ...createdTribeIds])];
-      
-      const allTribes = await getTribes();
-      const userTribes = allTribes.filter(t => myTribeIds.includes(t.id));
+      const userTribes = await getMyTribes();
       setMyTribes(userTribes);
     };
+    const fetchRsvpCap = async () => {
+      const cap = await getMaxRsvpPoints();
+      setRsvpCap(cap);
+    };
     fetchUserTribes();
+    fetchRsvpCap();
   }, []);
 
   async function onSubmit(values: EventCreateFormValues) {
     setIsLoading(true);
 
     try {
-      await createEvent({ ...values, coverPreview });
+      // Upload cover image to S3 if provided
+      let coverUrl = coverPreview;
+      if (values.coverImage) {
+        try {
+          coverUrl = await uploadFile(values.coverImage, 'events/covers');
+        } catch (uploadErr: any) {
+          toast({ variant: 'destructive', title: 'Image Upload Failed', description: uploadErr.message });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // Merge date + time into a single timestamp
+      const [hours, minutes] = (values.eventTime || '12:00').split(':').map(Number);
+      const mergedDate = new Date(values.eventDate);
+      mergedDate.setHours(hours, minutes, 0, 0);
+
+      await createEvent({ ...values, eventDate: mergedDate, coverPreview: coverUrl });
       toast({
         title: "Event Created!",
         description: `Your event "${values.name}" has been successfully created.`,
@@ -359,6 +380,28 @@ export default function CreateEventPage() {
                 )}
               />
 
+              <FormField
+                control={form.control}
+                name="eventTime"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-lg">Event Time</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="time"
+                        className="text-base w-full sm:w-48"
+                        {...field}
+                        id="event-time-input"
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      What time does the event start?
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
                <FormField
                   control={form.control}
                   name="associatedTribe"
@@ -447,6 +490,48 @@ export default function CreateEventPage() {
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="rsvpPointsReward"
+                render={({ field }) => (
+                  <FormItem className="rounded-lg border p-4 shadow-sm">
+                    <FormLabel className="text-base font-semibold flex items-center gap-2">
+                      <Star className="h-4 w-4 text-amber-500" />
+                      RSVP Contribution Points
+                    </FormLabel>
+                    <FormDescription>
+                      Award attendees contribution points for RSVP&apos;ing as &quot;Going&quot;.
+                      {rsvpCap.max < 50 && (
+                        <span className="block mt-1 text-xs">
+                          Your cap: <strong>{rsvpCap.max} pts</strong> (reputation: {rsvpCap.reputation}).
+                          {rsvpCap.max === 10 && ' Earn 50+ rep points to unlock up to 25 pts.'}
+                          {rsvpCap.max === 25 && ' Earn 100+ rep points to unlock up to 50 pts.'}
+                        </span>
+                      )}
+                      {rsvpCap.max >= 50 && (
+                        <span className="block mt-1 text-xs text-green-600">
+                          ✦ Max tier unlocked — up to 50 pts (reputation: {rsvpCap.reputation})
+                        </span>
+                      )}
+                    </FormDescription>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={rsvpCap.max}
+                        placeholder="0"
+                        {...field}
+                        onChange={(e) => {
+                          const val = Math.min(Number(e.target.value) || 0, rsvpCap.max);
+                          field.onChange(val);
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )}
               />

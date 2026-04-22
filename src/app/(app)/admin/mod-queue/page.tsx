@@ -24,9 +24,10 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUser } from '@/hooks/use-user';
-import { dismissReport, removePost, getActiveGlobalReports } from '@/lib/services/moderation-service';
-import { getTribeById } from '@/lib/data-access/tribes';
-import type { Tribe, TribePost, ReportedPost } from '@/lib/types';
+import { dismissReport, removePost, getActiveGlobalReports, banUser, escalateReport } from '@/lib/actions/content-actions';
+import { getTribeById } from '@/lib/actions/tribe-actions';
+import type { TribePost, ReportedPost } from '@/lib/types';
+import type { Tribe } from '@/lib/types';
 
 
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 15, 20];
@@ -63,6 +64,7 @@ export default function ModQueuePage() {
   const [userToBanDetails, setUserToBanDetails] = useState<{ userId: string; userName: string; postId: string } | null>(null);
   const [banDuration, setBanDuration] = useState("permanent");
   const [banReason, setBanReason] = useState("");
+  const [forceLogout, setForceLogout] = useState(false);
   const [preventRepostState, setPreventRepostState] = useState<{ [postId: string]: boolean }>({});
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -159,11 +161,21 @@ export default function ModQueuePage() {
   };
 
 
-  const handleEscalate = (reportPostId: string) => {
-    toast({
-      title: "Report Escalated (Simulated)",
-      description: `Report for post ID ${reportPostId} has been escalated to platform administrators.`,
-    });
+  const handleEscalate = async (reportPostId: string) => {
+    setIsTakingAction(reportPostId);
+    try {
+      await escalateReport(reportPostId);
+      toast({
+        title: "Report Escalated",
+        description: `Report for post has been escalated for further review.`,
+      });
+      reloadData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to escalate report';
+      toast({ variant: 'destructive', title: 'Escalation Failed', description: msg });
+    } finally {
+      setIsTakingAction(null);
+    }
   };
 
   const handleOpenBanDialog = (post: TribePost) => {
@@ -175,22 +187,37 @@ export default function ModQueuePage() {
     setIsBanDialogOpen(true);
   };
 
-  const handleConfirmBan = () => {
+  const handleConfirmBan = async () => {
     if (!userToBanDetails) return;
-    console.log("Banning user:", { userId: userToBanDetails.userId, userName: userToBanDetails.userName, postId: userToBanDetails.postId, duration: banDuration, reason: banReason });
-    let durationText = "permanently";
-    if (banDuration === "1_day") durationText = "for 1 day";
-    else if (banDuration === "7_days") durationText = "for 7 days";
-    else if (banDuration === "30_days") durationText = "for 30 days";
-    toast({
-      title: "User Banned (Simulated)",
-      description: `User ${userToBanDetails.userName} has been banned ${durationText}. Their reputation has been impacted (Simulated). ${banReason ? `Reason: ${banReason}` : ''}`,
-      variant: "destructive",
-    });
-    setIsBanDialogOpen(false);
-    setUserToBanDetails(null);
-    setBanDuration("permanent");
-    setBanReason("");
+    setIsTakingAction(userToBanDetails.postId);
+    try {
+      await banUser({
+        userId: userToBanDetails.userId,
+        reason: banReason || undefined,
+        duration: banDuration as '1_day' | '7_days' | '30_days' | 'permanent',
+        relatedPostId: userToBanDetails.postId,
+        forceLogout,
+      });
+      let durationText = "permanently";
+      if (banDuration === "1_day") durationText = "for 1 day";
+      else if (banDuration === "7_days") durationText = "for 7 days";
+      else if (banDuration === "30_days") durationText = "for 30 days";
+      toast({
+        title: "User Banned",
+        description: `User ${userToBanDetails.userName} has been banned ${durationText}.${forceLogout ? ' All sessions invalidated.' : ''} ${banReason ? `Reason: ${banReason}` : ''}`,
+        variant: "destructive",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to ban user';
+      toast({ variant: 'destructive', title: 'Ban Failed', description: msg });
+    } finally {
+      setIsTakingAction(null);
+      setIsBanDialogOpen(false);
+      setUserToBanDetails(null);
+      setBanDuration("permanent");
+      setBanReason("");
+      setForceLogout(false);
+    }
   };
 
   const filteredReports = useMemo(() => {
@@ -233,8 +260,8 @@ export default function ModQueuePage() {
         aValue = tribeA?.name.toLowerCase() || '';
         bValue = tribeB?.name.toLowerCase() || '';
       } else {
-         aValue = (a as any)[sortConfig.key];
-         bValue = (b as any)[sortConfig.key];
+         aValue = (a as unknown as Record<string, unknown>)[sortConfig.key];
+         bValue = (b as unknown as Record<string, unknown>)[sortConfig.key];
       }
       
       if (aValue === undefined || aValue === null) return 1;
@@ -278,7 +305,18 @@ export default function ModQueuePage() {
   
   const handleNextPage = () => setCurrentPage(prev => Math.min(prev + 1, totalPages));
   const handlePreviousPage = () => setCurrentPage(prev => Math.max(prev - 1, 1));
-  
+
+  const availableSortOptions = useMemo(() => {
+    const options = [...sortOptions];
+    if (allTribes.length > 0) {
+      options.push(
+        { value: 'tribeName_asc', label: 'Tribe Name (A-Z)', key: 'tribeName', direction: 'ascending' },
+        { value: 'tribeName_desc', label: 'Tribe Name (Z-A)', key: 'tribeName', direction: 'descending' }
+      );
+    }
+    return options;
+  }, [allTribes]);
+
   if (hasAccess === undefined) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-var(--header-height,4rem)-2rem)]">
@@ -311,17 +349,6 @@ export default function ModQueuePage() {
       </div>
     );
   }
-  
-  const availableSortOptions = useMemo(() => {
-    const options = [...sortOptions];
-    if (allTribes.length > 0) {
-      options.push(
-        { value: 'tribeName_asc', label: 'Tribe Name (A-Z)', key: 'tribeName', direction: 'ascending' },
-        { value: 'tribeName_desc', label: 'Tribe Name (Z-A)', key: 'tribeName', direction: 'descending' }
-      );
-    }
-    return options;
-  }, [allTribes]);
 
 
   return (
@@ -463,7 +490,8 @@ export default function ModQueuePage() {
                               <p className="text-xs whitespace-pre-wrap">{post.content}</p>
                               {post.imageUrl && (
                                 <div className="mt-2 relative aspect-video max-w-xs rounded-md overflow-hidden border">
-                                  <Image src={post.imageUrl} alt={post.imageAlt || "Post image"} fill style={{ objectFit: "cover" }} data-ai-hint={post.dataAiHintImage || "post image"} />
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={post.imageUrl} alt={post.imageAlt || "Post image"} className="w-full h-full object-cover" data-ai-hint={post.dataAiHintImage || "post image"} />
                                 </div>
                               )}
                                {post.isRemoved && ( 
@@ -617,6 +645,16 @@ export default function ModQueuePage() {
               <div>
                 <Label htmlFor="ban-reason" className="text-sm font-medium">Reason for Ban (Optional)</Label>
                 <Textarea id="ban-reason" value={banReason} onChange={(e) => setBanReason(e.target.value)} placeholder="Provide context for the ban..." className="mt-1 min-h-[80px]" />
+              </div>
+              <div className="flex items-center space-x-3 pt-2 border-t">
+                <Checkbox
+                  id="force-logout-ban"
+                  checked={forceLogout}
+                  onCheckedChange={(checked) => setForceLogout(!!checked)}
+                />
+                <Label htmlFor="force-logout-ban" className="text-sm font-medium text-destructive flex items-center">
+                  <Ban className="mr-2 h-4 w-4" /> Hard Ban — Invalidate all active sessions
+                </Label>
               </div>
             </div>
             <DialogFooter>

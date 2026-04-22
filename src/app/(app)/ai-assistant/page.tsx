@@ -11,7 +11,7 @@ import { Bot, Send, User, HelpCircle, Zap, PlusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { askAssistant } from '@/ai/flows/assistant-flow';
 
-// Genkit history expects a specific format. `role` is 'user' or 'model'.
+// Chat history format — 'role' is 'user' or 'model'.
 interface ChatMessage {
   id: string;
   role: "user" | "model";
@@ -50,15 +50,15 @@ export default function AiAssistantPage() {
     setIsLoading(true);
 
     try {
-      // Prepare history for Genkit, which expects role: 'user' or 'model'
-      const historyForGenkit = newMessages.slice(0, -1).map(msg => ({
+      // Prepare chat history for the AI assistant
+      const chatHistory = newMessages.slice(0, -1).map(msg => ({
         role: msg.role,
         parts: [{ text: msg.text }],
       }));
 
       const aiResponseText = await askAssistant({
         message: textToSend,
-        history: historyForGenkit,
+        history: chatHistory,
       });
 
       const aiMessage: ChatMessage = {
@@ -98,8 +98,8 @@ export default function AiAssistantPage() {
       <Card className="w-full max-w-3xl h-full flex flex-col shadow-2xl">
         <CardHeader className="border-b p-4 flex flex-row items-center justify-between">
           <div className="flex items-center space-x-3">
-            <Avatar className="h-10 w-10 border-2 border-primary">
-              <AvatarImage src="https://placehold.co/100x100.png?text=AI" alt="T-Codex Prime" data-ai-hint="robot hologram" />
+            <Avatar className="h-10 w-10">
+              <AvatarImage src="/seed/avatar-default.svg" alt="T-Codex Prime" data-ai-hint="robot hologram" />
               <AvatarFallback><Bot className="h-5 w-5" /></AvatarFallback>
             </Avatar>
             <div>
@@ -130,7 +130,7 @@ export default function AiAssistantPage() {
               >
                 {message.role === "model" && (
                   <Avatar className="h-8 w-8 self-start">
-                    <AvatarImage src="https://placehold.co/40x40.png?text=AI" alt="AI" data-ai-hint="robot bot" />
+                    <AvatarImage src="/seed/avatar-default.svg" alt="AI" data-ai-hint="robot bot" />
                     <AvatarFallback><Bot className="h-4 w-4" /></AvatarFallback>
                   </Avatar>
                 )}
@@ -146,7 +146,7 @@ export default function AiAssistantPage() {
                 </div>
                 {message.role === "user" && (
                   <Avatar className="h-8 w-8 self-start">
-                    <AvatarImage src="https://placehold.co/40x40.png" alt="User" data-ai-hint="person user" />
+                    <AvatarImage src="/seed/avatar-default.svg" alt="User" data-ai-hint="person user" />
                     <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
                   </Avatar>
                 )}
@@ -155,7 +155,7 @@ export default function AiAssistantPage() {
             {isLoading && (
                 <div className="flex items-end space-x-2 mr-auto justify-start max-w-[85%]">
                     <Avatar className="h-8 w-8 self-start">
-                        <AvatarImage src="https://placehold.co/40x40.png?text=AI" alt="AI" data-ai-hint="robot bot" />
+                        <AvatarImage src="/seed/avatar-default.svg" alt="AI" data-ai-hint="robot bot" />
                         <AvatarFallback><Bot className="h-4 w-4" /></AvatarFallback>
                     </Avatar>
                     <div className="rounded-xl p-3 shadow-md text-sm bg-card text-card-foreground border rounded-bl-none">

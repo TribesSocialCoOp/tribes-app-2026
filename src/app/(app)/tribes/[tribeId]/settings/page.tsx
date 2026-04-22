@@ -24,14 +24,13 @@ import { Separator } from '@/components/ui/separator';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-import { getTribeById } from '@/lib/data-access/tribes';
-import type { Tribe } from '@/lib/data';
-import { moodsData as allMoodsData } from '../../../moods/page';
-import { updateTribeSettings } from '@/lib/services/tribe-service';
-import type { UserProfile } from '@/lib/types';
+import { getTribeById, updateTribeSettings, checkTribeAccess } from '@/lib/actions/tribe-actions';
+import type { Tribe } from '@/lib/types';
+import { moodsData as allMoodsData } from '@/lib/moods-data';
+import { REPUTATION_GATE_OPTIONS, type ReputationStatus } from '@/lib/constants';
 
-
-const reputationLevels: Exclude<UserProfile['reputationStatus'], undefined | 'Poor' | 'At Risk'>[] = ['Fair', 'Good', 'Excellent'];
+// Use canonical reputation levels from shared constants
+const reputationLevels = REPUTATION_GATE_OPTIONS;
 
 const tribeSettingsFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
@@ -63,10 +62,15 @@ export default function TribeSettingsPage() {
   const [isCopied, setIsCopied] = useState(false);
 
   useEffect(() => {
-    // Determine access based on role
-    const canAccess = role === 'Admin' || role === 'Creator';
-    setHasAccess(canAccess);
-  }, [role]);
+    // Determine access via server-side tribe authorization (not global role)
+    const resolveAccess = async () => {
+      const accessLevel = await checkTribeAccess(tribeId);
+      // Only founders and platform admins can access settings
+      const canAccess = accessLevel === 'platform_admin' || accessLevel === 'founder';
+      setHasAccess(canAccess);
+    };
+    resolveAccess();
+  }, [tribeId]);
 
   const form = useForm<TribeSettingsFormValues>({
     resolver: zodResolver(tribeSettingsFormSchema),
@@ -115,14 +119,17 @@ export default function TribeSettingsPage() {
 
     const payload = {
         ...values,
-        minimumReputation: values.minimumReputation && reputationLevels.includes(values.minimumReputation as any)
-            ? values.minimumReputation as UserProfile['reputationStatus']
+        minimumReputation: values.minimumReputation && reputationLevels.includes(values.minimumReputation as ReputationStatus)
+            ? values.minimumReputation as typeof reputationLevels[number]
             : undefined,
         minimumAccountAgeDays: !isNaN(ageDaysValue) && ageDaysValue > 0 ? ageDaysValue : undefined,
     };
     
     try {
-        await updateTribeSettings(tribeId, payload);
+        await updateTribeSettings(tribeId, {
+            ...payload,
+            minimumReputation: payload.minimumReputation as Exclude<typeof reputationLevels[number], 'Onboarding'> | undefined,
+        });
         setTribe(prev => prev ? { ...prev, ...payload } : null);
         toast({
             title: "Settings Saved",

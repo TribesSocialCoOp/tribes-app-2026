@@ -1,9 +1,9 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Brush } from "lucide-react";
+import { PlusCircle, Brush, Loader2 } from "lucide-react";
 
 import { CreatePostDialog, type PostFormValues } from '@/components/dialogs/create-post-dialog';
 import { SharePostDialog } from '@/components/dialogs/share-post-dialog';
@@ -11,6 +11,10 @@ import { AddBlockDialog } from '@/components/dialogs/add-block-dialog';
 import { CustomizeWallSheet } from '@/components/sheets/customize-wall-sheet';
 
 import type { TribePost } from '@/lib/types';
+import { uploadFile } from '@/lib/upload';
+import { useToast } from '@/hooks/use-toast';
+import { getWallBlocks, saveWallBlock, deleteWallBlock as deleteWallBlockAction, getWallStyle, saveWallStyle } from '@/lib/actions/profile-actions';
+import { sharePost } from '@/lib/actions/content-actions';
 import MyPostsBlock from '@/components/wall-blocks/my-posts-block';
 import HtmlBlock from '@/components/wall-blocks/html-block';
 import MusicBlock from '@/components/wall-blocks/music-block';
@@ -30,41 +34,53 @@ export interface WallStyles {
     layout: 'single-column' | 'two-column';
 }
 
-// Initial state for the wall, now block-based
-const initialWallBlocks: WallBlock[] = [
+// Default fallback blocks for first-time users
+const defaultWallBlocks: WallBlock[] = [
     {
         id: 'block-1',
         type: 'my-posts',
         content: {
             posts: [
-                { id: "post1", title: "My Latest Project", content: "Proud to share the launch of my new website! Let me know what you think.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "website project design", sharedWith: {"AI Innovators": "main_profile", "Indie Game Devs": "PixelPioneer"} },
-                { id: "post2", title: "Thoughts on AI", content: "A blog post I wrote about the future of artificial intelligence.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "artificial intelligence brain", sharedWith: {"AI Innovators": "WonderlandCoder"} },
-                { id: "post3", title: "Hiking Adventure", content: "Some photos from my recent trip to the mountains. This is a private post, only visible to me.", imageUrl: `https://placehold.co/400x225.png`, dataAiHintImage: "mountain landscape hiking", sharedWith: {} },
+                { id: "post1", title: "My Latest Project", content: "Proud to share the launch of my new website! Let me know what you think.", imageUrl: `/seed/post-code.svg`, dataAiHintImage: "website project design", sharedWith: {} },
             ]
-        }
-    },
-    {
-        id: 'block-2',
-        type: 'html',
-        content: {
-            html: `<h2>Welcome to My Space!</h2><p>This is a custom HTML block. You can put <strong>any</strong> markup you want here. It's a great way to personalize your page.</p>`
-        }
-    },
-    {
-        id: 'block-3',
-        type: 'music',
-        content: {
-            trackUrl: 'https://soundcloud.com/your-track'
         }
     },
 ];
 
 export default function MyWallPage() {
-    const [blocks, setBlocks] = useState<WallBlock[]>(initialWallBlocks);
+    const [blocks, setBlocks] = useState<WallBlock[]>([]);
     const [styles, setStyles] = useState<WallStyles>({
         backgroundColor: 'bg-background',
         layout: 'single-column'
     });
+    const [isLoadingWall, setIsLoadingWall] = useState(true);
+
+    useEffect(() => {
+        const loadWallData = async () => {
+            setIsLoadingWall(true);
+            try {
+                const [dbBlocks, dbStyle] = await Promise.all([
+                    getWallBlocks(),
+                    getWallStyle(),
+                ]);
+                if (dbBlocks.length > 0) {
+                    setBlocks(dbBlocks.map(b => ({
+                        id: b.id,
+                        type: b.type as WallBlock['type'],
+                        content: JSON.parse(b.content),
+                    })));
+                } else {
+                    setBlocks(defaultWallBlocks);
+                }
+                setStyles(dbStyle as WallStyles);
+            } catch {
+                setBlocks(defaultWallBlocks);
+            } finally {
+                setIsLoadingWall(false);
+            }
+        };
+        loadWallData();
+    }, []);
 
     const [isCreatePostDialogOpen, setIsCreatePostDialogOpen] = useState(false);
     const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
@@ -73,12 +89,26 @@ export default function MyWallPage() {
     const [isCustomizeSheetOpen, setIsCustomizeSheetOpen] = useState(false);
 
 
-    const handlePostCreated = (newPostData: PostFormValues) => {
+    const { toast } = useToast();
+
+    const handlePostCreated = async (newPostData: PostFormValues) => {
+        // Upload image to S3 if present
+        let imageUrl: string | undefined;
+        if (newPostData.image) {
+          try {
+            imageUrl = await uploadFile(newPostData.image, 'posts');
+          } catch (err: unknown) {
+            toast({ variant: 'destructive', title: 'Image Upload Failed', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+            // Fall back to local preview
+            imageUrl = URL.createObjectURL(newPostData.image);
+          }
+        }
+
         const newPost: Partial<TribePost> & { id: string, sharedWith?: Record<string, string> } = {
             id: `wall-post-${Date.now()}`,
             title: newPostData.title,
             content: newPostData.content,
-            imageUrl: newPostData.image ? URL.createObjectURL(newPostData.image) : undefined,
+            imageUrl,
             dataAiHintImage: newPostData.image ? 'user upload' : undefined,
             sharedWith: {},
         };
@@ -104,7 +134,8 @@ export default function MyWallPage() {
         setIsShareDialogOpen(true);
     };
 
-    const handleConfirmShare = (postId: string, updatedTribeShares: Record<string, string>) => {
+    const handleConfirmShare = async (postId: string, updatedTribeShares: Record<string, string>) => {
+        // Optimistic local state update
         setBlocks(prevBlocks => prevBlocks.map(block => {
             if (block.type === 'my-posts') {
                 return {
@@ -119,11 +150,23 @@ export default function MyWallPage() {
             }
             return block;
         }));
-        console.log(`Post ${postId} share settings updated to:`, updatedTribeShares);
         setIsShareDialogOpen(false);
+
+        // Persist cross-posts to the database
+        try {
+            await sharePost({ postId, tribeShares: updatedTribeShares });
+            const tribeCount = Object.keys(updatedTribeShares).length;
+            toast({
+                title: 'Post Shared',
+                description: `Your post has been shared to ${tribeCount} tribe${tribeCount !== 1 ? 's' : ''}.`,
+            });
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : 'Failed to share post';
+            toast({ variant: 'destructive', title: 'Share Failed', description: msg });
+        }
     };
 
-    const handleAddBlock = (blockType: 'html' | 'music' | 'video') => {
+    const handleAddBlock = async (blockType: 'html' | 'music' | 'video') => {
         let newBlock: WallBlock;
         switch(blockType) {
             case 'html':
@@ -140,11 +183,18 @@ export default function MyWallPage() {
         }
         setBlocks(prev => [...prev, newBlock]);
         setIsAddBlockDialogOpen(false);
+        // Persist to DB
+        try {
+            await saveWallBlock({ id: newBlock.id, type: newBlock.type, content: JSON.stringify(newBlock.content), sortOrder: blocks.length });
+        } catch { /* ignore save errors, block is already in local state */ }
     };
     
-    const handleSaveStyles = (newStyles: WallStyles) => {
+    const handleSaveStyles = async (newStyles: WallStyles) => {
         setStyles(newStyles);
         setIsCustomizeSheetOpen(false);
+        try {
+            await saveWallStyle(newStyles);
+        } catch { /* ignore */ }
     };
 
     const renderBlock = (block: WallBlock) => {

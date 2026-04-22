@@ -24,11 +24,11 @@ const WallItemCard = ({ post, onShare }: { post: Partial<TribePost> & { id: stri
       <CardContent className="flex-grow">
         {post.imageUrl &&
           <div className="relative aspect-video w-full overflow-hidden rounded-md border mb-4">
-            <Image 
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
               src={post.imageUrl}
               alt={post.title || "Wall post image"}
-              fill
-              style={{ objectFit: 'cover' }}
+              className="w-full h-full object-cover"
               data-ai-hint={post.dataAiHintImage || "user content"}
             />
           </div>

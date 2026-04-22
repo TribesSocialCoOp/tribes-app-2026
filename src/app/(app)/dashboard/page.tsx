@@ -1,1 +1,11 @@
-// This file is being renamed. The content will be in src/app/(app)/my-wall/page.tsx
+"use client";
+
+import { redirect } from 'next/navigation';
+import { useEffect } from 'react';
+
+export default function DashboardPage() {
+  useEffect(() => {
+    redirect('/my-wall');
+  }, []);
+  return null;
+}

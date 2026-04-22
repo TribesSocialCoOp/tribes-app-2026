@@ -1,59 +1,71 @@
 /**
  * @fileoverview Data access layer for Tribes.
- * This file centralizes all logic for fetching and manipulating tribe data,
- * acting as an abstraction layer between the UI and the data source.
- *
- * In this prototype, it returns mock data. In a production app, this is where
- * you would interact with your chosen database (e.g., Firestore, Supabase, etc.).
+ * Now backed by Drizzle ORM + SQLite.
  */
 
-import { tribesData, type Tribe } from '@/lib/data';
+import { db } from '@/db';
+import { tribes, tribeMoodTags } from '@/db/schema';
+import { eq, like } from 'drizzle-orm';
+import type { Tribe } from '@/lib/types';
+
+function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    members: row.memberCount ?? 0,
+    isPublic: row.isPublic ?? true,
+    cover: row.cover ?? '',
+    dataAiHint: row.dataAiHint ?? '',
+    moods,
+    homepageUrl: row.homepageUrl ?? undefined,
+    joinMechanism: (row.joinMechanism ?? undefined) as Tribe['joinMechanism'],
+    minimumReputation: (row.minimumReputation ?? undefined) as Tribe['minimumReputation'],
+    minimumAccountAgeDays: row.minimumAccountAgeDays ?? undefined,
+  };
+}
+
+async function getMoodsForTribe(tribeId: string): Promise<string[]> {
+  const rows = await db.select().from(tribeMoodTags).where(eq(tribeMoodTags.tribeId, tribeId));
+  return rows.map(r => r.moodSlug);
+}
 
 /**
  * Fetches all tribes.
- * @returns A promise that resolves to an array of all tribes.
  */
 export async function getTribes(): Promise<Tribe[]> {
-  // In a real app, this would be a database query.
-  // For now, we simulate an async operation with the mock data.
-  return new Promise(resolve => {
-    setTimeout(() => {
-      resolve(tribesData);
-    }, 250); // Simulate network latency
-  });
+  const rows = await db.select().from(tribes);
+  const allMoods = await db.select().from(tribeMoodTags);
+
+  // Group moods by tribeId in a single pass
+  const moodMap = new Map<string, string[]>();
+  for (const m of allMoods) {
+    const arr = moodMap.get(m.tribeId) ?? [];
+    arr.push(m.moodSlug);
+    moodMap.set(m.tribeId, arr);
+  }
+
+  return rows.map(row => rowToTribe(row, moodMap.get(row.id) ?? []));
 }
 
 /**
  * Fetches a single tribe by its ID.
- * @param tribeId The ID of the tribe to fetch.
- * @returns A promise that resolves to the tribe, or null if not found.
  */
 export async function getTribeById(tribeId: string): Promise<Tribe | null> {
-    // In a real app, this would be a specific document/row lookup.
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const tribe = tribesData.find(t => t.id === tribeId);
-            resolve(tribe || null);
-        }, 250); // Simulate network latency
-    });
+  const rows = await db.select().from(tribes).where(eq(tribes.id, tribeId)).limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  const moods = await getMoodsForTribe(row.id);
+  return rowToTribe(row, moods);
 }
 
 /**
  * Finds a single tribe by its name (case-insensitive).
- * Note: In a real backend, you'd want an index on the name field for performance.
- * @param name The name of the tribe to find.
- * @returns A promise that resolves to the tribe, or null if not found.
  */
 export async function findTribeByName(name: string): Promise<Tribe | null> {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const tribe = tribesData.find(t => t.name.toLowerCase() === name.toLowerCase());
-            resolve(tribe || null);
-        }, 250);
-    });
+  const rows = await db.select().from(tribes).where(like(tribes.name, name)).limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  const moods = await getMoodsForTribe(row.id);
+  return rowToTribe(row, moods);
 }
-
-
-// Future functions could include:
-// export async function createTribe(tribeData: Omit<Tribe, 'id'>): Promise<Tribe> { ... }
-// export async function updateTribe(tribeId: string, updates: Partial<Tribe>): Promise<Tribe> { ... }

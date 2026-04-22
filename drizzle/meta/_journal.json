@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1774806619218,
+      "tag": "0000_rapid_wendell_rand",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1774808620717,
+      "tag": "0001_lovely_frightful_four",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1775262002546,
+      "tag": "0002_quiet_jack_flag",
+      "breakpoints": true
+    }
+  ]
+}

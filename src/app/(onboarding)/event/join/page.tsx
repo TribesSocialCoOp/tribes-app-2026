@@ -7,10 +7,10 @@ import { Button } from "@/components/ui/button";
 import { CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, Users } from "lucide-react";
-import React, { useState, useEffect } from "react";
+import { ArrowRight, Users, Loader2 } from "lucide-react";
+import React, { useState, useEffect, Suspense } from "react";
 
-export default function EventOnboardingJoinPage() {
+function EventJoinContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [eventName, setEventName] = useState("the Event");
@@ -26,11 +26,10 @@ export default function EventOnboardingJoinPage() {
 
   const handleJoinEvent = () => {
     if (!eventId) {
-      // Should not happen if QR code is well-formed
       alert("Event ID is missing. Cannot join.");
       return;
     }
-    const chosenNickname = nickname.trim() || `Anon${Math.floor(100 + Math.random() * 900)}`; // Default nickname if empty
+    const chosenNickname = nickname.trim() || `Anon${Math.floor(100 + Math.random() * 900)}`;
     router.push(`/event/stream/${eventId}?eventName=${encodeURIComponent(eventName)}&nickname=${encodeURIComponent(chosenNickname)}`);
   };
 
@@ -74,5 +73,17 @@ export default function EventOnboardingJoinPage() {
         </Button>
       </CardFooter>
     </>
+  );
+}
+
+export default function EventOnboardingJoinPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-[200px]">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <EventJoinContent />
+    </Suspense>
   );
 }

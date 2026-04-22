@@ -88,7 +88,7 @@ export function CustomizeWallSheet({
                     <legend className="text-sm font-semibold text-foreground mb-2">Layout</legend>
                     <RadioGroup
                         value={styles.layout}
-                        onValueChange={(value) => setStyles(s => ({ ...s, layout: value as any }))}
+                        onValueChange={(value) => setStyles(s => ({ ...s, layout: value as WallStyles['layout'] }))}
                         className="space-y-2"
                     >
                         {layoutOptions.map(option => (

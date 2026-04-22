@@ -10,13 +10,15 @@ import { format } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, CalendarDays, Users, Globe, Lock, Tag, Info, MapPin, ExternalLink, Radio } from "lucide-react";
+import { ArrowLeft, CalendarDays, Users, Globe, Lock, Tag, Info, MapPin, ExternalLink, Radio, CheckCircle2, Star, Heart, Loader2 } from "lucide-react";
 import { cn } from '@/lib/utils';
 import InteractiveMap from '@/components/maps/interactive-map';
-import type { Tribe as TribeInfo } from '@/lib/data';
-import { findTribeByName } from '@/lib/data-access/tribes';
-import { getEventById } from '@/lib/services/event-service';
+import type { Tribe as TribeInfo } from '@/lib/types';
+import { findTribeByName } from '@/lib/actions/tribe-actions';
+import { getEventById, rsvpToEvent, getEventRsvpCount, getUserRsvpStatus, getEventAttendeesPreview } from '@/lib/actions/event-actions';
 import type { Event } from '@/lib/types';
+import { useUser } from '@/hooks/use-user';
+import { useToast } from '@/hooks/use-toast';
 
 
 export default function EventDetailPage() {
@@ -24,9 +26,18 @@ export default function EventDetailPage() {
   const params = useParams();
   const eventId = params.eventId as string;
 
+  const { role } = useUser();
+  const { toast } = useToast();
+  const isLoggedIn = !!role;
+
   const [event, setEvent] = useState<Event | null>(null);
   const [organizingTribe, setOrganizingTribe] = useState<TribeInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [rsvpStatus, setRsvpStatus] = useState<'going' | 'interested' | 'not_going' | null>(null);
+  const [rsvpCount, setRsvpCount] = useState(0);
+  const [isRsvping, setIsRsvping] = useState(false);
+  const [attendees, setAttendees] = useState<{ id: string; name: string; avatar?: string }[]>([]);
+  const [attendeeTotalCount, setAttendeeTotalCount] = useState(0);
 
   useEffect(() => {
     if (eventId) {
@@ -38,6 +49,16 @@ export default function EventDetailPage() {
           // Fetch tribe data asynchronously using the data access layer
           const tribe = await findTribeByName(foundEvent.associatedTribe);
           setOrganizingTribe(tribe || null);
+          // Fetch RSVP data
+          const [count, userStatus, attendeeData] = await Promise.all([
+            getEventRsvpCount(eventId),
+            getUserRsvpStatus(eventId),
+            getEventAttendeesPreview(eventId),
+          ]);
+          setRsvpCount(count);
+          setRsvpStatus(userStatus);
+          setAttendees(attendeeData.users);
+          setAttendeeTotalCount(attendeeData.totalCount);
         } else {
           setEvent(null);
           setOrganizingTribe(null);
@@ -48,9 +69,29 @@ export default function EventDetailPage() {
     }
   }, [eventId]);
 
-  const handleJoinEventStream = () => {
-    if (event) {
-      router.push(`/event/join?eventId=${event.id}&eventName=${encodeURIComponent(event.name)}`);
+  const handleRsvp = async (status: 'going' | 'interested' | 'not_going') => {
+    if (!isLoggedIn) {
+      router.push('/login');
+      return;
+    }
+    setIsRsvping(true);
+    try {
+      const result = await rsvpToEvent(eventId, status);
+      setRsvpStatus(status);
+      setRsvpCount(result.rsvpCount);
+      // Refresh attendees list after RSVP change
+      const attendeeData = await getEventAttendeesPreview(eventId);
+      setAttendees(attendeeData.users);
+      setAttendeeTotalCount(attendeeData.totalCount);
+      const labels = { going: "Going", interested: "Interested", not_going: "Not Going" };
+      toast({
+        title: `RSVP: ${labels[status]}`,
+        description: result.pointsAwarded > 0 ? `+${result.pointsAwarded} contribution points earned!` : `Your RSVP has been updated.`,
+      });
+    } catch (e: unknown) {
+      toast({ title: 'Error', description: ((e instanceof Error) ? e.message : 'An error occurred'), variant: 'destructive' });
+    } finally {
+      setIsRsvping(false);
     }
   };
 
@@ -198,10 +239,81 @@ export default function EventDetailPage() {
             </div>
           )}
 
-          <div className="pt-4">
-            <Button size="lg" className="w-full md:w-auto bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleJoinEventStream}>
-              <Radio className="mr-2 h-5 w-5"/> Join Event Live Stream
-            </Button>
+          <div className="pt-4 space-y-4">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Users className="h-4 w-4" />
+              <span className="font-medium">{rsvpCount} going</span>
+              {event.rsvpPointsReward && event.rsvpPointsReward > 0 && (
+                <Badge variant="outline" className="text-xs border-amber-500 text-amber-600 bg-amber-500/10">
+                  <Star className="h-3 w-3 mr-1 fill-current" /> +{event.rsvpPointsReward} pts for attending
+                </Badge>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button
+                size="lg"
+                disabled={isRsvping}
+                onClick={() => handleRsvp('going')}
+                className={cn(
+                  "flex-1 md:flex-none",
+                  rsvpStatus === 'going'
+                    ? 'bg-green-600 hover:bg-green-700 text-white'
+                    : 'bg-green-600/20 text-green-700 border border-green-600/50 hover:bg-green-600/30'
+                )}
+              >
+                {isRsvping ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <CheckCircle2 className="mr-2 h-5 w-5" />}
+                {rsvpStatus === 'going' ? "You're Going!" : 'Going'}
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                disabled={isRsvping}
+                onClick={() => handleRsvp('interested')}
+                className={cn(
+                  "flex-1 md:flex-none",
+                  rsvpStatus === 'interested' && 'border-amber-500 text-amber-600 bg-amber-500/10'
+                )}
+              >
+                <Heart className={cn("mr-2 h-5 w-5", rsvpStatus === 'interested' && 'fill-amber-500 text-amber-500')} />
+                Interested
+              </Button>
+              <Button
+                size="lg"
+                variant="ghost"
+                disabled={isRsvping}
+                onClick={() => handleRsvp('not_going')}
+                className={cn(
+                  "flex-1 md:flex-none text-muted-foreground",
+                  rsvpStatus === 'not_going' && 'bg-muted'
+                )}
+              >
+                Not Going
+              </Button>
+            </div>
+
+            {/* Attendee List */}
+            {attendeeTotalCount > 0 && (
+              <div className="pt-3 border-t border-border/50">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Who&apos;s going</p>
+                <div className="flex items-center gap-1">
+                  <div className="flex -space-x-2">
+                    {attendees.map(att => (
+                      <div key={att.id} title={att.name}
+                        className="h-8 w-8 rounded-full border-2 border-background bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary overflow-hidden">
+                        {att.avatar ? (
+                          <img src={att.avatar} alt={att.name} className="h-full w-full object-cover" />
+                        ) : (
+                          att.name.charAt(0).toUpperCase()
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {attendeeTotalCount > attendees.length && (
+                    <span className="text-xs text-muted-foreground ml-2">+{attendeeTotalCount - attendees.length} more</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
         </CardContent>

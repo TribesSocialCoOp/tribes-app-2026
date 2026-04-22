@@ -1,0 +1,24 @@
+#cloud-config
+# Tribes.app Backup Server Bootstrap
+
+package_update: true
+
+packages:
+  - restic
+  - openssh-server
+
+users:
+  - name: ${deploy_user}
+    shell: /bin/bash
+    ssh_authorized_keys: []
+
+runcmd:
+  - mkdir -p /backups/tribes /home/${deploy_user}/.ssh
+  - chown -R ${deploy_user}:${deploy_user} /backups
+
+  # UFW — only allow SSH
+  - apt-get install -y ufw
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow 22/tcp
+  - ufw --force enable

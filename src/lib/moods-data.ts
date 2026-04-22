@@ -1,0 +1,16 @@
+
+import { Smile, Target, Sparkles as ShowcaseIcon, Map, ShoppingCart, BookOpen, Gamepad2, Megaphone, Users as ConnectIcon, Signal, Landmark } from "lucide-react";
+
+export const moodsData = [
+  { name: "Chill", slug: "chill", description: "Relax, unwind, and find your calm.", emoji: "😌", bgClass: "bg-blue-100", textClass: "text-blue-700", img: "/moods/chill.svg", dataAiHint: "relax meditation", icon: Smile },
+  { name: "Focus", slug: "focus", description: "Boost productivity and concentration for your projects.", emoji: "🎯", bgClass: "bg-green-100", textClass: "text-green-700", img: "/moods/focus.svg", dataAiHint: "work study", icon: Target },
+  { name: "Showcase", slug: "showcase", description: "Showcase your art, performances, and creative projects. Find collaborators.", emoji: "✨", bgClass: "bg-purple-100", textClass: "text-purple-700", img: "/moods/showcase.svg", dataAiHint: "art music performance", icon: ShowcaseIcon },
+  { name: "Discover", slug: "discover", description: "Explore new ideas, live events, local scenes, and active communities.", emoji: "🗺️", bgClass: "bg-yellow-100", textClass: "text-yellow-700", img: "/moods/discover.svg", dataAiHint: "events local scene", icon: Map  },
+  { name: "Connect", slug: "connect", description: "Find and build communities around shared live experiences and passions.", emoji: "🤝", bgClass: "bg-orange-100", textClass: "text-orange-700", img: "/moods/connect.svg", dataAiHint: "community meetup networking", icon: ConnectIcon },
+  { name: "Shop", slug: "shop", description: "Find deals, artist merch, and share tips.", emoji: "🛍️", bgClass: "bg-pink-100", textClass: "text-pink-700", img: "/moods/shop.svg", dataAiHint: "retail store merch", icon: ShoppingCart },
+  { name: "Learn", slug: "learn", description: "Expand your knowledge with workshops and skill-sharing.", emoji: "📚", bgClass: "bg-teal-100", textClass: "text-teal-700", img: "/moods/learn.svg", dataAiHint: "education workshop", icon: BookOpen },
+  { name: "Game", slug: "game", description: "Connect with gamers and share experiences.", emoji: "🎮", bgClass: "bg-red-100", textClass: "text-red-700", img: "/moods/game.svg", dataAiHint: "games console", icon: Gamepad2 },
+  { name: "Pulse", slug: "pulse", description: "Tune into real-time updates, news, and important announcements.", emoji: "📡", bgClass: "bg-slate-100", textClass: "text-slate-700", img: "/moods/pulse.svg", dataAiHint: "news updates signal", icon: Signal },
+  { name: "Discourse", slug: "discourse", description: "Engage in deep conversations, structured debates, and thoughtful analysis.", emoji: "🏛️", bgClass: "bg-indigo-100", textClass: "text-indigo-700", img: "/moods/discourse.svg", dataAiHint: "debate discussion forum", icon: Landmark },
+  { name: "Advocate", slug: "advocate", description: "Organize for a cause, find volunteer opportunities, and drive community action.", emoji: "✊", bgClass: "bg-amber-100", textClass: "text-amber-700", img: "/moods/advocate.svg", dataAiHint: "activism social cause", icon: Megaphone },
+];

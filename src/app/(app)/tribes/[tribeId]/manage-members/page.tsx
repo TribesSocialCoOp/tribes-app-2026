@@ -25,10 +25,10 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 
-import type { Tribe, TribeMember, PendingMember } from '@/lib/types';
-import { getTribeById } from '@/lib/data-access/tribes';
-import { getTribeMembers, getPendingMembers, updateMemberNickname, updateMemberRole, approveJoinRequest, denyJoinRequest } from '@/lib/services/tribe-service';
-import { banMemberFromTribe } from '@/lib/services/moderation-service';
+import type { TribeMember, PendingMember } from '@/lib/types';
+import type { Tribe } from '@/lib/types';
+import { getTribeById, getTribeMembers, getPendingMembers, updateMemberNickname, updateMemberRole, approveJoinRequest, denyJoinRequest, checkTribeAccess } from '@/lib/actions/tribe-actions';
+import { banMemberFromTribe } from '@/lib/actions/content-actions';
 
 
 export default function ManageMembersPage() {
@@ -69,12 +69,17 @@ export default function ManageMembersPage() {
   }, [tribeId]);
 
   useEffect(() => {
-    const canAccess = role === 'Admin' || role === 'Creator';
-    setHasAccess(canAccess);
-    if (canAccess) {
-      reloadData();
-    }
-  }, [role, reloadData]);
+    const resolveAccess = async () => {
+      const accessLevel = await checkTribeAccess(tribeId);
+      // Speakers and above can access member management
+      const canAccess = accessLevel === 'platform_admin' || accessLevel === 'founder' || accessLevel === 'speaker';
+      setHasAccess(canAccess);
+      if (canAccess) {
+        reloadData();
+      }
+    };
+    resolveAccess();
+  }, [tribeId, reloadData]);
 
   const handleOpenNicknameDialog = (member: TribeMember) => {
     setMemberToEditNickname(member);
@@ -275,14 +280,14 @@ export default function ManageMembersPage() {
                         <p className="text-xs text-muted-foreground mt-0.5">No tribe-specific nickname.</p>
                       )}
                       <div className="flex items-center space-x-2 mt-1.5">
-                          <Badge variant={member.role === 'speaker' ? "default" : "outline"} className={cn("text-xs", member.role === 'speaker' ? "bg-primary text-primary-foreground" : "border-muted-foreground text-muted-foreground")}>
-                              {member.role === 'speaker' ? 'Speaker' : 'Member'}
+                          <Badge variant={member.role === 'founder' ? 'default' : member.role === 'speaker' ? "default" : "outline"} className={cn("text-xs", member.role === 'founder' ? "bg-amber-600 text-white" : member.role === 'speaker' ? "bg-primary text-primary-foreground" : "border-muted-foreground text-muted-foreground")}>
+                              {member.role === 'founder' ? 'Founder' : member.role === 'speaker' ? 'Speaker' : 'Member'}
                           </Badge>
                           {member.reputationStatus && (
                               <Badge className={cn("text-xs border-transparent", {
-                                  'bg-accent text-accent-foreground': member.reputationStatus === 'Excellent' || member.reputationStatus === 'Good',
-                                  'bg-primary text-primary-foreground': member.reputationStatus === 'Fair',
-                                  'bg-destructive text-destructive-foreground': member.reputationStatus === 'Poor' || member.reputationStatus === 'At Risk'
+                                  'bg-accent text-accent-foreground': member.reputationStatus === 'Elder' || member.reputationStatus === 'Veteran',
+                                  'bg-primary text-primary-foreground': member.reputationStatus === 'Trusted' || member.reputationStatus === 'Active',
+                                  'bg-muted text-muted-foreground': member.reputationStatus === 'Newcomer' || member.reputationStatus === 'Onboarding'
                               })}>
                                   {member.reputationStatus}
                               </Badge>
@@ -322,7 +327,7 @@ export default function ManageMembersPage() {
           ) : (
              <div className="mt-6 p-6 border-2 border-dashed rounded-lg text-center">
                 <UsersRound className="h-12 w-12 text-muted-foreground mx-auto mb-3 opacity-50"/>
-                <p className="text-sm text-muted-foreground">No members found for this tribe (this is mock data).</p>
+                <p className="text-sm text-muted-foreground">No members found for this tribe.</p>
             </div>
           )}
         </CardContent>

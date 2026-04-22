@@ -13,8 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookOpen, Search, ArrowRight, MessageSquare, Globe, Map, Building, History, Loader2 } from "lucide-react";
 import { cn } from '@/lib/utils';
-import { getStoryTopics } from '@/lib/data-access/stories';
-import type { StoryTopic } from '@/lib/data';
+import { getStoryTopics } from '@/lib/actions/content-actions';
+import type { StoryTopic } from '@/lib/types';
 
 
 const StoryTopicCard: React.FC<{ story: StoryTopic }> = ({ story }) => {
@@ -155,7 +155,7 @@ export default function OurStoryPage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full sm:w-auto">
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as typeof activeTab)} className="w-full sm:w-auto">
             <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto sm:h-10">
               {(['all', 'local', 'national', 'global'] as const).map(tab => (
                 <TabsTrigger key={tab} value={tab} className="capitalize px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">

@@ -1,7 +1,9 @@
 
 "use client";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useMemo } from "react";
+import DOMPurify from "isomorphic-dompurify";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Code, Edit } from "lucide-react";
 import { Button } from "../ui/button";
 
@@ -12,6 +14,11 @@ interface HtmlBlockProps {
 }
 
 export default function HtmlBlock({ content }: HtmlBlockProps) {
+  const sanitizedHtml = useMemo(
+    () => DOMPurify.sanitize(content.html, { USE_PROFILES: { html: true } }),
+    [content.html]
+  );
+
   return (
     <Card>
       <CardHeader>
@@ -26,8 +33,7 @@ export default function HtmlBlock({ content }: HtmlBlockProps) {
         </div>
       </CardHeader>
       <CardContent>
-        {/* WARNING: In a real app, this MUST be sanitized to prevent XSS attacks */}
-        <div dangerouslySetInnerHTML={{ __html: content.html }} />
+        <div dangerouslySetInnerHTML={{ __html: sanitizedHtml }} />
       </CardContent>
     </Card>
   );

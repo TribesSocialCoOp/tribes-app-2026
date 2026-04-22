@@ -1,0 +1,45 @@
+# ============================================================
+# Tribes.app Caddyfile — Production Reverse Proxy
+# ============================================================
+# Caddy auto-provisions Let's Encrypt TLS for all domains.
+# Replace {$DOMAIN} with your actual domain or hardcode below.
+#
+# Usage:
+#   DOMAIN=tribes.app docker compose -f docker-compose.prod.yml up -d
+# ============================================================
+
+{$APP_DOMAIN:tribes.app} {
+    # Next.js app
+    reverse_proxy app:9002
+
+    # Security headers (complement Next.js CSP headers)
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Robots-Tag "noindex, nofollow"  # Remove for public launch
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/access.log
+        format json
+    }
+}
+
+{$WS_DOMAIN:ws.tribes.app} {
+    # WebSocket relay — must preserve upgrade headers
+    reverse_proxy ws-relay:9003 {
+        header_up Connection "Upgrade"
+        header_up Upgrade "websocket"
+    }
+}
+
+{$MEDIA_DOMAIN:media.tribes.app} {
+    # SeaweedFS Filer — public media CDN
+    reverse_proxy seaweedfs-filer:8888
+
+    # Long-lived cache for immutable media files
+    header Cache-Control "public, max-age=31536000, immutable"
+
+    # Serve from cache when upstream is slow
+    header Vary "Accept-Encoding"
+}

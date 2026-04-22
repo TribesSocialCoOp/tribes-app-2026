@@ -43,3 +43,33 @@ next-env.d.ts
 # firebase
 firebase-debug.log
 firestore-debug.log
+# Dev email mailbox
+src/db/dev-mailbox.json
+
+# Dev artifacts — screenshots, databases, test scripts
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+qa.ts
+.playwright-mcp/
+
+# Root-level screenshots (dev testing)
+billing_*.png
+founding_member_success.png
+free_user_billing.png
+intercom_with_vibes.png
+invite_code_validated.png
+member_dashboard.png
+membership_status_banner.png
+phase3_*.png
+reply_sent_toast.png
+settings_avatar.png
+stripe_checkout.png
+tribe_create_upload.png
+vibe_working.png
+
+
+# Infrastructure secrets
+infra/terraform/terraform.tfvars
+infra/terraform/.terraform/

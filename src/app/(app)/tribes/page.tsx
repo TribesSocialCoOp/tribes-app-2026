@@ -5,36 +5,28 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, HeartHandshake, Loader2, ShieldCheck, History } from "lucide-react";
+import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, HeartHandshake, Loader2, ShieldCheck, History, X } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { cn } from '@/lib/utils';
-import type { Tribe } from '@/lib/data';
-import { getTribes } from '@/lib/data-access/tribes';
+import type { Tribe, UserProfile } from '@/lib/types';
+import { getTribes, getMyTribeIds, requestToJoinTribe } from '@/lib/actions/tribe-actions';
 import { useUser } from '@/hooks/use-user';
 import { useToast } from '@/hooks/use-toast';
 import { JoinTribeDialog } from '@/components/dialogs/join-tribe-dialog';
-import type { UserProfile } from '@/lib/types';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
+import { REPUTATION_HIERARCHY, TRIBE_0_ID, meetsReputationGate } from '@/lib/constants';
 
-const reputationLevels: Record<string, number> = {
-  'Excellent': 4,
-  'Good': 3,
-  'Fair': 2,
-  'Poor': 1,
-  'At Risk': 0,
-  'Onboarding': -1, // Give onboarding a low score so it fails numerical checks
-};
 
 const checkJoinRequirements = (tribe: Tribe, user: UserProfile | null): { canJoin: boolean; requirement?: string; reason?: 'reputation' | 'onboarding' | 'age' } => {
     if (!user) return { canJoin: false, requirement: 'Unknown', reason: 'reputation' };
 
     // Onboarding users can only join tribes with NO requirements.
     if (user.reputationStatus === 'Onboarding') {
-        if (tribe.id === '0') return { canJoin: false, requirement: undefined, reason: 'onboarding' };
-        if (tribe.minimumReputation && tribe.minimumReputation !== 'None') {
+        if (tribe.id === TRIBE_0_ID) return { canJoin: false, requirement: undefined, reason: 'onboarding' };
+        if (tribe.minimumReputation && (tribe.minimumReputation as string) !== 'None') {
             return { canJoin: false, requirement: tribe.minimumReputation, reason: 'onboarding' };
         }
         if (tribe.minimumAccountAgeDays && tribe.minimumAccountAgeDays > 0) {
@@ -44,10 +36,8 @@ const checkJoinRequirements = (tribe: Tribe, user: UserProfile | null): { canJoi
     }
     
     // Check reputation requirement
-    if (tribe.minimumReputation && tribe.minimumReputation !== 'None') {
-        const userLevel = reputationLevels[user.reputationStatus || ''] ?? -1;
-        const requiredLevel = reputationLevels[tribe.minimumReputation] ?? -1;
-        if (userLevel < requiredLevel) {
+    if (tribe.minimumReputation && (tribe.minimumReputation as string) !== 'None') {
+        if (!meetsReputationGate(user.reputationStatus, tribe.minimumReputation)) {
             return { canJoin: false, requirement: tribe.minimumReputation, reason: 'reputation' };
         }
     }
@@ -159,24 +149,23 @@ export default function TribesPage() {
   const [myTribeIds, setMyTribeIds] = useState<string[]>([]);
   const [isClient, setIsClient] = useState(false);
   const [joiningStates, setJoiningStates] = useState<Record<string, boolean>>({});
+  const [searchTerm, setSearchTerm] = useState('');
   const { user } = useUser();
   const { toast } = useToast();
-  const canCreate = user.role !== 'Human_Free';
+  const canCreate = user?.role !== 'Human_Free';
 
   // New state for the join dialog
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
   const [tribeToJoin, setTribeToJoin] = useState<Tribe | null>(null);
 
-  const baseTribeMemberships = ['1', '3', '6', '7'];
-
   const syncData = async () => {
-    // Combine base memberships with any created in this session from localStorage
-    const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
-    setMyTribeIds([...new Set([...baseTribeMemberships, ...createdTribeIds])]);
-    
-    // Fetch data using the new abstraction layer
-    const fetchedTribes = await getTribes();
+    // Fetch membership from DB (sole source of truth)
+    const [fetchedTribes, memberTribeIds] = await Promise.all([
+      getTribes(),
+      getMyTribeIds(),
+    ]);
     setAllTribes(fetchedTribes);
+    setMyTribeIds(memberTribeIds);
   };
   
   useEffect(() => {
@@ -195,27 +184,26 @@ export default function TribesPage() {
     setIsJoinDialogOpen(true);
   };
 
-  const handleConfirmJoin = (tribeToJoin: Tribe, selectedAlias?: string) => {
+  const handleConfirmJoin = async (tribeToJoin: Tribe, selectedAlias?: string) => {
     setJoiningStates(prev => ({ ...prev, [tribeToJoin.id]: true }));
     setIsJoinDialogOpen(false); // Close the dialog immediately for better UX
 
-    // Log the selected alias for debugging/verification
-    console.log(`Joining tribe "${tribeToJoin.name}" with alias: ${selectedAlias || 'Main Profile Name'}`);
-
-    // Simulate API call
-    setTimeout(() => {
-        if (tribeToJoin.joinMechanism === 'approval') {
-            toast({ title: "Request Sent", description: `Your request to join ${tribeToJoin.name} is pending approval.` });
-        } else {
-            const currentMyTribeIds = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
-            currentMyTribeIds.push(tribeToJoin.id);
-            localStorage.setItem('myCreatedTribeIds', JSON.stringify([...new Set(currentMyTribeIds)]));
-            syncData(); // Re-sync data to update the lists
-            toast({ title: "Welcome!", description: `You have successfully joined ${tribeToJoin.name}.` });
-        }
-        setJoiningStates(prev => ({ ...prev, [tribeToJoin.id]: false }));
-        setTribeToJoin(null);
-    }, 1000);
+    try {
+      const result = await requestToJoinTribe(tribeToJoin.id);
+      if (result === 'pending') {
+        toast({ title: "Request Sent", description: `Your request to join ${tribeToJoin.name} is pending approval.` });
+      } else if (result === 'joined') {
+        await syncData(); // Re-sync data from DB to update the lists
+        toast({ title: "Welcome!", description: `You have successfully joined ${tribeToJoin.name}.` });
+      } else {
+        toast({ title: "Cannot Join", description: `Your request to join ${tribeToJoin.name} was rejected.`, variant: "destructive" });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to join tribe. Please try again.", variant: "destructive" });
+    } finally {
+      setJoiningStates(prev => ({ ...prev, [tribeToJoin.id]: false }));
+      setTribeToJoin(null);
+    }
   };
 
   const { myTribes, discoverTribes } = useMemo(() => {
@@ -224,10 +212,19 @@ export default function TribesPage() {
       return { myTribes: [], discoverTribes: [] };
     }
 
-    const myTribesList = allTribes.filter(t => myTribeIds.includes(t.id));
-    const discoverTribesList = allTribes.filter(t => !myTribeIds.includes(t.id) && t.isPublic && t.id !== '0');
+    const lowerSearch = searchTerm.toLowerCase().trim();
+    const matchesSearch = (tribe: Tribe) => {
+      if (!lowerSearch) return true;
+      return (
+        tribe.name.toLowerCase().includes(lowerSearch) ||
+        tribe.description.toLowerCase().includes(lowerSearch)
+      );
+    };
+
+    const myTribesList = allTribes.filter(t => myTribeIds.includes(t.id) && matchesSearch(t));
+    const discoverTribesList = allTribes.filter(t => !myTribeIds.includes(t.id) && t.isPublic && t.id !== '0' && matchesSearch(t));
     return { myTribes: myTribesList, discoverTribes: discoverTribesList };
-  }, [allTribes, myTribeIds, isClient]);
+  }, [allTribes, myTribeIds, isClient, searchTerm]);
 
   const renderTribeList = (tribes: Tribe[], isMyTribeList: boolean) => (
     <Card className="shadow-lg">
@@ -271,7 +268,7 @@ export default function TribesPage() {
             <Card key={tribe.id} className="shadow-lg hover:shadow-xl transition-shadow flex flex-col overflow-hidden">
                 <Link href={`/tribes/${tribe.id}`} passHref className="contents">
                     <div className="relative h-40 w-full">
-                    <Image src={tribe.cover} alt={tribe.name} layout="fill" objectFit="cover" data-ai-hint={tribe.dataAiHint} />
+                    <Image src={tribe.cover} alt={tribe.name} fill style={{ objectFit: 'cover' }} data-ai-hint={tribe.dataAiHint} />
                     <Badge variant={tribe.isPublic ? "secondary" : "outline"} className={cn("absolute top-2 right-2", !tribe.isPublic && "border-pink-500 text-pink-500 bg-pink-500/10")}>
                         {tribe.isPublic ? "Public" : "Private"}
                     </Badge>
@@ -364,7 +361,23 @@ export default function TribesPage() {
         <div className="mb-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="relative flex-grow w-full sm:w-auto">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-            <Input placeholder="Search for tribes..." className="pl-10 py-3 text-base rounded-full shadow-sm w-full" />
+            <Input
+              placeholder="Search for tribes..."
+              className="pl-10 py-3 text-base rounded-full shadow-sm w-full"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              id="tribes-search-input"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button variant={viewMode === 'card' ? 'default' : 'outline'} size="icon" onClick={() => setViewMode('card')} aria-label="Card view">

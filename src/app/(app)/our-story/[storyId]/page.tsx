@@ -28,23 +28,16 @@ import { ReportCommentDialog } from '@/components/dialogs/report-comment-dialog'
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import type { DiscussionComment, UserRole } from '@/lib/types';
-import type { StoryTopic, SourceArticle } from '@/lib/data';
-import { MOCK_CURRENT_USER_ID } from '@/lib/data';
-import { getStoryTopicById, getArticlesForStory, getCommentsForStory } from '@/lib/data-access/stories';
-import { reportComment } from '@/lib/services/moderation-service';
+import type { StoryTopic, SourceArticle } from '@/lib/types';
+import { getStoryTopicById, getArticlesForStory, getCommentsForStory, reportComment, createStoryComment } from '@/lib/actions/content-actions';
 
 // Helper for Article Card
 const ArticleCard: React.FC<{ article: SourceArticle }> = ({ article }) => (
  <Card className="shadow-sm hover:shadow-md transition-shadow flex items-stretch overflow-hidden rounded-lg">
-    <div className="w-32 flex-shrink-0 relative bg-muted">
-      <Image
-        src={`https://placehold.co/150x150.png?text=${encodeURIComponent(article.dataAiHint ? article.dataAiHint.substring(0,10) : 'Source')}`}
-        alt={article.title}
-        fill
-        style={{objectFit:"cover"}}
-        className="w-full h-full"
-        data-ai-hint={article.dataAiHint || "news document"}
-      />
+    <div className="w-32 flex-shrink-0 relative bg-gradient-to-br from-muted to-muted-foreground/20 flex items-center justify-center">
+      <span className="text-2xl font-bold text-muted-foreground/40">
+        {article.dataAiHint ? article.dataAiHint.substring(0, 2).toUpperCase() : '📰'}
+      </span>
     </div>
     <div className="flex-1 min-w-0 p-3 flex flex-col justify-between">
       <div>
@@ -77,14 +70,33 @@ const ArticleCard: React.FC<{ article: SourceArticle }> = ({ article }) => (
 // Helper for Comment Card
 interface CommentCardProps {
   comment: DiscussionComment;
+  storyId: string;
   level?: number;
   onReportComment: (comment: DiscussionComment) => void;
 }
-const CommentCard: React.FC<CommentCardProps> = ({ comment, level = 0, onReportComment }) => {
+const StoryCommentCard: React.FC<CommentCardProps> = ({ comment, storyId, level = 0, onReportComment }) => {
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [replyContent, setReplyContent] = useState("");
+  const [isReplying, setIsReplying] = useState(false);
   const { role } = useUser();
+  const { toast } = useToast();
   const isUserLoggedIn = !!role;
+
+  const handlePostReply = async () => {
+    if (!replyContent.trim() || isReplying) return;
+    setIsReplying(true);
+    try {
+      await createStoryComment(storyId, replyContent.trim(), comment.id);
+      setReplyContent("");
+      setShowReplyInput(false);
+      toast({ title: "Reply Posted", description: `Your reply to ${comment.authorName} has been posted.` });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to post reply';
+      toast({ variant: 'destructive', title: 'Error', description: msg });
+    } finally {
+      setIsReplying(false);
+    }
+  };
 
   return (
     <Card className={`shadow-sm ${level > 0 ? 'ml-4 sm:ml-6' : ''} bg-background`}>
@@ -137,15 +149,15 @@ const CommentCard: React.FC<CommentCardProps> = ({ comment, level = 0, onReportC
                 className="min-h-[60px] text-sm"
             />
             <div className="mt-2 flex justify-end">
-                <Button size="sm" disabled={!replyContent.trim()} onClick={() => { console.log("Simulate reply:", replyContent); setReplyContent(""); setShowReplyInput(false); }}>
-                    Post Reply <Send className="ml-1.5 h-3.5 w-3.5"/>
+                <Button size="sm" disabled={!replyContent.trim() || isReplying} onClick={handlePostReply}>
+                    {isReplying ? 'Posting...' : 'Post Reply'} <Send className="ml-1.5 h-3.5 w-3.5"/>
                 </Button>
             </div>
         </div>
       )}
       {comment.replies && comment.replies.length > 0 && (
         <div className="p-3 border-t space-y-2 bg-muted/30">
-          {comment.replies.map(reply => <CommentCard key={reply.id} comment={reply} level={level + 1} onReportComment={onReportComment} />)}
+          {comment.replies.map(reply => <StoryCommentCard key={reply.id} comment={reply} storyId={storyId} level={level + 1} onReportComment={onReportComment} />)}
         </div>
       )}
     </Card>
@@ -158,7 +170,7 @@ export default function StoryDetailPage() {
   const params = useParams();
   const storyId = params.storyId as string;
   const { toast } = useToast();
-  const { role } = useUser();
+  const { role, user } = useUser();
 
   const [story, setStory] = useState<StoryTopic | null>(null);
   const [articles, setArticles] = useState<SourceArticle[]>([]);
@@ -205,19 +217,28 @@ export default function StoryDetailPage() {
     }
   }, [story]);
 
-  const handlePostComment = () => {
+  const handlePostComment = async () => {
     if (!newComment.trim() || !story) return;
+    // Optimistic update
     const newCommentObj: DiscussionComment = {
         id: `new-com-${Date.now()}`,
-        authorId: MOCK_CURRENT_USER_ID,
-        authorName: "You (Current User)",
-        authorAvatarFallback: "ME",
+        authorId: user?.id || 'anon',
+        authorName: user?.name || "You",
+        authorAvatarFallback: user?.name?.substring(0, 2).toUpperCase() || "??",
         content: newComment,
         timestamp: new Date(),
         vibes: 0,
     };
     setComments(prev => [newCommentObj, ...prev]);
+    const commentText = newComment;
     setNewComment("");
+    // Persist to DB
+    try {
+      // createStoryComment imported at top of file
+      await createStoryComment(story.id, commentText);
+    } catch (err: unknown) {
+      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+    }
   };
 
   const handleAddCommentClick = () => {
@@ -404,7 +425,7 @@ export default function StoryDetailPage() {
                 </>
               )}
               {comments.length > 0 ? (
-                comments.map(comment => <CommentCard key={comment.id} comment={comment} onReportComment={handleOpenReportCommentDialog} />)
+                comments.map(comment => <StoryCommentCard key={comment.id} comment={comment} storyId={storyId} onReportComment={handleOpenReportCommentDialog} />)
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">No discussions have started on this topic yet. Be the first!</p>
               )}

@@ -9,36 +9,132 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Switch } from "@/components/ui/switch";
-import { Bell, UserCircle, ShieldCheck, Palette, LogOut, Trash2, CreditCard, Loader2, PlusCircle, AtSign, X, Star } from "lucide-react";
+import { UserCircle, Loader2, PlusCircle, AtSign, X, Star, CreditCard, Mail, AlertTriangle, Cpu } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { UserProfile } from '@/lib/types';
-import { getUserProfile, updateUserProfile } from '@/lib/services/user-service';
-import { MOCK_CURRENT_USER_ID } from '@/lib/data';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import { getUserProfile, updateUserProfile } from '@/lib/actions/profile-actions';
+import { getNotificationPreferences, saveNotificationPreferences } from '@/lib/actions/content-actions';
+import { resendVerificationEmail } from '@/lib/actions/auth-email-actions';
+import { getActiveSessions, revokeSession, revokeAllOtherSessions } from '@/lib/actions/auth-actions';
+import { uploadFile } from '@/lib/upload';
 import { useUser } from '@/hooks/use-user';
 
+// Extracted settings sections
+import { ReputationSection } from '@/components/settings/reputation-section';
+import { NotificationsSection, type NotifPrefsState } from '@/components/settings/notifications-section';
+import { SecuritySection } from '@/components/settings/security-section';
+import { SessionsSection } from '@/components/settings/sessions-section';
+import { AppearanceSection, BillingSection, AccountActionsSection } from '@/components/settings/minor-sections';
+import { AiSettingsSection } from '@/components/settings/ai-settings-section';
 export default function SettingsPage() {
   const { toast } = useToast();
-  const { role } = useUser();
+  const { role, user: sessionUser, isLoading: isUserLoading } = useUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Local state for form fields to allow editing before saving
+  // Identity form state
   const [givenName, setGivenName] = useState("");
   const [bio, setBio] = useState("");
   const [aliases, setAliases] = useState<string[]>([]);
   const [newAlias, setNewAlias] = useState("");
   const [reservedAliasInput, setReservedAliasInput] = useState('');
   const [isSavingAlias, setIsSavingAlias] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Email verification banner state
+  const [verifyBannerDismissed, setVerifyBannerDismissed] = useState(false);
+  const [isResendingVerification, setIsResendingVerification] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
+
+  // Notification preferences state
+  const [notifPrefs, setNotifPrefs] = useState<NotifPrefsState>({
+    pushEnabled: true, emailEnabled: true, mentionsEnabled: true,
+    bondMessagesEnabled: true, tribeActivityEnabled: true, eventRemindersEnabled: true,
+  });
+  const [isSavingNotifPrefs, setIsSavingNotifPrefs] = useState(false);
+
+  // Session management state
+  const [activeSessions, setActiveSessions] = useState<Array<{
+    id: string;
+    userAgent: string | null;
+    createdAt: Date | null;
+    isCurrent: boolean;
+  }>>([]);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [isRevokingSession, setIsRevokingSession] = useState<string | null>(null);
+
+  // Load notification preferences
+  useEffect(() => {
+    async function loadNotifPrefs() {
+      const prefs = await getNotificationPreferences();
+      if (prefs) setNotifPrefs(prefs);
+    }
+    if (sessionUser) loadNotifPrefs();
+  }, [sessionUser]);
+
+  async function handleSaveNotifPrefs() {
+    setIsSavingNotifPrefs(true);
+    try {
+      await saveNotificationPreferences(notifPrefs);
+      toast({ title: 'Saved', description: 'Notification preferences updated.' });
+    } catch (err: unknown) {
+      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+    } finally {
+      setIsSavingNotifPrefs(false);
+    }
+  }
+
+  // Load active sessions
+  async function loadSessions() {
+    setIsLoadingSessions(true);
+    try {
+      const sessions = await getActiveSessions();
+      setActiveSessions(sessions);
+    } catch (err) {
+      console.error('Failed to load sessions:', err);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }
 
   useEffect(() => {
+    if (sessionUser) loadSessions();
+  }, [sessionUser]);
+
+  async function handleRevokeSession(sessionId: string) {
+    setIsRevokingSession(sessionId);
+    try {
+      await revokeSession(sessionId);
+      setActiveSessions(prev => prev.filter(s => s.id !== sessionId));
+      toast({ title: 'Session Revoked', description: 'The session has been signed out.' });
+    } catch (err: unknown) {
+      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+    } finally {
+      setIsRevokingSession(null);
+    }
+  }
+
+  async function handleRevokeAllOther() {
+    setIsRevokingSession('all');
+    try {
+      await revokeAllOtherSessions();
+      setActiveSessions(prev => prev.filter(s => s.isCurrent));
+      toast({ title: 'All Sessions Revoked', description: 'All other devices have been signed out.' });
+    } catch (err: unknown) {
+      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+    } finally {
+      setIsRevokingSession(null);
+    }
+  }
+
+  // Profile fetch
+  useEffect(() => {
     const fetchProfile = async () => {
+      if (!sessionUser) return;
       setIsLoading(true);
-      const userProfile = await getUserProfile(MOCK_CURRENT_USER_ID);
+      const userProfile = await getUserProfile(sessionUser.id);
       if (userProfile) {
         setProfile(userProfile);
         setGivenName(userProfile.name);
@@ -48,8 +144,10 @@ export default function SettingsPage() {
       }
       setIsLoading(false);
     };
-    fetchProfile();
-  }, []);
+    if (!isUserLoading) {
+        fetchProfile();
+    }
+  }, [sessionUser, isUserLoading]);
   
   const handleAddAlias = () => {
     if (newAlias.trim() && !aliases.includes(newAlias.trim())) {
@@ -156,7 +254,59 @@ export default function SettingsPage() {
         </p>
       </header>
 
-      {/* Identity & Profile Settings */}
+      {/* Email Verification Advisory Banner */}
+      {profile && !profile.emailVerified && !verifyBannerDismissed && (
+        <div className="relative flex items-start gap-3 p-4 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
+          <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+              Your email hasn&apos;t been verified yet.
+            </p>
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              Verify your email to enable account recovery and notification emails.
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              {verificationSent ? (
+                <p className="text-xs text-green-700 dark:text-green-400 font-medium flex items-center gap-1">
+                  <Mail className="h-3.5 w-3.5" /> Verification email sent! Check your inbox.
+                </p>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-400 text-amber-800 hover:bg-amber-100 dark:text-amber-200 dark:hover:bg-amber-900/50 h-8 text-xs"
+                  disabled={isResendingVerification}
+                  onClick={async () => {
+                    if (!profile) return;
+                    setIsResendingVerification(true);
+                    try {
+                      await resendVerificationEmail(profile.id);
+                      setVerificationSent(true);
+                      toast({ title: 'Email Sent', description: 'Check your inbox for the verification link.' });
+                    } catch (err: unknown) {
+                      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+                    } finally {
+                      setIsResendingVerification(false);
+                    }
+                  }}
+                >
+                  {isResendingVerification ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Mail className="mr-1 h-3 w-3" />}
+                  Resend Verification Email
+                </Button>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => setVerifyBannerDismissed(true)}
+            className="text-amber-500 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-200"
+            aria-label="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
+      {/* Identity & Profile Settings — stays inline due to tight state coupling */}
       <Card className="shadow-lg">
         <CardHeader>
           <div className="flex items-center space-x-3">
@@ -171,7 +321,32 @@ export default function SettingsPage() {
               <AvatarImage src={profile.avatar} alt={profile.name} data-ai-hint="profile person" />
               <AvatarFallback>{profile.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
             </Avatar>
-            <Button variant="outline">Change Picture</Button>
+            <div className="flex flex-col gap-2">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !profile) return;
+                  setIsUploadingAvatar(true);
+                  try {
+                    const url = await uploadFile(file, 'avatars');
+                    await updateUserProfile(profile.id, { avatar: url });
+                    setProfile({ ...profile, avatar: url });
+                    toast({ title: 'Avatar updated', description: 'Your profile picture has been changed.' });
+                  } catch (err: unknown) {
+                    toast({ variant: 'destructive', title: 'Upload failed', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+                  } finally {
+                    setIsUploadingAvatar(false);
+                  }
+                }}
+              />
+              <Button variant="outline" disabled={isUploadingAvatar} onClick={() => avatarInputRef.current?.click()}>
+                {isUploadingAvatar ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading...</> : 'Change Picture'}
+              </Button>
+            </div>
           </div>
            <div className="space-y-1.5">
               <Label htmlFor="givenName">Given Name</Label>
@@ -271,154 +446,53 @@ export default function SettingsPage() {
       </Card>
 
       <Separator />
+      <ReputationSection profile={profile} />
 
-      {/* Reputation & Trust */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <div className="flex items-center space-x-3">
-            <ShieldCheck className="h-7 w-7 text-primary" />
-            <CardTitle className="text-xl">Reputation &amp; Trust</CardTitle>
-          </div>
-          <CardDescription>Your community standing, based on positive interactions and adherence to guidelines.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-md border bg-card">
-                <div>
-                    <Label className="text-xs text-muted-foreground">Reputation Status</Label>
-                    {profile.reputationStatus && (
-                        <Badge variant={
-                            profile.reputationStatus === 'Excellent' || profile.reputationStatus === 'Good' ? 'default' :
-                            profile.reputationStatus === 'Poor' || profile.reputationStatus === 'At Risk' ? 'destructive' :
-                            'outline'
-                        } className="mt-1 block w-fit">
-                            {profile.reputationStatus}
-                        </Badge>
-                    )}
-                </div>
-                 <div className="text-right">
-                    <Label className="text-xs text-muted-foreground">Score</Label>
-                    <p className="text-2xl font-bold">{profile.reputationScore || 'N/A'}</p>
-                 </div>
-            </div>
-             <div className="px-1">
-                <Progress value={profile.reputationScore ? (profile.reputationScore / 1000) * 100 : 0} aria-label={`${profile.reputationScore} out of 1000 reputation score`} />
-                <p className="text-xs text-muted-foreground mt-2">
-                    Your reputation score is a reflection of your interactions across the platform. Positive contributions increase your score, while moderation actions may decrease it.
-                </p>
-             </div>
-        </CardContent>
-      </Card>
-      
       <Separator />
+      <NotificationsSection
+        notifPrefs={notifPrefs}
+        setNotifPrefs={setNotifPrefs}
+        isSaving={isSavingNotifPrefs}
+        onSave={handleSaveNotifPrefs}
+      />
 
-      {/* Notification Settings */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <div className="flex items-center space-x-3">
-            <Bell className="h-7 w-7 text-primary" />
-            <CardTitle className="text-xl">Notifications</CardTitle>
-          </div>
-          <CardDescription>Manage how you receive notifications.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-3 rounded-md border hover:bg-muted/50">
-            <Label htmlFor="emailNotifications" className="flex-grow cursor-pointer">Email Notifications</Label>
-            <Switch id="emailNotifications" defaultChecked />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-md border hover:bg-muted/50">
-            <Label htmlFor="pushNotifications" className="flex-grow cursor-pointer">Push Notifications</Label>
-            <Switch id="pushNotifications" defaultChecked />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-md border hover:bg-muted/50">
-            <Label htmlFor="tribeMentions" className="flex-grow cursor-pointer">Tribe Mentions</Label>
-            <Switch id="tribeMentions" defaultChecked />
-          </div>
-        </CardContent>
-         <CardFooter>
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">Save Notification Preferences</Button>
-        </CardFooter>
-      </Card>
-      
       <Separator />
+      <SecuritySection />
 
-      {/* Security Settings */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <div className="flex items-center space-x-3">
-            <ShieldCheck className="h-7 w-7 text-primary" />
-            <CardTitle className="text-xl">Security &amp; Privacy</CardTitle>
-          </div>
-          <CardDescription>Manage your password, two-factor authentication, and privacy settings.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button variant="outline" className="w-full md:w-auto">Change Password</Button>
-          <Button variant="outline" className="w-full md:w-auto">Setup Two-Factor Authentication</Button>
-          <div className="flex items-center justify-between p-3 rounded-md border hover:bg-muted/50">
-            <div>
-              <Label htmlFor="dataSharing" className="font-medium">Allow AI Assistant Access to My Data</Label>
-              <p className="text-xs text-muted-foreground mt-1">
-                Let the AI assistant use your public tribe information to provide more personalized help. Private data is never used.
+      <Separator />
+      <SessionsSection
+        sessions={activeSessions}
+        isLoading={isLoadingSessions}
+        isRevokingSession={isRevokingSession}
+        onRevoke={handleRevokeSession}
+        onRevokeAll={handleRevokeAllOther}
+      />
+
+      <Separator />
+      <AppearanceSection />
+
+      {profile.role === 'Admin' && (
+        <>
+          <Separator />
+          <div className="space-y-6">
+            <header>
+              <h2 className="text-2xl font-bold tracking-normal font-mono text-foreground flex items-center gap-2">
+                <Cpu className="h-6 w-6 text-primary" /> AI Inference Engine
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Configure the LLM backend for T-Codex Prime and automated workflows.
               </p>
-            </div>
-            <Switch id="dataSharing" />
+            </header>
+            <AiSettingsSection />
           </div>
-        </CardContent>
-      </Card>
+        </>
+      )}
 
       <Separator />
-      
-      {/* Appearance Settings */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <div className="flex items-center space-x-3">
-            <Palette className="h-7 w-7 text-primary" />
-            <CardTitle className="text-xl">Appearance</CardTitle>
-          </div>
-          <CardDescription>Customize the look and feel of Tribes.app.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-3 rounded-md border hover:bg-muted/50">
-            <Label htmlFor="darkMode" className="flex-grow cursor-pointer">Dark Mode</Label>
-            <Switch id="darkMode" />
-          </div>
-          {/* More appearance options can be added here */}
-        </CardContent>
-      </Card>
+      <BillingSection roleName={profile.role} />
 
       <Separator />
-
-      {/* Billing Information */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <div className="flex items-center space-x-3">
-            <CreditCard className="h-7 w-7 text-primary" />
-            <CardTitle className="text-xl">Billing &amp; Subscription</CardTitle>
-          </div>
-          <CardDescription>Manage your subscription plan and payment methods.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-muted-foreground">Current Plan: <span className="font-semibold text-foreground">{profile.role.replace(/_/g, ' ')}</span></p>
-          <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90">Upgrade to Pro</Button>
-          <Button variant="outline" className="w-full md:w-auto">Manage Payment Methods</Button>
-        </CardContent>
-      </Card>
-
-      <Separator />
-
-      {/* Account Actions */}
-      <Card className="shadow-lg border-destructive">
-        <CardHeader>
-          <CardTitle className="text-xl text-destructive">Account Actions</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button variant="outline" className="w-full text-destructive border-destructive hover:bg-destructive/10">
-            <LogOut className="mr-2 h-5 w-5" /> Log Out
-          </Button>
-          <Button variant="destructive" className="w-full">
-            <Trash2 className="mr-2 h-5 w-5" /> Delete Account
-          </Button>
-        </CardContent>
-      </Card>
+      <AccountActionsSection />
     </div>
   );
 }

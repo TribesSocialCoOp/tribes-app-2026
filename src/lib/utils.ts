@@ -4,3 +4,35 @@ import { twMerge } from "tailwind-merge"
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
+
+/**
+ * Returns a human-readable relative time string (e.g. "5m ago", "2h ago").
+ * Previously duplicated in: moods/[moodSlug], tribes/[tribeId], your-comms, event/stream.
+ */
+export function timeSince(date: Date): string {
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${Math.floor(seconds)}s ago`;
+  let interval = Math.floor(seconds / 60);
+  if (interval < 60) return `${interval}m ago`;
+  interval = Math.floor(seconds / 3600);
+  if (interval < 24) return `${interval}h ago`;
+  interval = Math.floor(seconds / 86400);
+  if (interval < 7) return `${interval}d ago`;
+  if (interval < 30) return `${Math.floor(interval / 7)}w ago`;
+  interval = Math.floor(seconds / 2592000);
+  if (interval < 12) return `${interval}mo ago`;
+  interval = Math.floor(seconds / 31536000);
+  return `${interval}y ago`;
+}
+
+/**
+ * Formats a Date to a locale-aware short date string.
+ * Safely handles invalid/null dates.
+ * Previously duplicated in: bond-table-row.
+ */
+export function formatDate(date: Date): string {
+  if (!date || !(date instanceof Date) || isNaN(date.getTime())) return "N/A";
+  return date.toLocaleDateString();
+}

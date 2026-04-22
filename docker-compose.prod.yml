@@ -1,0 +1,131 @@
+services:
+  # ── App ───────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env.production
+    volumes:
+      - app-data:/app/data          # Local SQLite replica (low-latency reads)
+    depends_on:
+      sqld:
+        condition: service_started
+      valkey:
+        condition: service_started
+    networks: [tribes]
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ── WebSocket Relay ───────────────────────────────────────────
+  ws-relay:
+    build:
+      context: ./ws-relay
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: .env.production
+    networks: [tribes]
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ── Database (LibSQL / sqld) ──────────────────────────────────
+  sqld:
+    image: ghcr.io/tursodatabase/libsql-server:latest
+    restart: unless-stopped
+    volumes:
+      - sqld-data:/var/lib/sqld     # Persistent DB files
+    environment:
+      - SQLD_HTTP_LISTEN_ADDR=0.0.0.0:8080
+      # Uncomment for auth token enforcement:
+      # - SQLD_AUTH_JWT_KEY_FILE=/run/secrets/sqld_jwt_key
+    networks: [tribes]
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ── Rate Limiting (Valkey — Redis-compatible, BSD licensed) ───
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    volumes:
+      - valkey-data:/data
+    command:
+      - valkey-server
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - "900 1"                     # Persist to disk every 15min if ≥1 change
+    networks: [tribes]
+
+  # ── Object Storage (SeaweedFS) ────────────────────────────────
+  seaweedfs-master:
+    image: chrislusf/seaweedfs:latest
+    restart: unless-stopped
+    command: "master -ip=seaweedfs-master -defaultReplication=000 -mdir=/data"
+    volumes:
+      - seaweed-master:/data
+    networks: [tribes]
+
+  seaweedfs-volume:
+    image: chrislusf/seaweedfs:latest
+    restart: unless-stopped
+    command: "volume -mserver=seaweedfs-master:9333 -port=8080 -dir=/data -max=100"
+    volumes:
+      - seaweed-volume:/data
+    depends_on: [seaweedfs-master]
+    networks: [tribes]
+
+  seaweedfs-filer:
+    image: chrislusf/seaweedfs:latest
+    restart: unless-stopped
+    command: "filer -master=seaweedfs-master:9333 -s3 -s3.port=8333 -dataCenter=defaultDataCenter"
+    volumes:
+      - seaweed-filer:/data
+    depends_on: [seaweedfs-master, seaweedfs-volume]
+    networks: [tribes]
+
+  # ── Reverse Proxy + Auto TLS (Caddy) ─────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"               # HTTP/3 (QUIC)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data            # TLS certs (persisted across restarts)
+      - caddy-config:/config
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:-tribes.app}
+      - WS_DOMAIN=${WS_DOMAIN:-ws.tribes.app}
+      - MEDIA_DOMAIN=${MEDIA_DOMAIN:-media.tribes.app}
+    depends_on: [app, ws-relay, seaweedfs-filer]
+    networks: [tribes]
+
+# ── Volumes ───────────────────────────────────────────────────
+volumes:
+  app-data:
+  sqld-data:
+  valkey-data:
+  seaweed-master:
+  seaweed-volume:
+  seaweed-filer:
+  caddy-data:
+  caddy-config:
+
+# ── Networks ──────────────────────────────────────────────────
+networks:
+  tribes:
+    driver: bridge
+    # Internal-only network — only Caddy exposes ports to the host

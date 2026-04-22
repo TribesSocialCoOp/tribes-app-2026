@@ -1,0 +1,154 @@
+'use server';
+
+import { requireAuth, getCurrentUserId } from './shared';
+import type { Tribe, TribeMember, PendingMember } from '@/lib/types';
+import { trackContribution } from './shared';
+import type { TribeAccessLevel } from '@/lib/services/tribe-auth';
+
+// ======== TRIBE DATA ACCESS ========
+export async function getTribes(): Promise<Tribe[]> {
+  const { getTribes: fn } = await import('@/lib/data-access/tribes');
+  return fn();
+}
+
+export async function getTribeById(tribeId: string): Promise<Tribe | null> {
+  const { getTribeById: fn } = await import('@/lib/data-access/tribes');
+  return fn(tribeId);
+}
+
+export async function findTribeByName(name: string): Promise<Tribe | null> {
+  const { findTribeByName: fn } = await import('@/lib/data-access/tribes');
+  return fn(name);
+}
+
+export async function getMyTribeIds(): Promise<string[]> {
+  const userId = await getCurrentUserId();
+  if (!userId) return [];
+  const { db } = await import('@/db');
+  const { tribeMembers } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const rows = await db.select({ tribeId: tribeMembers.tribeId }).from(tribeMembers).where(eq(tribeMembers.userId, userId));
+  return rows.map(r => r.tribeId);
+}
+
+/** Returns full Tribe objects for the current user's memberships. */
+export async function getMyTribes(): Promise<Tribe[]> {
+  const userId = await getCurrentUserId();
+  if (!userId) return [];
+  const [allTribes, myIds] = await Promise.all([getTribes(), getMyTribeIds()]);
+  return allTribes.filter(t => myIds.includes(t.id));
+}
+
+// ======== TRIBE AUTH CHECK (for UI pages) ========
+
+/**
+ * Returns the caller's access level for a tribe.
+ * Used by UI pages (settings, manage-members, mod-queue) to determine access.
+ */
+export async function checkTribeAccess(tribeId: string): Promise<TribeAccessLevel> {
+  const userId = await getCurrentUserId();
+  if (!userId) return 'guest';
+  const { getTribeAccessLevel } = await import('@/lib/services/tribe-auth');
+  return getTribeAccessLevel(userId, tribeId);
+}
+
+// ======== TRIBE SERVICE (MUTATIONS — all hardened with auth) ========
+
+export async function createTribe(payload: Parameters<typeof import('@/lib/services/tribe-service').createTribe>[0]): Promise<Tribe> {
+  const userId = await requireAuth();
+  // Subscription guard: check if user can create another tribe
+  const { canCreateTribe } = await import('@/lib/services/subscription-guard');
+  const check = await canCreateTribe(userId);
+  if (!check.allowed) {
+    throw new Error(`You have reached your tribe creation limit (${check.current}/${check.limit}). Upgrade your plan to create more.`);
+  }
+  const { createTribe: fn } = await import('@/lib/services/tribe-service');
+  const result = await fn({ ...payload, createdBy: userId });
+  trackContribution(userId, 'tribe_created', result.id, `Created tribe: ${result.name}`);
+  return result;
+}
+
+export async function updateTribeSettings(tribeId: string, payload: Parameters<typeof import('@/lib/services/tribe-service').updateTribeSettings>[1]): Promise<Tribe | null> {
+  const userId = await requireAuth();
+  const { requireTribeFounder } = await import('@/lib/services/tribe-auth');
+  await requireTribeFounder(userId, tribeId);
+  const { updateTribeSettings: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId, payload);
+}
+
+export async function getTribeMembers(tribeId: string): Promise<TribeMember[]> {
+  // Gate private tribe member lists: non-members can't see who's in a private tribe
+  const { getTribeById: fetchTribe } = await import('@/lib/data-access/tribes');
+  const tribe = await fetchTribe(tribeId);
+  if (tribe && !tribe.isPublic) {
+    const userId = await getCurrentUserId();
+    if (!userId) return []; // Guests can't see private tribe members
+    const { getTribeAccessLevel } = await import('@/lib/services/tribe-auth');
+    const access = await getTribeAccessLevel(userId, tribeId);
+    if (access === 'guest') return []; // Non-members can't see private tribe members
+  }
+  const { getTribeMembers: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId);
+}
+
+export async function getPendingMembers(tribeId: string): Promise<PendingMember[]> {
+  const userId = await requireAuth();
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
+  const { getPendingMembers: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId);
+}
+
+export async function updateMemberNickname(tribeId: string, memberId: string, nickname: string | undefined): Promise<void> {
+  const userId = await requireAuth();
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
+  const { updateMemberNickname: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId, memberId, nickname);
+}
+
+export async function updateMemberRole(tribeId: string, memberId: string, role: 'member' | 'speaker'): Promise<void> {
+  const userId = await requireAuth();
+  // Only founders can appoint/remove speakers
+  const { requireTribeFounder } = await import('@/lib/services/tribe-auth');
+  await requireTribeFounder(userId, tribeId);
+  const { updateMemberRole: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId, memberId, role);
+}
+
+export async function approveJoinRequest(tribeId: string, pendingMemberId: string): Promise<void> {
+  const userId = await requireAuth();
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
+  const { approveJoinRequest: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId, pendingMemberId);
+}
+
+export async function denyJoinRequest(tribeId: string, pendingMemberId: string): Promise<void> {
+  const userId = await requireAuth();
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
+  const { denyJoinRequest: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId, pendingMemberId);
+}
+
+export async function leaveTribe(tribeId: string): Promise<void> {
+  const userId = await requireAuth();
+  const { leaveTribe: fn } = await import('@/lib/services/tribe-service');
+  return fn(userId, tribeId);
+}
+
+export async function requestToJoinTribe(tribeId: string): Promise<'joined' | 'pending' | 'rejected'> {
+  const userId = await requireAuth();
+  const { requestToJoinTribe: fn } = await import('@/lib/services/tribe-service');
+  return fn(userId, tribeId);
+}
+
+// ======== TRIBE ANALYTICS ========
+export async function getTribeAnalytics(tribeId: string) {
+  const userId = await requireAuth();
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
+  const { getTribeAnalytics: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId);
+}

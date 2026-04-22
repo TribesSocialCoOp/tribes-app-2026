@@ -3,25 +3,22 @@
 
 import React, { useState, useEffect } from 'react';
 import { useForm } from "react-hook-form";
-import {
-  Dialog, DialogContent as ShadDialogContent, DialogHeader as ShadDialogHeader, DialogTitle as ShadDialogTitle, DialogDescription as ShadDialogDescription, DialogFooter as ShadDialogFooter
-} from "@/components/ui/dialog";
-import {
-  Sheet, SheetContent as ShadSheetContent, SheetHeader as ShadSheetHeader, SheetTitle as ShadSheetTitle, SheetDescription as ShadSheetDescription, SheetFooter as ShadSheetFooter
-} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormItem, FormLabel } from "@/components/ui/form";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useIsMobile } from "@/hooks/use-mobile";
 import { Share2, Users as UsersIcon, UserCircle, AtSign, Loader2 } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getTribes } from '@/lib/data-access/tribes';
-import type { Tribe } from '@/lib/data';
+import { getUserProfile } from '@/lib/actions/profile-actions';
+import { getMyTribes } from '@/lib/actions/tribe-actions';
+import { useUser } from '@/hooks/use-user';
+import type { Tribe } from '@/lib/types';
 import type { TribePost, UserProfile } from '@/lib/types';
-import { getUserProfile } from '@/lib/services/user-service';
-import { MOCK_CURRENT_USER_ID } from '@/lib/data';
+import {
+  ResponsiveDialog, ResponsiveDialogHeader, ResponsiveDialogTitle,
+  ResponsiveDialogDescription, ResponsiveDialogFooter
+} from "@/components/ui/responsive-dialog";
 
 interface SharePostDialogProps {
   isOpen: boolean;
@@ -36,9 +33,9 @@ export function SharePostDialog({
   post,
   onConfirmShare,
 }: SharePostDialogProps) {
-  const isMobile = useIsMobile();
   const { toast } = useToast();
   const [myTribes, setMyTribes] = useState<Tribe[]>([]);
+  const { user: sessionUser, isLoading: isUserLoading } = useUser();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [selectedTribeShares, setSelectedTribeShares] = useState<Record<string, string>>({});
@@ -46,19 +43,14 @@ export function SharePostDialog({
   const form = useForm();
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && sessionUser) {
       const fetchUserData = async () => {
         setIsLoadingProfile(true);
-        const [profile, allTribes] = await Promise.all([
-          getUserProfile(MOCK_CURRENT_USER_ID),
-          getTribes()
+        const [profile, userTribes] = await Promise.all([
+          getUserProfile(sessionUser.id),
+          getMyTribes(),
         ]);
         setUserProfile(profile);
-
-        const baseTribeMemberships = ['1', '3', '6', '7'];
-        const createdTribeIds: string[] = JSON.parse(localStorage.getItem('myCreatedTribeIds') || '[]');
-        const myTribeIds = [...new Set([...baseTribeMemberships, ...createdTribeIds])];
-        const userTribes = allTribes.filter(t => myTribeIds.includes(t.id));
         setMyTribes(userTribes);
         
         setIsLoadingProfile(false);
@@ -66,7 +58,7 @@ export function SharePostDialog({
       fetchUserData();
       setSelectedTribeShares(post?.sharedWith || {});
     }
-  }, [isOpen, post]);
+  }, [isOpen, post, sessionUser]);
 
   if (!post) return null;
 
@@ -81,7 +73,7 @@ export function SharePostDialog({
   const handleTribeCheckChange = (checked: boolean | 'indeterminate', tribeName: string) => {
     const newSelection = { ...selectedTribeShares };
     if (checked) {
-      newSelection[tribeName] = "main_profile"; // Default to main profile
+      newSelection[tribeName] = "main_profile";
     } else {
       delete newSelection[tribeName];
     }
@@ -97,33 +89,25 @@ export function SharePostDialog({
     ...(userProfile?.aliases?.map(alias => ({ value: alias, label: alias, icon: AtSign })) || [])
   ];
 
-  const DialogContentComponent = isMobile ? ShadSheetContent : ShadDialogContent;
-  const DialogHeaderComponent = isMobile ? ShadSheetHeader : ShadDialogHeader;
-  const DialogTitleComponent = isMobile ? ShadSheetTitle : ShadDialogTitle;
-  const DialogDescriptionComponent = isMobile ? ShadSheetDescription : ShadDialogDescription;
-  const DialogFooterComponent = isMobile ? ShadSheetFooter : ShadDialogFooter;
-  const RootComponent = isMobile ? Sheet : Dialog;
+  return (
+    <ResponsiveDialog open={isOpen} onOpenChange={onOpenChange} className="sm:max-w-xl">
+      <Form {...form}>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle className="flex items-center">
+            <Share2 className="mr-2 h-5 w-5 text-primary" /> Share Post
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Choose which tribes to share "<span className="italic font-semibold">{post.title || "this post"}</span>" with, and which persona to use.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
 
-  const commonContent = (
-    <Form {...form}>
-      <div className="flex flex-col h-full overflow-hidden">
-        <div className="p-4 sm:p-6 border-b">
-          <DialogHeaderComponent>
-            <DialogTitleComponent className="flex items-center">
-              <Share2 className="mr-2 h-5 w-5 text-primary" /> Share Post
-            </DialogTitleComponent>
-            <DialogDescriptionComponent>
-              Choose which tribes to share "<span className="italic font-semibold">{post.title || "this post"}</span>" with, and which persona to use.
-            </DialogDescriptionComponent>
-          </DialogHeaderComponent>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="py-4">
           {isLoadingProfile ? (
             <div className="flex items-center justify-center h-40">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
-            <ScrollArea className="h-full">
+            <ScrollArea className="h-auto max-h-[50vh]">
                 <div className="space-y-4">
                   {myTribes.length > 0 ? (
                     myTribes.map((tribe) => {
@@ -172,33 +156,14 @@ export function SharePostDialog({
             </ScrollArea>
           )}
         </div>
-        <div className="p-4 sm:p-6 border-t">
-          <DialogFooterComponent>
-            <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="button" onClick={handleShare} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              Update Sharing
-            </Button>
-          </DialogFooterComponent>
-        </div>
-      </div>
-    </Form>
-  );
 
-  if (isMobile) {
-    return (
-      <RootComponent open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContentComponent side="bottom" className="h-auto max-h-[90vh] flex flex-col p-0">
-          {commonContent}
-        </DialogContentComponent>
-      </RootComponent>
-    );
-  }
-
-  return (
-    <RootComponent open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContentComponent className="sm:max-w-xl p-0 h-auto max-h-[90vh] flex flex-col">
-        {commonContent}
-      </DialogContentComponent>
-    </RootComponent>
+        <ResponsiveDialogFooter>
+          <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button type="button" onClick={handleShare} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+            Update Sharing
+          </Button>
+        </ResponsiveDialogFooter>
+      </Form>
+    </ResponsiveDialog>
   );
 }

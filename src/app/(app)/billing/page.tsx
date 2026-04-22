@@ -1,10 +1,17 @@
 
 "use client";
 
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, Star, User, Briefcase, HeartHandshake, Building, BarChart, Rocket, ShieldCheck, Vote, Annoyed, UserPlus, Lock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
+import { Check, Star, User, Briefcase, HeartHandshake, Building, BarChart, Rocket, ShieldCheck, Vote, Annoyed, UserPlus, Lock, Gift, Loader2, Sparkles, Crown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+import { useUser } from "@/hooks/use-user";
+import { validateInviteCode, redeemInviteCode, createCheckoutSession, getMySubscription, getContributionSummary } from '@/lib/actions/profile-actions';
 
 const freeTier = {
     name: "Always Free",
@@ -26,6 +33,9 @@ const individualCoopTier = {
   icon: User,
   price: "$7",
   priceDescription: "/ month",
+  yearlyPrice: "$70",
+  yearlyDescription: "/ year (save 17%)",
+  planId: "individual_coop",
   description: "For active creators and leaders who want to support and govern the community.",
   features: [
     "Co-Op voting rights on platform decisions",
@@ -43,6 +53,7 @@ const organizationalTiers = [
         icon: Building,
         price: "$29",
         priceDescription: "/ month",
+        planId: "org_base",
         description: "For small creators, vendors, and organizations ready to build.",
         features: [
             "Up to 1,000 members",
@@ -58,6 +69,7 @@ const organizationalTiers = [
         icon: BarChart,
         price: "$79",
         priceDescription: "/ month",
+        planId: "org_pro",
         description: "For growing organizations that need more scale and insight.",
         features: [
             "Up to 10,000 members",
@@ -73,6 +85,7 @@ const organizationalTiers = [
         icon: Rocket,
         price: "Contact Us",
         priceDescription: "",
+        planId: "org_enterprise",
         description: "For large-scale operations with custom needs.",
         features: [
             "Unlimited members",
@@ -85,6 +98,296 @@ const organizationalTiers = [
 ];
 
 export default function BillingPage() {
+  const { toast } = useToast();
+  const { user, isLoading: isUserLoading } = useUser();
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState("");
+  const [isRedeeming, setIsRedeeming] = useState(false);
+  const [inviteStatus, setInviteStatus] = useState<{ valid: boolean; planName?: string } | null>(null);
+  const [subscription, setSubscription] = useState<Awaited<ReturnType<typeof getMySubscription>> | null>(null);
+  const [contribSummary, setContribSummary] = useState<Awaited<ReturnType<typeof getContributionSummary>> | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      getMySubscription().then(setSubscription).catch(() => {});
+      getContributionSummary().then(setContribSummary).catch(() => {});
+    }
+  }, [user]);
+
+  const handleCheckout = async (planId: string, interval: 'monthly' | 'yearly' = 'monthly') => {
+    if (!user) {
+      toast({ title: "Please log in", description: "You need an account to subscribe.", variant: "destructive" });
+      return;
+    }
+    setLoadingPlan(`${planId}-${interval}`);
+    try {
+      const result = await createCheckoutSession(planId, interval);
+      window.location.href = result.url;
+    } catch (err: unknown) {
+      toast({ title: "Checkout Error", description: ((err instanceof Error) ? err.message : 'An error occurred'), variant: "destructive" });
+    } finally {
+      setLoadingPlan(null);
+    }
+  };
+
+  const handleValidateCode = async () => {
+    if (!inviteCode.trim()) return;
+    try {
+      const result = await validateInviteCode(inviteCode);
+      setInviteStatus({ valid: true, planName: result.planName });
+      toast({ title: "Code Valid!", description: `This code grants ${result.planName} membership.` });
+    } catch (err: unknown) {
+      setInviteStatus({ valid: false });
+      toast({ title: "Invalid Code", description: ((err instanceof Error) ? err.message : 'An error occurred'), variant: "destructive" });
+    }
+  };
+
+  const handleRedeemCode = async () => {
+    if (!user) {
+      toast({ title: "Please log in", description: "You need an account to redeem a code.", variant: "destructive" });
+      return;
+    }
+    setIsRedeeming(true);
+    try {
+      const result = await redeemInviteCode(inviteCode);
+      toast({ title: "🎉 Welcome, Founding Member!", description: `You now have ${result.planName} access.` });
+      setInviteCode("");
+      setInviteStatus(null);
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err: unknown) {
+      toast({ title: "Redemption Failed", description: ((err instanceof Error) ? err.message : 'An error occurred'), variant: "destructive" });
+    } finally {
+      setIsRedeeming(false);
+    }
+  };
+
+  const hasActiveSub = subscription?.subscription?.status === 'active';
+  const currentPlanName = subscription?.plan?.name ?? 'Always Free';
+  const subSource = subscription?.subscription?.source;
+  const currentPlanId = subscription?.subscription?.planId;
+
+  // Find the tier features for the current plan
+  const currentTierFeatures = currentPlanId === 'individual_coop'
+    ? individualCoopTier.features
+    : organizationalTiers.find(t => t.planId === currentPlanId)?.features ?? [];
+
+  // ──────────────────────────── MEMBER VIEW ────────────────────────────
+  if (hasActiveSub && user) {
+    return (
+      <div className="space-y-10 max-w-4xl mx-auto">
+        <header className="text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-foreground font-mono">Your Membership</h1>
+          <p className="text-lg text-muted-foreground mt-2">
+            Manage your Co-Op membership, share invite codes, and explore upgrade options.
+          </p>
+        </header>
+
+        {/* Current Plan Card */}
+        <Card className="shadow-lg border-emerald-500/50 bg-gradient-to-r from-emerald-50/50 to-background dark:from-emerald-950/20 dark:to-background">
+          <CardHeader>
+            <div className="flex items-center space-x-3">
+              <Crown className="h-8 w-8 text-emerald-500" />
+              <div>
+                <CardTitle className="text-xl tracking-normal flex items-center gap-2">
+                  {currentPlanName}
+                  {subSource && (
+                    <Badge variant={subSource === 'founding' ? 'default' : subSource === 'earned' ? 'secondary' : 'outline'}
+                           className={cn(
+                             subSource === 'founding' && 'bg-amber-500 hover:bg-amber-600',
+                             subSource === 'earned' && 'bg-emerald-500 hover:bg-emerald-600'
+                           )}>
+                      {subSource === 'founding' ? '✨ Founding Member' : subSource === 'earned' ? '🏆 Earned' : '💳 Paid'}
+                    </Badge>
+                  )}
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  {subSource === 'founding'
+                    ? 'You joined as a Founding Member. Your early support is what makes this platform possible.'
+                    : subSource === 'earned'
+                    ? 'You earned your membership through community contributions. Thank you for making this place great.'
+                    : 'Your membership powers the co-op. Thank you for supporting an ad-free, member-owned platform.'
+                  }
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Plan Benefits */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3">Your Benefits</h3>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {currentTierFeatures.map((feature, index) => (
+                    <li key={index} className="flex items-start">
+                      <Check className="h-4 w-4 text-emerald-500 mr-2 mt-0.5 shrink-0" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Account Details */}
+              <div>
+                <h3 className="text-sm font-semibold text-foreground mb-3">Account Details</h3>
+                <dl className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Status</dt>
+                    <dd className="font-medium text-emerald-600">Active</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Source</dt>
+                    <dd className="font-medium capitalize">{subSource ?? 'N/A'}</dd>
+                  </div>
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Plan</dt>
+                    <dd className="font-medium">{currentPlanName}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="border-t pt-6">
+            {subSource === 'paid' && (
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  try {
+                    const { createBillingPortalSession } = await import('@/lib/services/payment-service');
+                    const session = await createBillingPortalSession(user.id);
+                    window.location.href = session.url;
+                  } catch (e) {
+                    toast({ title: "Error", description: "Could not open billing portal.", variant: "destructive" });
+                  }
+                }}
+              >
+                Manage Subscription
+              </Button>
+            )}
+            {subSource === 'founding' && (
+              <p className="text-sm text-muted-foreground">
+                ✨ As a Founding Member, your membership is complimentary. No payment required.
+              </p>
+            )}
+            {subSource === 'earned' && (
+              <p className="text-sm text-muted-foreground">
+                🏆 You earned this through community contributions. Keep contributing to maintain your status!
+              </p>
+            )}
+          </CardFooter>
+        </Card>
+
+        {/* Invite Friends */}
+        <Card className="shadow-lg">
+          <CardHeader>
+            <div className="flex items-center space-x-3">
+              <Gift className="h-7 w-7 text-amber-500" />
+              <div>
+                <CardTitle className="text-lg tracking-normal">Invite Friends</CardTitle>
+                <CardDescription>
+                  Share a personal invite code with friends. When they join, you earn 25 referral points toward your reputation.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="outline"
+              className="font-mono"
+              onClick={async () => {
+                try {
+                  const { generateInviteCode } = await import('@/lib/actions/profile-actions');
+                  const result = await generateInviteCode();
+                  navigator.clipboard.writeText(result.code);
+                  toast({ title: "Code Generated!", description: `${result.code} — copied to clipboard!` });
+                } catch (e: unknown) {
+                  toast({ title: "Error", description: ((e instanceof Error) ? e.message : 'An error occurred'), variant: "destructive" });
+                }
+              }}
+            >
+              <UserPlus className="h-4 w-4 mr-2" />
+              Generate Invite Code
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Upgrade to Org (only for individual plan holders) */}
+        {currentPlanId === 'individual_coop' && (
+          <>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                <div className="w-full border-t border-border"></div>
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-background px-3 text-sm text-muted-foreground">Looking for more?</span>
+              </div>
+            </div>
+
+            <section>
+              <div className="text-center mb-6">
+                <div className="flex items-center justify-center space-x-3 mb-2">
+                  <Briefcase className="h-7 w-7 text-sky-600" />
+                  <h2 className="text-2xl font-semibold tracking-normal text-foreground">Upgrade to Organizational</h2>
+                </div>
+                <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+                  Need tools for your business, brand, or non-profit? Organizational plans include everything you have now, plus professional features.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {organizationalTiers.map((tier) => (
+                  <Card key={tier.name} className={cn("flex flex-col shadow-lg", tier.isPopular && "border-primary ring-2 ring-primary")}>
+                    {tier.isPopular && (
+                      <div className="py-1 px-3 bg-primary text-primary-foreground text-xs font-semibold rounded-t-lg flex items-center justify-center">
+                        <Star className="mr-1.5 h-4 w-4" /> Most Popular
+                      </div>
+                    )}
+                    <CardHeader className="pt-6">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <tier.icon className="h-7 w-7 text-sky-600" />
+                        <CardTitle className="text-lg tracking-normal">{tier.name}</CardTitle>
+                      </div>
+                      <CardDescription>{tier.description}</CardDescription>
+                      <div className="flex items-baseline pt-2">
+                        <span className="text-2xl font-bold tracking-tighter">{tier.price}</span>
+                        {tier.priceDescription && <span className="text-sm text-muted-foreground ml-1">{tier.priceDescription}</span>}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex-1">
+                      <ul className="space-y-2 text-sm text-muted-foreground">
+                        {tier.features.map((f, i) => (
+                          <li key={i} className="flex items-start">
+                            <Check className="h-4 w-4 text-accent mr-2 mt-0.5 shrink-0" />
+                            <span>{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                    <CardFooter>
+                      {tier.planId === 'org_enterprise' ? (
+                        <Button className="w-full" variant="outline">{tier.cta}</Button>
+                      ) : (
+                        <Button
+                          className="w-full"
+                          variant={tier.isPopular ? "default" : "outline"}
+                          disabled={loadingPlan === `${tier.planId}-monthly`}
+                          onClick={() => handleCheckout(tier.planId, 'monthly')}
+                        >
+                          {loadingPlan === `${tier.planId}-monthly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                          Upgrade — {tier.price}/mo
+                        </Button>
+                      )}
+                    </CardFooter>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  // ──────────────────────────── SALES VIEW (non-members) ────────────────────────────
   return (
     <div className="space-y-12 max-w-6xl mx-auto">
       <header className="text-center">
@@ -93,6 +396,38 @@ export default function BillingPage() {
           We're building a platform owned and governed by its members, not advertisers. Your contribution powers an ad-free, privacy-focused community where you have a real stake.
         </p>
       </header>
+
+      {/* Earn-path progress (only for free users with contributions) */}
+      {user && contribSummary && contribSummary.totalPoints > 0 && (
+        <section>
+          <Card className="shadow-lg border-muted">
+            <CardHeader>
+              <div className="flex items-center space-x-3">
+                <TrendingUp className="h-7 w-7 text-muted-foreground" />
+                <div>
+                  <CardTitle className="text-lg tracking-normal">Your Contribution Progress</CardTitle>
+                  <CardDescription>Keep contributing to earn free Co-Op membership!</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{contribSummary.contributions.length} contributions</span>
+                  <span className="font-medium">
+                    {contribSummary.totalPoints} / {contribSummary.threshold} pts
+                    {contribSummary.progress >= 100 && ' — Ready to earn membership!'}
+                  </span>
+                </div>
+                <Progress value={contribSummary.progress} className="h-2" />
+                <p className="text-xs text-muted-foreground">
+                  Earn {contribSummary.threshold} points through posts, moderation, referrals, and events to unlock free membership.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      )}
 
       <section>
         <Card className="shadow-lg bg-muted/50">
@@ -126,14 +461,53 @@ export default function BillingPage() {
         </Card>
       </section>
 
-      {/* Individual Tiers Section */}
+      {/* Founding Member / Invite Code Section */}
+      <section>
+        <Card className="shadow-lg border-amber-500/50 bg-gradient-to-br from-amber-50/50 to-background dark:from-amber-950/20 dark:to-background">
+          <CardHeader className="text-center">
+            <div className="flex items-center justify-center space-x-3 mb-2">
+              <Sparkles className="h-8 w-8 text-amber-500" />
+              <CardTitle className="text-2xl tracking-normal">Founding Member Access</CardTitle>
+            </div>
+            <CardDescription className="max-w-lg mx-auto">
+              Have an invite code? Founding Members get full Co-Op membership — no payment required. Your early contributions help build the community.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-3 max-w-md mx-auto">
+              <Input
+                placeholder="Enter invite code (e.g. FOUNDING-ALPHA-001)"
+                value={inviteCode}
+                onChange={(e) => { setInviteCode(e.target.value); setInviteStatus(null); }}
+                className="font-mono uppercase"
+              />
+              {inviteStatus?.valid ? (
+                <Button onClick={handleRedeemCode} disabled={isRedeeming} className="bg-amber-500 hover:bg-amber-600 text-white shrink-0">
+                  {isRedeeming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Gift className="h-4 w-4 mr-2" />}
+                  Redeem
+                </Button>
+              ) : (
+                <Button onClick={handleValidateCode} variant="outline" disabled={!inviteCode.trim()} className="shrink-0">
+                  Validate
+                </Button>
+              )}
+            </div>
+            {inviteStatus?.valid && (
+              <p className="text-center text-sm text-amber-600 dark:text-amber-400 mt-3 font-medium">
+                ✅ Valid! This code grants <strong>{inviteStatus.planName}</strong> membership.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </section>
+
+      {/* Individual Tiers */}
       <section>
         <div className="flex items-center justify-center space-x-3 mb-6">
           <User className="h-8 w-8 text-primary" />
           <h2 className="text-3xl font-semibold tracking-normal text-foreground">Individual Tiers</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-            {/* Always Free Card */}
             <Card className="shadow-lg flex flex-col">
                <CardHeader className="pt-6">
                   <div className="flex items-center space-x-3 mb-2">
@@ -148,22 +522,18 @@ export default function BillingPage() {
                 </CardHeader>
                 <CardContent className="flex-1 space-y-3">
                   <ul className="space-y-2 text-sm text-muted-foreground">
-                    {freeTier.features.map((feature, index) => (
-                      <li key={index} className="flex items-start">
-                        <Check className="h-4 w-4 text-accent mr-2 mt-0.5 shrink-0" />
-                        <span>{feature}</span>
+                    {freeTier.features.map((f, i) => (
+                      <li key={i} className="flex items-start">
+                        <Check className="h-4 w-4 text-accent mr-2 mt-0.5 shrink-0" /><span>{f}</span>
                       </li>
                     ))}
                   </ul>
                 </CardContent>
                 <CardFooter>
-                  <Button className="w-full" variant="outline">
-                    {freeTier.cta}
-                  </Button>
+                  <Button className="w-full" variant="outline">{freeTier.cta}</Button>
                 </CardFooter>
             </Card>
 
-            {/* Individual Co-op Member Card */}
             <Card className="shadow-lg border-primary ring-2 ring-primary flex flex-col">
                <CardHeader className="pt-6">
                   <div className="flex items-center space-x-3 mb-2">
@@ -175,20 +545,25 @@ export default function BillingPage() {
                     <span className="text-3xl font-bold tracking-tighter">{individualCoopTier.price}</span>
                     <span className="text-sm text-muted-foreground ml-1">{individualCoopTier.priceDescription}</span>
                   </div>
+                  <p className="text-xs text-muted-foreground">or {individualCoopTier.yearlyPrice} {individualCoopTier.yearlyDescription}</p>
                 </CardHeader>
                 <CardContent className="flex-1 space-y-3">
                   <ul className="space-y-2 text-sm text-muted-foreground">
-                    {individualCoopTier.features.map((feature, index) => (
-                      <li key={index} className="flex items-start">
-                        <Check className="h-4 w-4 text-accent mr-2 mt-0.5 shrink-0" />
-                        <span>{feature}</span>
+                    {individualCoopTier.features.map((f, i) => (
+                      <li key={i} className="flex items-start">
+                        <Check className="h-4 w-4 text-accent mr-2 mt-0.5 shrink-0" /><span>{f}</span>
                       </li>
                     ))}
                   </ul>
                 </CardContent>
-                <CardFooter>
-                  <Button className="w-full" variant="default">
-                    {individualCoopTier.cta}
+                <CardFooter className="flex-col gap-2">
+                  <Button className="w-full" variant="default" disabled={loadingPlan === `${individualCoopTier.planId}-monthly`} onClick={() => handleCheckout(individualCoopTier.planId, 'monthly')}>
+                    {loadingPlan === `${individualCoopTier.planId}-monthly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                    {individualCoopTier.cta} — $7/mo
+                  </Button>
+                  <Button className="w-full" variant="outline" disabled={loadingPlan === `${individualCoopTier.planId}-yearly`} onClick={() => handleCheckout(individualCoopTier.planId, 'yearly')}>
+                    {loadingPlan === `${individualCoopTier.planId}-yearly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                    Annual — $70/yr (save 17%)
                   </Button>
                 </CardFooter>
             </Card>
@@ -197,17 +572,11 @@ export default function BillingPage() {
       
       {/* Divider */}
       <div className="relative">
-          <div className="absolute inset-0 flex items-center" aria-hidden="true">
-              <div className="w-full border-t border-border"></div>
-          </div>
-          <div className="relative flex justify-center">
-              <span className="bg-background px-2 text-sm text-muted-foreground">
-                  <Briefcase className="h-5 w-5"/>
-              </span>
-          </div>
+          <div className="absolute inset-0 flex items-center" aria-hidden="true"><div className="w-full border-t border-border"></div></div>
+          <div className="relative flex justify-center"><span className="bg-background px-2 text-sm text-muted-foreground"><Briefcase className="h-5 w-5"/></span></div>
       </div>
 
-      {/* Organizational Membership Section */}
+      {/* Organizational Membership */}
       <section>
         <div className="text-center">
             <div className="flex items-center justify-center space-x-3 mb-2">
@@ -218,7 +587,6 @@ export default function BillingPage() {
                 For businesses, brands, artists, and non-profits. All plans include full Co-Op membership with voting rights, plus professional tools for community engagement and commerce.
             </p>
         </div>
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
             {organizationalTiers.map((tier) => (
               <Card key={tier.name} className={cn("flex flex-col shadow-lg transition-all", tier.isPopular ? "border-primary ring-2 ring-primary" : "")}>
@@ -240,25 +608,35 @@ export default function BillingPage() {
                 </CardHeader>
                 <CardContent className="flex-1 space-y-3">
                   <ul className="space-y-2 text-sm text-muted-foreground">
-                    {tier.features.map((feature, index) => (
-                      <li key={index} className="flex items-start">
-                        <Check className="h-4 w-4 text-accent mr-2 mt-0.5 shrink-0" />
-                        <span>{feature}</span>
+                    {tier.features.map((f, i) => (
+                      <li key={i} className="flex items-start">
+                        <Check className="h-4 w-4 text-accent mr-2 mt-0.5 shrink-0" /><span>{f}</span>
                       </li>
                     ))}
                   </ul>
                 </CardContent>
-                <CardFooter>
-                  <Button className="w-full" variant={tier.isPopular ? "default" : "outline"}>
-                    {tier.cta}
-                  </Button>
+                <CardFooter className="flex-col gap-2">
+                  {tier.planId === 'org_enterprise' ? (
+                    <Button className="w-full" variant="outline">{tier.cta}</Button>
+                  ) : (
+                    <>
+                      <Button className="w-full" variant={tier.isPopular ? "default" : "outline"} disabled={loadingPlan === `${tier.planId}-monthly`} onClick={() => handleCheckout(tier.planId, 'monthly')}>
+                        {loadingPlan === `${tier.planId}-monthly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                        {tier.cta} — {tier.price}/mo
+                      </Button>
+                      <Button className="w-full" variant="outline" disabled={loadingPlan === `${tier.planId}-yearly`} onClick={() => handleCheckout(tier.planId, 'yearly')}>
+                        {loadingPlan === `${tier.planId}-yearly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                        Annual (save 17%)
+                      </Button>
+                    </>
+                  )}
                 </CardFooter>
               </Card>
             ))}
         </div>
       </section>
 
-      {/* Mission-Driven Discount Section */}
+      {/* Mission-Driven Discount */}
       <section className="pt-8">
         <Card className="bg-muted/50 border-dashed shadow-md">
             <CardHeader className="flex-col sm:flex-row items-center gap-4">

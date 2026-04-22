@@ -2,6 +2,7 @@ import type {Metadata} from 'next';
 import { Oxanium, Geist_Mono } from 'next/font/google'; // Changed Geist to Oxanium
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
+import { CookieConsent } from "@/components/layout/cookie-consent";
 
 // Configure Oxanium font
 const oxanium = Oxanium({
@@ -26,10 +27,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${oxanium.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}>
         {children}
         <Toaster />
+        <CookieConsent />
       </body>
     </html>
   );

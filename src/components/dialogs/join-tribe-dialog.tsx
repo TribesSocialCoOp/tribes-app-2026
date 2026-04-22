@@ -2,22 +2,19 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import {
-  Dialog, DialogContent as ShadDialogContent, DialogHeader as ShadDialogHeader, DialogTitle as ShadDialogTitle, DialogDescription as ShadDialogDescription, DialogFooter as ShadDialogFooter
-} from "@/components/ui/dialog";
-import {
-  Sheet, SheetContent as ShadSheetContent, SheetHeader as ShadSheetHeader, SheetTitle as ShadSheetTitle, SheetDescription as ShadSheetDescription, SheetFooter as ShadSheetFooter
-} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useIsMobile } from "@/hooks/use-mobile";
-import type { Tribe } from '@/lib/data';
+import type { Tribe } from '@/lib/types';
 import { UserPlus, UserCircle, AtSign, Loader2 } from 'lucide-react';
 import type { UserProfile } from '@/lib/types';
-import { getUserProfile } from '@/lib/services/user-service';
-import { MOCK_CURRENT_USER_ID } from '@/lib/data';
+import { getUserProfile } from '@/lib/actions/profile-actions';
+import { useUser } from '@/hooks/use-user';
+import {
+  ResponsiveDialog, ResponsiveDialogHeader, ResponsiveDialogTitle,
+  ResponsiveDialogDescription, ResponsiveDialogFooter
+} from "@/components/ui/responsive-dialog";
 
 interface JoinTribeDialogProps {
   isOpen: boolean;
@@ -34,28 +31,25 @@ export function JoinTribeDialog({
   onConfirmJoin,
   isJoining,
 }: JoinTribeDialogProps) {
-  const isMobile = useIsMobile();
   const [selectedIdentity, setSelectedIdentity] = useState<string>("main_profile");
+  const { user: sessionUser, isLoading: isUserLoading } = useUser();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && sessionUser) {
       setIsLoadingProfile(true);
       const fetchProfile = async () => {
-        const profile = await getUserProfile(MOCK_CURRENT_USER_ID);
+        const profile = await getUserProfile(sessionUser.id);
         setUserProfile(profile);
         setIsLoadingProfile(false);
       };
       fetchProfile();
-      // Reset selection when dialog opens
       setSelectedIdentity("main_profile");
     }
-  }, [isOpen]);
+  }, [isOpen, sessionUser]);
 
-  if (!tribe) {
-    return null;
-  }
+  if (!tribe) return null;
 
   const handleConfirm = () => {
     const alias = selectedIdentity === "main_profile" ? undefined : selectedIdentity;
@@ -67,23 +61,16 @@ export function JoinTribeDialog({
     ...(userProfile?.aliases.map(alias => ({ value: alias, label: alias, icon: AtSign })) || [])
   ];
 
-  const DialogContentComponent = isMobile ? ShadSheetContent : ShadDialogContent;
-  const DialogHeaderComponent = isMobile ? ShadSheetHeader : ShadDialogHeader;
-  const DialogTitleComponent = isMobile ? ShadSheetTitle : ShadDialogTitle;
-  const DialogDescriptionComponent = isMobile ? ShadSheetDescription : ShadDialogDescription;
-  const DialogFooterComponent = isMobile ? ShadSheetFooter : ShadDialogFooter;
-  const RootComponent = isMobile ? Sheet : Dialog;
-
-  const commonContent = (
-    <>
-      <DialogHeaderComponent>
-        <DialogTitleComponent className="flex items-center">
+  return (
+    <ResponsiveDialog open={isOpen} onOpenChange={onOpenChange} className="sm:max-w-md">
+      <ResponsiveDialogHeader>
+        <ResponsiveDialogTitle className="flex items-center">
           <UserPlus className="mr-2 h-5 w-5 text-primary" /> Join {tribe.name}
-        </DialogTitleComponent>
-        <DialogDescriptionComponent>
+        </ResponsiveDialogTitle>
+        <ResponsiveDialogDescription>
           Choose how you want to appear in this tribe. Your choice can be changed later in your Bond settings for this tribe.
-        </DialogDescriptionComponent>
-      </DialogHeaderComponent>
+        </ResponsiveDialogDescription>
+      </ResponsiveDialogHeader>
 
       <div className="py-4 space-y-4">
         {isLoadingProfile ? (
@@ -114,7 +101,7 @@ export function JoinTribeDialog({
         </p>
       </div>
 
-      <DialogFooterComponent className="pt-2">
+      <ResponsiveDialogFooter className="pt-2">
         <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isJoining}>Cancel</Button>
         <Button
           onClick={handleConfirm}
@@ -124,27 +111,7 @@ export function JoinTribeDialog({
           {isJoining ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
           {isJoining ? "Joining..." : "Confirm & Join"}
         </Button>
-      </DialogFooterComponent>
-    </>
-  );
-
-  if (isMobile) {
-    return (
-      <RootComponent open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContentComponent side="bottom" className="h-auto max-h-[80vh] flex flex-col p-0">
-            <div className="p-4 sm:p-6 overflow-y-auto">
-              {commonContent}
-            </div>
-        </DialogContentComponent>
-      </RootComponent>
-    );
-  }
-
-  return (
-    <RootComponent open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContentComponent className="sm:max-w-md p-6">
-        {commonContent}
-      </DialogContentComponent>
-    </RootComponent>
+      </ResponsiveDialogFooter>
+    </ResponsiveDialog>
   );
 }

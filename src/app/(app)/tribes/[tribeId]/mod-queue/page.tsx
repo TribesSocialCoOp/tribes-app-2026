@@ -21,8 +21,10 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUser } from '@/hooks/use-user';
-import { dismissReport, removePost, getActiveReportsForTribe } from '@/lib/services/moderation-service';
-import type { Tribe, TribePost, ReportedPost } from '@/lib/types';
+import { dismissReport, removePost, getActiveReportsForTribe, escalateReport } from '@/lib/actions/content-actions';
+import { checkTribeAccess } from '@/lib/actions/tribe-actions';
+import type { TribePost, ReportedPost } from '@/lib/types';
+import type { Tribe } from '@/lib/types';
 
 
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 15];
@@ -80,9 +82,14 @@ export default function TribeModQueuePage() {
   };
 
   useEffect(() => {
-    const canAccess = role === 'Admin' || role === 'Creator';
-    setHasAccess(canAccess);
-  }, [role]);
+    const resolveAccess = async () => {
+      const accessLevel = await checkTribeAccess(tribeId);
+      // Speakers and above can access the mod queue
+      const canAccess = accessLevel === 'platform_admin' || accessLevel === 'founder' || accessLevel === 'speaker';
+      setHasAccess(canAccess);
+    };
+    resolveAccess();
+  }, [tribeId]);
 
 
   useEffect(() => {
@@ -130,11 +137,21 @@ export default function TribeModQueuePage() {
     setPreventRepostState(prev => ({ ...prev, [postIdToRemove]: false }));
   };
 
-  const handleEscalateReport = (postId: string) => {
-    toast({
-        title: "Report Escalated (Simulated)",
-        description: `Report for post ID ${postId} has been escalated to the Global Moderation team.`,
-    });
+  const handleEscalateReport = async (postId: string) => {
+    setIsTakingAction(postId);
+    try {
+      await escalateReport(postId);
+      toast({
+        title: "Report Escalated",
+        description: `Report has been escalated to the Global Moderation team.`,
+      });
+      reloadData();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to escalate report';
+      toast({ variant: 'destructive', title: 'Escalation Failed', description: msg });
+    } finally {
+      setIsTakingAction(null);
+    }
   };
 
   const filteredReports = useMemo(() => {
@@ -168,8 +185,8 @@ export default function TribeModQueuePage() {
         aValue = a.reporterName?.toLowerCase() || '';
         bValue = b.reporterName?.toLowerCase() || '';
       } else {
-         aValue = (a as any)[sortConfig.key];
-         bValue = (b as any)[sortConfig.key];
+         aValue = (a as unknown as Record<string, unknown>)[sortConfig.key];
+         bValue = (b as unknown as Record<string, unknown>)[sortConfig.key];
       }
 
       if (aValue === undefined || aValue === null) return 1;
@@ -394,7 +411,8 @@ export default function TribeModQueuePage() {
                                 <p className="text-xs whitespace-pre-wrap">{post.content}</p>
                                 {post.imageUrl && (
                                     <div className="mt-2 relative aspect-video max-w-xs rounded-md overflow-hidden border">
-                                    <Image src={post.imageUrl} alt={post.imageAlt || "Post image"} fill style={{objectFit:"cover"}} data-ai-hint={post.dataAiHintImage || "post image"}/>
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={post.imageUrl} alt={post.imageAlt || "Post image"} className="w-full h-full object-cover" data-ai-hint={post.dataAiHintImage || "post image"}/>
                                     </div>
                                 )}
                                 {post.isRemoved && (

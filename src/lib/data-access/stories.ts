@@ -1,66 +1,92 @@
-
 /**
  * @fileoverview Data access layer for "Our Story" topics.
- * This centralizes logic for fetching story data, preparing for a real backend.
+ * Now backed by Drizzle ORM + SQLite.
  */
 
-import {
-  mockStoryTopics,
-  mockArticlesForStory,
-  mockCommentsForStory,
-  type StoryTopic,
-  type SourceArticle
-} from '@/lib/data';
-import type { DiscussionComment } from '@/lib/types';
+import { db } from '@/db';
+import { stories, storyArticles, storyComments } from '@/db/schema';
+import { eq } from 'drizzle-orm';
+import type { DiscussionComment, StoryTopic, SourceArticle } from '@/lib/types';
+
+
+function rowToStoryTopic(row: typeof stories.$inferSelect): StoryTopic {
+  return {
+    id: row.id,
+    title: row.title,
+    summary: row.summary,
+    category: row.category as StoryTopic['category'],
+    curator: row.curatorName ?? undefined,
+    curatorAvatar: row.curatorAvatar ?? undefined,
+    curatorAvatarFallback: row.curatorAvatarFallback ?? undefined,
+    dataAiHintCuratorAvatar: row.dataAiHintCuratorAvatar ?? undefined,
+    coverImage: row.coverImage ?? undefined,
+    dataAiHintCover: row.dataAiHintCover ?? undefined,
+    discussionCount: row.discussionCount ?? 0,
+    lastUpdatedAt: row.lastUpdatedAt ?? new Date(),
+  };
+}
+
+function rowToArticle(row: typeof storyArticles.$inferSelect): SourceArticle {
+  return {
+    id: row.id,
+    title: row.title,
+    url: row.url,
+    sourceName: row.sourceName,
+    publishedDate: row.publishedAt ?? new Date(),
+    summarySnippet: row.summarySnippet ?? undefined,
+    dataAiHint: row.dataAiHint ?? undefined,
+  };
+}
+
+function rowToComment(row: typeof storyComments.$inferSelect, allComments: (typeof storyComments.$inferSelect)[]): DiscussionComment {
+  const replies = allComments
+    .filter(c => c.parentCommentId === row.id)
+    .map(c => rowToComment(c, allComments));
+
+  return {
+    id: row.id,
+    authorId: row.authorId,
+    authorName: row.authorName,
+    authorAvatarFallback: row.authorAvatarFallback,
+    dataAiHintAvatar: row.dataAiHintAvatar ?? undefined,
+    content: row.content,
+    vibes: row.vibeCount ?? 0,
+    timestamp: row.createdAt ?? new Date(),
+    replies: replies.length > 0 ? replies : undefined,
+  };
+}
 
 /**
  * Fetches all story topics.
- * @returns A promise that resolves to an array of all story topics.
  */
 export async function getStoryTopics(): Promise<StoryTopic[]> {
-  return new Promise(resolve => {
-    setTimeout(() => {
-      resolve(mockStoryTopics);
-    }, 250);
-  });
+  const rows = await db.select().from(stories);
+  return rows.map(rowToStoryTopic);
 }
 
 /**
  * Fetches a single story topic by its ID.
- * @param storyId The ID of the story topic to fetch.
- * @returns A promise that resolves to the topic, or null if not found.
  */
 export async function getStoryTopicById(storyId: string): Promise<StoryTopic | null> {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            const topic = mockStoryTopics.find(s => s.id === storyId);
-            resolve(topic || null);
-        }, 250);
-    });
+  const rows = await db.select().from(stories).where(eq(stories.id, storyId));
+  const row = rows[0];
+  return row ? rowToStoryTopic(row) : null;
 }
 
 /**
  * Fetches the related articles for a specific story topic.
- * @param storyId The ID of the story topic.
- * @returns A promise that resolves to an array of source articles.
  */
 export async function getArticlesForStory(storyId: string): Promise<SourceArticle[]> {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve(mockArticlesForStory[storyId] || []);
-        }, 250);
-    });
+  const rows = await db.select().from(storyArticles).where(eq(storyArticles.storyId, storyId));
+  return rows.map(rowToArticle);
 }
 
 /**
  * Fetches the discussion comments for a specific story topic.
- * @param storyId The ID of the story topic.
- * @returns A promise that resolves to an array of discussion comments.
  */
 export async function getCommentsForStory(storyId: string): Promise<DiscussionComment[]> {
-    return new Promise(resolve => {
-        setTimeout(() => {
-            resolve(mockCommentsForStory[storyId] || []);
-        }, 250);
-    });
+  const allRows = await db.select().from(storyComments).where(eq(storyComments.storyId, storyId));
+  // Build tree: return only root comments (no parent)
+  const rootComments = allRows.filter((c: typeof storyComments.$inferSelect) => !c.parentCommentId);
+  return rootComments.map((c: typeof storyComments.$inferSelect) => rowToComment(c, allRows));
 }
