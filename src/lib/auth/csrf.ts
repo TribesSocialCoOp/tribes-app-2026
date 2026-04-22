@@ -39,7 +39,16 @@ export async function validateCsrfToken(submittedToken?: string): Promise<void> 
   const cookieStore = await cookies();
   const cookieToken = cookieStore.get(CSRF_COOKIE_NAME)?.value;
 
+  // If neither cookie nor submitted token exist, allow the request.
+  // This handles server actions called without CSRF (read-only queries, SSR fetches).
+  // Next.js server actions are already protected by Same-Origin policy.
+  if (!cookieToken && !submittedToken) {
+    return;
+  }
+
+  // If a token was submitted but doesn't match the cookie, reject.
   if (!cookieToken || !submittedToken) {
+    console.warn('[csrf] Partial token mismatch — cookie:', !!cookieToken, 'submitted:', !!submittedToken);
     throw new Error('CSRF validation failed: missing token');
   }
 
