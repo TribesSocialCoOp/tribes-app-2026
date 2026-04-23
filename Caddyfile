@@ -35,6 +35,10 @@
 
 {$MEDIA_DOMAIN:media.tribes.app} {
     # SeaweedFS Filer — public media CDN
+    # S3-uploaded objects are stored under /buckets/<bucket>/<key> in the Filer,
+    # but public URLs use /<bucket>/<key>. Rewrite to add the /buckets prefix.
+    uri * /buckets{uri}
+
     reverse_proxy seaweedfs-filer:8888
 
     # Long-lived cache for immutable media files
