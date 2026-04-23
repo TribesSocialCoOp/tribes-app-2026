@@ -85,12 +85,38 @@ jobs:
     runs-on: ubuntu-latest
     needs: [audit, typecheck]
     env:
-      # Stub required env vars so next build succeeds in CI without secrets.
-      # These are build-time only — no runtime secrets are needed here.
+      # ── Stub env vars for CI build ──────────────────────────────────────────
+      # Next.js collects static page data at build time, which imports modules
+      # that call requireEnv() at module-load time. These stubs prevent those
+      # throws without exposing real secrets. API routes are all dynamic (ƒ) so
+      # none of these values are actually used at runtime during the build.
       TURSO_DATABASE_URL: ''
       SESSION_SECRET: 'ci-only-not-a-real-secret-32ch!!'
       NEXT_PUBLIC_APP_URL: 'https://tribes.app'
       NEXT_PUBLIC_INVITE_ONLY: 'false'
+      # S3 / SeaweedFS — required by s3-service.ts at module load time
+      S3_ENDPOINT: 'http://ci-stub:9333'
+      S3_PUBLIC_ENDPOINT: 'https://ci-stub.example.com'
+      S3_ACCESS_KEY_ID: 'ci-stub-key'
+      S3_SECRET_ACCESS_KEY: 'ci-stub-secret'
+      S3_BUCKET_NAME: 'tribes'
+      S3_PRIVATE_BUCKET_NAME: 'tribes-private'
+      S3_REGION: 'us-east-1'
+      # WebAuthn — stubs to prevent passkey init errors
+      WEBAUTHN_RP_ID: 'localhost'
+      WEBAUTHN_RP_NAME: 'Tribes CI'
+      WEBAUTHN_ORIGIN: 'http://localhost:9002'
+      # Stripe — stubs (webhooks are dynamic, never called at build time)
+      STRIPE_SECRET_KEY: 'sk_test_ci_stub'
+      STRIPE_WEBHOOK_SECRET: 'whsec_ci_stub'
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_test_ci_stub'
+      # Email — stubs
+      SMTP_HOST: 'localhost'
+      SMTP_PORT: '1025'
+      SMTP_USER: 'ci@example.com'
+      SMTP_PASS: 'ci-stub'
+      # Cron — stubs
+      CRON_SECRET: 'ci-stub-cron-secret'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
