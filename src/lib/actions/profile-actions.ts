@@ -110,6 +110,12 @@ export async function createCheckoutSession(planId: string, interval: 'monthly' 
   return fn(userId, planId, interval);
 }
 
+export async function createBillingPortalAction(): Promise<{ url: string }> {
+  const userId = await requireAuth();
+  const { createBillingPortalSession } = await import('@/lib/services/payment-service');
+  return createBillingPortalSession(userId);
+}
+
 // ======== CONTRIBUTIONS ========
 export async function recordContribution(type: string, referenceId?: string, description?: string) {
   const userId = await requireAuth();
@@ -171,13 +177,27 @@ export async function saveWallStyle(style: { backgroundColor: string; layout: st
   return fn(userId, style);
 }
 
-// ======== ACCOUNT DELETION ========
-export async function deleteMyAccount(): Promise<{ success: boolean }> {
+// ======== ACCOUNT DELETION (30-day grace period) ========
+
+export async function deleteMyAccount(): Promise<{ success: boolean; scheduledDate: string }> {
   const userId = await requireAuth();
-  const { deleteUserAccount } = await import('@/lib/services/account-deletion-service');
-  await deleteUserAccount(userId);
-  // Clear the session after deletion
+  const { requestAccountDeletion } = await import('@/lib/services/account-deletion-service');
+  const { scheduledDate } = await requestAccountDeletion(userId);
+  // Clear the session after scheduling deletion
   const { deleteSession } = await import('@/lib/auth/session');
   await deleteSession();
+  return { success: true, scheduledDate: scheduledDate.toISOString() };
+}
+
+export async function cancelMyAccountDeletion(): Promise<{ success: boolean }> {
+  const userId = await requireAuth();
+  const { cancelAccountDeletion } = await import('@/lib/services/account-deletion-service');
+  await cancelAccountDeletion(userId);
   return { success: true };
+}
+
+export async function getMyDeletionStatus() {
+  const userId = await requireAuth();
+  const { getDeletionStatus } = await import('@/lib/services/account-deletion-service');
+  return getDeletionStatus(userId);
 }

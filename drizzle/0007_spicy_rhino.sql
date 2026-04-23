@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `deletion_requested_at` integer;

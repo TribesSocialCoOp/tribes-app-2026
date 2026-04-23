@@ -68,7 +68,7 @@ export function AppSidebar() {
     }
   };
 
-  // Notification badge — poll unread count every 30s
+  // Notification badge — poll unread count every 30s + live WS updates
   const [unreadCount, setUnreadCount] = useState(0);
   useEffect(() => {
     if (isGuest) return;
@@ -82,6 +82,23 @@ export function AppSidebar() {
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
     return () => clearInterval(interval);
+  }, [isGuest]);
+
+  // Live WS unread bump — increment badge instantly on incoming message
+  useEffect(() => {
+    if (isGuest || typeof window === 'undefined') return;
+    // Only subscribe if WS relay is configured
+    if (!process.env.NEXT_PUBLIC_WS_RELAY_URL) return;
+
+    const { TribesWebSocket } = require('@/lib/ws-client');
+    const ws = TribesWebSocket.getInstance();
+
+    const unsub = ws.subscribe('message', () => {
+      // Bump unread count — the poll will reconcile the real number
+      setUnreadCount(prev => prev + 1);
+    });
+
+    return unsub;
   }, [isGuest]);
 
   return (

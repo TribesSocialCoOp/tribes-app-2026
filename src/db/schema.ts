@@ -12,10 +12,14 @@ export const users = sqliteTable('users', {
   role: text('role').notNull().default('Human_Free'),
   bio: text('bio'),
   avatar: text('avatar'),
-  reservedAlias: text('reserved_alias'),
+  reservedAlias: text('reserved_alias').unique(),
   reputationScore: integer('reputation_score').default(0),
   reputationStatus: text('reputation_status').default('Newcomer'),
   emailVerified: integer('email_verified', { mode: 'boolean' }).default(false),
+  totpSecret: text('totp_secret'),
+  totpEnabled: integer('totp_enabled', { mode: 'boolean' }).default(false),
+  aiDataSharingEnabled: integer('ai_data_sharing_enabled', { mode: 'boolean' }).default(true),
+  deletionRequestedAt: integer('deletion_requested_at', { mode: 'timestamp' }), // null = active, set = pending deletion
   createdAt: integer('created_at', { mode: 'timestamp' }),
 });
 
@@ -512,4 +516,18 @@ export const mediaFiles = sqliteTable('media_files', {
   publicUrl: text('public_url'),              // CDN URL (public bucket only)
   createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
   deletedAt: integer('deleted_at', { mode: 'timestamp' }), // Soft delete
+});
+
+// ============================================================
+// @MENTIONS
+// ============================================================
+
+export const mentions = sqliteTable('mentions', {
+  id: text('id').primaryKey(),
+  sourceType: text('source_type').notNull(), // 'post' | 'comment' | 'story_comment'
+  sourceId: text('source_id').notNull(),
+  mentionedUserId: text('mentioned_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  mentionerUserId: text('mentioner_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  read: integer('read', { mode: 'boolean' }).default(false),
+  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });

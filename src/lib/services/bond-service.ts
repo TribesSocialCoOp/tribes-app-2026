@@ -621,39 +621,66 @@ export async function getBlockedUserIds(userId: string): Promise<Set<string>> {
 async function notifyBondRequestEmail(fromUserId: string, toUserId: string, bondType: string): Promise<void> {
   const { getPreferences } = await import('@/lib/services/notification-service');
   const prefs = await getPreferences(toUserId);
-  if (!prefs.emailEnabled || !prefs.bondMessagesEnabled) return;
 
   const [toUser] = await db.select({ name: users.name, email: users.email })
     .from(users).where(eq(users.id, toUserId)).limit(1);
   const [fromUser] = await db.select({ name: users.name })
     .from(users).where(eq(users.id, fromUserId)).limit(1);
 
-  if (!toUser?.email) return;
+  if (!toUser) return;
 
-  const { sendEmail } = await import('@/lib/services/email-service');
-  const { bondRequestEmail } = await import('@/lib/services/email-templates');
-  const { generateUnsubscribeUrl } = await import('@/lib/services/email-unsubscribe-service');
-  const unsubUrl = generateUnsubscribeUrl(toUserId, 'bondMessages');
-  const email = bondRequestEmail(toUser.name, fromUser?.name ?? 'Someone', bondType, unsubUrl);
-  await sendEmail({ to: toUser.email, ...email });
+  // Push notification (always attempt if push is enabled)
+  if (prefs.pushEnabled && prefs.bondMessagesEnabled) {
+    const { sendPushNotification } = await import('@/lib/services/push-service');
+    sendPushNotification(toUserId, {
+      title: 'New Bond Request',
+      body: `${fromUser?.name ?? 'Someone'} wants to form a ${bondType} bond with you.`,
+      url: '/bonds?tab=requests',
+      tag: `bond-request-${fromUserId}`,
+    }).catch(() => {});
+  }
+
+  // Email notification
+  if (prefs.emailEnabled && prefs.bondMessagesEnabled && toUser.email) {
+    const { sendEmail } = await import('@/lib/services/email-service');
+    const { bondRequestEmail } = await import('@/lib/services/email-templates');
+    const { generateUnsubscribeUrl } = await import('@/lib/services/email-unsubscribe-service');
+    const unsubUrl = generateUnsubscribeUrl(toUserId, 'bondMessages');
+    const email = bondRequestEmail(toUser.name, fromUser?.name ?? 'Someone', bondType, unsubUrl);
+    await sendEmail({ to: toUser.email, ...email }, toUserId);
+  }
 }
 
 async function notifyFamilyIntroEmail(newMemberId: string, targetId: string, introducerName: string): Promise<void> {
   const { getPreferences } = await import('@/lib/services/notification-service');
   const prefs = await getPreferences(targetId);
-  if (!prefs.emailEnabled || !prefs.bondMessagesEnabled) return;
 
   const [toUser] = await db.select({ name: users.name, email: users.email })
     .from(users).where(eq(users.id, targetId)).limit(1);
   const [fromUser] = await db.select({ name: users.name })
     .from(users).where(eq(users.id, newMemberId)).limit(1);
 
-  if (!toUser?.email) return;
+  if (!toUser) return;
 
-  const { sendEmail } = await import('@/lib/services/email-service');
-  const { familyIntroEmail } = await import('@/lib/services/email-templates');
-  const { generateUnsubscribeUrl } = await import('@/lib/services/email-unsubscribe-service');
-  const unsubUrl = generateUnsubscribeUrl(targetId, 'bondMessages');
-  const email = familyIntroEmail(toUser.name, fromUser?.name ?? 'A new member', introducerName, unsubUrl);
-  await sendEmail({ to: toUser.email, ...email });
+  // Push notification
+  if (prefs.pushEnabled && prefs.bondMessagesEnabled) {
+    const { sendPushNotification } = await import('@/lib/services/push-service');
+    sendPushNotification(targetId, {
+      title: 'Family Introduction',
+      body: `${introducerName} introduced you to ${fromUser?.name ?? 'a new family member'}.`,
+      url: '/bonds?tab=requests',
+      tag: `family-intro-${newMemberId}`,
+    }).catch(() => {});
+  }
+
+  // Email notification
+  if (prefs.emailEnabled && prefs.bondMessagesEnabled && toUser.email) {
+    const { sendEmail } = await import('@/lib/services/email-service');
+    const { familyIntroEmail } = await import('@/lib/services/email-templates');
+    const { generateUnsubscribeUrl } = await import('@/lib/services/email-unsubscribe-service');
+    const unsubUrl = generateUnsubscribeUrl(targetId, 'bondMessages');
+    const email = familyIntroEmail(toUser.name, fromUser?.name ?? 'A new member', introducerName, unsubUrl);
+    await sendEmail({ to: toUser.email, ...email }, targetId);
+  }
 }
+

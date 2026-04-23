@@ -14,6 +14,7 @@ import {
   tribeMembers,
   tribes,
   users,
+  mentions,
 } from '@/db/schema';
 import { eq, and, isNull, ne, desc, sql } from 'drizzle-orm';
 
@@ -23,7 +24,7 @@ import { eq, and, isNull, ne, desc, sql } from 'drizzle-orm';
 
 export interface ActivityItem {
   id: string;
-  type: 'bond_request' | 'unread_message' | 'tribe_join_request' | 'system';
+  type: 'bond_request' | 'unread_message' | 'tribe_join_request' | 'mention' | 'system';
   title: string;
   description: string;
   timestamp: Date;
@@ -200,6 +201,38 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
           read: false,
         });
       }
+    }
+  }
+
+  // 4. Unread mentions (if mentions enabled)
+  if (prefs.mentionsEnabled) {
+    const mentionRows = await db.select({
+      id: mentions.id,
+      sourceType: mentions.sourceType,
+      mentionerUserId: mentions.mentionerUserId,
+      createdAt: mentions.createdAt,
+      read: mentions.read,
+    }).from(mentions)
+      .where(and(
+        eq(mentions.mentionedUserId, userId),
+        eq(mentions.read, false),
+      ))
+      .orderBy(desc(mentions.createdAt))
+      .limit(10);
+
+    for (const m of mentionRows) {
+      const [mentioner] = await db.select({ name: users.name })
+        .from(users).where(eq(users.id, m.mentionerUserId)).limit(1);
+
+      items.push({
+        id: `activity-mention-${m.id}`,
+        type: 'mention',
+        title: 'You were mentioned',
+        description: `${mentioner?.name ?? 'Someone'} mentioned you in a ${m.sourceType?.replace('_', ' ') ?? 'post'}`,
+        timestamp: m.createdAt ?? new Date(),
+        actionUrl: '/your-comms',
+        read: false,
+      });
     }
   }
 

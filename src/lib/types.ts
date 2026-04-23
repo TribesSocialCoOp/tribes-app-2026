@@ -33,6 +33,8 @@ export interface UserProfile {
   reputationScore?: number;
   reputationStatus?: 'Onboarding' | 'Newcomer' | 'Active' | 'Trusted' | 'Veteran' | 'Elder';
   emailVerified?: boolean;
+  totpEnabled?: boolean;
+  aiDataSharingEnabled?: boolean;
   accountCreatedAt?: Date;
 }
 

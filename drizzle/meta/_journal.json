@@ -29,6 +29,34 @@
       "when": 1776902236888,
       "tag": "0003_powerful_spectrum",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1776959078267,
+      "tag": "0004_ordinary_dazzler",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1776959572403,
+      "tag": "0005_smooth_reaper",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1776961359315,
+      "tag": "0006_late_captain_marvel",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1776961918889,
+      "tag": "0007_spicy_rhino",
+      "breakpoints": true
     }
   ]
 }

@@ -189,7 +189,14 @@ export async function createTribePost(tribeId: string, payload: { title?: string
   });
 
   const finalRows = await db.select().from(posts).where(eq(posts.id, id)).limit(1);
-  return rowToTribePost(finalRows[0]!);
+  const created = rowToTribePost(finalRows[0]!);
+
+  // Process @mentions (fire-and-forget)
+  import('./mention-service').then(({ processMentions }) =>
+    processMentions(payload.content, authorId, 'post', id)
+  ).catch(() => {});
+
+  return created;
 }
 
 /**
@@ -436,6 +443,11 @@ export async function createComment(
   await db.update(posts).set({
     commentCount: sql`${posts.commentCount} + 1`,
   }).where(eq(posts.id, postId));
+
+  // Process @mentions (fire-and-forget)
+  import('./mention-service').then(({ processMentions }) =>
+    processMentions(content, userId, 'comment', id)
+  ).catch(() => {});
 
   return {
     id,

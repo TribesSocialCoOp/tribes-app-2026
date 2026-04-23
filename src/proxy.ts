@@ -65,6 +65,12 @@ export async function proxy(request: NextRequest) {
       return response;
     }
 
+    // Check if account is pending deletion — redirect to recovery page
+    // Allow settings page so user can cancel deletion
+    if (parsed.deletionRequestedAt && pathname !== '/account-recovery' && pathname !== '/settings') {
+      return NextResponse.redirect(new URL('/account-recovery', request.url));
+    }
+
     // Refresh the session TTL (sliding window)
     const newExpires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     parsed.expires = newExpires;

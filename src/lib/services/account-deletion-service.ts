@@ -1,18 +1,19 @@
 /**
  * @fileoverview Account Deletion Service
  * 
- * Performs a full-cascade account deletion compliant with GDPR Art. 17
- * and CCPA "Right to Delete". Uses a hybrid approach:
- *   - Posts/comments with replies → tombstoned and hidden (isRemoved + removalReason)
- *     to preserve thread integrity while removing content from view
+ * Implements a 30-day soft-delete grace period for GDPR Art. 17 / CCPA compliance.
+ * 
+ * Flow:
+ *   1. User requests deletion → `deletionRequestedAt = now()`, all sessions revoked
+ *   2. During grace period, account is functionally disabled (proxy redirects to recovery)
+ *   3. User can log back in within 30 days → cancel deletion → `deletionRequestedAt = null`
+ *   4. After 30 days, cron runs permanent cascade delete via `purgeExpiredAccounts()`
+ * 
+ * Permanent deletion uses a hybrid approach:
+ *   - Posts/comments with replies → tombstoned (isRemoved + hidden)
  *   - Posts/comments with no replies → hard-deleted
  *   - All other user data → hard-deleted via schema cascades + manual cleanup
- *   - Stripe subscription → cancelled immediately
- * 
- * TODO: Implement a 30-day soft-delete grace period. Instead of immediate
- * permanent deletion, mark the account as `pending_deletion` and purge
- * data after 30 days via a scheduled job. This gives users a window to
- * recover their account if the deletion was accidental.
+ *   - Stripe subscription → cancelled immediately on soft-delete
  */
 
 import { db } from '@/db';
@@ -26,9 +27,9 @@ import {
   messages, storyComments,
   wallBlocks, wallStyles, userPreferences, userAliases,
   notificationPreferences, pushSubscriptions, emailVerificationTokens,
-  userBans,
+  userBans, mentions,
 } from '@/db/schema';
-import { eq, or, and, sql } from 'drizzle-orm';
+import { eq, or, and, sql, lte } from 'drizzle-orm';
 import {
   DELETED_USER_NAME,
   DELETED_USER_AVATAR_FALLBACK,
@@ -36,48 +37,170 @@ import {
   ACCOUNT_DELETION_REASON,
 } from '@/lib/constants';
 
-/**
- * Deletes a user account and all associated data.
- * 
- * Strategy:
- *   1. Cancel Stripe subscription (if any)
- *   2. Tombstone posts that have comments from other users
- *   3. Hard-delete posts with no external comments
- *   4. Tombstone comments that have replies from other users
- *   5. Hard-delete comments with no replies
- *   6. Clean up non-cascading references
- *   7. Delete the user row (cascades handle ~15 related tables)
- */
-export async function deleteUserAccount(userId: string): Promise<void> {
-  console.log(`[account-deletion] Starting deletion for user ${userId}`);
+/** Grace period in days before permanent deletion. */
+const GRACE_PERIOD_DAYS = 30;
 
-  // ──────────────────────────────────────────────
-  // Step 1: Cancel Stripe subscription
-  // ──────────────────────────────────────────────
+// ============================================================
+// SOFT DELETE (Phase 1: User requests deletion)
+// ============================================================
+
+/**
+ * Initiates account deletion with a 30-day grace period.
+ * - Sets `deletionRequestedAt` timestamp
+ * - Cancels Stripe subscription immediately
+ * - Revokes all sessions (forces logout)
+ * - Sends a confirmation email
+ */
+export async function requestAccountDeletion(userId: string): Promise<{ scheduledDate: Date }> {
+  const now = new Date();
+  const scheduledDate = new Date(now.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+
+  console.log(`[account-deletion] Soft-delete requested for user ${userId}, purge scheduled for ${scheduledDate.toISOString()}`);
+
+  // Mark account for deletion
+  await db.update(users).set({
+    deletionRequestedAt: now,
+  }).where(eq(users.id, userId));
+
+  // Cancel Stripe subscription immediately (refund window starts now)
   await cancelStripeSubscription(userId);
 
-  // ──────────────────────────────────────────────
-  // Step 2 & 3: Handle posts (tombstone or delete)
-  // ──────────────────────────────────────────────
+  // Revoke all sessions (force logout everywhere)
+  await db.update(sessions).set({
+    revokedAt: now,
+  }).where(eq(sessions.userId, userId));
+
+  // Send confirmation email (fire-and-forget)
+  try {
+    const [user] = await db.select({ email: users.email, name: users.name })
+      .from(users).where(eq(users.id, userId)).limit(1);
+    if (user?.email) {
+      const { sendEmail } = await import('./email-service');
+      await sendEmail({
+        to: user.email,
+        subject: 'Your Tribes.app account is scheduled for deletion',
+        html: `
+          <h2>Account Deletion Scheduled</h2>
+          <p>Hi ${user.name ?? 'there'},</p>
+          <p>Your Tribes.app account has been scheduled for permanent deletion on <strong>${scheduledDate.toLocaleDateString()}</strong>.</p>
+          <p>If this was a mistake, you can cancel the deletion by logging in before that date and clicking "Cancel Deletion" in your Settings.</p>
+          <p>After ${GRACE_PERIOD_DAYS} days, all your data will be permanently removed and cannot be recovered.</p>
+        `,
+      });
+    }
+  } catch {
+    // Email failure is non-critical
+  }
+
+  return { scheduledDate };
+}
+
+// ============================================================
+// CANCEL DELETION (User changes their mind)
+// ============================================================
+
+/**
+ * Cancels a pending account deletion.
+ * Clears `deletionRequestedAt` to reactivate the account.
+ */
+export async function cancelAccountDeletion(userId: string): Promise<void> {
+  console.log(`[account-deletion] Cancelling deletion for user ${userId}`);
+
+  await db.update(users).set({
+    deletionRequestedAt: null,
+  }).where(eq(users.id, userId));
+}
+
+/**
+ * Returns the deletion status for a user.
+ */
+export async function getDeletionStatus(userId: string): Promise<{
+  isPending: boolean;
+  requestedAt: Date | null;
+  scheduledPurgeDate: Date | null;
+  daysRemaining: number | null;
+}> {
+  const [user] = await db.select({ deletionRequestedAt: users.deletionRequestedAt })
+    .from(users).where(eq(users.id, userId)).limit(1);
+
+  if (!user?.deletionRequestedAt) {
+    return { isPending: false, requestedAt: null, scheduledPurgeDate: null, daysRemaining: null };
+  }
+
+  const scheduledPurge = new Date(user.deletionRequestedAt.getTime() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+  const daysRemaining = Math.max(0, Math.ceil((scheduledPurge.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+
+  return {
+    isPending: true,
+    requestedAt: user.deletionRequestedAt,
+    scheduledPurgeDate: scheduledPurge,
+    daysRemaining,
+  };
+}
+
+// ============================================================
+// PERMANENT PURGE (Cron job after grace period)
+// ============================================================
+
+/**
+ * Permanently deletes all accounts whose grace period has expired.
+ * Should be called by a daily cron job.
+ * Returns the number of accounts purged.
+ */
+export async function purgeExpiredAccounts(): Promise<number> {
+  const cutoff = new Date(Date.now() - GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000);
+
+  const expiredUsers = await db.select({ id: users.id })
+    .from(users)
+    .where(lte(users.deletionRequestedAt, cutoff));
+
+  let purged = 0;
+  for (const user of expiredUsers) {
+    try {
+      await permanentlyDeleteUser(user.id);
+      purged++;
+    } catch (err) {
+      console.error(`[account-deletion] Failed to purge user ${user.id}:`, err);
+    }
+  }
+
+  console.log(`[account-deletion] Purged ${purged} expired accounts`);
+  return purged;
+}
+
+/**
+ * Performs the actual permanent deletion of a user account.
+ * This is the destructive operation — no recovery after this.
+ */
+async function permanentlyDeleteUser(userId: string): Promise<void> {
+  console.log(`[account-deletion] Starting permanent deletion for user ${userId}`);
+
   await cleanupPosts(userId);
-
-  // ──────────────────────────────────────────────
-  // Step 4 & 5: Handle comments (tombstone or delete)
-  // ──────────────────────────────────────────────
   await cleanupComments(userId);
-
-  // ──────────────────────────────────────────────
-  // Step 6: Clean up non-cascading references
-  // ──────────────────────────────────────────────
   await cleanupNonCascadingReferences(userId);
 
-  // ──────────────────────────────────────────────
-  // Step 7: Delete user row (cascades handle the rest)
-  // ──────────────────────────────────────────────
+  // Delete the user row (cascades handle ~15 related tables)
   await db.delete(users).where(eq(users.id, userId));
 
-  console.log(`[account-deletion] Completed deletion for user ${userId}`);
+  console.log(`[account-deletion] Completed permanent deletion for user ${userId}`);
 }
+
+// ============================================================
+// LEGACY: Immediate deletion (kept for admin use)
+// ============================================================
+
+/**
+ * Immediately and permanently deletes a user account (no grace period).
+ * Use only for admin-initiated deletions or testing.
+ */
+export async function deleteUserAccount(userId: string): Promise<void> {
+  await cancelStripeSubscription(userId);
+  await permanentlyDeleteUser(userId);
+}
+
+// ============================================================
+// INTERNAL HELPERS
+// ============================================================
 
 /**
  * Cancel any active Stripe subscription for the user.
@@ -148,11 +271,8 @@ async function cleanupPosts(userId: string): Promise<void> {
       }).where(eq(posts.id, post.id));
     } else {
       // No external comments → safe to hard-delete
-      // Delete associated mood tags first (they cascade from post, but be explicit)
       await db.delete(postMoodTags).where(eq(postMoodTags.postId, post.id));
-      // Delete the user's own comments on this post
       await db.delete(comments).where(eq(comments.postId, post.id));
-      // Delete the post
       await db.delete(posts).where(eq(posts.id, post.id));
     }
   }
@@ -163,13 +283,11 @@ async function cleanupPosts(userId: string): Promise<void> {
  * Hard-delete comments with no replies.
  */
 async function cleanupComments(userId: string): Promise<void> {
-  // Get remaining comments by this user (some may have been deleted with their posts)
   const userComments = await db.select({ id: comments.id })
     .from(comments)
     .where(eq(comments.authorId, userId));
 
   for (const comment of userComments) {
-    // Check if any OTHER user has replied to this comment
     const externalReplies = await db.select({ id: comments.id })
       .from(comments)
       .where(and(
@@ -179,7 +297,6 @@ async function cleanupComments(userId: string): Promise<void> {
       .limit(1);
 
     if (externalReplies.length > 0) {
-      // Tombstone
       await db.update(comments).set({
         authorName: DELETED_USER_NAME,
         authorAvatar: null,
@@ -188,7 +305,6 @@ async function cleanupComments(userId: string): Promise<void> {
         content: REMOVED_CONTENT_PLACEHOLDER,
       }).where(eq(comments.id, comment.id));
     } else {
-      // Hard-delete
       await db.delete(comments).where(eq(comments.id, comment.id));
     }
   }
@@ -198,7 +314,7 @@ async function cleanupComments(userId: string): Promise<void> {
  * Clean up tables that reference users.id WITHOUT onDelete: 'cascade'.
  */
 async function cleanupNonCascadingReferences(userId: string): Promise<void> {
-  // Bond requests (fromUserId / toUserId — no cascade)
+  // Bond requests
   await db.delete(bondRequests).where(
     or(eq(bondRequests.fromUserId, userId), eq(bondRequests.toUserId, userId))
   );
@@ -214,8 +330,13 @@ async function cleanupNonCascadingReferences(userId: string): Promise<void> {
     promotedBy: null,
   }).where(eq(postMoodTags.promotedBy, userId));
 
-  // Vibes — delete (no cascade defined)
+  // Vibes
   await db.delete(vibes).where(eq(vibes.userId, userId));
+
+  // Mentions — clean up both sides
+  await db.delete(mentions).where(
+    or(eq(mentions.mentionedUserId, userId), eq(mentions.mentionerUserId, userId))
+  );
 
   // Tribes — nullify createdBy (don't delete the tribe itself)
   await db.update(tribes).set({
@@ -223,7 +344,7 @@ async function cleanupNonCascadingReferences(userId: string): Promise<void> {
   }).where(eq(tribes.createdBy, userId));
 
   // Events — creatorId is NOT NULL, can't nullify.
-  // Delete events with no external RSVPs; leave others (FK will reference deleted user).
+  // Delete events with no external RSVPs; leave others.
   const userEvents = await db.select({ id: events.id })
     .from(events)
     .where(eq(events.creatorId, userId));
@@ -238,13 +359,10 @@ async function cleanupNonCascadingReferences(userId: string): Promise<void> {
       .limit(1);
 
     if (otherRsvps.length === 0) {
-      // No other attendees — safe to delete
       await db.delete(eventStreamPosts).where(eq(eventStreamPosts.eventId, event.id));
       await db.delete(eventRsvps).where(eq(eventRsvps.eventId, event.id));
       await db.delete(events).where(eq(events.id, event.id));
     }
-    // If others have RSVPd, the event stays but the FK will dangle.
-    // This is acceptable — the event still functions without a creator reference.
   }
 
   // Story comments — tombstone content, anonymize author
@@ -253,7 +371,6 @@ async function cleanupNonCascadingReferences(userId: string): Promise<void> {
     .where(eq(storyComments.authorId, userId));
 
   for (const sc of userStoryComments) {
-    // Check for replies from other users
     const externalReplies = await db.select({ id: storyComments.id })
       .from(storyComments)
       .where(and(
@@ -274,13 +391,13 @@ async function cleanupNonCascadingReferences(userId: string): Promise<void> {
     }
   }
 
-  // Messages — delete (bond will cascade too, but messages.senderId has no cascade)
+  // Messages
   await db.delete(messages).where(eq(messages.senderId, userId));
 
-  // Event stream posts — delete (authorId has no cascade)
+  // Event stream posts
   await db.delete(eventStreamPosts).where(eq(eventStreamPosts.authorId, userId));
 
-  // Revoke all active sessions (belt-and-suspenders; cascade will handle too)
+  // Revoke all active sessions
   await db.update(sessions).set({
     revokedAt: new Date(),
   }).where(eq(sessions.userId, userId));

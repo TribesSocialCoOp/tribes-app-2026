@@ -29,6 +29,8 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${oxanium.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}>
+        {/* Prevent FOUC: apply dark mode class before React hydrates */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('tribes-theme');var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.classList.add('dark')}catch(e){}})()` }} />
         {children}
         <Toaster />
         <CookieConsent />

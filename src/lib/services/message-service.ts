@@ -39,6 +39,24 @@ export async function sendMessage(
     sentAt,
   });
 
+  // Fire push notification to bond partner (fire-and-forget)
+  // The WS relay handles real-time delivery; this is the offline fallback
+  import('./realtime-dispatch').then(async ({ notifyBondMessage }) => {
+    const { users } = await import('@/db/schema');
+    const { eq } = await import('drizzle-orm');
+
+    // Find the bond partner's userId
+    const [bond] = await db.select({ targetId: bonds.targetId })
+      .from(bonds).where(eq(bonds.id, bondId)).limit(1);
+    if (!bond) return;
+
+    // Get sender name for the notification
+    const [sender] = await db.select({ name: users.name })
+      .from(users).where(eq(users.id, senderId)).limit(1);
+
+    await notifyBondMessage(bond.targetId, sender?.name ?? 'Someone', bondId);
+  }).catch(() => {});
+
   return { id, bondId, senderId, ciphertext, plaintext: null, sentAt, readAt: null };
 }
 

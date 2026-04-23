@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `users_reserved_alias_unique` ON `users` (`reserved_alias`);

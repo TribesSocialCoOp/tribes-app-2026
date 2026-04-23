@@ -59,8 +59,24 @@ function getFromAddress(): string {
 /**
  * Sends a transactional email.
  * In DEV, logs to a JSON file. In PROD, sends via Nodemailer SMTP.
+ * If userId is provided, checks the user's notification preferences
+ * and skips the email if they have opted out.
  */
-export async function sendEmail(message: EmailMessage): Promise<void> {
+export async function sendEmail(message: EmailMessage, userId?: string): Promise<void> {
+  // Honour user email opt-out
+  if (userId) {
+    try {
+      const { getPreferences } = await import('./notification-service');
+      const prefs = await getPreferences(userId);
+      if (!prefs.emailEnabled) {
+        console.log(`[email] Skipped — user ${userId} opted out of emails`);
+        return;
+      }
+    } catch {
+      // Preferences not loadable — send anyway (fail open)
+    }
+  }
+
   if (isDev) {
     await devLogEmail(message);
     return;

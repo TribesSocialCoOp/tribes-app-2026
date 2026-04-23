@@ -75,9 +75,10 @@ export async function GET(request: NextRequest) {
 
         // Default to enabled if no prefs row exists
         const emailEnabled = prefs?.emailEnabled ?? true;
+        const pushEnabled = prefs?.pushEnabled ?? true;
         const eventRemindersEnabled = prefs?.eventRemindersEnabled ?? true;
 
-        if (!emailEnabled || !eventRemindersEnabled) {
+        if (!eventRemindersEnabled || (!emailEnabled && !pushEnabled)) {
           skipped++;
           // Still mark as sent to avoid re-checking on next run
           await db.update(eventRsvps)
@@ -90,7 +91,7 @@ export async function GET(request: NextRequest) {
         const [user] = await db.select({ name: users.name, email: users.email })
           .from(users).where(eq(users.id, rsvp.userId)).limit(1);
 
-        if (!user?.email) {
+        if (!user) {
           skipped++;
           await db.update(eventRsvps)
             .set({ reminderSentAt: new Date() })
@@ -106,10 +107,23 @@ export async function GET(request: NextRequest) {
             })
           : 'Soon';
 
-        // Send reminder
-        const unsubUrl = generateUnsubscribeUrl(rsvp.userId, 'eventReminders');
-        const email = eventReminderEmail(user.name, event.name, dateStr, unsubUrl);
-        await sendEmail({ to: user.email, ...email });
+        // Send push notification (fire-and-forget)
+        if (pushEnabled) {
+          const { sendPushNotification } = await import('@/lib/services/push-service');
+          sendPushNotification(rsvp.userId, {
+            title: `Reminder: ${event.name}`,
+            body: `Your event is coming up on ${dateStr}`,
+            url: `/events`,
+            tag: `event-reminder-${event.id}`,
+          }).catch(() => {});
+        }
+
+        // Send email reminder
+        if (emailEnabled && user.email) {
+          const unsubUrl = generateUnsubscribeUrl(rsvp.userId, 'eventReminders');
+          const email = eventReminderEmail(user.name, event.name, dateStr, unsubUrl);
+          await sendEmail({ to: user.email, ...email }, rsvp.userId);
+        }
 
         // Mark as reminded
         await db.update(eventRsvps)

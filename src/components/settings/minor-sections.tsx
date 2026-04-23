@@ -8,6 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { CreditCard, LogOut, Palette, Trash2, Loader2, ShieldAlert, KeyRound } from "lucide-react";
+import { useTheme } from '@/hooks/use-theme';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +27,8 @@ import { deleteMyAccount } from "@/lib/actions/profile-actions";
 import { startAuthentication } from '@simplewebauthn/browser';
 
 export function AppearanceSection() {
+  const { isDark, toggle } = useTheme();
+
   return (
     <Card className="shadow-lg">
       <CardHeader>
@@ -38,7 +41,7 @@ export function AppearanceSection() {
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-muted/50">
           <Label htmlFor="darkMode" className="flex-1 cursor-pointer">Dark Mode</Label>
-          <Switch id="darkMode" className="shrink-0" />
+          <Switch id="darkMode" className="shrink-0" checked={isDark} onCheckedChange={toggle} />
         </div>
       </CardContent>
     </Card>
@@ -47,9 +50,30 @@ export function AppearanceSection() {
 
 interface BillingSectionProps {
   roleName: string;
+  hasActiveSubscription?: boolean;
 }
 
-export function BillingSection({ roleName }: BillingSectionProps) {
+export function BillingSection({ roleName, hasActiveSubscription }: BillingSectionProps) {
+  const { toast } = useToast();
+  const router = useRouter();
+  const [isLoadingPortal, setIsLoadingPortal] = useState(false);
+
+  async function handleManageSubscription() {
+    setIsLoadingPortal(true);
+    try {
+      const { createBillingPortalAction } = await import('@/lib/actions/profile-actions');
+      const result = await createBillingPortalAction();
+      if (result?.url) {
+        router.push(result.url);
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not open billing portal.';
+      toast({ variant: 'destructive', title: 'Billing Error', description: message });
+    } finally {
+      setIsLoadingPortal(false);
+    }
+  }
+
   return (
     <Card className="shadow-lg">
       <CardHeader>
@@ -62,8 +86,24 @@ export function BillingSection({ roleName }: BillingSectionProps) {
       <CardContent className="space-y-4">
         <p className="text-muted-foreground">Current Plan: <span className="font-semibold text-foreground">{roleName.replace(/_/g, ' ')}</span></p>
         <div className="flex flex-col sm:flex-row gap-2">
-          <Button variant="default" className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto">Upgrade to Pro</Button>
-          <Button variant="outline" className="w-full sm:w-auto">Manage Payment Methods</Button>
+          <Button
+            variant="default"
+            className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto"
+            onClick={() => router.push('/billing')}
+          >
+            <CreditCard className="mr-2 h-4 w-4" /> View Plans & Upgrade
+          </Button>
+          {hasActiveSubscription && (
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={handleManageSubscription}
+              disabled={isLoadingPortal}
+            >
+              {isLoadingPortal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Manage Subscription
+            </Button>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -120,11 +160,12 @@ export function AccountActionsSection() {
 
   async function performDeletion() {
     try {
-      await deleteMyAccount();
+      const result = await deleteMyAccount();
       setStep('done');
-      toast({ title: 'Account Deleted', description: 'Your account has been permanently deleted.' });
+      const date = new Date(result.scheduledDate).toLocaleDateString();
+      toast({ title: 'Deletion Scheduled', description: `Your account will be permanently deleted on ${date}. You can cancel by logging back in.` });
       // Redirect after a brief pause
-      setTimeout(() => router.push('/login'), 1500);
+      setTimeout(() => router.push('/login'), 2500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to delete account.';
       toast({ variant: 'destructive', title: 'Deletion Failed', description: message });
@@ -170,12 +211,13 @@ export function AccountActionsSection() {
               </AlertDialogTitle>
               <AlertDialogDescription asChild>
                 <div className="space-y-3 text-sm">
-                  <p>This action is <strong>permanent and irreversible</strong>. The following will be deleted:</p>
+                  <p>Your account will be <strong>scheduled for deletion</strong> with a <strong>30-day recovery window</strong>.</p>
+                  <p className="text-muted-foreground">During the grace period:</p>
                   <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                    <li>Your profile, bonds, and tribe memberships</li>
-                    <li>Your posts, comments, and uploads</li>
-                    <li>Active subscriptions will be cancelled</li>
-                    <li>Your passkeys and vault backups</li>
+                    <li>Your account will be deactivated immediately</li>
+                    <li>You can log back in within 30 days to cancel</li>
+                    <li>Active subscriptions will be cancelled now</li>
+                    <li>After 30 days, all data is permanently removed</li>
                   </ul>
                   <p className="text-muted-foreground">
                     Posts with replies from other users will be anonymized to preserve conversation threads.
@@ -219,7 +261,7 @@ export function AccountActionsSection() {
 
             {step === 'done' && (
               <div className="flex flex-col items-center gap-3 py-4">
-                <p className="text-sm text-foreground text-center font-medium">Account deleted. Redirecting...</p>
+                <p className="text-sm text-foreground text-center font-medium">Deletion scheduled. Redirecting to login...</p>
               </div>
             )}
 

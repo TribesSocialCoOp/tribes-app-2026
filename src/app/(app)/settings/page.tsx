@@ -65,6 +65,11 @@ export default function SettingsPage() {
   const [isLoadingSessions, setIsLoadingSessions] = useState(false);
   const [isRevokingSession, setIsRevokingSession] = useState<string | null>(null);
 
+  // Passkey management state
+  const [passkeys, setPasskeys] = useState<{ id: string; createdAt: Date }[]>([]);
+  const [userTotpEnabled, setUserTotpEnabled] = useState(false);
+  const [userAiSharing, setUserAiSharing] = useState(true);
+
   // Load notification preferences
   useEffect(() => {
     async function loadNotifPrefs() {
@@ -100,8 +105,22 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    if (sessionUser) loadSessions();
+    if (sessionUser) {
+      loadSessions();
+      loadPasskeys();
+    }
   }, [sessionUser]);
+
+  // Load passkeys + security state
+  async function loadPasskeys() {
+    try {
+      const { getRegisteredPasskeys } = await import('@/lib/actions/auth-actions');
+      const keys = await getRegisteredPasskeys();
+      setPasskeys(keys);
+    } catch (err) {
+      console.error('Failed to load passkeys:', err);
+    }
+  }
 
   async function handleRevokeSession(sessionId: string) {
     setIsRevokingSession(sessionId);
@@ -141,6 +160,8 @@ export default function SettingsPage() {
         setBio(userProfile.bio || "");
         setAliases(userProfile.aliases || []);
         setReservedAliasInput(userProfile.reservedAlias || "");
+        setUserTotpEnabled(userProfile.totpEnabled ?? false);
+        setUserAiSharing(userProfile.aiDataSharingEnabled ?? true);
       }
       setIsLoading(false);
     };
@@ -459,7 +480,12 @@ export default function SettingsPage() {
       />
 
       <Separator />
-      <SecuritySection />
+      <SecuritySection
+        passkeys={passkeys}
+        totpEnabled={userTotpEnabled}
+        aiDataSharingEnabled={userAiSharing}
+        onPasskeysChanged={loadPasskeys}
+      />
 
       <Separator />
       <SessionsSection
@@ -491,7 +517,7 @@ export default function SettingsPage() {
       )}
 
       <Separator />
-      <BillingSection roleName={profile.role} />
+      <BillingSection roleName={profile.role} hasActiveSubscription={profile.role !== 'Human_Free'} />
 
       <Separator />
       <AccountActionsSection />

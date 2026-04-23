@@ -41,6 +41,7 @@ export interface SessionPayload {
   userId: string;
   sessionId: string;
   expires: Date;
+  deletionRequestedAt?: string | null; // ISO string if pending deletion
 }
 
 export async function encrypt(payload: SessionPayload) {
@@ -81,8 +82,19 @@ export async function createSession(userId: string) {
     userAgent,
   });
 
+  // Check if user has pending deletion
+  const { users } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [user] = await db.select({ deletionRequestedAt: users.deletionRequestedAt })
+    .from(users).where(eq(users.id, userId)).limit(1);
+
   // Embed sessionId in the JWT cookie
-  const session = await encrypt({ userId, sessionId, expires });
+  const session = await encrypt({
+    userId,
+    sessionId,
+    expires,
+    deletionRequestedAt: user?.deletionRequestedAt?.toISOString() ?? null,
+  });
 
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, session, {

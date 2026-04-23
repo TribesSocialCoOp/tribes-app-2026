@@ -299,14 +299,29 @@ export async function getMediaUrl(
     return file.publicUrl;
   }
 
-  // Private files — verify ownership (or bond access in future)
+  // Private files — verify ownership or bond access
   if (file.userId !== requestingUserId) {
-    // TODO: Check bond-level access for shared attachments
+    // Check if requester has an active bond with the file owner
+    const { bonds } = await import('@/db/schema');
+    const [bond] = await db.select({ id: bonds.id })
+      .from(bonds)
+      .where(and(
+        eq(bonds.userId, requestingUserId),
+        eq(bonds.targetId, file.userId),
+      ))
+      .limit(1);
+
+    if (bond) {
+      // Bond partner — grant access via presigned URL
+      return getPresignedUrl(file.s3Key);
+    }
+
+    // No ownership, no bond — deny
     s3Logger.warn({ fileId, ownerId: file.userId, requesterId: requestingUserId }, 'Unauthorized media access attempt');
     return null;
   }
 
-  // Generate presigned URL for private file
+  // Generate presigned URL for private file (owner access)
   return getPresignedUrl(file.s3Key);
 }
 
