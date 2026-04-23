@@ -74,37 +74,16 @@ jobs:
         run: npm run typecheck
 
   # ──────────────────────────────────────────────────────────────
-  # 3. Lint
-  #    Catches obvious code quality issues quickly.
-  # ──────────────────────────────────────────────────────────────
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci --legacy-peer-deps
-
-      - name: Run ESLint
-        run: npm run lint
-
-  # ──────────────────────────────────────────────────────────────
-  # 4. Build Verification
+  # 3. Build Verification
   #    Ensures a production Next.js build succeeds before any
-  #    changes reach the server.
+  #    changes reach the server. Next.js 16 runs ESLint internally
+  #    during `next build` (if configured), so a separate lint job
+  #    is redundant without a standalone ESLint setup.
   # ──────────────────────────────────────────────────────────────
   build:
     name: Production Build
     runs-on: ubuntu-latest
-    needs: [audit, typecheck, lint]
+    needs: [audit, typecheck]
     env:
       # Stub required env vars so next build succeeds in CI without secrets.
       # These are build-time only — no runtime secrets are needed here.

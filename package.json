@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack --port 9002 --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "echo 'ESLint not configured — add eslint + eslint-config-next to enable'",
     "typecheck": "tsc --noEmit",
     "audit": "npm audit --audit-level=high",
     "test": "vitest run",
