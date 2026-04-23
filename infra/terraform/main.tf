@@ -84,6 +84,13 @@ resource "hcloud_server" "tribes_prod" {
   ssh_keys    = [hcloud_ssh_key.tribes.id]
   firewall_ids = [hcloud_firewall.tribes_prod.id]
 
+  # Attach the reserved static IP — survives server rebuilds
+  # This is the IP whitelisted in Google Workspace SMTP relay
+  public_net {
+    ipv4_enabled = true
+    ipv4         = hcloud_primary_ip.tribes_prod.id
+  }
+
   user_data = templatefile("${path.module}/cloud-init.yaml", {
     deploy_user = "tribes"
   })

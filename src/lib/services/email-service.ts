@@ -37,13 +37,26 @@ const isDev = process.env.NODE_ENV !== 'production';
 const DEV_MAILBOX_PATH = path.join(process.cwd(), 'src', 'db', 'dev-mailbox.json');
 
 function getSmtpConfig() {
+  const port = parseInt(process.env.SMTP_PORT ?? '587', 10);
+  const isImplicitTls = port === 465;
+
   return {
     host: process.env.SMTP_HOST ?? '',
-    port: parseInt(process.env.SMTP_PORT ?? '587', 10),
-    secure: (process.env.SMTP_PORT ?? '587') === '465',
+    port,
+    // Port 465 = implicit TLS (connect encrypted from the start)
+    // Port 587 = STARTTLS (upgrade plaintext → TLS after EHLO)
+    secure: isImplicitTls,
     auth: {
       user: process.env.SMTP_USER ?? '',
       pass: process.env.SMTP_PASS ?? '',
+    },
+    // Enforce TLS on port 587 — refuse to send if STARTTLS fails
+    requireTLS: !isImplicitTls,
+    tls: {
+      // Reject self-signed or invalid certificates
+      rejectUnauthorized: true,
+      // Minimum TLS 1.2 — block TLS 1.0/1.1
+      minVersion: 'TLSv1.2' as const,
     },
   };
 }
