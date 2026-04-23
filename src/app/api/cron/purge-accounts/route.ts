@@ -10,9 +10,11 @@ import { NextResponse } from 'next/server';
 const CRON_SECRET = process.env.CRON_SECRET;
 
 export async function GET(request: Request) {
-  // Verify cron secret
+  // SECURITY: Fail closed — deny ALL requests if CRON_SECRET is not configured.
+  // The previous pattern (CRON_SECRET && ...) would silently allow any caller
+  // through when the env var was missing.
   const authHeader = request.headers.get('authorization');
-  if (CRON_SECRET && authHeader !== `Bearer ${CRON_SECRET}`) {
+  if (!CRON_SECRET || authHeader !== `Bearer ${CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

@@ -148,7 +148,9 @@ export async function dismissReport(postId: string): Promise<void> {
 }
 
 export async function escalateReport(postId: string): Promise<void> {
-  await requireAuth();
+  // SECURITY: Only platform admins may escalate reports globally
+  const { requireAdmin } = await import('./shared');
+  await requireAdmin();
   const { escalateReport: fn } = await import('@/lib/services/moderation-service');
   return fn(postId);
 }
@@ -228,11 +230,18 @@ export async function getActiveReportedPostIds(): Promise<Set<string>> {
 }
 
 export async function getActiveReportsForTribe(tribeId: string): Promise<{ tribe: Tribe | null; reports: ReportedPost[]; posts: TribePost[] }> {
+  // SECURITY: Must be at least a tribe speaker to view reports for a tribe
+  const userId = await requireAuth();
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
   const { getActiveReportsForTribe: fn } = await import('@/lib/services/moderation-service');
   return fn(tribeId);
 }
 
 export async function getActiveGlobalReports(): Promise<{ reports: ReportedPost[]; posts: TribePost[]; tribes: Tribe[] }> {
+  // SECURITY: Only platform admins may view the global moderation queue
+  const { requireAdmin } = await import('./shared');
+  await requireAdmin();
   const { getActiveGlobalReports: fn } = await import('@/lib/services/moderation-service');
   return fn();
 }

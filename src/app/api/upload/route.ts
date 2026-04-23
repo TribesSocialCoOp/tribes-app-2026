@@ -27,8 +27,11 @@ import { eq } from 'drizzle-orm';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = [
-  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
-  'application/octet-stream', // Encrypted files
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  // 'image/svg+xml' — REMOVED: SVGs can embed <script> tags and event handlers.
+  // If served from the same origin this is a stored XSS vector. Use raster formats only.
+  // If SVG uploads are needed in future, implement server-side sanitization first.
+  'application/octet-stream', // Encrypted files (E2E bond attachments)
 ];
 
 const VALID_CONTEXTS = new Set<UploadContext>([

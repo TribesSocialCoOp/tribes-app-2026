@@ -87,6 +87,8 @@ function buildSecurityHeaders() {
 
 const nextConfig: NextConfig = {
   output: 'standalone',   // Required for Docker multi-stage build (.next/standalone/)
+  // SECURITY: Suppress X-Powered-By: Next.js header to reduce framework fingerprinting.
+  poweredByHeader: false,
   images: {
     remotePatterns: buildRemotePatterns(),
   },

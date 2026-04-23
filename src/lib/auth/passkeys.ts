@@ -4,6 +4,7 @@ import {
   generateAuthenticationOptions, 
   verifyAuthenticationResponse 
 } from '@simplewebauthn/server';
+import type { RegistrationResponseJSON, AuthenticationResponseJSON } from '@simplewebauthn/server';
 import { db } from '@/db';
 import { credentials, users, userAliases } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -56,7 +57,7 @@ export async function startRegistration(userId: string) {
   return options;
 }
 
-export async function finishRegistration(userId: string, body: any) {
+export async function finishRegistration(userId: string, body: RegistrationResponseJSON) {
   const challenge = (await cookies()).get('webauthn_challenge')?.value;
   if (!challenge) throw new Error('Challenge not found');
 
@@ -112,7 +113,7 @@ export async function startAuthentication() {
   return options;
 }
 
-export async function finishAuthentication(body: any) {
+export async function finishAuthentication(body: AuthenticationResponseJSON) {
   const challenge = (await cookies()).get('webauthn_challenge')?.value;
   if (!challenge) throw new Error('Challenge not found');
 

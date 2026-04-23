@@ -28,7 +28,7 @@ export async function requestPasskeyRecovery(email: string): Promise<void> {
   const { passKeyRecoveryEmail } = await import('@/lib/services/email-templates');
 
   const token = await createVerificationToken(user.id, 'passkey_recovery');
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:9002';
+  const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? 'https://tribes.app' : 'http://localhost:9002');
   const recoveryUrl = `${baseUrl}/api/auth/recover?token=${encodeURIComponent(token)}`;
 
   const emailContent = passKeyRecoveryEmail(user.name, recoveryUrl);
@@ -49,7 +49,7 @@ export async function resendVerificationEmail(userId: string): Promise<void> {
   const { verifyEmailTemplate } = await import('@/lib/services/email-templates');
 
   const token = await createVerificationToken(user.id, 'verify_email');
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:9002';
+  const baseUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? 'https://tribes.app' : 'http://localhost:9002');
   const verifyUrl = `${baseUrl}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
 
   const emailContent = verifyEmailTemplate(user.name, verifyUrl);

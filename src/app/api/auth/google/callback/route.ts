@@ -4,6 +4,7 @@ import { users, oauthAccounts } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { createSession } from '@/lib/auth/session';
 import { cookies } from 'next/headers';
+import { loginLimiter, getClientIp } from '@/lib/auth/rate-limit';
 
 /**
  * Google OAuth 2.0 — Callback Handler
@@ -16,6 +17,16 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo';
 
 export async function GET(request: NextRequest) {
+  // SECURITY: Rate-limit the callback by IP to prevent email enumeration.
+  // An attacker repeatedly hitting this endpoint can learn whether a given
+  // email is registered by observing the different response paths.
+  const ip = getClientIp(request.headers);
+  try {
+    await loginLimiter.check(ip);
+  } catch {
+    return NextResponse.redirect(new URL('/login?error=too_many_attempts', request.url));
+  }
+
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
   const state = searchParams.get('state');

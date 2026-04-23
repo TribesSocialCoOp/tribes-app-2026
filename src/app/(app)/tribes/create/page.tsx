@@ -59,8 +59,10 @@ export default function CreateTribePage() {
     setIsLoading(true);
     
     try {
-      // Upload cover image to S3 if provided
-      let coverUrl = coverPreview;
+      // Upload cover image to S3 if provided.
+      // IMPORTANT: never pass a base64 data URI (coverPreview) to the Server Action —
+      // it will blow the 1 MB Next.js body limit. Only pass the CDN URL.
+      let coverUrl: string | null = null;
       if (values.coverImage) {
         try {
           coverUrl = await uploadFile(values.coverImage, 'tribes/covers');
@@ -71,7 +73,8 @@ export default function CreateTribePage() {
         }
       }
 
-      const newTribe = await createTribe({ ...values, coverPreview: coverUrl });
+      const { coverImage, ...actionPayload } = values;
+      const newTribe = await createTribe({ ...actionPayload, coverPreview: coverUrl });
 
 
       toast({

@@ -31,11 +31,13 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       latencyMs: Date.now() - start,
     });
-  } catch (err) {
+  } catch {
+    // SECURITY: Do not return the raw error message — it may contain internal
+    // details like DB connection strings, file paths, or driver version info.
     return NextResponse.json(
       {
         status: 'error',
-        error: (err as Error).message,
+        error: 'Database unavailable',
         timestamp: new Date().toISOString(),
       },
       { status: 503 },

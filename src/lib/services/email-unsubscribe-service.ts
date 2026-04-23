@@ -45,7 +45,7 @@ function getSecret(): string {
 }
 
 function getAppUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:9002';
+  return process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || (process.env.NODE_ENV === 'production' ? 'https://tribes.app' : 'http://localhost:9002');
 }
 
 /**
@@ -89,7 +89,12 @@ export function validateUnsubscribeToken(token: string): UnsubscribePayload | nu
     if (signature !== expectedSig) return null;
 
     const payload = JSON.parse(Buffer.from(payloadB64!, 'base64url').toString('utf-8'));
-    const { userId, category } = payload;
+    const { userId, category, ts } = payload;
+
+    // SECURITY: Enforce token expiry — tokens older than 30 days are rejected.
+    // The `ts` field was always written but never validated, allowing indefinite replay.
+    const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+    if (!ts || Date.now() - ts > MAX_AGE_MS) return null;
 
     // Validate category
     if (!userId || !CATEGORY_TO_COLUMN[category as UnsubscribeCategory]) return null;

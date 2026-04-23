@@ -16,6 +16,14 @@ export async function getEventById(eventId: string): Promise<Event | null> {
 }
 
 export async function getEventsForTribe(tribeName: string): Promise<Event[]> {
+  // SECURITY: Private tribes should not expose their events to non-members.
+  // findTribeByName respects the viewer's membership — returns null if private
+  // and the caller is not a member.
+  const userId = await getCurrentUserId();
+  const { findTribeByName } = await import('@/lib/data-access/tribes');
+  const tribe = await findTribeByName(tribeName, userId);
+  if (!tribe) return []; // Tribe not found or caller has no access
+
   const { getEventsForTribe: fn } = await import('@/lib/services/event-service');
   return fn(tribeName);
 }
