@@ -27,6 +27,17 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# These env vars are read by next.config.ts at build time to produce
+# correct CSP headers and image remotePatterns in the routes manifest.
+ARG S3_PUBLIC_ENDPOINT=https://media.tribes.app
+ARG S3_ENDPOINT=http://seaweedfs-filer:8333
+ARG NEXT_PUBLIC_WS_RELAY_URL=wss://ws.tribes.app
+ARG NEXT_PUBLIC_APP_URL=https://tribes.app
+ENV S3_PUBLIC_ENDPOINT=${S3_PUBLIC_ENDPOINT}
+ENV S3_ENDPOINT=${S3_ENDPOINT}
+ENV NEXT_PUBLIC_WS_RELAY_URL=${NEXT_PUBLIC_WS_RELAY_URL}
+ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+
 # Unset sync URL during build — sqld isn't reachable in the build stage,
 # and the TCP timeout adds ~4 minutes of dead wait otherwise.
 RUN TURSO_DATABASE_URL="" npm run build
