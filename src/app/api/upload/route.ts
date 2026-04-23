@@ -18,11 +18,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { validateCsrfToken } from '@/lib/auth/csrf';
 import { uploadLimiter, getClientIp } from '@/lib/auth/rate-limit';
-import { uploadImage, recordMediaFile, type UploadContext } from '@/lib/services/s3-service';
+import { uploadImage, recordMediaFile, getBucketForContext, getUserStorageUsage, type UploadContext } from '@/lib/services/s3-service';
+import { getQuotaForRole, formatBytes } from '@/lib/storage-quotas';
 import { s3Logger } from '@/lib/logger';
+import { db } from '@/db';
+import { users } from '@/db/schema';
+import { eq } from 'drizzle-orm';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml'];
+const ALLOWED_TYPES = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+  'application/octet-stream', // Encrypted files
+];
 
 const VALID_CONTEXTS = new Set<UploadContext>([
   'public-tribe-post',
@@ -50,6 +57,17 @@ export async function POST(request: NextRequest) {
     const file = formData.get('file') as File | null;
     const folder = (formData.get('folder') as string) || 'uploads';
     const rawContext = (formData.get('context') as string) || 'public-tribe-post';
+    const rawEncryptionMeta = formData.get('encryptionMeta') as string | null;
+
+    // Parse encryption metadata (sent by client for E2E uploads)
+    let encryptionMeta: object | undefined;
+    if (rawEncryptionMeta) {
+      try {
+        encryptionMeta = JSON.parse(rawEncryptionMeta);
+      } catch {
+        return NextResponse.json({ error: 'Invalid encryption metadata' }, { status: 400 });
+      }
+    }
 
     // Validate and coerce context — default to most-restrictive (scanned) if unknown
     const context: UploadContext = VALID_CONTEXTS.has(rawContext as UploadContext)
@@ -78,6 +96,27 @@ export async function POST(request: NextRequest) {
 
     const clientIp = getClientIp(request.headers);
 
+    // ── Storage quota enforcement ──────────────────────────────
+    const bucket = getBucketForContext(context);
+    const [userRow] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+    const userRole = userRow?.role ?? 'Human_Free';
+    const quota = getQuotaForRole(userRole);
+    const limit = bucket === 'public' ? quota.publicBytes : quota.privateBytes;
+
+    if (limit !== null) {
+      const usage = await getUserStorageUsage(userId);
+      const currentUsage = bucket === 'public' ? usage.public : usage.private;
+      if (currentUsage + file.size > limit) {
+        return NextResponse.json(
+          {
+            error: `Storage quota exceeded. Using ${formatBytes(currentUsage)} of ${formatBytes(limit)} ${bucket} storage. ` +
+              `This file (${formatBytes(file.size)}) would exceed your limit. Upgrade your plan for more storage.`,
+          },
+          { status: 413 }
+        );
+      }
+    }
+
     try {
       // Upload to S3 (routes to public or private bucket based on context)
       const result = await uploadImage(file, folder, context, userId);
@@ -91,6 +130,8 @@ export async function POST(request: NextRequest) {
         fileName: file.name || 'upload.bin',
         contentType: file.type || 'application/octet-stream',
         sizeBytes: result.sizeBytes,
+        encrypted: !!encryptionMeta,
+        encryptionMeta,
         publicUrl: result.url,
       });
 

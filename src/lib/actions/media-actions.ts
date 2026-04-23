@@ -48,3 +48,33 @@ export async function deleteMediaFile(fileId: string): Promise<boolean> {
   const { softDeleteMediaFile } = await import('@/lib/services/s3-service');
   return softDeleteMediaFile(fileId, userId);
 }
+
+// ======== STORAGE INFO (Usage + Quota) ========
+
+/**
+ * Get current user's storage usage AND quota in one call.
+ * Suitable for displaying a storage meter in settings.
+ */
+export async function getMyStorageInfo(): Promise<{
+  usage: { public: number; private: number; total: number };
+  quota: { publicBytes: number | null; privateBytes: number | null };
+}> {
+  const userId = await requireAuth();
+
+  const [{ getUserStorageUsage }, { db }, { users }, { eq }, { getQuotaForRole }] = await Promise.all([
+    import('@/lib/services/s3-service'),
+    import('@/db'),
+    import('@/db/schema'),
+    import('drizzle-orm'),
+    import('@/lib/storage-quotas'),
+  ]);
+
+  const [usage, [userRow]] = await Promise.all([
+    getUserStorageUsage(userId),
+    db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1),
+  ]);
+
+  const quota = getQuotaForRole(userRow?.role ?? 'Human_Free');
+
+  return { usage, quota };
+}
