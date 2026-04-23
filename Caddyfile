@@ -37,7 +37,7 @@
     # SeaweedFS Filer — public media CDN
     # S3-uploaded objects are stored under /buckets/<bucket>/<key> in the Filer,
     # but public URLs use /<bucket>/<key>. Rewrite to add the /buckets prefix.
-    uri * /buckets{uri}
+    rewrite * /buckets{path}
 
     reverse_proxy seaweedfs-filer:8888
 
