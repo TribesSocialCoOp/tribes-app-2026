@@ -44,6 +44,7 @@ function getSmtpConfig() {
   return {
     host: process.env.SMTP_HOST ?? '',
     port,
+    name: 'tribes.app',
     // Port 465 = implicit TLS (connect encrypted from the start)
     // Port 587 = STARTTLS (upgrade plaintext → TLS after EHLO)
     secure: isImplicitTls,
