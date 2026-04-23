@@ -39,6 +39,7 @@ const DEV_MAILBOX_PATH = path.join(process.cwd(), 'src', 'db', 'dev-mailbox.json
 function getSmtpConfig() {
   const port = parseInt(process.env.SMTP_PORT ?? '587', 10);
   const isImplicitTls = port === 465;
+  const pass = process.env.SMTP_PASS ?? '';
 
   return {
     host: process.env.SMTP_HOST ?? '',
@@ -46,10 +47,9 @@ function getSmtpConfig() {
     // Port 465 = implicit TLS (connect encrypted from the start)
     // Port 587 = STARTTLS (upgrade plaintext → TLS after EHLO)
     secure: isImplicitTls,
-    auth: {
-      user: process.env.SMTP_USER ?? '',
-      pass: process.env.SMTP_PASS ?? '',
-    },
+    // Only include auth if credentials are provided.
+    // Google Workspace SMTP relay supports IP-only auth (no password needed).
+    ...(pass ? { auth: { user: process.env.SMTP_USER ?? '', pass } } : {}),
     // Enforce TLS on port 587 — refuse to send if STARTTLS fails
     requireTLS: !isImplicitTls,
     tls: {
@@ -97,7 +97,7 @@ export async function sendEmail(message: EmailMessage, userId?: string): Promise
 
   // PROD: Use Nodemailer
   const config = getSmtpConfig();
-  if (!config.host || !config.auth.user) {
+  if (!config.host) {
     console.warn('[email] SMTP not configured — skipping email to:', message.to);
     return;
   }
