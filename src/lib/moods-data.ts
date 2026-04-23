@@ -1,5 +1,5 @@
 
-import { Smile, Target, Sparkles as ShowcaseIcon, Map, ShoppingCart, BookOpen, Gamepad2, Megaphone, Users as ConnectIcon, Signal, Landmark } from "lucide-react";
+import { Smile, Target, Sparkles as ShowcaseIcon, Map, ShoppingCart, BookOpen, Gamepad2, Megaphone, Users as ConnectIcon, Signal, Landmark, Notebook, HeartPulse, Wind, Coffee } from "lucide-react";
 
 export const moodsData = [
   { name: "Chill", slug: "chill", description: "Relax, unwind, and find your calm.", emoji: "😌", bgClass: "bg-blue-100", textClass: "text-blue-700", img: "/moods/chill.svg", dataAiHint: "relax meditation", icon: Smile },
@@ -13,4 +13,8 @@ export const moodsData = [
   { name: "Pulse", slug: "pulse", description: "Tune into real-time updates, news, and important announcements.", emoji: "📡", bgClass: "bg-slate-100", textClass: "text-slate-700", img: "/moods/pulse.svg", dataAiHint: "news updates signal", icon: Signal },
   { name: "Discourse", slug: "discourse", description: "Engage in deep conversations, structured debates, and thoughtful analysis.", emoji: "🏛️", bgClass: "bg-indigo-100", textClass: "text-indigo-700", img: "/moods/discourse.svg", dataAiHint: "debate discussion forum", icon: Landmark },
   { name: "Advocate", slug: "advocate", description: "Organize for a cause, find volunteer opportunities, and drive community action.", emoji: "✊", bgClass: "bg-amber-100", textClass: "text-amber-700", img: "/moods/advocate.svg", dataAiHint: "activism social cause", icon: Megaphone },
+  { name: "Reflect", slug: "reflect", description: "Journaling, quiet contemplation, and looking inward.", emoji: "🪞", bgClass: "bg-slate-200", textClass: "text-slate-800", img: "/moods/reflect.svg", dataAiHint: "journal meditation self-reflection", icon: Notebook },
+  { name: "Heal", slug: "heal", description: "Mental health, recovery, emotional wellness, and support.", emoji: "🌱", bgClass: "bg-emerald-100", textClass: "text-emerald-700", img: "/moods/heal.svg", dataAiHint: "recovery support wellness", icon: HeartPulse },
+  { name: "Vent", slug: "vent", description: "Get things off your chest and find empathy without judgment.", emoji: "💨", bgClass: "bg-rose-100", textClass: "text-rose-700", img: "/moods/vent.svg", dataAiHint: "rant stress release", icon: Wind },
+  { name: "Kin", slug: "kin", description: "Share life's little moments with your inner circle and chosen family.", emoji: "☕", bgClass: "bg-stone-100", textClass: "text-stone-700", img: "/moods/kin.svg", dataAiHint: "family close friends intimate cozy", icon: Coffee },
 ];
