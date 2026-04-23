@@ -1,20 +1,20 @@
 /**
- * @fileoverview Contribution tracking service.
- * Phase 3: Earn-path membership — track community contributions
- * and auto-upgrade users who reach the membership threshold.
- *
- * Point values:
- *   post:          5 pts   (creating content)
- *   moderation:   10 pts   (reporting harmful content)
- *   referral:     25 pts   (inviting a friend who signs up)
- *   event_hosted: 15 pts   (hosting a community event)
- *   bug_report:   10 pts   (reporting a bug)
- *
- * Earn threshold: 100 points → auto-upgrade to Individual Co-Op
- *
- * IMPORTANT: All queries use the shared `db` from @/db to respect
- * the local-first sync architecture (local SQLite → sqld → public).
- */
+* @fileoverview Contribution tracking service.
+* Phase 3: Earn-path membership — track community contributions
+* and auto-upgrade users who reach the membership threshold.
+*
+* Point values:
+*   post:          5 pts   (creating content)
+*   moderation:   10 pts   (reporting harmful content)
+*   referral:     25 pts   (inviting a friend who signs up)
+*   event_hosted: 15 pts   (hosting a community event)
+*   bug_report:   10 pts   (reporting a bug)
+*
+* Earn threshold: 100 points → auto-upgrade to Individual Co-Op
+*
+* IMPORTANT: All queries use the shared `db` from @/db to respect
+* the local-first sync architecture (local SQLite → sqld → public).
+*/
 
 import { db } from '@/db';
 import { contributions, subscriptions, plans, users } from '@/db/schema';
