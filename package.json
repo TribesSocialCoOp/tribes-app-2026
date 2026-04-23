@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "audit": "npm audit --audit-level=high",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:push": "drizzle-kit push --force",

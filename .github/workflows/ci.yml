@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+  # Run the supply chain audit on a daily schedule even without code changes
+  # so newly disclosed CVEs are caught quickly.
+  schedule:
+    - cron: '0 9 * * *'   # 09:00 UTC every day
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # 1. Supply Chain Security Audit
+  #    Fails the build on HIGH or CRITICAL severity vulnerabilities.
+  #    Moderate issues are reported but do not block (many are in
+  #    dev-only tooling that never ships to production).
+  # ──────────────────────────────────────────────────────────────
+  audit:
+    name: Supply Chain Audit (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run security audit (high + critical only)
+        # Exit code 1 = vulnerabilities at or above --audit-level found.
+        # We gate on HIGH so moderate findings (mostly dev tooling) don't
+        # block shipping while still catching exploitable production CVEs.
+        run: npm audit --audit-level=high
+
+      - name: Run full audit report (informational)
+        # Always run the full report so moderates are visible in the log,
+        # even when the build is green.
+        if: always()
+        run: npm audit --json | npx --yes better-npm-audit --audit-level=moderate || true
+
+  # ──────────────────────────────────────────────────────────────
+  # 2. Type Checking
+  #    Catches TypeScript errors that could mask security issues
+  #    (e.g., `any` types slipping back into auth surfaces).
+  # ──────────────────────────────────────────────────────────────
+  typecheck:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run TypeScript compiler
+        run: npm run typecheck
+
+  # ──────────────────────────────────────────────────────────────
+  # 3. Lint
+  #    Catches obvious code quality issues quickly.
+  # ──────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run ESLint
+        run: npm run lint
+
+  # ──────────────────────────────────────────────────────────────
+  # 4. Build Verification
+  #    Ensures a production Next.js build succeeds before any
+  #    changes reach the server.
+  # ──────────────────────────────────────────────────────────────
+  build:
+    name: Production Build
+    runs-on: ubuntu-latest
+    needs: [audit, typecheck, lint]
+    env:
+      # Stub required env vars so next build succeeds in CI without secrets.
+      # These are build-time only — no runtime secrets are needed here.
+      TURSO_DATABASE_URL: ''
+      SESSION_SECRET: 'ci-only-not-a-real-secret-32ch!!'
+      NEXT_PUBLIC_APP_URL: 'https://tribes.app'
+      NEXT_PUBLIC_INVITE_ONLY: 'false'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+
+  # ──────────────────────────────────────────────────────────────
+  # 5. Scheduled Audit Notification
+  #    On the daily schedule run, if the audit fails (new CVE),
+  #    GitHub will email the repo owner automatically via the
+  #    failed workflow notification. No extra setup needed.
+  # ──────────────────────────────────────────────────────────────
