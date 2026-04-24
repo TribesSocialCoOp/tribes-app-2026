@@ -5,7 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, HeartHandshake, Loader2, ShieldCheck, History, X } from "lucide-react";
+import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, HeartHandshake, Loader2, ShieldCheck, History, X, Globe, Lock } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -269,9 +269,26 @@ export default function TribesPage() {
                 <Link href={`/tribes/${tribe.id}`} passHref className="contents">
                     <div className="relative h-40 w-full">
                     <Image src={tribe.cover} alt={tribe.name} fill style={{ objectFit: 'cover', objectPosition: tribe.coverPosition || 'center' }} data-ai-hint={tribe.dataAiHint} />
-                    <Badge variant={tribe.isPublic ? "secondary" : "outline"} className={cn("absolute top-2 right-2", !tribe.isPublic && "border-pink-500 text-pink-500 bg-pink-500/10")}>
-                        {tribe.isPublic ? "Public" : "Private"}
-                    </Badge>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className={cn(
+                            "absolute top-2 right-2 p-1.5 rounded-full backdrop-blur-sm shadow-md",
+                            tribe.isPublic
+                              ? "bg-emerald-500/80 text-white"
+                              : "bg-black/60 text-white"
+                          )}>
+                            {tribe.isPublic
+                              ? <Globe className="h-3.5 w-3.5" />
+                              : <Lock className="h-3.5 w-3.5" />
+                            }
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{tribe.isPublic ? "Public — anyone can discover" : "Private — invite only"}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     </div>
                     <CardHeader className="pb-2">
                     <CardTitle className="text-xl font-semibold truncate tracking-normal">{tribe.name}</CardTitle>
