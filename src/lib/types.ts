@@ -209,6 +209,7 @@ export interface Tribe {
   members: number;
   isPublic: boolean;
   cover: string;
+  coverPosition?: string;        // CSS object-position, e.g. '50% 30%'
   dataAiHint: string;
   moods?: string[];
   homepageUrl?: string;
@@ -217,6 +218,7 @@ export interface Tribe {
   minimumAccountAgeDays?: number;
   brandColor?: string;
   brandLogo?: string;
+  createdBy?: string;
 }
 
 // Story related types

@@ -64,7 +64,7 @@ export function TribeHeroBanner() {
           src={tribe.cover}
           alt={`${tribe.name} cover image`}
           fill
-          style={{ objectFit: "cover" }}
+          style={{ objectFit: "cover", objectPosition: tribe.coverPosition || "center" }}
           data-ai-hint={tribe.dataAiHint || "community group"}
           priority
         />

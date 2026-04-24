@@ -197,6 +197,7 @@ export const tribes = sqliteTable('tribes', {
   memberCount: integer('member_count').default(0),
   isPublic: integer('is_public', { mode: 'boolean' }).default(true),
   cover: text('cover'),
+  coverPosition: text('cover_position'),           // CSS object-position, e.g. '50% 30%'
   dataAiHint: text('data_ai_hint'),
   homepageUrl: text('homepage_url'),
   joinMechanism: text('join_mechanism').default('instant'),

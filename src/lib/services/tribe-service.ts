@@ -88,6 +88,8 @@ const tribeSettingsFormSchema = z.object({
   minimumAccountAgeDays: z.number().int().positive().optional(),
   brandColor: z.string().optional(),
   brandLogo: z.string().optional(),
+  cover: z.string().optional(),
+  coverPosition: z.string().optional(),
 });
 type UpdateTribeSettingsPayload = z.infer<typeof tribeSettingsFormSchema>;
 
@@ -106,6 +108,8 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
     minimumAccountAgeDays: payload.minimumAccountAgeDays ?? null,
     brandColor: payload.brandColor ?? existing.brandColor,
     brandLogo: payload.brandLogo ?? existing.brandLogo,
+    cover: payload.cover ?? existing.cover,
+    coverPosition: payload.coverPosition ?? existing.coverPosition,
   }).where(eq(tribes.id, tribeId));
 
   // Update mood tags: delete old, insert new

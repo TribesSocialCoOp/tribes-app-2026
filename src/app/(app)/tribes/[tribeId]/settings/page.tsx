@@ -3,7 +3,8 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -12,11 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from '@/components/ui/input';
+import { uploadFile } from '@/lib/upload';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag, Link2, ShieldAlert, Copy, Check, Info, ShieldCheck as ReputationIcon, History, Palette, Trash2 } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag, Link2, ShieldAlert, Copy, Check, Info, ShieldCheck as ReputationIcon, History, Palette, Trash2, Image as ImageIcon, Move, Upload } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
@@ -66,6 +68,15 @@ export default function TribeSettingsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
+  // Cover image state
+  const [coverUrl, setCoverUrl] = useState<string>('');
+  const [coverPosition, setCoverPosition] = useState<string>('center');
+  const [isUploading, setIsUploading] = useState(false);
+  const [isRepositioning, setIsRepositioning] = useState(false);
+  const repositionRef = useRef<HTMLDivElement>(null);
+  const dragStartY = useRef(0);
+  const startPosY = useRef(50);
+
   useEffect(() => {
     // Determine access via server-side tribe authorization (not global role)
     const resolveAccess = async () => {
@@ -100,6 +111,8 @@ export default function TribeSettingsPage() {
         const currentTribeData = await getTribeById(tribeId);
         if (currentTribeData) {
           setTribe(currentTribeData);
+          setCoverUrl(currentTribeData.cover || '');
+          setCoverPosition(currentTribeData.coverPosition || 'center');
           form.reset({
             name: currentTribeData.name,
             description: currentTribeData.description,
@@ -138,6 +151,8 @@ export default function TribeSettingsPage() {
         await updateTribeSettings(tribeId, {
             ...payload,
             minimumReputation: payload.minimumReputation as Exclude<typeof reputationLevels[number], 'Onboarding'> | undefined,
+            cover: coverUrl || undefined,
+            coverPosition: coverPosition || undefined,
         });
         setTribe(prev => prev ? { ...prev, ...payload } : null);
         toast({
@@ -221,6 +236,163 @@ export default function TribeSettingsPage() {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
             <CardContent className="space-y-6">
+              {/* Cover Image Section */}
+              <div className="space-y-3">
+                <label className="text-md font-medium leading-none">Cover Image</label>
+                <div
+                  ref={repositionRef}
+                  className="relative h-40 md:h-52 w-full rounded-lg overflow-hidden border bg-muted group cursor-default"
+                >
+                  {coverUrl ? (
+                    <>
+                      <Image
+                        src={coverUrl}
+                        alt="Tribe cover"
+                        fill
+                        style={{ objectFit: 'cover', objectPosition: coverPosition }}
+                        draggable={false}
+                        className="select-none"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
+                      <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="bg-white/90 hover:bg-white text-black shadow-md"
+                          onClick={() => setIsRepositioning(!isRepositioning)}
+                        >
+                          <Move className="mr-1.5 h-3.5 w-3.5" />
+                          {isRepositioning ? 'Done' : 'Reposition'}
+                        </Button>
+                        <label className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-white/90 hover:bg-white text-black shadow-md cursor-pointer">
+                          <Upload className="h-3.5 w-3.5" />
+                          Replace
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="sr-only"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 5 * 1024 * 1024) {
+                                toast({ variant: 'destructive', title: 'File too large', description: 'Max file size is 5MB.' });
+                                return;
+                              }
+                              setIsUploading(true);
+                              try {
+                                const url = await uploadFile(file, 'tribes/covers');
+                                setCoverUrl(url);
+                                setCoverPosition('center');
+                                toast({ title: 'Image uploaded', description: 'Remember to save settings.' });
+                              } catch (err) {
+                                toast({ variant: 'destructive', title: 'Upload failed', description: (err as Error).message });
+                              } finally {
+                                setIsUploading(false);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      {isRepositioning && (
+                        <div
+                          className="absolute inset-0 cursor-grab active:cursor-grabbing"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            dragStartY.current = e.clientY;
+                            // Parse current Y% from coverPosition
+                            const match = coverPosition.match(/(\d+)%\s*$/);
+                            startPosY.current = match ? parseInt(match[1]) : 50;
+                            const onMove = (ev: MouseEvent) => {
+                              const container = repositionRef.current;
+                              if (!container) return;
+                              const deltaY = ev.clientY - dragStartY.current;
+                              const containerH = container.clientHeight;
+                              const pctDelta = (deltaY / containerH) * 100;
+                              const newY = Math.max(0, Math.min(100, startPosY.current - pctDelta));
+                              setCoverPosition(`center ${Math.round(newY)}%`);
+                            };
+                            const onUp = () => {
+                              window.removeEventListener('mousemove', onMove);
+                              window.removeEventListener('mouseup', onUp);
+                            };
+                            window.addEventListener('mousemove', onMove);
+                            window.addEventListener('mouseup', onUp);
+                          }}
+                          onTouchStart={(e) => {
+                            const touch = e.touches[0];
+                            dragStartY.current = touch.clientY;
+                            const match = coverPosition.match(/(\d+)%\s*$/);
+                            startPosY.current = match ? parseInt(match[1]) : 50;
+                            const onMove = (ev: TouchEvent) => {
+                              const container = repositionRef.current;
+                              if (!container) return;
+                              const deltaY = ev.touches[0].clientY - dragStartY.current;
+                              const containerH = container.clientHeight;
+                              const pctDelta = (deltaY / containerH) * 100;
+                              const newY = Math.max(0, Math.min(100, startPosY.current - pctDelta));
+                              setCoverPosition(`center ${Math.round(newY)}%`);
+                            };
+                            const onUp = () => {
+                              window.removeEventListener('touchmove', onMove);
+                              window.removeEventListener('touchend', onUp);
+                            };
+                            window.addEventListener('touchmove', onMove, { passive: true });
+                            window.addEventListener('touchend', onUp);
+                          }}
+                        >
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="bg-black/60 text-white text-sm px-4 py-2 rounded-full font-medium backdrop-blur-sm">
+                              <Move className="inline h-4 w-4 mr-1.5 -mt-0.5" />
+                              Drag to reposition
+                            </div>
+                          </div>
+                          <div className="absolute inset-x-0 top-0 h-px bg-white/40" />
+                          <div className="absolute inset-x-0 bottom-0 h-px bg-white/40" />
+                        </div>
+                      )}
+                      {isUploading && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                          <div className="text-white text-sm font-medium">Uploading...</div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center h-full cursor-pointer hover:bg-muted/80 transition-colors">
+                      <ImageIcon className="h-10 w-10 text-muted-foreground mb-2" />
+                      <span className="text-sm text-muted-foreground">Click to upload a cover image</span>
+                      <span className="text-xs text-muted-foreground mt-1">Max 5MB</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="sr-only"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          if (file.size > 5 * 1024 * 1024) {
+                            toast({ variant: 'destructive', title: 'File too large', description: 'Max file size is 5MB.' });
+                            return;
+                          }
+                          setIsUploading(true);
+                          try {
+                            const url = await uploadFile(file, 'tribes/covers');
+                            setCoverUrl(url);
+                            toast({ title: 'Image uploaded', description: 'Remember to save settings.' });
+                          } catch (err) {
+                            toast({ variant: 'destructive', title: 'Upload failed', description: (err as Error).message });
+                          } finally {
+                            setIsUploading(false);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Hover to replace or reposition your cover image. Changes take effect when you save.</p>
+              </div>
+
+              <Separator />
+
               <FormField
                 control={form.control}
                 name="name"

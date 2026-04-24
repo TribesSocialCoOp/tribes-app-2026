@@ -19,6 +19,7 @@ function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
     members: row.memberCount ?? 0,
     isPublic: row.isPublic ?? true,
     cover: row.cover ?? '',
+    coverPosition: row.coverPosition ?? undefined,
     dataAiHint: row.dataAiHint ?? '',
     moods,
     homepageUrl: row.homepageUrl ?? undefined,
@@ -27,6 +28,7 @@ function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
     minimumAccountAgeDays: row.minimumAccountAgeDays ?? undefined,
     brandColor: row.brandColor ?? undefined,
     brandLogo: row.brandLogo ?? undefined,
+    createdBy: row.createdBy ?? undefined,
   };
 }
 

@@ -57,6 +57,13 @@
       "when": 1776961918889,
       "tag": "0007_spicy_rhino",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1777071021017,
+      "tag": "0008_little_prism",
+      "breakpoints": true
     }
   ]
 }

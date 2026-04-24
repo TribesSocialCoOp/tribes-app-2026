@@ -268,7 +268,7 @@ export default function TribesPage() {
             <Card key={tribe.id} className="shadow-lg hover:shadow-xl transition-shadow flex flex-col overflow-hidden">
                 <Link href={`/tribes/${tribe.id}`} passHref className="contents">
                     <div className="relative h-40 w-full">
-                    <Image src={tribe.cover} alt={tribe.name} fill style={{ objectFit: 'cover' }} data-ai-hint={tribe.dataAiHint} />
+                    <Image src={tribe.cover} alt={tribe.name} fill style={{ objectFit: 'cover', objectPosition: tribe.coverPosition || 'center' }} data-ai-hint={tribe.dataAiHint} />
                     <Badge variant={tribe.isPublic ? "secondary" : "outline"} className={cn("absolute top-2 right-2", !tribe.isPublic && "border-pink-500 text-pink-500 bg-pink-500/10")}>
                         {tribe.isPublic ? "Public" : "Private"}
                     </Badge>
