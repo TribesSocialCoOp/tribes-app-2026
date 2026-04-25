@@ -4,6 +4,7 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 import { moodsData } from '@/lib/moods-data';
 import { X } from 'lucide-react';
+import { PillCarousel } from './pill-carousel';
 
 const STORAGE_KEY = 'tribes_mood_filter';
 
@@ -28,7 +29,7 @@ export function MoodFilterBar({ selectedSlugs, onChange, className }: MoodFilter
   };
 
   return (
-    <div className={cn("flex items-center gap-1 overflow-x-auto scrollbar-none pb-1", className)}>
+    <PillCarousel className={className}>
       {selectedSlugs.length > 0 && (
         <button
           onClick={handleClearAll}
@@ -57,7 +58,7 @@ export function MoodFilterBar({ selectedSlugs, onChange, className }: MoodFilter
           </button>
         );
       })}
-    </div>
+    </PillCarousel>
   );
 }
 

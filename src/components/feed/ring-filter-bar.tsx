@@ -4,6 +4,7 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 import type { Ring } from '@/lib/types';
 import { BookLock, Heart, Users, Tent, Radio, LayoutGrid } from 'lucide-react';
+import { PillCarousel } from './pill-carousel';
 
 type FilterValue = Ring | 'all' | 'streams';
 
@@ -31,7 +32,7 @@ export function RingFilterBar({ value, onChange, className }: RingFilterBarProps
   };
 
   return (
-    <div className={cn("flex gap-1 overflow-x-auto scrollbar-none pb-1", className)}>
+    <PillCarousel className={className}>
       {RING_FILTERS.map(filter => {
         const isActive = value === filter.value;
         return (
@@ -51,7 +52,7 @@ export function RingFilterBar({ value, onChange, className }: RingFilterBarProps
           </button>
         );
       })}
-    </div>
+    </PillCarousel>
   );
 }
 
