@@ -46,7 +46,7 @@ export const BondTableRow: React.FC<BondTableRowProps> = ({ bond }) => {
           <div className="flex-grow min-w-0">
             <span className="block">{bond.targetName}</span>
             <div className={cn("sm:hidden mt-1", hasAliasInfo && "mb-2")}>
-              <Badge className={cn(getBondTypeBadgeClasses(bond), "whitespace-nowrap")}>
+              <Badge variant="outline" className={cn(getBondTypeBadgeClasses(bond), "whitespace-nowrap")}>
                 {getBondTypeDisplay(bond)}
               </Badge>
             </div>
@@ -81,7 +81,7 @@ export const BondTableRow: React.FC<BondTableRowProps> = ({ bond }) => {
         </div>
       </TableCell>
       <TableCell className="hidden sm:table-cell">
-        <Badge className={cn(getBondTypeBadgeClasses(bond), "whitespace-nowrap")}>
+        <Badge variant="outline" className={cn(getBondTypeBadgeClasses(bond), "whitespace-nowrap")}>
           {getBondTypeDisplay(bond)}
         </Badge>
       </TableCell>
