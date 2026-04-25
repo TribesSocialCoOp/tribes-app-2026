@@ -1,6 +1,6 @@
 
-import Image from 'next/image';
-import logoImageFromFile from '@/app/(app)/images/Tribes_Logo_Threaded.png';
+import { Tent } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface AppLogoProps {
   className?: string; // For additional styling like margins
@@ -11,18 +11,15 @@ interface AppLogoProps {
 
 export function AppLogo({
   className,
-  width = 32, // Default width if not specified
-  height = 32, // Default height if not specified
-  alt = "App Logo"
+  width = 32,
+  height = 32,
 }: AppLogoProps) {
   return (
-    <Image
-      src={logoImageFromFile}
-      alt={alt}
+    <Tent
       width={width}
       height={height}
-      className={className}
-      priority // Often good for LCP elements like logos
+      className={cn("text-primary shrink-0", className)}
+      strokeWidth={2}
     />
   );
 }
