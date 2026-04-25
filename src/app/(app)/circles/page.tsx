@@ -9,20 +9,24 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import type { Bond, Tribe } from '@/lib/types';
+import type { Bond } from '@/lib/types';
 import { getBonds } from '@/lib/actions/bond-actions';
 import { getMyTribesList } from '@/lib/actions/content-actions';
 import { useUser } from '@/hooks/use-user';
+import { TribeCard, type TribeCardData } from '@/components/cards/tribe-card';
+import { ViewToggle, getPersistedViewMode, type ViewMode } from '@/components/ui/view-toggle';
 
 export default function CirclesPage() {
   const [activeTab, setActiveTab] = useState<'bonds' | 'tribes'>('bonds');
   const [bonds, setBonds] = useState<Bond[]>([]);
-  const [tribes, setTribes] = useState<{ id: string; name: string; slug: string | null }[]>([]);
+  const [tribes, setTribes] = useState<TribeCardData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const { role } = useUser();
 
   useEffect(() => {
+    setViewMode(getPersistedViewMode());
     async function fetchData() {
       try {
         const [bondsResult, tribesResult] = await Promise.all([
@@ -30,7 +34,7 @@ export default function CirclesPage() {
           getMyTribesList(),
         ]);
         setBonds(bondsResult);
-        setTribes(tribesResult);
+        setTribes(tribesResult.map(t => ({ id: t.id, name: t.name, slug: t.slug })));
       } catch (err) {
         console.error('[CirclesPage] Failed to fetch data:', err);
       } finally {
@@ -60,11 +64,14 @@ export default function CirclesPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Circles</h1>
-        <p className="text-md md:text-lg text-muted-foreground mt-1">
-          Your bonds and tribes — all your people in one place.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Circles</h1>
+          <p className="text-md md:text-lg text-muted-foreground mt-1">
+            Your bonds and tribes — all your people in one place.
+          </p>
+        </div>
+        <ViewToggle value={viewMode} onChange={setViewMode} className="mt-2" />
       </header>
 
       {/* Search */}
@@ -115,9 +122,13 @@ export default function CirclesPage() {
               <h2 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
                 <Heart className="h-5 w-5 text-pink-500" /> Inner Circle
               </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className={cn(
+                viewMode === 'grid'
+                  ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+                  : "space-y-2"
+              )}>
                 {innerCircleBonds.map(bond => (
-                  <BondCard key={bond.id} bond={bond} />
+                  <BondCard key={bond.id} bond={bond} view={viewMode} />
                 ))}
               </div>
             </section>
@@ -129,9 +140,13 @@ export default function CirclesPage() {
               <Users className="h-5 w-5 text-primary" /> All Bonds
             </h2>
             {otherBonds.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className={cn(
+                viewMode === 'grid'
+                  ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+                  : "space-y-2"
+              )}>
                 {otherBonds.map(bond => (
-                  <BondCard key={bond.id} bond={bond} />
+                  <BondCard key={bond.id} bond={bond} view={viewMode} />
                 ))}
               </div>
             ) : (
@@ -159,23 +174,13 @@ export default function CirclesPage() {
       {activeTab === 'tribes' && (
         <div className="space-y-4">
           {filteredTribes.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className={cn(
+              viewMode === 'grid'
+                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+                : "space-y-2"
+            )}>
               {filteredTribes.map(tribe => (
-                <Link key={tribe.id} href={tribe.slug ? `/t/${tribe.slug}` : `/tribes/${tribe.id}`} className="block group">
-                  <Card className="hover:shadow-md transition-all duration-200 hover:border-primary/30">
-                    <CardHeader className="pb-2 p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                          <Tent className="h-5 w-5 text-primary" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <CardTitle className="text-base truncate">{tribe.name}</CardTitle>
-                        </div>
-                        <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                    </CardHeader>
-                  </Card>
-                </Link>
+                <TribeCard key={tribe.id} tribe={tribe} view={viewMode} />
               ))}
             </div>
           ) : (
@@ -202,7 +207,7 @@ export default function CirclesPage() {
   );
 }
 
-function BondCard({ bond }: { bond: Bond }) {
+function BondCard({ bond, view }: { bond: Bond; view: ViewMode }) {
   const initials = bond.targetName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   const bondTypeColors: Record<string, string> = {
     family: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
@@ -214,7 +219,7 @@ function BondCard({ bond }: { bond: Bond }) {
   return (
     <Link href={bond.targetId ? `/profile/${bond.targetId}` : '/bonds'} className="block group">
       <Card className="hover:shadow-md transition-all duration-200 hover:border-primary/30">
-        <CardContent className="p-4">
+        <CardContent className="p-3 sm:p-4">
           <div className="flex items-center gap-3">
             <Avatar className="h-10 w-10">
               <AvatarFallback className="text-xs">{initials}</AvatarFallback>

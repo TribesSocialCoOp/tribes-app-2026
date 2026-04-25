@@ -13,6 +13,8 @@ import type { Tribe, Event } from '@/lib/types';
 import { getTribes } from '@/lib/actions/tribe-actions';
 import { getEvents } from '@/lib/actions/event-actions';
 import { moodsData } from '@/lib/moods-data';
+import { TribeCard, type TribeCardData } from '@/components/cards/tribe-card';
+import { ViewToggle, getPersistedViewMode, type ViewMode } from '@/components/ui/view-toggle';
 
 type DiscoverTab = 'tribes' | 'moods' | 'events' | 'more';
 
@@ -22,8 +24,10 @@ export default function DiscoverPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   useEffect(() => {
+    setViewMode(getPersistedViewMode());
     async function fetchData() {
       try {
         const [tribesResult, eventsResult] = await Promise.all([
@@ -63,11 +67,14 @@ export default function DiscoverPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Discover</h1>
-        <p className="text-md md:text-lg text-muted-foreground mt-1">
-          Explore tribes, mood streams, events, and more.
-        </p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Discover</h1>
+          <p className="text-md md:text-lg text-muted-foreground mt-1">
+            Explore tribes, mood streams, events, and more.
+          </p>
+        </div>
+        <ViewToggle value={viewMode} onChange={setViewMode} className="mt-2" />
       </header>
 
       {/* Search */}
@@ -102,40 +109,25 @@ export default function DiscoverPage() {
 
       {/* Tribes Discovery */}
       {activeTab === 'tribes' && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className={cn(
+          viewMode === 'grid'
+            ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+            : "space-y-2"
+        )}>
           {filteredTribes.length > 0 ? filteredTribes.map(tribe => (
-            <Link key={tribe.id} href={tribe.slug ? `/t/${tribe.slug}` : `/tribes/${tribe.id}`} className="block group">
-              <Card className="overflow-hidden hover:shadow-lg transition-all duration-200 hover:border-primary/30 h-full">
-                {tribe.cover && (
-                  <div className="relative h-28 w-full overflow-hidden">
-                    <Image
-                      src={tribe.cover}
-                      alt={tribe.name}
-                      fill
-                      className="object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-                    <div className="absolute bottom-2 left-3">
-                      <Badge variant="secondary" className="text-[10px] bg-black/50 text-white border-none">
-                        {tribe.isPublic ? <><Globe className="h-3 w-3 mr-1" /> Public</> : <><Lock className="h-3 w-3 mr-1" /> Private</>}
-                      </Badge>
-                    </div>
-                  </div>
-                )}
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    {tribe.name}
-                    <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity ml-auto" />
-                  </CardTitle>
-                  {tribe.description && (
-                    <CardDescription className="line-clamp-2 text-xs">{tribe.description}</CardDescription>
-                  )}
-                </CardHeader>
-                <CardFooter className="pt-0 text-xs text-muted-foreground">
-                  <Users className="h-3.5 w-3.5 mr-1" /> {tribe.members ?? 0} members
-                </CardFooter>
-              </Card>
-            </Link>
+            <TribeCard
+              key={tribe.id}
+              tribe={{
+                id: tribe.id,
+                name: tribe.name,
+                slug: tribe.slug,
+                description: tribe.description,
+                cover: tribe.cover,
+                isPublic: tribe.isPublic,
+                members: tribe.members,
+              }}
+              view={viewMode}
+            />
           )) : (
             <div className="col-span-full text-center py-12 text-muted-foreground">
               No tribes found{searchQuery ? ` for "${searchQuery}"` : ''}.
