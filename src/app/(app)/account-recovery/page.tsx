@@ -65,7 +65,7 @@ export default function AccountRecoveryPage() {
       <div className="mb-8">
         <Image
           src="/_next/static/media/TribesLogo.png"
-          alt="Tribes.app"
+          alt="Tribes"
           width={80}
           height={80}
           className="mx-auto"

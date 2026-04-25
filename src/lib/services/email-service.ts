@@ -63,7 +63,7 @@ function getSmtpConfig() {
 }
 
 function getFromAddress(): string {
-  return process.env.EMAIL_FROM ?? '"Tribes.app" <noreply@tribes.app>';
+  return process.env.EMAIL_FROM ?? '"Tribes" <noreply@tribes.app>';
 }
 
 // ============================================================

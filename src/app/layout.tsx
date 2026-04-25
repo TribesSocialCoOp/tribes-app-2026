@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Tribes.app',
+  title: 'Tribes',
   description: 'Connect and communicate with your tribes.',
 };
 

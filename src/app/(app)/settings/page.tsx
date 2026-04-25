@@ -395,7 +395,7 @@ export default function SettingsPage() {
               <Star className="h-6 w-6 text-primary" />
               <div>
                 <h3 className="text-base font-semibold">Reserved Alias</h3>
-                <p className="text-sm text-muted-foreground">Your unique, global handle across Tribes.app.</p>
+                <p className="text-sm text-muted-foreground">Your unique, global handle across Tribes.</p>
               </div>
             </div>
              {role === 'Human_Free' ? (

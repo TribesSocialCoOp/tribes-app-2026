@@ -36,7 +36,7 @@ export function AppearanceSection() {
           <Palette className="h-7 w-7 text-primary" />
           <CardTitle className="text-xl">Appearance</CardTitle>
         </div>
-        <CardDescription>Customize the look and feel of Tribes.app.</CardDescription>
+        <CardDescription>Customize the look and feel of Tribes.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-muted/50">

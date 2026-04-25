@@ -68,7 +68,7 @@ export function usePushNotifications() {
         // Show a test notification to confirm it works
         showLocalNotification(
           'Notifications Enabled! 🎉',
-          'You will now receive local notifications from Tribes.app in dev mode.',
+          'You will now receive local notifications from Tribes in dev mode.',
           '/'
         );
 

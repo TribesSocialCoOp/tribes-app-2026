@@ -28,7 +28,7 @@ function renderPage(title: string, body: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title} — Tribes.app</title>
+  <title>${title} — Tribes</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', -apple-system, sans-serif; background: #f4f4f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -45,7 +45,7 @@ function renderPage(title: string, body: string): string {
 </head>
 <body>
   <div class="card">
-    <div class="brand">Tribes.app</div>
+    <div class="brand">Tribes</div>
     ${body}
   </div>
 </body>
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     const html = renderPage('Invalid Link', `
       <h1>Invalid Link</h1>
       <p>This unsubscribe link is missing or malformed.</p>
-      <a class="btn" href="/">Go to Tribes.app</a>
+      <a class="btn" href="/">Go to Tribes</a>
     `);
     return new NextResponse(html, { status: 400, headers: { 'Content-Type': 'text/html' } });
   }

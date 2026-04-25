@@ -99,7 +99,7 @@ export function AppSidebar() {
         <Link href="/your-comms" className="flex items-center gap-2" onClick={handleLinkClick}>
           <AppLogo width={32} height={32} />
           <span className="font-semibold text-lg font-mono text-sidebar-foreground group-data-[collapsible=icon]:hidden tracking-normal">
-            Tribes.app
+            Tribes
           </span>
         </Link>
       </SidebarHeader>

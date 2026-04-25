@@ -104,7 +104,7 @@ export default function AiAssistantPage() {
             </Avatar>
             <div>
               <CardTitle className="text-xl font-mono text-foreground">T-Codex Prime</CardTitle>
-              <p className="text-sm text-muted-foreground">Your guide to all things Tribes.app</p>
+              <p className="text-sm text-muted-foreground">Your guide to all things Tribes</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={handleClearChat}>
@@ -117,7 +117,7 @@ export default function AiAssistantPage() {
               <div className="text-center text-muted-foreground py-10">
                 <HelpCircle className="mx-auto h-12 w-12 mb-4 opacity-50" />
                 <p className="font-semibold">Welcome to T-Codex Prime!</p>
-                <p>Ask me anything about Tribes.app, or try one of the suggestions below.</p>
+                <p>Ask me anything about Tribes, or try one of the suggestions below.</p>
               </div>
             )}
             {messages.map((message) => (

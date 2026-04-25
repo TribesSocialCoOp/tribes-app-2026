@@ -1,5 +1,5 @@
 /**
- * @fileoverview Email Templates for Tribes.app (P4-1 + P4-2).
+ * @fileoverview Email Templates for Tribes (P4-1 + P4-2).
  * 
  * All templates use inline CSS (email-safe, no external stylesheets).
  * Each returns { subject, html, text } for use with sendEmail().
@@ -37,7 +37,7 @@ function emailLayout({ content, preheader, unsubscribeUrl }: LayoutOptions): str
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tribes.app</title>
+  <title>Tribes</title>
   ${preheader ? `<span style="display:none;font-size:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;">${preheader}</span>` : ''}
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:${FONT_STACK};">
@@ -48,7 +48,7 @@ function emailLayout({ content, preheader, unsubscribeUrl }: LayoutOptions): str
         <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
           <tr>
             <td align="center" style="padding:0 0 24px;">
-              <div style="font-size:28px;font-weight:800;color:${BRAND_COLOR};letter-spacing:-0.5px;">Tribes.app</div>
+              <div style="font-size:28px;font-weight:800;color:${BRAND_COLOR};letter-spacing:-0.5px;">Tribes</div>
             </td>
           </tr>
         </table>
@@ -64,8 +64,8 @@ function emailLayout({ content, preheader, unsubscribeUrl }: LayoutOptions): str
         <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
           <tr>
             <td align="center" style="padding:24px 0;color:#a1a1aa;font-size:12px;line-height:1.5;">
-              <p style="margin:0;">Tribes.app — Secure, local-first community platform</p>
-              <p style="margin:4px 0 0;">You received this because you have an account on Tribes.app.</p>
+              <p style="margin:0;">Tribes — Secure, local-first community platform</p>
+              <p style="margin:4px 0 0;">You received this because you have an account on Tribes.</p>
               ${unsubscribeLink}
             </td>
           </tr>
@@ -92,11 +92,11 @@ function ctaButton(label: string, url: string): string {
 // ============================================================
 
 export function welcomeEmail(name: string): { subject: string; html: string; text: string } {
-  const subject = `Welcome to Tribes.app, ${name}! 🎉`;
+  const subject = `Welcome to Tribes, ${name}! 🎉`;
 
   const html = emailLayout({
     content: `
-    <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Welcome to Tribes.app!</h1>
+    <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Welcome to Tribes!</h1>
     <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
       Hey <strong>${name}</strong>, you're in! Here's what you can do:
     </p>
@@ -110,10 +110,10 @@ export function welcomeEmail(name: string): { subject: string; html: string; tex
       Your data is local-first and your messages are end-to-end encrypted. Only you and your bonds can read them.
     </p>
   `,
-    preheader: `Welcome to Tribes.app! Here's what you can do.`,
+    preheader: `Welcome to Tribes! Here's what you can do.`,
   });
 
-  const text = `Welcome to Tribes.app, ${name}!\n\nYou're in! Form bonds, join tribes, attend events, and build your reputation.\n\nYour data is local-first and your messages are E2E encrypted.`;
+  const text = `Welcome to Tribes, ${name}!\n\nYou're in! Form bonds, join tribes, attend events, and build your reputation.\n\nYour data is local-first and your messages are E2E encrypted.`;
 
   return { subject, html, text };
 }
@@ -123,7 +123,7 @@ export function welcomeEmail(name: string): { subject: string; html: string; tex
 // ============================================================
 
 export function verifyEmailTemplate(name: string, verifyUrl: string): { subject: string; html: string; text: string } {
-  const subject = 'Verify your email — Tribes.app';
+  const subject = 'Verify your email — Tribes';
 
   const html = emailLayout({
     content: `
@@ -136,7 +136,7 @@ export function verifyEmailTemplate(name: string, verifyUrl: string): { subject:
       This link expires in 24 hours. If you didn't create this account, you can safely ignore this email.
     </p>
   `,
-    preheader: `Verify your email to secure your Tribes.app account.`,
+    preheader: `Verify your email to secure your Tribes account.`,
   });
 
   const text = `Hi ${name}, verify your email: ${verifyUrl}\n\nThis link expires in 24 hours.`;
@@ -149,7 +149,7 @@ export function verifyEmailTemplate(name: string, verifyUrl: string): { subject:
 // ============================================================
 
 export function passKeyRecoveryEmail(name: string, recoveryUrl: string): { subject: string; html: string; text: string } {
-  const subject = 'Account Recovery — Tribes.app';
+  const subject = 'Account Recovery — Tribes';
 
   const html = emailLayout({
     content: `
@@ -169,7 +169,7 @@ export function passKeyRecoveryEmail(name: string, recoveryUrl: string): { subje
       This link expires in 15 minutes. If you didn't request this, you can safely ignore it.
     </p>
   `,
-    preheader: `Account recovery link for your Tribes.app account.`,
+    preheader: `Account recovery link for your Tribes account.`,
   });
 
   const text = `Hi ${name}, recover your account: ${recoveryUrl}\n\nThis link expires in 15 minutes. Your bonds remain intact but encrypted message history may not be recoverable.`;
@@ -187,7 +187,7 @@ export function bondRequestEmail(
   bondType: string,
   unsubscribeUrl?: string,
 ): { subject: string; html: string; text: string } {
-  const subject = `${fromName} wants to form a ${bondType} bond — Tribes.app`;
+  const subject = `${fromName} wants to form a ${bondType} bond — Tribes`;
 
   const bondEmoji: Record<string, string> = {
     family: '👨‍👩‍👦',
@@ -222,7 +222,7 @@ export function bondRequestEmail(
     unsubscribeUrl,
   });
 
-  const text = `Hi ${name}, ${fromName} wants to form a ${bondType} bond with you on Tribes.app.\n\nLog in to accept or decline.`;
+  const text = `Hi ${name}, ${fromName} wants to form a ${bondType} bond with you on Tribes.\n\nLog in to accept or decline.`;
 
   return { subject, html, text };
 }
@@ -237,7 +237,7 @@ export function familyIntroEmail(
   introducerName: string,
   unsubscribeUrl?: string,
 ): { subject: string; html: string; text: string } {
-  const subject = `Family introduction from ${introducerName} — Tribes.app`;
+  const subject = `Family introduction from ${introducerName} — Tribes`;
 
   const html = emailLayout({
     content: `
@@ -254,7 +254,7 @@ export function familyIntroEmail(
     </div>
     ${ctaButton('View Bond Request', '/bonds')}
   `,
-    preheader: `${introducerName} introduced you to ${fromName} on Tribes.app.`,
+    preheader: `${introducerName} introduced you to ${fromName} on Tribes.`,
     unsubscribeUrl,
   });
 
@@ -273,7 +273,7 @@ export function eventReminderEmail(
   dateStr: string,
   unsubscribeUrl?: string,
 ): { subject: string; html: string; text: string } {
-  const subject = `Reminder: ${eventName} is coming up — Tribes.app`;
+  const subject = `Reminder: ${eventName} is coming up — Tribes`;
 
   const html = emailLayout({
     content: `

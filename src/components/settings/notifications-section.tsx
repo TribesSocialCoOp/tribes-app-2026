@@ -84,7 +84,7 @@ export function NotificationsSection({ notifPrefs, setNotifPrefs, isSaving, onSa
                 {permission === 'denied'
                   ? 'Notifications are blocked by your browser. Update your browser settings to enable.'
                   : isSubscribed
-                    ? 'You will receive push notifications for activity on Tribes.app.'
+                    ? 'You will receive push notifications for activity on Tribes.'
                     : 'Enable push notifications to stay updated even when the app is in the background.'
                 }
               </p>

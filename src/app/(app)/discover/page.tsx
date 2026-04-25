@@ -211,7 +211,7 @@ export default function DiscoverPage() {
                 </div>
                 <div>
                   <p className="font-medium text-sm">Our Story</p>
-                  <p className="text-xs text-muted-foreground">The Tribes.app journey</p>
+                  <p className="text-xs text-muted-foreground">The Tribes journey</p>
                 </div>
               </CardContent>
             </Card>

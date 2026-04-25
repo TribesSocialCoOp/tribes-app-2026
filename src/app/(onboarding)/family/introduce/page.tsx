@@ -115,8 +115,8 @@ function IntroduceContent() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'Join my family on Tribes.app',
-          text: `${connectedFamilyMemberName} is inviting you to connect on Tribes.app!`,
+          title: 'Join my family on Tribes',
+          text: `${connectedFamilyMemberName} is inviting you to connect on Tribes!`,
           url: inviteUrl,
         });
       } catch {
