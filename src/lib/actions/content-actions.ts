@@ -194,7 +194,7 @@ export async function createRingPost(payload: CreateRingPostPayload): Promise<Tr
 /**
  * Returns a lightweight list of the user's tribes for the compose tribe selector.
  */
-export async function getMyTribesList(): Promise<{ id: string; name: string; slug: string | null }[]> {
+export async function getMyTribesList(): Promise<{ id: string; name: string; slug: string | null; description: string | null; cover: string | null; isPublic: boolean; members: number }[]> {
   const userId = await getCurrentUserId();
   if (!userId) return [];
   const { db } = await import('@/db');
@@ -205,13 +205,21 @@ export async function getMyTribesList(): Promise<{ id: string; name: string; slu
     .from(tribeMembers)
     .where(eq(tribeMembers.userId, userId));
 
-  const results: { id: string; name: string; slug: string | null }[] = [];
+  const results: { id: string; name: string; slug: string | null; description: string | null; cover: string | null; isPublic: boolean; members: number }[] = [];
   for (const row of memberRows) {
-    const [tribe] = await db.select({ id: tribes.id, name: tribes.name, slug: tribes.slug })
+    const [tribe] = await db.select({
+      id: tribes.id,
+      name: tribes.name,
+      slug: tribes.slug,
+      description: tribes.description,
+      cover: tribes.cover,
+      isPublic: tribes.isPublic,
+      members: tribes.memberCount,
+    })
       .from(tribes)
       .where(eq(tribes.id, row.tribeId))
       .limit(1);
-    if (tribe) results.push(tribe);
+    if (tribe) results.push({ ...tribe, isPublic: tribe.isPublic ?? true, members: tribe.members ?? 0 });
   }
   return results;
 }

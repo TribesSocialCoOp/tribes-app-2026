@@ -117,15 +117,7 @@ export default function DiscoverPage() {
           {filteredTribes.length > 0 ? filteredTribes.map(tribe => (
             <TribeCard
               key={tribe.id}
-              tribe={{
-                id: tribe.id,
-                name: tribe.name,
-                slug: tribe.slug,
-                description: tribe.description,
-                cover: tribe.cover,
-                isPublic: tribe.isPublic,
-                members: tribe.members,
-              }}
+              tribe={tribe}
               view={viewMode}
             />
           )) : (

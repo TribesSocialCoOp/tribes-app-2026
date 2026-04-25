@@ -44,7 +44,7 @@ function CirclesContent() {
     async function fetchTribes() {
       try {
         const tribesResult = await getMyTribesList();
-        setTribes(tribesResult.map(t => ({ id: t.id, name: t.name, slug: t.slug })));
+        setTribes(tribesResult);
       } catch (err) {
         console.error('[CirclesPage] Failed to fetch tribes:', err);
       } finally {
