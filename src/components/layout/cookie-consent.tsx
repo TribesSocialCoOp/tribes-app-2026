@@ -59,7 +59,8 @@ function saveConsent(consent: ConsentState): void {
   localStorage.setItem(CONSENT_STORAGE_KEY, JSON.stringify(consent));
   // Also persist to cookie (1 year expiry)
   const encoded = encodeURIComponent(JSON.stringify(consent));
-  document.cookie = `${CONSENT_COOKIE_NAME}=${encoded}; path=/; max-age=${365 * 24 * 60 * 60}; SameSite=Lax`;
+  const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  document.cookie = `${CONSENT_COOKIE_NAME}=${encoded}; path=/; max-age=${365 * 24 * 60 * 60}; SameSite=Lax${isSecure ? '; Secure' : ''}`;
 }
 
 // ============================================================
