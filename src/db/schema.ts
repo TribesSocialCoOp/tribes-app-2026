@@ -211,6 +211,7 @@ export const tribes = sqliteTable('tribes', {
   brandColor: text('brand_color'),                // Hex color for org branding (e.g. '#4F46E5')
   brandLogo: text('brand_logo'),                  // URL to org logo image
   inviteToken: text('invite_token').unique(),     // Random unguessable invite token
+  bondDurationDays: integer('bond_duration_days'), // null = platform default (90 days); tribe owner can override
   createdAt: integer('created_at', { mode: 'timestamp' }),
 });
 

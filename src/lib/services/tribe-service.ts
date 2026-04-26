@@ -98,6 +98,7 @@ const tribeSettingsFormSchema = z.object({
   brandLogo: z.string().optional(),
   cover: z.string().optional(),
   coverPosition: z.string().optional(),
+  bondDurationDays: z.number().int().min(30).max(365).optional().nullable(), // null = platform default (90 days)
 });
 type UpdateTribeSettingsPayload = z.infer<typeof tribeSettingsFormSchema>;
 
@@ -118,6 +119,7 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
     brandLogo: payload.brandLogo ?? existing.brandLogo,
     cover: payload.cover ?? existing.cover,
     coverPosition: payload.coverPosition ?? existing.coverPosition,
+    bondDurationDays: payload.bondDurationDays !== undefined ? payload.bondDurationDays : existing.bondDurationDays,
   }).where(eq(tribes.id, tribeId));
 
   // Update mood tags: delete old, insert new

@@ -5,10 +5,13 @@
  */
 
 import { db } from '@/db';
-import { bonds, bondRequests, blockedUsers, users } from '@/db/schema';
+import { bonds, bondRequests, blockedUsers, users, tribes } from '@/db/schema';
 import { eq, and, or, count } from 'drizzle-orm';
 import type { Bond, BondRequest, BondType, FormationMethod } from '@/lib/types';
-import { computePasskeyStatus, computeNewExpiry, isBondDegraded, getStatusDescription } from '@/lib/crypto/passkey-lifecycle';
+import {
+  computePasskeyStatus, computeNewExpiry, isBondDegraded, getStatusDescription,
+  getExpiryDuration, daysUntilExpiry, AUTO_REFRESH_THRESHOLD_DAYS,
+} from '@/lib/crypto/passkey-lifecycle';
 
 /**
  * Guard: ensures a bond's passkey is not expired before allowing sensitive operations.
@@ -308,8 +311,7 @@ export async function acceptBondRequest(requestId: string, acceptorUserId: strin
   const [toUser] = await db.select().from(users).where(eq(users.id, request.toUserId)).limit(1);
 
   const now = new Date();
-  const isFamily = request.bondType === 'family';
-  const expiresAt = new Date(now.getTime() + (isFamily ? 365 : 30) * 86400000);
+  const expiresAt = computeNewExpiry(request.bondType);
 
   // Create bond for the requester (from → to)
   await db.insert(bonds).values({
@@ -324,7 +326,7 @@ export async function acceptBondRequest(requestId: string, acceptorUserId: strin
     expiresAt,
     lastRefreshedAt: now,
     reconnectsCount: 0,
-    innerCircle: isFamily, // Family bonds auto-join Inner Circle
+    innerCircle: request.bondType === 'family', // Family bonds auto-join Inner Circle
   });
 
   // For mutual bond types (family, friend, professional, collaborator), create the reverse bond too
@@ -342,7 +344,7 @@ export async function acceptBondRequest(requestId: string, acceptorUserId: strin
       expiresAt,
       lastRefreshedAt: now,
       reconnectsCount: 0,
-      innerCircle: isFamily, // Family bonds auto-join Inner Circle
+      innerCircle: request.bondType === 'family', // Family bonds auto-join Inner Circle
     });
   }
 }
@@ -459,6 +461,14 @@ export async function createFollowerBond(
     .limit(1);
   if (existing.length > 0) return; // Already bonded
 
+  // For tribe bonds, read the tribe's configured duration
+  let tribeDurationDays: number | null = null;
+  if (targetType === 'tribe') {
+    const [tribe] = await db.select({ bondDurationDays: tribes.bondDurationDays })
+      .from(tribes).where(eq(tribes.id, targetId)).limit(1);
+    tribeDurationDays = tribe?.bondDurationDays ?? null;
+  }
+
   const now = new Date();
   await db.insert(bonds).values({
     id: `bond-${userId.substring(0, 8)}-${targetId.substring(0, 8)}-${Date.now()}`,
@@ -469,7 +479,7 @@ export async function createFollowerBond(
     bondType,
     formationMethod: 'virtual_request',
     passkeyStatus: 'active',
-    expiresAt: new Date(now.getTime() + 30 * 86400000),
+    expiresAt: computeNewExpiry(bondType, tribeDurationDays),
     lastRefreshedAt: now,
     reconnectsCount: 0,
   });
@@ -554,10 +564,18 @@ export async function refreshBond(bondId: string, userId: string): Promise<void>
     .limit(1);
   if (!existing) throw new Error('Bond not found or unauthorized');
 
+  // For tribe bonds, read the tribe's configured duration
+  let tribeDurationDays: number | null = null;
+  if (existing.targetType === 'tribe' && existing.targetId) {
+    const [tribe] = await db.select({ bondDurationDays: tribes.bondDurationDays })
+      .from(tribes).where(eq(tribes.id, existing.targetId)).limit(1);
+    tribeDurationDays = tribe?.bondDurationDays ?? null;
+  }
+
   await db.update(bonds).set({
     passkeyStatus: 'active',
     lastRefreshedAt: new Date(),
-    expiresAt: computeNewExpiry(existing.bondType),
+    expiresAt: computeNewExpiry(existing.bondType, tribeDurationDays),
     reconnectsCount: (existing.reconnectsCount ?? 0) + 1,
     publicKeyJwk: null, // Clear public key — client must regenerate
   }).where(eq(bonds.id, bondId));
@@ -604,7 +622,7 @@ export async function upgradeToFamilyBond(bondId: string, userId: string): Promi
     bondType: 'family',
     passkeyStatus: 'active',
     lastRefreshedAt: new Date(),
-    expiresAt: computeNewExpiry('family'),
+    expiresAt: computeNewExpiry('family'), // Family bonds always use 365-day duration
     reconnectsCount: (existing.reconnectsCount ?? 0) + 1,
     publicKeyJwk: null, // Clear public key — type changed, regen required
   }).where(eq(bonds.id, bondId));
@@ -688,6 +706,59 @@ export async function getBlockedUserIds(userId: string): Promise<Set<string>> {
   const rows = await db.select().from(blockedUsers)
     .where(eq(blockedUsers.userId, userId));
   return new Set(rows.map(r => r.blockedUserId));
+}
+
+// ============================================================
+// AUTO-REFRESH ON SHARING ACTIVITY
+// ============================================================
+
+/**
+ * Silently extends a bond's expiry when the user actively shares content.
+ *
+ * This is the heart of the "active not passive" design: posting, commenting,
+ * vibing, and messaging keep your bonds alive. Lurking does not.
+ *
+ * Only triggers a DB write when the bond has < AUTO_REFRESH_THRESHOLD_DAYS
+ * remaining, to avoid unnecessary writes on every interaction.
+ *
+ * @param userId - The user who performed the sharing action
+ * @param targetId - The tribe ID or user ID the action relates to
+ * @param targetType - 'tribe' or 'user'
+ */
+export async function touchBondOnActivity(
+  userId: string,
+  targetId: string,
+  targetType: 'tribe' | 'user' = 'tribe',
+): Promise<void> {
+  try {
+    // Find the user's bond with this target
+    const [bond] = await db.select().from(bonds)
+      .where(and(eq(bonds.userId, userId), eq(bonds.targetId, targetId)))
+      .limit(1);
+
+    if (!bond || !bond.expiresAt) return;
+
+    // Only refresh if within the threshold window
+    const remaining = daysUntilExpiry({ expiresAt: bond.expiresAt });
+    if (remaining > AUTO_REFRESH_THRESHOLD_DAYS) return;
+
+    // For tribe bonds, read the tribe's configured duration
+    let tribeDurationDays: number | null = null;
+    if (targetType === 'tribe') {
+      const [tribe] = await db.select({ bondDurationDays: tribes.bondDurationDays })
+        .from(tribes).where(eq(tribes.id, targetId)).limit(1);
+      tribeDurationDays = tribe?.bondDurationDays ?? null;
+    }
+
+    // Extend the bond
+    await db.update(bonds).set({
+      passkeyStatus: 'active',
+      lastRefreshedAt: new Date(),
+      expiresAt: computeNewExpiry(bond.bondType, tribeDurationDays),
+    }).where(eq(bonds.id, bond.id));
+  } catch {
+    // Fire-and-forget: never let auto-refresh failures break the main action
+  }
 }
 
 // ============================================================

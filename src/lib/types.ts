@@ -230,6 +230,7 @@ export interface Tribe {
   brandLogo?: string;
   createdBy?: string;
   inviteToken?: string;
+  bondDurationDays?: number;    // Owner-configurable bond expiry (null = platform default 90 days)
 }
 
 // Story related types

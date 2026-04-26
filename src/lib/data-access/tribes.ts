@@ -31,6 +31,7 @@ function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
     brandLogo: row.brandLogo ?? undefined,
     createdBy: row.createdBy ?? undefined,
     inviteToken: row.inviteToken ?? undefined,
+    bondDurationDays: row.bondDurationDays ?? undefined,
   };
 }
 

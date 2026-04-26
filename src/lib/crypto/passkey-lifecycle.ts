@@ -13,11 +13,41 @@
  * - `expired`:       past expiry date
  *
  * Expiry durations by bond type:
- * - `family`:  365 days
- * - All others: 30 days
+ * - `family`:                365 days  — deepest trust, longest investment cycle
+ * - `friend`:                180 days  — real friendships survive months apart
+ * - `professional`:           90 days  — quarterly cadence, project-based
+ * - `collaborator`:           90 days  — same as professional
+ * - `follower` / `supporter`: 90 days  — tribe membership (overridable by tribe owner)
+ *
+ * Auto-refresh philosophy:
+ *   Bonds are meant to be *active*, not passive. Sharing (posting, commenting,
+ *   vibing, messaging) keeps the bond alive. Consumption alone does not.
+ *   When a user shares within a tribe or messages a bonded user, the bond
+ *   expiry is silently extended — so bonds only fade when the relationship
+ *   goes truly dormant.
  */
 
-import type { Bond } from '@/lib/types';
+import type { Bond, BondType } from '@/lib/types';
+
+// ============================================================
+// DURATION CONSTANTS (milliseconds)
+// ============================================================
+
+/** Duration map by bond type. Values in days. */
+const BOND_DURATION_DAYS: Record<BondType, number> = {
+  family:       365,
+  friend:       180,
+  professional:  90,
+  collaborator:  90,
+  follower:      90,
+  supporter:     90,
+};
+
+/** Default tribe bond duration when the tribe owner hasn't configured one. */
+export const DEFAULT_TRIBE_BOND_DURATION_DAYS = 90;
+
+/** Minimum remaining days before auto-refresh will kick in. */
+export const AUTO_REFRESH_THRESHOLD_DAYS = 7;
 
 // ============================================================
 // STATUS COMPUTATION
@@ -40,16 +70,33 @@ export function computePasskeyStatus(bond: Pick<Bond, 'expiresAt'>): Bond['passk
 
 /**
  * Returns the expiry duration in milliseconds for a given bond type.
+ * For tribe bonds (follower/supporter), an optional `tribeDurationDays`
+ * override can be provided from the tribe's settings.
  */
-export function getExpiryDuration(bondType: string): number {
-  return bondType === 'family' ? 365 * 86_400_000 : 30 * 86_400_000;
+export function getExpiryDuration(bondType: string, tribeDurationDays?: number | null): number {
+  // If a tribe-owner override is provided for tribe-membership bond types, use it
+  if (tribeDurationDays && (bondType === 'follower' || bondType === 'supporter')) {
+    return tribeDurationDays * 86_400_000;
+  }
+  const days = BOND_DURATION_DAYS[bondType as BondType] ?? DEFAULT_TRIBE_BOND_DURATION_DAYS;
+  return days * 86_400_000;
+}
+
+/**
+ * Returns the duration in days for a given bond type.
+ */
+export function getExpiryDurationDays(bondType: string, tribeDurationDays?: number | null): number {
+  if (tribeDurationDays && (bondType === 'follower' || bondType === 'supporter')) {
+    return tribeDurationDays;
+  }
+  return BOND_DURATION_DAYS[bondType as BondType] ?? DEFAULT_TRIBE_BOND_DURATION_DAYS;
 }
 
 /**
  * Computes the new expiration date for a bond refresh.
  */
-export function computeNewExpiry(bondType: string): Date {
-  return new Date(Date.now() + getExpiryDuration(bondType));
+export function computeNewExpiry(bondType: string, tribeDurationDays?: number | null): Date {
+  return new Date(Date.now() + getExpiryDuration(bondType, tribeDurationDays));
 }
 
 // ============================================================

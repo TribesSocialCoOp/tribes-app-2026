@@ -194,6 +194,11 @@ export async function createTribePost(tribeId: string, payload: { title?: string
   const finalRows = await db.select().from(posts).where(eq(posts.id, id)).limit(1);
   const created = rowToTribePost(finalRows[0]!);
 
+  // Auto-refresh: sharing keeps your tribe bond alive (fire-and-forget)
+  import('./bond-service').then(({ touchBondOnActivity }) =>
+    touchBondOnActivity(authorId, tribeId, 'tribe')
+  ).catch(() => {});
+
   // Process @mentions (fire-and-forget)
   import('./mention-service').then(({ processMentions }) =>
     processMentions(payload.content, authorId, 'post', id)
@@ -394,6 +399,17 @@ export async function toggleVibe(
       ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
       : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
 
+    // Auto-refresh: vibing keeps your tribe bond alive (fire-and-forget)
+    if (targetType === 'post') {
+      const [vibePost] = await db.select({ tribeId: posts.tribeId }).from(posts)
+        .where(eq(posts.id, targetId)).limit(1);
+      if (vibePost?.tribeId) {
+        import('./bond-service').then(({ touchBondOnActivity }) =>
+          touchBondOnActivity(userId, vibePost.tribeId!, 'tribe')
+        ).catch(() => {});
+      }
+    }
+
     return { vibed: true, newCount };
   }
 }
@@ -446,6 +462,16 @@ export async function createComment(
   await db.update(posts).set({
     commentCount: sql`${posts.commentCount} + 1`,
   }).where(eq(posts.id, postId));
+
+  // Auto-refresh: commenting keeps your tribe bond alive (fire-and-forget)
+  // Look up the post's tribe to touch the right bond
+  const [parentPost] = await db.select({ tribeId: posts.tribeId }).from(posts)
+    .where(eq(posts.id, postId)).limit(1);
+  if (parentPost?.tribeId) {
+    import('./bond-service').then(({ touchBondOnActivity }) =>
+      touchBondOnActivity(userId, parentPost.tribeId!, 'tribe')
+    ).catch(() => {});
+  }
 
   // Process @mentions (fire-and-forget)
   import('./mention-service').then(({ processMentions }) =>

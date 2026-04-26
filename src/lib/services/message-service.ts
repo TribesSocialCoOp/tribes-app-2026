@@ -57,6 +57,15 @@ export async function sendMessage(
     await notifyBondMessage(bond.targetId, sender?.name ?? 'Someone', bondId);
   }).catch(() => {});
 
+  // Auto-refresh: messaging keeps your bond alive (fire-and-forget)
+  import('./bond-service').then(async ({ touchBondOnActivity }) => {
+    const [bond] = await db.select({ targetId: bonds.targetId, targetType: bonds.targetType })
+      .from(bonds).where(eq(bonds.id, bondId)).limit(1);
+    if (bond?.targetId) {
+      await touchBondOnActivity(senderId, bond.targetId, (bond.targetType as 'user' | 'tribe') ?? 'user');
+    }
+  }).catch(() => {});
+
   return { id, bondId, senderId, ciphertext, plaintext: null, sentAt, readAt: null };
 }
 

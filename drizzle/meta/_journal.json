@@ -85,6 +85,13 @@
       "when": 1777153655575,
       "tag": "0011_chief_steve_rogers",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1777163730885,
+      "tag": "0012_vengeful_power_man",
+      "breakpoints": true
     }
   ]
 }
