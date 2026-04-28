@@ -66,15 +66,15 @@ export default function DiscoverPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Discover</h1>
-          <p className="text-md md:text-lg text-muted-foreground mt-1">
+    <div className="space-y-4 md:space-y-6">
+      <header className="flex items-start justify-between gap-2 min-w-0">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Discover</h1>
+          <p className="text-sm md:text-lg text-muted-foreground mt-1">
             Explore tribes, mood streams, events, and more.
           </p>
         </div>
-        <ViewToggle value={viewMode} onChange={setViewMode} className="mt-2" />
+        <ViewToggle value={viewMode} onChange={setViewMode} className="mt-2 shrink-0" />
       </header>
 
       {/* Search */}
@@ -89,7 +89,7 @@ export default function DiscoverPage() {
       </div>
 
       {/* Tab Switcher */}
-      <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit overflow-x-auto">
+      <div className="flex gap-1 p-1 bg-muted/50 rounded-lg overflow-x-auto max-w-full scrollbar-none">
         {tabs.map(tab => (
           <button
             key={tab.key}

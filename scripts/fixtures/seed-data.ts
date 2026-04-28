@@ -3,7 +3,7 @@ import type { UserRole, Event, Bond, TribePost, ReportedPost, DiscussionComment,
 
 // Mock data moved from data.ts
 export const tribesData: Tribe[] = [
-  { id: "0", slug: "the-trials", name: "The Trials", description: "Welcome to Tribes.app! Complete the trials in this hub to build your starting reputation and unlock the full platform experience.", members: 9999, isPublic: true, cover: "/seed/tribe-trials.svg", dataAiHint: "start trial guide", moods: ["learn"], homepageUrl: "https://tribes.app/help", joinMechanism: 'instant' },
+  { id: "0", slug: "welcome", name: "Welcome to Tribes", description: "Your starting point on Tribes.app! Learn how to navigate, form bonds, join communities, and make this platform your own.", members: 9999, isPublic: true, cover: "/seed/tribe-trials.svg", dataAiHint: "welcome onboarding guide", moods: ["learn", "connect"], homepageUrl: "https://tribes.app", joinMechanism: 'instant' },
   { id: "1", slug: "ai-innovators", name: "AI Innovators", description: "Exploring the future of artificial intelligence and machine learning. Professional networking and project discussions.", members: 128, isPublic: true, cover: "/seed/tribe-ai.svg", dataAiHint: "technology innovation", moods: ["focus", "learn"], homepageUrl: "https://innovate.ai", joinMechanism: 'approval', minimumReputation: 'Active', minimumAccountAgeDays: 30 },
   { id: "2", slug: "weekend-hikers-club", name: "Weekend Hikers Club", description: "Sharing trails, tips, and breathtaking views from our adventures in nature.", members: 76, isPublic: true, cover: "/seed/tribe-hiking.svg", dataAiHint: "nature mountain", moods: ["discover", "connect"], joinMechanism: 'instant' },
   { id: "3", slug: "indie-game-devs", name: "Indie Game Devs", description: "A community for indie game developers to collaborate, share projects, and find local playtesters.", members: 245, isPublic: false, cover: "/seed/tribe-games.svg", dataAiHint: "gaming development", moods: ["showcase", "game", "learn"], homepageUrl: "https://indiegamedev.guild", joinMechanism: 'instant' },
@@ -71,14 +71,31 @@ export const sampleEventsData: Event[] = [
 const MOCK_POST_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
 export const initialSampleTribePosts: TribePost[] = [
   {
-    id: "trial_post_1", tribeId: "0", authorId: "system", authorName: "T-Codex Prime", authorAvatarFallback: "AI",
+    id: "welcome_post_1", tribeId: "0", authorId: "dustin", authorName: "Dustin Moore", authorAvatarFallback: "DM",
     timestamp: new Date(MOCK_POST_DATE_MS),
-    title: "Welcome, Initiate! Your First Trial: Introductions",
-    content: "Welcome to Tribes.app! Your journey starts here.",
-    vibes: 1, comments: 0, dataAiHintAvatar: "robot mascot",
+    title: "Welcome to Tribes! 🎉 Start Here",
+    content: `Welcome to Tribes! 🎉\n\nHey, I'm Dustin. I built this place because I was tired of social platforms that treat people like content to be consumed. Tribes is different.\n\n**This isn't a platform for scrolling. It's a platform for sharing.** There are no algorithms here. No engagement tricks. Your feed is just the people and communities you actually connect with.\n\n## How it works\n\n**🔗 Bonds** are your connections with real people. When you bond with someone, you both get encrypted passkeys that let you see each other's stuff. Bonds are mutual and they stay alive as long as you keep interacting. If you drift apart, the bond goes dormant. No hard cutoff, and you can always reconnect.\n\n**🛡️ Inner Circle** is for your closest people. Any bond can be toggled into your Inner Circle for longer access and your most personal content ring.\n\n**🏕️ Tribes** are communities. Each one has its own feed, members, and vibe. Some you can join right away, others need approval.\n\n**🔔 Rings** control who sees what:\n- *Journal* is private, just for you\n- *Inner Circle* goes to your closest bonds\n- *My People* goes to everyone you're bonded with\n- *Tribes* goes to tribe members\n\n## Getting started\n\n1. **Check out Discover** and find some tribes that interest you\n2. **Form some bonds** with people via invite links or NFC tap\n3. **Post something!** Share a thought with your people or a tribe\n4. **Set a mood** on your posts to help others find your vibe\n\nWelcome aboard. This is your space, make it yours. ✌️`,
+    vibes: 12, comments: 3, dataAiHintAvatar: "founder portrait",
     isPinned: true,
   },
+  {
+    id: "welcome_post_2", tribeId: "0", authorId: "dustin", authorName: "Dustin Moore", authorAvatarFallback: "DM",
+    timestamp: new Date(MOCK_POST_DATE_MS - 60000),
+    title: "Understanding Bonds",
+    content: `## Understanding Bonds 🔗\n\nBonds are how you connect with people on Tribes. Think of them like a handshake that actually means something.\n\n### How it works\n\nWhen you connect with someone, you each get a **passkey**. It's an encrypted key that lets you access each other's shared content. These passkeys have a lifespan:\n\n| Bond Type | Duration | How it refreshes |\n|-----------|----------|------------------|\n| **Person Bond** | 180 days | Refreshes automatically when you interact |\n| **Inner Circle** | 365 days | Same, but with access to closer content |\n| **Tribe Bond** | 90 days | Refreshes when you engage with the tribe |\n\n### When bonds expire\n\n**Person bonds go dormant**, not deleted. Your connection is still there, but content access pauses. Either person can send a **Reconnect Request** and if the other says yes, you're back.\n\nTribe bonds just expire. Rejoin the tribe to get back in.\n\n### Ways to form bonds\n\n- **Invite Link** from your Circles page\n- **NFC Tap** if your phone supports it (pretty cool honestly)\n- **Bond Request** by searching for someone\n- **Introduction** from a mutual connection\n\n### Inner Circle\n\nAny bond can be promoted to your **Inner Circle**. These are your most trusted people. They see content you post to the Inner Circle ring and get a longer 365-day passkey. You can toggle this on or off anytime from the bond menu.\n\nThe idea behind all of this is simple: **relationships that matter should be maintained.** And ones that naturally drift? Let them rest. No hard cutoffs. Just gentle fading, with the door always open to reconnect.`,
+    vibes: 8, comments: 1, dataAiHintAvatar: "founder portrait",
+    isPinned: true,
+  },
+  {
+    id: "welcome_post_3", tribeId: "0", authorId: "dustin", authorName: "Dustin Moore", authorAvatarFallback: "DM",
+    timestamp: new Date(MOCK_POST_DATE_MS - 120000),
+    title: "Getting Around Tribes",
+    content: `## Getting Around Tribes 🧭\n\nQuick tour of the main areas:\n\n### 📰 Your Comms (Feed)\nThis is your main feed. Everything shows up here: posts from bonds, tribes, and mood streams. Use the **ring filters** at the top to focus:\n- **All** for the full stream\n- **Journal** for your private posts\n- **Inner Circle** for your closest bonds\n- **My People** for all bonded users\n- **Tribes** for tribe content\n- **Streams** for mood-promoted posts across the platform\n\n### ⭕ Circles\nThis is where you manage your connections:\n- **Bonds tab** to see all your bonds, their status, and settings\n- **Tribes tab** to see what tribes you belong to\n\n### 🏕️ Discover\nFind new tribes to join. Browse around, search, or see what's popular.\n\n### 🧱 My Wall\nYour public profile. Pin journal posts to your wall to curate what people see when they visit you. Think of it like a living portfolio that updates as you go.\n\n### 🎨 Moods\nEvery post can carry a mood tag (Chill, Focus, Discover, Connect, etc.). Tribe founders can promote posts to **Mood Streams**, which are platform-wide feeds filtered by vibe. It's how good content gets found without needing an algorithm.\n\n---\n\nGot questions? Post them right here. That's what this tribe is for! 💬`,
+    vibes: 5, comments: 0, dataAiHintAvatar: "founder portrait",
+    isPinned: false,
+  },
 ];
+
 
 export const allMoodStreamPosts: MoodStreamPost[] = [
   {
@@ -105,12 +122,19 @@ export const mockReportedContentData: ReportedPost[] = [
 ];
 
 export const bondsData: Bond[] = [
-  { id: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "follower", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 30), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * (30)), reconnectsCount: 2, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "b1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "tribe", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 30), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 60), reconnectsCount: 2, connectionScore: 10, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "b2", targetName: "Bob Builder", targetType: "user", bondType: "person", formationMethod: "virtual_request", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 10), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 170), reconnectsCount: 0, connectionScore: 25, showInIntercom: true, allowChatInitiation: true, keyType: "standard", innerCircle: true },
+  { id: "b3", targetName: "Carol Cosmos", targetType: "user", bondType: "person", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 60), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 120), reconnectsCount: 1, connectionScore: 5, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "b4", targetName: "Dave Dormant", targetType: "user", bondType: "person", formationMethod: "virtual_request", passkeyStatus: "dormant", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 200), expiresAt: new Date(MOCK_POST_DATE_MS - 86400000 * 20), reconnectsCount: 3, connectionScore: 40, showInIntercom: false, allowChatInitiation: false, keyType: "standard" },
+  { id: "b5", targetName: "Summer Music Festival", targetType: "user", bondType: "event", formationMethod: "virtual_request", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 365), reconnectsCount: 0, connectionScore: 0, showInIntercom: false, allowChatInitiation: false, keyType: "event_attendee" },
+  { id: "b6", targetName: "Weekend Hikers Club", targetType: "tribe", bondType: "tribe", formationMethod: "virtual_request", passkeyStatus: "fading", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 85), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 5), reconnectsCount: 0, connectionScore: 12, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
 ];
 
 export const mockMembers: TribeMember[] = [
   // Existing seed member
   { id: 'user1', name: 'Alice Wonderland', avatar: '/seed/avatar-default.svg', dataAiHint: 'avatar person', tribeId: '1', role: 'speaker', reputationStatus: 'Veteran' },
+  // Welcome tribe founder
+  { id: 'dustin', name: 'Dustin Moore', tribeId: '0', role: 'founder', reputationStatus: 'Veteran' },
   // Dev login users — authorAE (mock current user / Creator)
   { id: 'authorAE', name: 'Alice Example', tribeId: '1', role: 'founder', reputationStatus: 'Active' },
   { id: 'authorAE', name: 'Alice Example', tribeId: '3', role: 'speaker', reputationStatus: 'Active' },

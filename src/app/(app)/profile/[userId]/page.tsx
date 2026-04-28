@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Loader2, LayoutGrid, Shield, MessageSquare, User as UserIcon } from "lucide-react";
+import { ArrowLeft, Loader2, LayoutGrid, Shield, MessageSquareText, User as UserIcon } from "lucide-react";
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { getPublicProfile, getPublicWallBlocks, getPublicWallStyle } from '@/lib/actions/profile-actions';
@@ -54,6 +54,7 @@ export default function PublicProfilePage() {
   const [styles, setStyles] = useState<WallStyles>({ backgroundColor: 'bg-background', layout: 'single-column' });
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [bondId, setBondId] = useState<string | null>(null);
 
   // If viewing own profile, redirect to /my-wall
   useEffect(() => {
@@ -95,6 +96,20 @@ export default function PublicProfilePage() {
     }
     if (userId) load();
   }, [userId]);
+
+  // Look up if we have a bond with this user
+  useEffect(() => {
+    async function checkBond() {
+      if (!user?.id || userId === user.id) return;
+      try {
+        const { getBonds } = await import('@/lib/actions/bond-actions');
+        const bonds = await getBonds();
+        const match = bonds.find(b => b.targetId === userId && b.targetType === 'user' && b.passkeyStatus !== 'expired');
+        if (match) setBondId(match.id);
+      } catch {}
+    }
+    checkBond();
+  }, [user?.id, userId]);
 
   if (isLoading) {
     return (
@@ -175,6 +190,16 @@ export default function PublicProfilePage() {
               <p className="text-muted-foreground mt-1 text-sm sm:text-base line-clamp-3">
                 {profile.bio}
               </p>
+            )}
+            {bondId && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 border-primary/30 text-primary hover:bg-primary/10"
+                onClick={() => router.push(`/bonds/${bondId}`)}
+              >
+                <MessageSquareText className="mr-2 h-4 w-4" /> Message
+              </Button>
             )}
           </div>
         </header>

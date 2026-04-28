@@ -1,47 +1,45 @@
 /**
  * @fileoverview Passkey expiration status lifecycle.
- * Phase 2D: Check-on-read pattern for bond passkey status.
  *
- * The passkey status is computed dynamically from the bond's `expiresAt`
- * timestamp every time a bond is read, rather than stored statically.
- * This ensures status is always accurate without needing background jobs.
+ * Bond durations reflect the natural cadence of human relationships:
+ *
+ * Duration model:
+ * - Inner Circle:  365 days — your closest people, yearly investment
+ * - Person bonds:  180 days — regular connections, semi-annual cadence
+ * - Tribe bonds:    90 days — community membership (owner-configurable)
+ * - Event bonds:   365 days — content access grants
  *
  * Status thresholds:
- * - `active`:        > 7 days until expiry
- * - `expires_soon`:  3–7 days until expiry
- * - `needs_refresh`: 0–3 days until expiry
- * - `expired`:       past expiry date
- *
- * Expiry durations by bond type:
- * - `family`:                365 days  — deepest trust, longest investment cycle
- * - `friend`:                180 days  — real friendships survive months apart
- * - `professional`:           90 days  — quarterly cadence, project-based
- * - `collaborator`:           90 days  — same as professional
- * - `follower` / `supporter`: 90 days  — tribe membership (overridable by tribe owner)
+ * - `active`:   > 7 days until expiry
+ * - `fading`:   1–7 days until expiry (nudge to interact)
+ * - `dormant`:  past expiry — person bonds only (visible but content hidden, reconnectable)
+ * - `expired`:  past expiry — tribe/event bonds (must re-join or get new pass)
  *
  * Auto-refresh philosophy:
- *   Bonds are meant to be *active*, not passive. Sharing (posting, commenting,
- *   vibing, messaging) keeps the bond alive. Consumption alone does not.
- *   When a user shares within a tribe or messages a bonded user, the bond
- *   expiry is silently extended — so bonds only fade when the relationship
+ *   Sharing (posting, commenting, vibing, messaging) keeps bonds alive.
+ *   Consumption alone does not. Bonds only fade when the relationship
  *   goes truly dormant.
+ *
+ * Legacy bond types (family, friend, professional, collaborator, follower, supporter)
+ * are mapped transparently to the new duration model:
+ *   - family → inner_circle duration (365d)
+ *   - friend/professional/collaborator → person duration (180d)
+ *   - follower/supporter → tribe duration (90d)
  */
 
 import type { Bond, BondType } from '@/lib/types';
 
 // ============================================================
-// DURATION CONSTANTS (milliseconds)
+// DURATION CONSTANTS
 // ============================================================
 
-/** Duration map by bond type. Values in days. */
-const BOND_DURATION_DAYS: Record<BondType, number> = {
-  family:       365,
-  friend:       180,
-  professional:  90,
-  collaborator:  90,
-  follower:      90,
-  supporter:     90,
-};
+/** Duration in days by bond category. */
+const DURATION_DAYS = {
+  inner_circle: 365,
+  person: 180,
+  tribe: 90,
+  event: 365,
+} as const;
 
 /** Default tribe bond duration when the tribe owner hasn't configured one. */
 export const DEFAULT_TRIBE_BOND_DURATION_DAYS = 90;
@@ -50,53 +48,123 @@ export const DEFAULT_TRIBE_BOND_DURATION_DAYS = 90;
 export const AUTO_REFRESH_THRESHOLD_DAYS = 7;
 
 // ============================================================
+// LEGACY TYPE MAPPING
+// ============================================================
+
+/**
+ * Maps legacy bond type strings from the DB to the new duration category.
+ * New bonds use 'person', 'tribe', 'event' directly.
+ */
+function legacyTypeToCategory(bondType: string, innerCircle?: boolean): keyof typeof DURATION_DAYS {
+  if (innerCircle) return 'inner_circle';
+
+  switch (bondType) {
+    case 'family': return 'inner_circle';
+    case 'friend': return 'person';
+    case 'professional': return 'person';
+    case 'collaborator': return 'person';
+    case 'person': return 'person';
+    case 'follower': return 'tribe';
+    case 'supporter': return 'tribe';
+    case 'tribe': return 'tribe';
+    case 'event': return 'event';
+    default: return 'person';
+  }
+}
+
+/**
+ * Maps a legacy bond type to the new canonical BondType.
+ */
+export function normalizeBondType(rawType: string): BondType {
+  switch (rawType) {
+    case 'person':
+    case 'family':
+    case 'friend':
+    case 'professional':
+    case 'collaborator':
+      return 'person';
+    case 'tribe':
+    case 'follower':
+    case 'supporter':
+      return 'tribe';
+    case 'event':
+      return 'event';
+    default:
+      return 'person';
+  }
+}
+
+// ============================================================
 // STATUS COMPUTATION
 // ============================================================
 
 /**
- * Computes the current passkey status based on the bond's expiration date.
- * This is the canonical source of truth for passkey status.
+ * Computes the current passkey status based on the bond's expiration date
+ * and bond type. This is the canonical source of truth for passkey status.
+ *
+ * Person bonds (including legacy family/friend/professional/collaborator):
+ *   active → fading → dormant (never hard-expire; reconnectable)
+ *
+ * Tribe/event bonds (including legacy follower/supporter):
+ *   active → fading → expired (hard cutoff; must re-join)
  */
-export function computePasskeyStatus(bond: Pick<Bond, 'expiresAt'>): Bond['passkeyStatus'] {
+export function computePasskeyStatus(
+  bond: Pick<Bond, 'expiresAt'>,
+  rawBondType?: string,
+  targetType?: string,
+): Bond['passkeyStatus'] {
   const now = Date.now();
   const expiresMs = bond.expiresAt instanceof Date ? bond.expiresAt.getTime() : Number(bond.expiresAt);
-  const daysUntilExpiry = (expiresMs - now) / 86_400_000;
+  const daysUntilExp = (expiresMs - now) / 86_400_000;
 
-  if (daysUntilExpiry <= 0) return 'expired';
-  if (daysUntilExpiry <= 3) return 'needs_refresh';
-  if (daysUntilExpiry <= 7) return 'expires_soon';
+  if (daysUntilExp <= 0) {
+    // Past expiry: person bonds go dormant, tribe/event bonds expire
+    const isPersonBond = !rawBondType || targetType === 'user' ||
+      ['person', 'family', 'friend', 'professional', 'collaborator'].includes(rawBondType);
+    return isPersonBond ? 'dormant' : 'expired';
+  }
+  if (daysUntilExp <= 7) return 'fading';
   return 'active';
 }
 
 /**
  * Returns the expiry duration in milliseconds for a given bond type.
- * For tribe bonds (follower/supporter), an optional `tribeDurationDays`
- * override can be provided from the tribe's settings.
+ * For tribe bonds, an optional `tribeDurationDays` override can be provided.
  */
-export function getExpiryDuration(bondType: string, tribeDurationDays?: number | null): number {
-  // If a tribe-owner override is provided for tribe-membership bond types, use it
-  if (tribeDurationDays && (bondType === 'follower' || bondType === 'supporter')) {
-    return tribeDurationDays * 86_400_000;
+export function getExpiryDuration(
+  bondType: string,
+  options?: { innerCircle?: boolean; tribeDurationDays?: number | null },
+): number {
+  // Tribe-owner override for tribe-type bonds
+  if (options?.tribeDurationDays && (bondType === 'follower' || bondType === 'supporter' || bondType === 'tribe')) {
+    return options.tribeDurationDays * 86_400_000;
   }
-  const days = BOND_DURATION_DAYS[bondType as BondType] ?? DEFAULT_TRIBE_BOND_DURATION_DAYS;
-  return days * 86_400_000;
+  const category = legacyTypeToCategory(bondType, options?.innerCircle);
+  return DURATION_DAYS[category] * 86_400_000;
 }
 
 /**
  * Returns the duration in days for a given bond type.
  */
-export function getExpiryDurationDays(bondType: string, tribeDurationDays?: number | null): number {
-  if (tribeDurationDays && (bondType === 'follower' || bondType === 'supporter')) {
-    return tribeDurationDays;
+export function getExpiryDurationDays(
+  bondType: string,
+  options?: { innerCircle?: boolean; tribeDurationDays?: number | null },
+): number {
+  if (options?.tribeDurationDays && (bondType === 'follower' || bondType === 'supporter' || bondType === 'tribe')) {
+    return options.tribeDurationDays;
   }
-  return BOND_DURATION_DAYS[bondType as BondType] ?? DEFAULT_TRIBE_BOND_DURATION_DAYS;
+  const category = legacyTypeToCategory(bondType, options?.innerCircle);
+  return DURATION_DAYS[category];
 }
 
 /**
  * Computes the new expiration date for a bond refresh.
  */
-export function computeNewExpiry(bondType: string, tribeDurationDays?: number | null): Date {
-  return new Date(Date.now() + getExpiryDuration(bondType, tribeDurationDays));
+export function computeNewExpiry(
+  bondType: string,
+  options?: { innerCircle?: boolean; tribeDurationDays?: number | null },
+): Date {
+  return new Date(Date.now() + getExpiryDuration(bondType, options));
 }
 
 // ============================================================
@@ -108,10 +176,10 @@ export function computeNewExpiry(bondType: string, tribeDurationDays?: number | 
  */
 export function getStatusDescription(status: Bond['passkeyStatus']): string {
   switch (status) {
-    case 'active': return 'Passkey is valid and active';
-    case 'expires_soon': return 'Passkey expires within 7 days';
-    case 'needs_refresh': return 'Passkey expires within 3 days — refresh recommended';
-    case 'expired': return 'Passkey has expired — bond functionality is degraded';
+    case 'active': return 'Bond is active and secure';
+    case 'fading': return 'Bond is fading — interact to keep it alive';
+    case 'dormant': return 'Bond is dormant — send a reconnect request to restore';
+    case 'expired': return 'Bond has expired — re-join the tribe or get a new event pass';
   }
 }
 
@@ -121,8 +189,8 @@ export function getStatusDescription(status: Bond['passkeyStatus']): string {
 export function getStatusIndicator(status: Bond['passkeyStatus']): string {
   switch (status) {
     case 'active': return '🔑';
-    case 'expires_soon': return '⏳';
-    case 'needs_refresh': return '⚠️';
+    case 'fading': return '⏳';
+    case 'dormant': return '💤';
     case 'expired': return '❌';
   }
 }
@@ -133,8 +201,8 @@ export function getStatusIndicator(status: Bond['passkeyStatus']): string {
 export function getStatusColor(status: Bond['passkeyStatus']): string {
   switch (status) {
     case 'active': return 'text-green-500';
-    case 'expires_soon': return 'text-yellow-500';
-    case 'needs_refresh': return 'text-orange-500';
+    case 'fading': return 'text-yellow-500';
+    case 'dormant': return 'text-muted-foreground';
     case 'expired': return 'text-red-500';
   }
 }
@@ -143,13 +211,26 @@ export function getStatusColor(status: Bond['passkeyStatus']): string {
  * Checks if a bond is in a degraded state (chat/intro features should be disabled).
  */
 export function isBondDegraded(status: Bond['passkeyStatus']): boolean {
-  return status === 'expired';
+  return status === 'dormant' || status === 'expired';
 }
 
 /**
- * Returns the number of days until expiry (negative if expired).
+ * Returns the number of days until expiry (negative if past expiry).
  */
 export function daysUntilExpiry(bond: Pick<Bond, 'expiresAt'>): number {
   const expiresMs = bond.expiresAt instanceof Date ? bond.expiresAt.getTime() : Number(bond.expiresAt);
   return Math.floor((expiresMs - Date.now()) / 86_400_000);
+}
+
+/**
+ * Convenience check: returns true if a bond is active or fading (i.e. usable).
+ * Centralises the repeated `computePasskeyStatus` + active/fading filter pattern.
+ */
+export function isActiveBond(
+  bond: Pick<Bond, 'expiresAt'>,
+  rawBondType?: string,
+  targetType?: string,
+): boolean {
+  const status = computePasskeyStatus(bond, rawBondType, targetType);
+  return status === 'active' || status === 'fading';
 }

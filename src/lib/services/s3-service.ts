@@ -235,7 +235,7 @@ export async function deleteObject(s3Key: string, bucket: BucketType): Promise<v
 
 import { db } from '@/db';
 import { mediaFiles } from '@/db/schema';
-import { eq, and, isNull, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, sql } from 'drizzle-orm';
 
 export interface RecordMediaInput {
   userId: string;
@@ -305,9 +305,9 @@ export async function getMediaUrl(
     const { bonds } = await import('@/db/schema');
     const [bond] = await db.select({ id: bonds.id })
       .from(bonds)
-      .where(and(
-        eq(bonds.userId, requestingUserId),
-        eq(bonds.targetId, file.userId),
+      .where(or(
+        and(eq(bonds.userId, requestingUserId), eq(bonds.targetId, file.userId)),
+        and(eq(bonds.userId, file.userId), eq(bonds.targetId, requestingUserId)),
       ))
       .limit(1);
 

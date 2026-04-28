@@ -30,7 +30,7 @@ export async function GET(request: Request) {
   } catch (err) {
     console.error('[cron/purge-accounts] Fatal error:', err);
     return NextResponse.json(
-      { error: 'Internal error', details: String(err) },
+      { error: 'Internal error' },
       { status: 500 },
     );
   }

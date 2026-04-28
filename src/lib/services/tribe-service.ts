@@ -5,7 +5,7 @@
 import * as z from "zod";
 import { db } from '@/db';
 import { tribes, tribeMoodTags, tribeMembers, pendingMembers } from '@/db/schema';
-import { eq, and, desc, count, sql, gte } from 'drizzle-orm';
+import { eq, and, desc, count, sql, gte, inArray } from 'drizzle-orm';
 import type { Tribe, PendingMember as PendingMemberType, TribeMember } from '@/lib/types';
 import { tribeCoverSvg } from '@/lib/placeholder-svg';
 import { REPUTATION_HIERARCHY } from '@/lib/constants';
@@ -64,8 +64,8 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
     });
 
     // Create the founder's bond to the tribe (same pattern as join/approve flows)
-    const { createFollowerBond } = await import('@/lib/services/bond-service');
-    await createFollowerBond(creatorId, id, 'tribe', payload.name);
+    const { createTribeBond } = await import('@/lib/services/bond-service');
+    await createTribeBond(creatorId, id, 'tribe', payload.name);
   }
 
   return {
@@ -136,24 +136,51 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
 // --- Member Management ---
 
 export async function getTribeMembers(tribeId: string): Promise<TribeMember[]> {
-  const { users } = await import('@/db/schema');
+  const { users, bonds } = await import('@/db/schema');
   const rows = await db.select().from(tribeMembers).where(eq(tribeMembers.tribeId, tribeId));
+  const memberUserIds = rows.map(r => r.userId);
+
+  if (memberUserIds.length === 0) return [];
+
+  const [allUsers, allBonds] = await Promise.all([
+    db.select().from(users).where(inArray(users.id, memberUserIds)),
+    db.select().from(bonds).where(and(
+      inArray(bonds.userId, memberUserIds),
+      eq(bonds.targetId, tribeId),
+    )),
+  ]);
+
+  const userMap = new Map(allUsers.map(u => [u.id, u]));
+  const bondMap = new Map(allBonds.map(b => [b.userId, b]));
   
-  return Promise.all(rows.map(async (r) => {
-    const userRows = await db.select().from(users).where(eq(users.id, r.userId)).limit(1);
-    const user = userRows[0];
+  return rows.map((r) => {
+    const user = userMap.get(r.userId);
+    const bond = bondMap.get(r.userId);
+
+    // Resolve name and avatar based on preferences (inline to avoid re-querying)
+    let resolvedName = user?.name ?? r.userId;
+    let resolvedAvatar = user?.avatar ?? '';
+
+    if (bond?.displayPreference === 'tribe_assigned_nickname' && r.tribeAssignedNickname) {
+      resolvedName = r.tribeAssignedNickname;
+    } else if (r.joinedAsAlias) {
+      resolvedName = r.joinedAsAlias;
+      if (r.joinedAsAvatar) resolvedAvatar = r.joinedAsAvatar;
+    }
+
     return {
       id: r.userId,
-      name: user?.name ?? r.userId,
-      avatar: user?.avatar ?? '',
+      name: resolvedName,
+      avatar: resolvedAvatar ?? '',
       dataAiHint: 'person',
       role: (r.role ?? 'member') as TribeMember['role'],
       tribeId: r.tribeId,
       tribeAssignedNickname: r.tribeAssignedNickname ?? undefined,
       reputationStatus: r.reputationStatus as TribeMember['reputationStatus'],
     };
-  }));
+  });
 }
+
 
 export async function getPendingMembers(tribeId: string): Promise<PendingMemberType[]> {
   const { users } = await import('@/db/schema');
@@ -207,19 +234,20 @@ export async function approveJoinRequest(tribeId: string, pendingMemberId: strin
     tribeId,
     userId: pending.userId,
     role: 'member',
+    joinedAsAlias: pending.joinedAsAlias,
+    joinedAsAvatar: pending.joinedAsAvatar,
     joinedAt: new Date(),
   });
 
   // Increment member count
-  const tribeRows = await db.select().from(tribes).where(eq(tribes.id, tribeId)).limit(1);
-  const tribe = tribeRows[0];
-  if (tribe) {
-    await db.update(tribes).set({ memberCount: (tribe.memberCount ?? 0) + 1 }).where(eq(tribes.id, tribeId));
-  }
+  await db.update(tribes).set({ 
+    memberCount: sql`COALESCE(${tribes.memberCount}, 0) + 1` 
+  }).where(eq(tribes.id, tribeId));
 
   // Auto-create follower bond for the new member → tribe
-  const { createFollowerBond } = await import('@/lib/services/bond-service');
-  await createFollowerBond(pending.userId, tribeId, 'tribe', tribe?.name ?? 'Unknown Tribe');
+  const { createTribeBond } = await import('@/lib/services/bond-service');
+  const [tribeRow] = await db.select({ name: tribes.name }).from(tribes).where(eq(tribes.id, tribeId)).limit(1);
+  await createTribeBond(pending.userId, tribeId, 'tribe', tribeRow?.name ?? 'Unknown Tribe');
 }
 
 export async function denyJoinRequest(tribeId: string, pendingMemberId: string): Promise<void> {
@@ -236,11 +264,9 @@ export async function leaveTribe(userId: string, tribeId: string): Promise<void>
   );
 
   // Decrement member count
-  const tribeRows = await db.select().from(tribes).where(eq(tribes.id, tribeId)).limit(1);
-  const tribe = tribeRows[0];
-  if (tribe && (tribe.memberCount ?? 0) > 0) {
-    await db.update(tribes).set({ memberCount: (tribe.memberCount ?? 1) - 1 }).where(eq(tribes.id, tribeId));
-  }
+  await db.update(tribes).set({ 
+    memberCount: sql`MAX(0, COALESCE(${tribes.memberCount}, 1) - 1)` 
+  }).where(eq(tribes.id, tribeId));
 
   // Revoke the tribe bond
   const { bonds: bondsTable } = await import('@/db/schema');
@@ -304,7 +330,7 @@ export async function deleteTribe(userId: string, tribeId: string): Promise<void
  * 
  * Bot friction: new/bot accounts with low reputation cannot join gated tribes.
  */
-export async function requestToJoinTribe(userId: string, tribeId: string): Promise<'joined' | 'pending' | 'rejected'> {
+export async function requestToJoinTribe(userId: string, tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected'> {
   const { users } = await import('@/db/schema');
 
   // 1. Load tribe and user
@@ -362,6 +388,8 @@ export async function requestToJoinTribe(userId: string, tribeId: string): Promi
       id: `pm-${userId}-${tribeId}`,
       tribeId,
       userId,
+      joinedAsAlias: aliasName || null,
+      joinedAsAvatar: aliasAvatar || null,
       requestedAt: new Date(),
     });
     return 'pending';
@@ -373,17 +401,19 @@ export async function requestToJoinTribe(userId: string, tribeId: string): Promi
     tribeId,
     userId,
     role: 'member',
+    joinedAsAlias: aliasName || null,
+    joinedAsAvatar: aliasAvatar || null,
     joinedAt: new Date(),
   });
 
   // Increment member count
-  if (tribe) {
-    await db.update(tribes).set({ memberCount: (tribe.memberCount ?? 0) + 1 }).where(eq(tribes.id, tribeId));
-  }
+  await db.update(tribes).set({ 
+    memberCount: sql`COALESCE(${tribes.memberCount}, 0) + 1` 
+  }).where(eq(tribes.id, tribeId));
 
   // Auto-create follower bond
-  const { createFollowerBond } = await import('@/lib/services/bond-service');
-  await createFollowerBond(userId, tribeId, 'tribe', tribe.name);
+  const { createTribeBond } = await import('@/lib/services/bond-service');
+  await createTribeBond(userId, tribeId, 'tribe', tribe.name);
 
   return 'joined';
 }

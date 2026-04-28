@@ -20,6 +20,6 @@ USER wsrelay
 EXPOSE 9003
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
-  CMD wget -qO- http://localhost:9004/health || exit 1
+  CMD wget -qO- http://127.0.0.1:9004/health || exit 1
 
 CMD ["node", "server.js"]

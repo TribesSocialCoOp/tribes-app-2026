@@ -11,13 +11,13 @@ import { ArrowLeft, Send, Link2, Copy, Share2, UserPlus, Loader2, Check, Users }
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from '@/hooks/use-toast';
 import React, { Suspense, useState, useEffect, useCallback } from "react";
-import { getFamilyBonds, sendFamilyIntroductions, createFamilyInviteLink } from "@/lib/actions/bond-actions";
+import { getInnerCircleBonds, sendInnerCircleIntroductions, createBondInviteLink } from "@/lib/actions/bond-actions";
 import type { Bond } from "@/lib/types";
 
 function IntroduceContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const connectedFamilyMemberName = searchParams.get("name") || "this family member";
+  const connectedFamilyMemberName = searchParams.get("name") || "this person";
   const newMemberId = searchParams.get("memberId") || "";
   const { toast } = useToast();
 
@@ -36,10 +36,10 @@ function IntroduceContent() {
   useEffect(() => {
     const loadFamilyBonds = async () => {
       try {
-        const bonds = await getFamilyBonds();
+        const bonds = await getInnerCircleBonds();
         setFamilyBonds(bonds);
       } catch {
-        toast({ title: 'Error', description: 'Failed to load family members.', variant: 'destructive' });
+        toast({ title: 'Error', description: 'Failed to load Inner Circle members.', variant: 'destructive' });
       } finally {
         setIsLoading(false);
       }
@@ -63,7 +63,7 @@ function IntroduceContent() {
   // Send introductions
   const handleSendIntroductions = useCallback(async () => {
     if (selectedIds.size === 0 && !inviteUrl) {
-      toast({ title: 'Select family members', description: 'Choose at least one family member to introduce, or generate an invite link.' });
+      toast({ title: 'Select members', description: 'Choose at least one Inner Circle member to introduce, or generate an invite link.' });
       return;
     }
 
@@ -71,7 +71,7 @@ function IntroduceContent() {
     try {
       let sentCount = 0;
       if (selectedIds.size > 0 && newMemberId) {
-        sentCount = await sendFamilyIntroductions(newMemberId, Array.from(selectedIds));
+        sentCount = await sendInnerCircleIntroductions(newMemberId, Array.from(selectedIds));
       }
 
       router.push(`/family/complete?name=${encodeURIComponent(connectedFamilyMemberName)}&count=${sentCount}${inviteUrl ? '&invited=true' : ''}`);
@@ -86,7 +86,7 @@ function IntroduceContent() {
   const handleGenerateInviteLink = useCallback(async () => {
     setIsGeneratingLink(true);
     try {
-      const result = await createFamilyInviteLink();
+      const result = await createBondInviteLink();
       const fullUrl = `${window.location.origin}${result.url}`;
       setInviteUrl(fullUrl);
       toast({ title: 'Invite link created!', description: `Expires at ${result.expiresAt.toLocaleTimeString()}` });
@@ -141,14 +141,14 @@ function IntroduceContent() {
         </Button>
         <CardTitle className="text-2xl md:text-3xl font-bold font-mono text-center pt-8 md:pt-2">Introduce {connectedFamilyMemberName}</CardTitle>
         <CardDescription className="text-md text-muted-foreground text-center pt-1">
-          Select existing family members or invite new ones to connect with {connectedFamilyMemberName}.
+          Select existing Inner Circle members or invite new ones to connect with {connectedFamilyMemberName}.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Existing Family Members */}
         <div>
           <h3 className="text-lg font-semibold mb-3 text-foreground flex items-center gap-2">
-            <Users className="h-5 w-5" /> Select Existing Family:
+            <Users className="h-5 w-5" /> Select Inner Circle:
           </h3>
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
@@ -157,7 +157,7 @@ function IntroduceContent() {
           ) : familyBonds.length === 0 ? (
             <div className="text-center py-6 px-4 rounded-md border border-dashed">
               <p className="text-sm text-muted-foreground">
-                You haven&apos;t formed any family bonds yet. Use the invite link below to bring family members onto the platform.
+                You haven&apos;t added anyone to your Inner Circle yet. Use the invite link below to bring people onto the platform.
               </p>
             </div>
           ) : (
@@ -235,7 +235,7 @@ function IntroduceContent() {
                 ) : (
                   <Link2 className="mr-2 h-4 w-4" />
                 )}
-                Generate Family Invite Link
+                Generate Invite Link
               </Button>
               <p className="text-xs text-muted-foreground px-1">
                 Create a shareable link for family members who aren&apos;t on the platform yet.
@@ -260,7 +260,7 @@ function IntroduceContent() {
             ? `Send ${selectedIds.size} Introduction${selectedIds.size > 1 ? 's' : ''}`
             : inviteUrl
               ? 'Continue'
-              : 'Select family members above'
+              : 'Select members above'
           }
         </Button>
       </CardFooter>

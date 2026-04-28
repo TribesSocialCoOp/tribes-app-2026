@@ -145,6 +145,9 @@ export async function updateSession(request: NextRequest) {
     name: SESSION_COOKIE_NAME,
     value: await encrypt(parsed),
     httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
     expires: parsed.expires,
   });
   return res;

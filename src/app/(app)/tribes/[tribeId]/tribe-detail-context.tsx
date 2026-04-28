@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { getTribeById, getTribeBySlug, getTribeMembers, leaveTribe, getMyTribeIds, requestToJoinTribe, checkTribeAccess } from '@/lib/actions/tribe-actions';
 import { getEventsForTribe } from '@/lib/actions/event-actions';
-import { getPostsForTribe, promotePostToMoods, repost, createTribePost, getActiveReportedPostIds, getActiveReportsForTribe, reportPost, reportComment, toggleVibe, createComment, deleteOwnPost } from '@/lib/actions/content-actions';
+import { getPostsForTribe, promotePostToMoods, repost, createTribePost, getActiveReportedPostIds, getActiveReportsForTribe, reportPost, reportComment, toggleVibe, createComment, deleteOwnPost, togglePinTribePost } from '@/lib/actions/content-actions';
 import type { Tribe, Event, TribePost, ReportedPost, TribeMember, DiscussionComment } from '@/lib/types';
 import type { PostFormValues } from '@/components/dialogs/create-post-dialog';
 import type { TribeAccessLevel } from '@/lib/services/tribe-auth';
@@ -47,6 +47,7 @@ interface TribeDetailState {
   commentDialog: DialogState<CommentContext | null>;
   repostDialog: DialogState<TribePost | null>;
   createPostDialog: { open: boolean };
+  joinTribeDialog: { open: boolean };
 }
 
 type Action =
@@ -71,7 +72,9 @@ type Action =
   | { type: 'OPEN_REPOST'; payload: TribePost }
   | { type: 'CLOSE_REPOST' }
   | { type: 'OPEN_CREATE_POST' }
-  | { type: 'CLOSE_CREATE_POST' };
+  | { type: 'CLOSE_CREATE_POST' }
+  | { type: 'OPEN_JOIN_TRIBE' }
+  | { type: 'CLOSE_JOIN_TRIBE' };
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -85,6 +88,7 @@ const initialState: TribeDetailState = {
   commentDialog: { open: false, target: null },
   repostDialog: { open: false, target: null },
   createPostDialog: { open: false },
+  joinTribeDialog: { open: false },
 };
 
 function reducer(state: TribeDetailState, action: Action): TribeDetailState {
@@ -108,6 +112,8 @@ function reducer(state: TribeDetailState, action: Action): TribeDetailState {
     case 'CLOSE_REPOST': return { ...state, repostDialog: { open: false, target: null } };
     case 'OPEN_CREATE_POST': return { ...state, createPostDialog: { open: true } };
     case 'CLOSE_CREATE_POST': return { ...state, createPostDialog: { open: false } };
+    case 'OPEN_JOIN_TRIBE': return { ...state, joinTribeDialog: { open: true } };
+    case 'CLOSE_JOIN_TRIBE': return { ...state, joinTribeDialog: { open: false } };
     default: return state;
   }
 }
@@ -125,7 +131,8 @@ interface TribeDetailContextValue {
 
   // Actions
   syncAllData: () => Promise<void>;
-  handleJoinTribe: () => Promise<void>;
+  handleInitiateJoinTribe: () => void;
+  handleConfirmJoinTribe: (tribe: Tribe, selectedAlias?: string) => Promise<void>;
   handleOpenPromoteDialog: (post: TribePost) => void;
   handleConfirmPromotion: (postId: string, selectedMoodSlugs: string[]) => Promise<void>;
   handleOpenReportPostDialog: (post: TribePost) => void;
@@ -138,6 +145,8 @@ interface TribeDetailContextValue {
   handleConfirmComment: (content: string) => Promise<void>;
   handleCreatePost: (values: PostFormValues) => Promise<void>;
   handleDeletePost: (postId: string) => Promise<void>;
+  handleTogglePinPost: (postId: string) => Promise<void>;
+  handleRemovePostAsMod: (postId: string) => Promise<void>;
   handleLeaveTribe: () => Promise<void>;
 }
 
@@ -198,11 +207,16 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     const accessLevel = await checkTribeAccess(effectiveTribeId);
     setTribeAccessLevel(accessLevel);
 
+    const isSpeakerOrAbove = accessLevel === 'platform_admin' || accessLevel === 'founder' || accessLevel === 'speaker';
+
     const [membersData, postsData, reportedIds, tribeReports] = await Promise.all([
       getTribeMembers(effectiveTribeId),
       getPostsForTribe(effectiveTribeId),
       getActiveReportedPostIds(),
-      getActiveReportsForTribe(effectiveTribeId),
+      // Only speakers/founders/admins can view moderation reports — skip for guests/members
+      isSpeakerOrAbove
+        ? getActiveReportsForTribe(effectiveTribeId)
+        : Promise.resolve({ tribe: null, reports: [], posts: [] }),
     ]);
 
     if (tribeData) {
@@ -247,12 +261,17 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
   }, [syncAllData]);
 
   // ── Handlers ──
-  const handleJoinTribe = useCallback(async () => {
-    if (!state.tribe) return;
+  const handleInitiateJoinTribe = useCallback(() => {
     if (!isLoggedIn) { router.push('/signup'); return; }
+    dispatch({ type: 'OPEN_JOIN_TRIBE' });
+  }, [isLoggedIn, router]);
+
+  const handleConfirmJoinTribe = useCallback(async (tribe: Tribe, selectedAlias?: string) => {
+    if (!state.tribe) return;
     dispatch({ type: 'SET_JOINING', payload: true });
     try {
-      const result = await requestToJoinTribe(state.tribe.id);
+      const result = await requestToJoinTribe(state.tribe.id, selectedAlias);
+      dispatch({ type: 'CLOSE_JOIN_TRIBE' });
       if (result === 'pending') {
         toast({ title: 'Request Sent', description: `Your request to join ${state.tribe.name} is pending approval.` });
       } else if (result === 'joined') {
@@ -263,10 +282,11 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       }
     } catch {
       toast({ title: 'Error', description: 'Failed to join tribe. Please try again.', variant: 'destructive' });
+      dispatch({ type: 'CLOSE_JOIN_TRIBE' });
     } finally {
       dispatch({ type: 'SET_JOINING', payload: false });
     }
-  }, [state.tribe, isLoggedIn, router, toast, syncAllData]);
+  }, [state.tribe, toast, syncAllData]);
 
   const handleOpenPromoteDialog = useCallback((post: TribePost) => {
     if (state.promotedPostIds.has(post.id)) {
@@ -393,24 +413,54 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     }
   }, [state.tribe, toast]);
 
+  const handleTogglePinPost = useCallback(async (postId: string) => {
+    try {
+      const { pinned } = await togglePinTribePost(postId);
+      toast({ 
+        title: pinned ? 'Post Pinned' : 'Post Unpinned', 
+        description: pinned ? 'This post will stay at the top of the feed.' : 'Post unpinned from top.' 
+      });
+      const refreshedPosts = await getPostsForTribe(state.tribe!.id);
+      dispatch({ type: 'SET_POSTS', payload: refreshedPosts });
+    } catch (err: unknown) {
+      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') || 'Failed to toggle pin.' });
+    }
+  }, [state.tribe, toast]);
+
+  const handleRemovePostAsMod = useCallback(async (postId: string) => {
+    try {
+      const { removePost } = await import('@/lib/actions/content-actions');
+      await removePost({
+        postId,
+        reason: 'Removed by tribe moderator.',
+        preventRepost: false
+      });
+      toast({ title: 'Post Removed', description: 'Content has been removed from the tribe feed.' });
+      const refreshedPosts = await getPostsForTribe(state.tribe!.id);
+      dispatch({ type: 'SET_POSTS', payload: refreshedPosts });
+    } catch (err: unknown) {
+      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') || 'Failed to remove post.' });
+    }
+  }, [state.tribe, toast]);
+
   const value = useMemo(() => ({
     state, dispatch, tribeId, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker,
-    syncAllData, handleJoinTribe,
+    syncAllData, handleInitiateJoinTribe, handleConfirmJoinTribe,
     handleOpenPromoteDialog, handleConfirmPromotion,
     handleOpenReportPostDialog, handleConfirmReportPost,
     handleOpenReportCommentDialog, handleConfirmReportComment,
     handleOpenRepostDialog, handleConfirmRepost,
     handleOpenCommentDialog, handleConfirmComment,
-    handleCreatePost, handleDeletePost, handleLeaveTribe,
+    handleCreatePost, handleDeletePost, handleTogglePinPost, handleRemovePostAsMod, handleLeaveTribe,
   }), [
     state, tribeId, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker,
-    syncAllData, handleJoinTribe,
+    syncAllData, handleInitiateJoinTribe, handleConfirmJoinTribe,
     handleOpenPromoteDialog, handleConfirmPromotion,
     handleOpenReportPostDialog, handleConfirmReportPost,
     handleOpenReportCommentDialog, handleConfirmReportComment,
     handleOpenRepostDialog, handleConfirmRepost,
     handleOpenCommentDialog, handleConfirmComment,
-    handleCreatePost, handleDeletePost, handleLeaveTribe,
+    handleCreatePost, handleDeletePost, handleTogglePinPost, handleRemovePostAsMod, handleLeaveTribe,
   ]);
 
   return (

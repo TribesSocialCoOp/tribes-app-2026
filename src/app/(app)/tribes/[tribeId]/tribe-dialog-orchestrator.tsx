@@ -7,6 +7,7 @@ import { RepostDialog } from '@/components/dialogs/repost-dialog';
 import { ReportCommentDialog } from '@/components/dialogs/report-comment-dialog';
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { CreatePostDialog } from '@/components/dialogs/create-post-dialog';
+import { JoinTribeDialog } from '@/components/dialogs/join-tribe-dialog';
 import { useTribeDetail } from './tribe-detail-context';
 
 export function TribeDialogOrchestrator() {
@@ -14,10 +15,10 @@ export function TribeDialogOrchestrator() {
     state, dispatch,
     handleConfirmPromotion, handleConfirmReportPost,
     handleConfirmReportComment, handleConfirmRepost,
-    handleConfirmComment, handleCreatePost,
+    handleConfirmComment, handleCreatePost, handleConfirmJoinTribe,
   } = useTribeDetail();
 
-  const { tribe, promoteDialog, reportPostDialog, reportCommentDialog, repostDialog, commentDialog, createPostDialog, reportReason } = state;
+  const { tribe, promoteDialog, reportPostDialog, reportCommentDialog, repostDialog, commentDialog, createPostDialog, joinTribeDialog, reportReason, isJoining } = state;
 
   return (
     <>
@@ -69,6 +70,13 @@ export function TribeDialogOrchestrator() {
         isOpen={createPostDialog.open}
         onOpenChange={(open) => !open && dispatch({ type: 'CLOSE_CREATE_POST' })}
         onPostCreated={handleCreatePost}
+      />
+      <JoinTribeDialog
+        isOpen={joinTribeDialog.open}
+        onOpenChange={(open) => !open && dispatch({ type: 'CLOSE_JOIN_TRIBE' })}
+        tribe={tribe}
+        onConfirmJoin={handleConfirmJoinTribe}
+        isJoining={isJoining}
       />
     </>
   );

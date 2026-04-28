@@ -7,16 +7,17 @@ import { IntercomProvider, useIntercom } from './intercom-context';
 import { IntercomFeedTab } from './intercom-feed-tab';
 import { IntercomActivityTab } from './intercom-activity-tab';
 import { ComposeBox } from '@/components/compose/compose-box';
+import { AuthGuard } from '@/components/providers/auth-guard';
 
 function IntercomContent() {
   const { state, dispatch, activityCount, refreshFeed } = useIntercom();
 
   return (
-    <div className="space-y-4 md:space-y-6">
-      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+    <div className="space-y-3 md:space-y-6 min-w-0">
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Feed</h1>
-          <p className="text-md md:text-lg text-muted-foreground mt-1">
+          <h1 className="text-2xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Feed</h1>
+          <p className="text-sm md:text-lg text-muted-foreground mt-1">
             Your world, tuned your way.
           </p>
         </div>
@@ -31,7 +32,7 @@ function IntercomContent() {
       )}
 
       {/* Tab Bar */}
-      <div className="flex gap-1 p-1 bg-muted/50 rounded-lg w-fit">
+      <div className="flex gap-1 p-1 bg-muted/50 rounded-lg max-w-full overflow-x-auto scrollbar-none">
         <button
           onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'feed' })}
           className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
@@ -71,8 +72,10 @@ function IntercomContent() {
 
 export default function YourCommsPage() {
   return (
-    <IntercomProvider>
-      <IntercomContent />
-    </IntercomProvider>
+    <AuthGuard message="Sign in to access your encrypted communication feed.">
+      <IntercomProvider>
+        <IntercomContent />
+      </IntercomProvider>
+    </AuthGuard>
   );
 }

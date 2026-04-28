@@ -69,6 +69,6 @@ USER nextjs
 EXPOSE 9002
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD \
-  wget -qO- http://localhost:9002/api/health || exit 1
+  wget -qO- http://127.0.0.1:9002/api/health || exit 1
 
 CMD ["node", "server.js"]

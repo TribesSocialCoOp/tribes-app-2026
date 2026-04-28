@@ -23,6 +23,8 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { createTribe } from '@/lib/actions/tribe-actions';
 import { uploadFile } from '@/lib/upload';
+import { useActionError } from '@/hooks/use-action-error';
+import { AuthGuard } from "@/components/providers/auth-guard";
 
 const createTribeFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
@@ -37,12 +39,23 @@ const createTribeFormSchema = z.object({
 
 type CreateTribeFormValues = z.infer<typeof createTribeFormSchema>;
 
+
 export default function CreateTribePage() {
+  return (
+    <AuthGuard message="You need an account to create a new tribe.">
+      <CreateTribeContent />
+    </AuthGuard>
+  );
+}
+
+function CreateTribeContent() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
   const [isAiGeneratingDesc, setIsAiGeneratingDesc] = React.useState(false);
   const [coverPreview, setCoverPreview] = React.useState<string | null>(null);
+  
+  const { handleError } = useActionError();
   
   const form = useForm<CreateTribeFormValues>({
     resolver: zodResolver(createTribeFormSchema),
@@ -85,11 +98,7 @@ export default function CreateTribePage() {
       router.push(`/t/${newTribe.slug}`);
     } catch (error) {
        console.error("Failed to create tribe:", error);
-       toast({
-        variant: "destructive",
-        title: "Creation Failed",
-        description: "There was an error creating your tribe. Please try again."
-      });
+       handleError(error, "Creation Failed");
     } finally {
       setIsLoading(false);
     }
@@ -341,5 +350,6 @@ export default function CreateTribePage() {
     </div>
   );
 }
+
 
     

@@ -20,7 +20,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  generateBondKeyPair,
+  generateExportableBondKeyPair,
   exportPublicKey,
   importPublicKey,
   deriveSharedSecret,
@@ -90,8 +90,8 @@ export function useBondCrypto(bondId: string | undefined): UseBondCryptoResult {
       let storedKey = await getBondKey(bondId);
 
       if (!storedKey) {
-        // Step 2: Generate new key pair
-        const keyPair = await generateBondKeyPair();
+        // Step 2: Generate new key pair (extractable for vault backup support)
+        const keyPair = await generateExportableBondKeyPair();
         const publicKeyJwk = await exportPublicKey(keyPair.publicKey);
 
         // Step 3: Store private key in IndexedDB
@@ -140,8 +140,8 @@ export function useBondCrypto(bondId: string | undefined): UseBondCryptoResult {
       // Delete old key
       await deleteBondKey(bondId);
 
-      // Generate new pair
-      const keyPair = await generateBondKeyPair();
+      // Generate new pair (extractable for vault backup support)
+      const keyPair = await generateExportableBondKeyPair();
       const publicKeyJwk = await exportPublicKey(keyPair.publicKey);
 
       // Store and submit

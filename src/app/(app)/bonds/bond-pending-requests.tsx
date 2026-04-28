@@ -43,8 +43,8 @@ export function BondPendingRequests() {
                   <div>
                     <p className="text-sm font-semibold">{req.fromUserName}</p>
                     <div className="flex items-center gap-2">
-                      <Badge className={cn("text-xs", req.bondType === 'family' ? 'bg-pink-500 text-white' : req.bondType === 'friend' ? 'bg-orange-500 text-white' : 'bg-sky-600 text-white')}>
-                        {req.bondType.charAt(0).toUpperCase() + req.bondType.slice(1)}
+                      <Badge className="text-xs bg-indigo-500 text-white">
+                        Bond Request
                       </Badge>
                       <span className="text-xs text-muted-foreground">{format(req.createdAt, 'MMM d, yyyy')}</span>
                     </div>

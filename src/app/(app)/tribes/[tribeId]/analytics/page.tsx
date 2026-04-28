@@ -12,10 +12,19 @@ import { AreaChart, BarChart, CartesianGrid, XAxis, YAxis, Tooltip as RechartsTo
 import { type Tribe } from '@/lib/types';
 import { getTribeById, getTribeAnalytics, getAdvancedTribeAnalytics } from '@/lib/actions/tribe-actions';
 import type { TribeAnalytics, AdvancedTribeAnalytics } from '@/lib/services/tribe-service';
+import { AuthGuard } from "@/components/providers/auth-guard";
 
 const PIE_COLORS = ['hsl(var(--primary))', 'hsl(var(--muted-foreground))'];
 
 export default function AnalyticsPage() {
+  return (
+    <AuthGuard message="Sign in to view tribe engagement analytics.">
+      <AnalyticsContent />
+    </AuthGuard>
+  );
+}
+
+function AnalyticsContent() {
   const router = useRouter();
   const { tribeId } = useTribeIdFromParams();
   const [tribe, setTribe] = useState<Tribe | null>(null);

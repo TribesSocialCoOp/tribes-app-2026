@@ -7,7 +7,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Tribe } from '@/lib/types';
-import { UserPlus, UserCircle, AtSign, Loader2 } from 'lucide-react';
+import { UserPlus, Loader2 } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { avatarSvg } from "@/lib/placeholder-svg";
 import type { UserProfile } from '@/lib/types';
 import { getUserProfile } from '@/lib/actions/profile-actions';
 import { useUser } from '@/hooks/use-user';
@@ -52,13 +54,20 @@ export function JoinTribeDialog({
   if (!tribe) return null;
 
   const handleConfirm = () => {
-    const alias = selectedIdentity === "main_profile" ? undefined : selectedIdentity;
-    onConfirmJoin(tribe, alias);
+    const isAlias = selectedIdentity !== "main_profile";
+    const aliasName = isAlias ? selectedIdentity : undefined;
+    
+    // We can generate the SVG avatar client-side or use a server action. 
+    // Wait, let's use the local generator or a fallback.
+    // If it's an alias, generate its avatarSvg directly here or let the backend do it.
+    // Since `avatarSvg` is in `src/lib/placeholder-svg.ts`, we can't easily use it here if it's server-only? No, it's just a TS function.
+    // But since `onConfirmJoin` accepts `(tribe, alias)` we can just pass the aliasName, and the backend can generate it!
+    onConfirmJoin(tribe, aliasName);
   };
   
   const identityOptions = [
-    { value: "main_profile", label: userProfile?.name || "Main Profile", icon: UserCircle },
-    ...(userProfile?.aliases.map(alias => ({ value: alias, label: alias, icon: AtSign })) || [])
+    { value: "main_profile", label: userProfile?.name || "Main Profile", isAlias: false },
+    ...(userProfile?.aliases.map(alias => ({ value: alias, label: alias, isAlias: true })) || [])
   ];
 
   return (
@@ -88,7 +97,12 @@ export function JoinTribeDialog({
                     className="flex items-center space-x-3 p-3 rounded-md border hover:bg-muted/50 cursor-pointer has-[:checked]:bg-accent has-[:checked]:border-primary has-[:checked]:text-accent-foreground transition-colors"
                   >
                     <RadioGroupItem value={option.value} id={`identity-${option.value}`} className="border-primary" />
-                    <option.icon className="h-5 w-5 text-muted-foreground" />
+                    <Avatar className="h-8 w-8 rounded-md shrink-0">
+                      <AvatarImage src={option.isAlias ? avatarSvg(option.value) : (userProfile?.avatar || undefined)} />
+                      <AvatarFallback className="rounded-md">
+                        {option.isAlias ? option.value.substring(0, 2).toUpperCase() : (userProfile?.name?.substring(0, 2).toUpperCase() || '??')}
+                      </AvatarFallback>
+                    </Avatar>
                     <span className="font-medium text-sm">{option.label}</span>
                   </Label>
                 ))}

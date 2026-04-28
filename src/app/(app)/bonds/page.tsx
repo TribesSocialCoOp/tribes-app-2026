@@ -58,10 +58,14 @@ function BondsContent() {
   );
 }
 
+import { AuthGuard } from '@/components/providers/auth-guard';
+
 export default function BondsPage() {
   return (
-    <BondsProvider>
-      <BondsContent />
-    </BondsProvider>
+    <AuthGuard message="Sign in to manage your connections, passkeys, and family bonds.">
+      <BondsProvider>
+        <BondsContent />
+      </BondsProvider>
+    </AuthGuard>
   );
 }

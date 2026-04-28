@@ -10,15 +10,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MessageSquareText, User, HeartHandshake, Rss, Loader2, Smile, Send, Megaphone, Pin } from "lucide-react";
+import { MessageSquareText, User, HeartHandshake, Rss, Loader2, Smile, Send, Megaphone, Pin, Lock, Trash2 } from "lucide-react";
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { toggleVibe, createComment, getCommentsForPost, togglePinToWall } from '@/lib/actions/content-actions';
+import { useUser } from '@/hooks/use-user';
+import { toggleVibe, createComment, getCommentsForPost, togglePinToWall, deleteOwnPost } from '@/lib/actions/content-actions';
 import type { CommunicationItem, DiscussionComment } from '@/lib/types';
 import { CommentInline } from './comment-inline';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 
 export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   const { toast } = useToast();
+  const { user } = useUser();
   const displayTime = useTimeSince(item.timestamp);
   const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
   const [vibeCount, setVibeCount] = useState(item.vibes ?? 0);
@@ -31,8 +34,12 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const [commentCount, setCommentCount] = useState(0);
   const [isPinned, setIsPinned] = useState(item.pinnedToWall ?? false);
   const [isPinning, setIsPinning] = useState(false);
+  const [isDeleted, setIsDeleted] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const emoticons = VIBE_EMOTICONS;
   const isPost = item.type === 'mood-stream' || item.type === 'ring-post';
+  const isOwnPost = isPost && !!user?.id && item.authorId === user.id;
 
   const handleVibeSelection = async (vibe: string) => {
     if (!isPost) return;
@@ -86,12 +93,15 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
     }
   };
 
+  // Hide deleted posts
+  if (isDeleted) return null;
+
   let icon = <MessageSquareText className="h-5 w-5 text-primary" />;
   let title = "";
   let subtitle = "";
   let body = "";
-  if (item.type === "family-bond" || item.type === "regular-bond") {
-    icon = item.type === "family-bond"
+  if (item.type === "inner-circle-bond" || item.type === "person-bond") {
+    icon = item.type === "inner-circle-bond"
       ? <HeartHandshake className="h-5 w-5 text-pink-500" />
       : <User className="h-5 w-5 text-foreground" />;
     title = item.sender || "Unknown Sender";
@@ -117,11 +127,12 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
       ? `📌 Wall update`
       : (item.ring ? ringLabels[item.ring] || 'Post' : 'Post');
     if (item.moodName) subtitle += ` • ${item.moodName}`;
+    if (item.isEncrypted) subtitle += ' 🔒';
     body = item.content || "";
   }
 
-  const isBond = item.type === 'family-bond' || item.type === 'regular-bond';
-  const bondProfileHref = isBond && item.bondTargetId ? `/profile/${item.bondTargetId}` : undefined;
+  const isBond = item.type === 'inner-circle-bond' || item.type === 'person-bond';
+  const bondChatHref = isBond && item.bondId ? `/bonds/${item.bondId}` : undefined;
 
   const cardContent = (
     <Card className={cn(
@@ -151,8 +162,28 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
       </CardHeader>
       <CardContent className="p-3 sm:p-4 pt-2 sm:pt-3">
         {item.title && <h3 className="text-lg font-semibold mb-1.5 text-foreground tracking-tight">{item.title}</h3>}
-        {item.imageUrl && (
-          <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-md">
+        {/* Multi-image support */}
+        {item.imageUrls && item.imageUrls.length > 0 ? (
+          <div className={cn(
+            "mb-3 grid gap-2 overflow-hidden rounded-md border bg-muted/20",
+            item.imageUrls.length === 1 ? "grid-cols-1" :
+              item.imageUrls.length === 2 ? "grid-cols-2" :
+                item.imageUrls.length === 3 ? "grid-cols-2" :
+                  "grid-cols-2"
+          )}>
+            {item.imageUrls.map((url, idx) => (
+              <div key={idx} className={cn(
+                "relative overflow-hidden",
+                item.imageUrls!.length === 1 ? "aspect-video" : "aspect-square",
+                item.imageUrls!.length === 3 && idx === 0 && "row-span-2 aspect-auto"
+              )}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt={`${item.imageAlt || "Communication media"} ${idx + 1}`} className="w-full h-full object-cover" />
+              </div>
+            ))}
+          </div>
+        ) : item.imageUrl ? (
+          <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-md bg-muted/20">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={item.imageUrl}
@@ -161,8 +192,8 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
               data-ai-hint={item.dataAiHintImage || "media content"}
             />
           </div>
-        )}
-        {body && <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{body}</p>}
+        ) : null}
+        {body && <MarkdownContent content={body} />}
         {item.promotedByName && (
           <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
             <Megaphone className="h-3 w-3" /> Promoted by {item.promotedByName}
@@ -246,6 +277,43 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
             {isPinned ? 'Pinned' : 'Pin'}
           </Button>
         )}
+        {/* Delete own post */}
+        {isOwnPost && !confirmDelete && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-destructive ml-auto"
+            onClick={() => setConfirmDelete(true)}
+          >
+            <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+          </Button>
+        )}
+        {isOwnPost && confirmDelete && (
+          <div className="flex items-center gap-2 ml-auto">
+            <span className="text-xs text-destructive font-medium">Delete permanently?</span>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isDeleting}
+              onClick={async () => {
+                setIsDeleting(true);
+                try {
+                  await deleteOwnPost(item.id);
+                  setIsDeleted(true);
+                  toast({ title: 'Post deleted', description: 'Your post has been permanently removed.' });
+                } catch (err) {
+                  toast({ title: 'Error', description: 'Could not delete post.', variant: 'destructive' });
+                } finally {
+                  setIsDeleting(false);
+                  setConfirmDelete(false);
+                }
+              }}
+            >
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Yes'}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+          </div>
+        )}
       </CardFooter>
       {showComments && loadedComments.length > 0 && (
         <div className="px-3 sm:px-4 pb-2 space-y-3 border-t pt-3">
@@ -282,10 +350,10 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
       )}
     </Card>
   );
-  // Wrap bond cards in a Link to the target's profile
-  if (bondProfileHref) {
+  // Wrap bond cards in a Link to the encrypted chat page
+  if (bondChatHref) {
     return (
-      <Link href={bondProfileHref} className="block no-underline">
+      <Link href={bondChatHref} className="block no-underline">
         {cardContent}
       </Link>
     );

@@ -102,10 +102,22 @@ export async function importPublicKey(jwk: JsonWebKey): Promise<CryptoKey> {
 }
 
 /**
- * Imports a private key from JWK format (for vault restore).
+ * Imports a private key (asymmetric) or symmetric key from JWK format (for vault restore).
  * The imported key is non-extractable — it can only be used, never re-exported.
  */
 export async function importPrivateKey(jwk: JsonWebKey): Promise<CryptoKey> {
+  // Detect if it's a symmetric key (oct) or asymmetric (EC)
+  if (jwk.kty === 'oct') {
+    return crypto.subtle.importKey(
+      'jwk',
+      jwk,
+      { name: 'AES-GCM' },
+      false, // imported as non-extractable
+      ['encrypt', 'decrypt'],
+    );
+  }
+
+  // Default to ECDH for bond keys
   return crypto.subtle.importKey(
     'jwk',
     jwk,

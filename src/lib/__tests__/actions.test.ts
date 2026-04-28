@@ -19,7 +19,9 @@ vi.mock('@/db', () => ({
   db: {
     select: vi.fn(() => ({
       from: vi.fn(() => ({
-        where: vi.fn(() => []),
+        where: vi.fn(() => ({
+          limit: vi.fn(() => [{ role: 'Admin', emailVerified: true }])
+        })),
       })),
     })),
   },

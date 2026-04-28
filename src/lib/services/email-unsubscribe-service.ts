@@ -6,7 +6,7 @@
  * opt out of a specific email category without logging in.
  */
 
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 
 // ============================================================
 // TYPES
@@ -86,7 +86,12 @@ export function validateUnsubscribeToken(token: string): UnsubscribePayload | nu
       .update(`unsub:${payloadB64}`)
       .digest('base64url');
 
-    if (signature !== expectedSig) return null;
+    // SECURITY: Use timing-safe comparison to prevent timing-based signature oracle attacks.
+    // A naive string comparison (===) leaks information about how many characters match,
+    // which can be exploited to forge valid signatures character-by-character.
+    const sigBuf = Buffer.from(signature, 'base64url');
+    const expectedBuf = Buffer.from(expectedSig, 'base64url');
+    if (sigBuf.length !== expectedBuf.length || !timingSafeEqual(sigBuf, expectedBuf)) return null;
 
     const payload = JSON.parse(Buffer.from(payloadB64!, 'base64url').toString('utf-8'));
     const { userId, category, ts } = payload;

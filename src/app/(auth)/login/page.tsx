@@ -22,13 +22,72 @@ export default function LoginPage() {
       // 1. Get authentication options from server
       const options = await loginUserAction();
       
-      // 2. Start biometric authentication in browser
+      // 2. Inject the PRF extension client-side.
+      // The server cannot include this because the PRF salt must be a real
+      // ArrayBuffer/Uint8Array — Node Buffers don't survive JSON serialization.
+      const { getPrfSaltBytes } = await import('@/lib/crypto');
+      const prfSalt = await getPrfSaltBytes();
+      const optionsWithPrf = {
+        ...options,
+        extensions: {
+          ...options.extensions,
+          prf: {
+            eval: { first: prfSalt },
+          },
+        },
+      };
+
+      // 3. Start biometric authentication in browser
       const authResponse = await startAuthentication({
-        optionsJSON: options,
+        optionsJSON: optionsWithPrf,
       });
 
-      // 3. Finish authentication on server
+      // 4. Finish authentication on server
       await finishLoginAction(authResponse);
+
+      // 5. Handle E2E Key Recovery (Phase 3: PRF)
+      try {
+        const { hasAnyKeys, derivePrfWrappingKey, decryptAndRestoreVault } = await import('@/lib/crypto');
+        const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
+        
+        // If this is a fresh session (no keys in IndexedDB), try to restore
+        if (!(await hasAnyKeys())) {
+          console.log('[auth] Local keystore empty, attempting PRF recovery...');
+          
+          // Extract PRF output from assertion
+          // @ts-expect-error — PRF extension results type not yet in @simplewebauthn/browser types
+          const rawPrf = authResponse.clientExtensionResults?.prf?.results?.first;
+          // Validate it is actually an ArrayBuffer of the expected size before use
+          const prfOutput = rawPrf instanceof ArrayBuffer && rawPrf.byteLength >= 32 ? rawPrf : null;
+
+          if (prfOutput) {
+            // Retrieve encrypted vault for this credential
+            const vaultData = await getPrfVaultAction(authResponse.id);
+            
+            if (vaultData) {
+              console.log('[auth] PRF vault found, decrypting...');
+              const wrappingKey = await derivePrfWrappingKey(prfOutput);
+              
+              // Efficiently convert base64 to ArrayBuffer via Buffer (avoids O(n^2) string concat)
+              const encryptedVault = Buffer.from(vaultData.encryptedVaultBase64, 'base64').buffer.slice(0);
+              
+              await decryptAndRestoreVault(wrappingKey, encryptedVault as ArrayBuffer);
+              console.log('[auth] E2E keys restored successfully.');
+              
+              toast({
+                title: "Security Synced",
+                description: "Your E2E encryption keys have been restored from your passkey.",
+              });
+            } else {
+              console.log('[auth] No PRF vault found for this credential. New device?');
+            }
+          } else {
+            console.warn('[auth] Authenticator did not provide a valid PRF output. Cannot auto-recover keys.');
+          }
+        }
+      } catch (cryptoErr) {
+        console.error('[auth] PRF recovery failed:', cryptoErr);
+      }
 
       toast({
         title: "Welcome Back",
@@ -49,11 +108,13 @@ export default function LoginPage() {
         return; // Don't show the generic error
       }
 
+      // Sanitize error messages — never expose raw browser/server internals to users
       toast({
         variant: "destructive",
         title: "Login Failed",
-        description: ((error instanceof Error) ? error.message : 'An error occurred') || "Credential verification failed.",
+        description: "Passkey authentication failed. Please try again.",
       });
+
     } finally {
       setIsLoading(false);
     }

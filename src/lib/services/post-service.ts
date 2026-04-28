@@ -3,9 +3,9 @@
  * Now backed by Drizzle ORM + SQLite.
  */
 import { db } from '@/db';
-import { posts, postMoodTags, comments, blockedUsers, vibes, tribeMembers } from '@/db/schema';
-import { eq, desc, and, sql } from 'drizzle-orm';
-import { users } from '@/db/schema';
+import { posts, postMoodTags, comments, blockedUsers, vibes, tribeMembers, users, tribes } from '@/db/schema';
+import { eq, desc, and, sql, inArray } from 'drizzle-orm';
+import { getBlockedAuthorIds, getUserTribeIds, resolveDisplayIdentity } from './query-helpers';
 import type { TribePost, MoodStreamPost, DiscussionComment } from '@/lib/types';
 import { rowToTribePost } from '@/lib/mappers/post-mapper';
 
@@ -26,27 +26,6 @@ function buildCommentTree(allComments: (typeof comments.$inferSelect)[], parentI
     }));
 }
 
-/**
- * Helper: get blocked user IDs for a given user.
- */
-async function getBlockedAuthorIds(userId?: string): Promise<string[]> {
-  if (!userId) return [];
-  const rows = await db.select({ blockedId: blockedUsers.blockedUserId })
-    .from(blockedUsers)
-    .where(eq(blockedUsers.userId, userId));
-  return rows.map(r => r.blockedId);
-}
-
-/**
- * Helper: get tribe IDs that a user is a member of.
- */
-async function getUserTribeIds(userId?: string): Promise<string[]> {
-  if (!userId) return [];
-  const rows = await db.select({ tribeId: tribeMembers.tribeId })
-    .from(tribeMembers)
-    .where(eq(tribeMembers.userId, userId));
-  return rows.map(r => r.tribeId);
-}
 
 /**
  * Fetches all posts for a specific tribe.
@@ -68,15 +47,26 @@ export async function getPostsForTribe(tribeId: string, viewerUserId?: string): 
       .orderBy(desc(posts.createdAt));
   }
 
-  const results = await Promise.all(rows.map(async (row) => {
-    const commentRows = await db.select().from(comments).where(eq(comments.postId, row.id));
+  const postIds = rows.map(r => r.id);
+  const allComments = postIds.length > 0
+    ? await db.select().from(comments).where(inArray(comments.postId, postIds))
+    : [];
+
+  const commentsByPost = new Map<string, (typeof comments.$inferSelect)[]>();
+  for (const c of allComments) {
+    if (!commentsByPost.has(c.postId)) commentsByPost.set(c.postId, []);
+    commentsByPost.get(c.postId)!.push(c);
+  }
+
+  const results = rows.map((row) => {
+    const commentRows = commentsByPost.get(row.id) ?? [];
     // Also filter out comments from blocked users
     const filteredComments = blockedIds.length > 0
       ? commentRows.filter(c => !blockedIds.includes(c.authorId))
       : commentRows;
     const commentsData = buildCommentTree(filteredComments, null);
     return rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined);
-  }));
+  });
 
   return results;
 }
@@ -94,38 +84,44 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
 
   if (postIds.length === 0) return [];
 
+  // 2. Batch-fetch all posts
+  const allPosts = await db.select().from(posts)
+    .where(inArray(posts.id, postIds));
+
+  // 3. Batch-fetch all tribes referenced by those posts
+  const tribeIds = [...new Set(allPosts.map(p => p.tribeId).filter(Boolean) as string[])];
+  const allTribes = tribeIds.length > 0
+    ? await db.select({ id: tribes.id, name: tribes.name }).from(tribes).where(inArray(tribes.id, tribeIds))
+    : [];
+  const tribeMap = new Map(allTribes.map(t => [t.id, t.name]));
+
+  // 4. Batch-fetch all promoter names
+  const promoterIds = [...new Set(taggedPosts.map(t => t.promotedBy).filter(Boolean) as string[])];
+  const allPromoters = promoterIds.length > 0
+    ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, promoterIds))
+    : [];
+  const promoterMap = new Map(allPromoters.map(u => [u.id, u.name]));
+
   const results: MoodStreamPost[] = [];
-  for (const postId of postIds) {
-    const postRows = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
-    const postRow = postRows[0];
-    if (!postRow) continue;
+  const viewerTribeIds = await getUserTribeIds(viewerUserId);
+
+  for (const postRow of allPosts) {
+    if (postRow.isRemoved) continue;
 
     // Skip posts from blocked users
     if (blockedIds.includes(postRow.authorId)) continue;
 
     // Enforce moodVisibility: restrict non-public posts to tribe members
     if (postRow.moodVisibility && postRow.moodVisibility !== 'public') {
-      const viewerTribeIds = await getUserTribeIds(viewerUserId);
-      if (!postRow.tribeId || !viewerTribeIds.includes(postRow.tribeId)) continue; // Not a member → skip
+      if (!postRow.tribeId || !viewerTribeIds.includes(postRow.tribeId)) continue;
     }
 
-    const tags = taggedPosts.filter(t => t.postId === postId).map(t => t.moodSlug);
-
-    // Look up tribe name
-    const { tribes } = await import('@/db/schema');
-    let tribe;
-    if (postRow.tribeId) {
-      const tribeRows = await db.select().from(tribes).where(eq(tribes.id, postRow.tribeId)).limit(1);
-      tribe = tribeRows[0];
-    }
+    const tags = taggedPosts.filter(t => t.postId === postRow.id).map(t => t.moodSlug);
+    const tribeName = postRow.tribeId ? tribeMap.get(postRow.tribeId) : undefined;
 
     // Look up promoter name (use first tag's promotedBy)
-    let promotedByName: string | undefined;
-    const promoterTag = taggedPosts.find(t => t.postId === postId && t.promotedBy);
-    if (promoterTag?.promotedBy) {
-      const promoterRows = await db.select({ name: users.name }).from(users).where(eq(users.id, promoterTag.promotedBy)).limit(1);
-      promotedByName = promoterRows[0]?.name;
-    }
+    const promoterTag = taggedPosts.find(t => t.postId === postRow.id && t.promotedBy);
+    const promotedByName = promoterTag?.promotedBy ? promoterMap.get(promoterTag.promotedBy) : undefined;
 
     results.push({
       id: postRow.id,
@@ -133,7 +129,7 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
       authorAvatarSrc: postRow.authorAvatar ?? undefined,
       authorAvatarFallback: postRow.authorAvatarFallback,
       dataAiHintAvatar: postRow.dataAiHintAvatar ?? undefined,
-      tribeName: tribe?.name ?? undefined,
+      tribeName,
       tribeId: postRow.tribeId ?? undefined,
       timestamp: postRow.createdAt ?? new Date(),
       title: postRow.title ?? undefined,
@@ -155,14 +151,15 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
  * Creates a new post in a tribe.
  * Image URL should already be uploaded client-side via /api/upload.
  */
-export async function createTribePost(tribeId: string, payload: { title?: string; content: string; imageUrl?: string }, authorId: string): Promise<TribePost> {
-  const id = `new-post-${Date.now()}`;
+export async function createTribePost(tribeId: string, payload: { title?: string; content: string; imageUrl?: string; imageUrls?: string[] }, authorId: string): Promise<TribePost> {
+  const id = crypto.randomUUID();
 
   // Access control: verify the author is a member of the tribe
   const memberRows = await db.select().from(tribeMembers)
     .where(and(eq(tribeMembers.tribeId, tribeId), eq(tribeMembers.userId, authorId)))
     .limit(1);
-  if (memberRows.length === 0) {
+  const member = memberRows[0];
+  if (!member) {
     throw new Error('You must be a member of this tribe to create a post.');
   }
 
@@ -170,20 +167,30 @@ export async function createTribePost(tribeId: string, payload: { title?: string
   const authorRows = await db.select().from(users).where(eq(users.id, authorId)).limit(1);
   const author = authorRows[0];
 
+  // Resolve identity based on bond preferences
+  const { name: resolvedName, avatar: resolvedAvatar } = await resolveDisplayIdentity(
+    authorId, 
+    tribeId, 
+    author?.name ?? 'Unknown User', 
+    author?.avatar
+  );
+  const resolvedAvatarFallback = resolvedName.substring(0, 2).toUpperCase() || '??';
+
   const finalImageUrl = payload.imageUrl || null;
 
   await db.insert(posts).values({
     id,
     tribeId,
     authorId,
-    authorName: author?.name ?? 'Unknown User',
-    authorAvatar: author?.avatar ?? null,
-    authorAvatarFallback: (author?.name?.substring(0, 2).toUpperCase()) ?? '??',
+    authorName: resolvedName,
+    authorAvatar: resolvedAvatar,
+    authorAvatarFallback: resolvedAvatarFallback,
     title: payload.title || null,
     content: payload.content,
-    imageUrl: finalImageUrl,
-    imageAlt: finalImageUrl ? 'User uploaded image' : null,
-    dataAiHintImage: finalImageUrl ? 'user upload' : null,
+    imageUrl: payload.imageUrl || null,
+    imageUrls: payload.imageUrls || null,
+    imageAlt: (payload.imageUrl || (payload.imageUrls && payload.imageUrls.length > 0)) ? 'User uploaded image' : null,
+    dataAiHintImage: (payload.imageUrl || (payload.imageUrls && payload.imageUrls.length > 0)) ? 'user upload' : null,
     vibeCount: 0,
     commentCount: 0,
     isRemoved: false,
@@ -195,9 +202,10 @@ export async function createTribePost(tribeId: string, payload: { title?: string
   const created = rowToTribePost(finalRows[0]!);
 
   // Auto-refresh: sharing keeps your tribe bond alive (fire-and-forget)
-  import('./bond-service').then(({ touchBondOnActivity }) =>
-    touchBondOnActivity(authorId, tribeId, 'tribe')
-  ).catch(() => {});
+  import('./bond-service').then(({ touchBondOnActivity, strengthenBondConnection }) => {
+    touchBondOnActivity(authorId, tribeId, 'tribe');
+    strengthenBondConnection(authorId, tribeId, 2);
+  }).catch(() => {});
 
   // Process @mentions (fire-and-forget)
   import('./mention-service').then(({ processMentions }) =>
@@ -211,7 +219,7 @@ export async function createTribePost(tribeId: string, payload: { title?: string
  * Reposts content.
  */
 export async function repost(postToRepost: TribePost, editedContent: string): Promise<TribePost> {
-  const id = `repost-${postToRepost.id}-${Date.now()}`;
+  const id = crypto.randomUUID();
 
   // Mark original as non-repostable
   await db.update(posts).set({ canBeReposted: false }).where(eq(posts.id, postToRepost.id));
@@ -270,7 +278,7 @@ export async function sharePostToTribe(
     ? (author?.name ?? 'Unknown User')
     : persona; // Use the alias directly
 
-  const id = `share-${sourcePostId}-${targetTribeId}-${Date.now()}`;
+  const id = crypto.randomUUID();
 
   await db.insert(posts).values({
     id,
@@ -282,6 +290,7 @@ export async function sharePostToTribe(
     title: source.title ? `Shared: ${source.title}` : 'Shared Post',
     content: source.content,
     imageUrl: source.imageUrl,
+    imageUrls: source.imageUrls,
     imageAlt: source.imageAlt,
     dataAiHintImage: source.dataAiHintImage,
     vibeCount: 0,
@@ -374,7 +383,7 @@ export async function toggleVibe(
     return { vibed: false, newCount };
   } else {
     // Add vibe
-    const id = `vibe-${userId.substring(0, 8)}-${Date.now()}`;
+    const id = crypto.randomUUID();
     await db.insert(vibes).values({
       id,
       userId,
@@ -404,9 +413,10 @@ export async function toggleVibe(
       const [vibePost] = await db.select({ tribeId: posts.tribeId }).from(posts)
         .where(eq(posts.id, targetId)).limit(1);
       if (vibePost?.tribeId) {
-        import('./bond-service').then(({ touchBondOnActivity }) =>
-          touchBondOnActivity(userId, vibePost.tribeId!, 'tribe')
-        ).catch(() => {});
+        import('./bond-service').then(({ touchBondOnActivity, strengthenBondConnection }) => {
+          touchBondOnActivity(userId, vibePost.tribeId!, 'tribe');
+          strengthenBondConnection(userId, vibePost.tribeId!, 1);
+        }).catch(() => {});
       }
     }
 
@@ -443,15 +453,27 @@ export async function createComment(
   if (!author) throw new Error('User not found');
 
   const id = crypto.randomUUID();
-  const initials = (author.name ?? 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+
+  // We need to know the tribeId to resolve identity
+  const [parentPost] = await db.select({ tribeId: posts.tribeId }).from(posts)
+    .where(eq(posts.id, postId)).limit(1);
+    
+  const { name: resolvedName, avatar: resolvedAvatar } = await resolveDisplayIdentity(
+    userId, 
+    parentPost?.tribeId || null, 
+    author.name ?? 'Unknown', 
+    author.avatar
+  );
+
+  const initials = resolvedName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
   await db.insert(comments).values({
     id,
     postId,
     parentCommentId: parentCommentId ?? null,
     authorId: userId,
-    authorName: author.name ?? 'Unknown',
-    authorAvatar: author.avatar ?? null,
+    authorName: resolvedName,
+    authorAvatar: resolvedAvatar,
     authorAvatarFallback: initials,
     content,
     vibeCount: 0,
@@ -463,14 +485,11 @@ export async function createComment(
     commentCount: sql`${posts.commentCount} + 1`,
   }).where(eq(posts.id, postId));
 
-  // Auto-refresh: commenting keeps your tribe bond alive (fire-and-forget)
-  // Look up the post's tribe to touch the right bond
-  const [parentPost] = await db.select({ tribeId: posts.tribeId }).from(posts)
-    .where(eq(posts.id, postId)).limit(1);
   if (parentPost?.tribeId) {
-    import('./bond-service').then(({ touchBondOnActivity }) =>
-      touchBondOnActivity(userId, parentPost.tribeId!, 'tribe')
-    ).catch(() => {});
+    import('./bond-service').then(({ touchBondOnActivity, strengthenBondConnection }) => {
+      touchBondOnActivity(userId, parentPost.tribeId!, 'tribe');
+      strengthenBondConnection(userId, parentPost.tribeId!, 1);
+    }).catch(() => {});
   }
 
   // Process @mentions (fire-and-forget)
@@ -481,8 +500,8 @@ export async function createComment(
   return {
     id,
     authorId: userId,
-    authorName: author.name ?? 'Unknown',
-    authorAvatar: author.avatar ?? undefined,
+    authorName: resolvedName,
+    authorAvatar: resolvedAvatar ?? undefined,
     authorAvatarFallback: initials,
     content,
     vibes: 0,

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Lock, Send, Loader2, AlertTriangle, RefreshCw, Wifi, WifiOff, Search, X, ChevronUp, ChevronDown, User as UserIcon } from "lucide-react";
+import { ArrowLeft, Lock, Send, Loader2, AlertTriangle, RefreshCw, Wifi, WifiOff, Search, X, ChevronUp, ChevronDown, User as UserIcon, Paperclip, FileIcon, ImageIcon } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/hooks/use-user";
@@ -26,7 +26,17 @@ import { TribesWebSocket } from "@/lib/ws-client";
 import type { Bond } from "@/lib/types";
 import { useMessageSearch, type DateRangePreset } from "@/hooks/use-message-search";
 
+import { AuthGuard } from '@/components/providers/auth-guard';
+
 export default function BondChatPage() {
+  return (
+    <AuthGuard message="Sign in to access your end-to-end encrypted chats.">
+      <BondChatContent />
+    </AuthGuard>
+  );
+}
+
+function BondChatContent() {
   const params = useParams();
   const bondId = params.bondId as string;
   const router = useRouter();
@@ -41,6 +51,11 @@ export default function BondChatPage() {
     plaintext: string;
     sentAt: Date;
     isMine: boolean;
+    attachmentName?: string;
+    attachmentType?: string;
+    attachmentSize?: number;
+    attachmentFileId?: string;
+    attachmentEncryptionMeta?: string;
   }>>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
@@ -50,6 +65,11 @@ export default function BondChatPage() {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // File attachment state
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Bond crypto hook — handles ECDH key exchange automatically
   const { sharedSecret, isExchangeComplete, isReady, isLoading: cryptoLoading, error: cryptoError } = useBondCrypto(bondId);
@@ -152,8 +172,10 @@ export default function BondChatPage() {
         ws.setPresence(bondId, 'join');
 
         // Listen for incoming messages
+        // Accept from any bondId — the peer sends under their own bondId
+        // which is different from ours. The relay routes by targetUserId.
         ws.subscribe('message', async (data: any) => {
-          if (data.bondId !== bondId || data.senderId === user?.id) return;
+          if (data.senderId === user?.id) return;
           try {
             const { decrypt: decryptFn } = await import('@/lib/crypto');
             const ciphertextBuffer = Uint8Array.from(
@@ -162,8 +184,17 @@ export default function BondChatPage() {
             const plaintextBuffer = await decryptFn(sharedSecret!, ciphertextBuffer);
             const plaintext = new TextDecoder().decode(plaintextBuffer);
             setMessages(prev => {
-              // Avoid duplicates
-              if (prev.some(m => m.id === data.messageId)) return prev;
+              // Avoid duplicates: check by messageId, or by content+sender proximity
+              const isDuplicate = prev.some(m => {
+                if (data.messageId && m.id === data.messageId) return true;
+                // Check if same sender sent the same text within 5 seconds
+                if (m.senderId === data.senderId && m.plaintext === plaintext) {
+                  const timeDiff = Math.abs(new Date().getTime() - m.sentAt.getTime());
+                  if (timeDiff < 5000) return true;
+                }
+                return false;
+              });
+              if (isDuplicate) return prev;
               return [...prev, {
                 id: data.messageId || `ws-${Date.now()}`,
                 senderId: data.senderId,
@@ -179,7 +210,7 @@ export default function BondChatPage() {
 
         // Typing indicator
         ws.subscribe('typing', (data: any) => {
-          if (data.bondId !== bondId || data.userId === user?.id) return;
+          if (data.userId === user?.id) return;
           setPeerTyping(true);
           if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
           typingTimeoutRef.current = setTimeout(() => setPeerTyping(false), 3000);
@@ -212,49 +243,90 @@ export default function BondChatPage() {
 
   // Send typing indicator
   const handleTyping = useCallback(() => {
-    if (!wsConnected) return;
+    if (!wsConnected || !bond?.targetId) return;
     const ws = TribesWebSocket.getInstance();
-    ws.sendTyping(bondId);
-  }, [bondId, wsConnected]);
+    ws.sendTyping(bondId, bond.targetId);
+  }, [bondId, bond?.targetId, wsConnected]);
 
-  // Send message
+  // Send message (with optional file attachment)
   const handleSend = useCallback(async () => {
-    if (!newMessage.trim() || !sharedSecret || isSending) return;
+    if ((!newMessage.trim() && !pendingFile) || !sharedSecret || isSending) return;
 
     setIsSending(true);
     try {
-      const { encrypt } = await import('@/lib/crypto');
-      const plaintextBuffer = new TextEncoder().encode(newMessage.trim());
-      const ciphertextBuffer = await encrypt(sharedSecret, plaintextBuffer.buffer as ArrayBuffer);
+      // Handle file attachment encryption + upload
+      let attachmentData: { fileId: string; fileName: string; fileType: string; fileSize: number; encryptionMeta: string } | undefined;
+      if (pendingFile) {
+        setIsUploading(true);
+        const { encryptFileWithKey } = await import('@/lib/crypto/file-encryption');
+        const { encryptedFile, meta } = await encryptFileWithKey(pendingFile, sharedSecret);
 
-      // Convert to base64 for transport
+        // Upload the encrypted file
+        const formData = new FormData();
+        formData.append('file', encryptedFile);
+        formData.append('folder', 'bond-attachments');
+        formData.append('context', 'bond-attachment');
+        formData.append('encryptionMeta', JSON.stringify(meta));
+
+        const csrfToken = document.cookie.match(/(?:^;\s*)__tribes_csrf=([^;]*)/)?.[1] ?? '';
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+          headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+        });
+
+        if (!response.ok) throw new Error('Upload failed');
+        const data = await response.json();
+
+        attachmentData = {
+          fileId: data.fileId || data.url,
+          fileName: pendingFile.name,
+          fileType: pendingFile.type,
+          fileSize: pendingFile.size,
+          encryptionMeta: JSON.stringify(meta),
+        };
+        setIsUploading(false);
+      }
+
+      // Encrypt the message text
+      const messageText = newMessage.trim() || (pendingFile ? `📎 ${pendingFile.name}` : '');
+      const { encrypt } = await import('@/lib/crypto');
+      const plaintextBuffer = new TextEncoder().encode(messageText);
+      const ciphertextBuffer = await encrypt(sharedSecret, plaintextBuffer.buffer as ArrayBuffer);
       const ciphertextBase64 = Buffer.from(new Uint8Array(ciphertextBuffer)).toString('base64');
 
-      // Persist via server action
-      await sendMessage(bondId, ciphertextBase64);
+      // Persist via server action (with attachment metadata)
+      await sendMessage(bondId, ciphertextBase64, attachmentData);
 
       // Relay via WebSocket for real-time delivery
-      if (wsConnected) {
+      if (wsConnected && bond?.targetId) {
         const ws = TribesWebSocket.getInstance();
-        ws.sendEncryptedMessage(bondId, ciphertextBase64);
+        ws.sendEncryptedMessage(bondId, ciphertextBase64, bond.targetId);
       }
 
       // Optimistic update
       setMessages(prev => [...prev, {
         id: `local-${Date.now()}`,
         senderId: user?.id ?? '',
-        plaintext: newMessage.trim(),
+        plaintext: messageText,
         sentAt: new Date(),
         isMine: true,
+        attachmentName: pendingFile?.name,
+        attachmentType: pendingFile?.type,
+        attachmentSize: pendingFile?.size,
+        attachmentFileId: attachmentData?.fileId,
+        attachmentEncryptionMeta: attachmentData?.encryptionMeta,
       }]);
 
       setNewMessage("");
+      setPendingFile(null);
     } catch (err: unknown) {
       toast({ variant: 'destructive', title: 'Send Failed', description: ((err instanceof Error) ? err.message : 'An error occurred') });
     } finally {
       setIsSending(false);
+      setIsUploading(false);
     }
-  }, [newMessage, sharedSecret, bondId, user?.id, toast, isSending, wsConnected]);
+  }, [newMessage, pendingFile, sharedSecret, bondId, user?.id, toast, isSending, wsConnected]);
 
   if (isLoading || cryptoLoading) {
     return (
@@ -480,24 +552,76 @@ export default function BondChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Dormant/Expired bond warning */}
+      {bond && (bond.passkeyStatus === 'dormant' || bond.passkeyStatus === 'expired') && (
+        <div className="border-t p-3 bg-amber-50 dark:bg-amber-950/30 text-center">
+          <p className="text-sm text-amber-800 dark:text-amber-200 font-medium">
+            {bond.passkeyStatus === 'dormant'
+              ? '💤 This bond is dormant. Send a reconnect request to resume messaging.'
+              : '❌ This bond has expired. You can no longer send messages.'}
+          </p>
+        </div>
+      )}
+
       {/* Input Area */}
-      {isExchangeComplete && (
+      {isExchangeComplete && bond?.passkeyStatus !== 'dormant' && bond?.passkeyStatus !== 'expired' && (
         <div className="border-t p-3 bg-background/95 backdrop-blur-sm">
+          {/* Pending attachment preview */}
+          {pendingFile && (
+            <div className="flex items-center gap-2 mb-2 p-2 rounded-md bg-muted/50 border">
+              {pendingFile.type.startsWith('image/') ? (
+                <ImageIcon className="h-4 w-4 text-primary shrink-0" />
+              ) : (
+                <FileIcon className="h-4 w-4 text-primary shrink-0" />
+              )}
+              <span className="text-sm truncate flex-1">{pendingFile.name}</span>
+              <span className="text-xs text-muted-foreground shrink-0">
+                {(pendingFile.size / 1024).toFixed(0)}KB
+              </span>
+              <button
+                onClick={() => setPendingFile(null)}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) setPendingFile(file);
+              e.target.value = ''; // Reset so same file can be re-selected
+            }}
+          />
           <form
             onSubmit={(e) => { e.preventDefault(); handleSend(); }}
             className="flex gap-2"
           >
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isSending}
+              title="Attach a file (encrypted)"
+            >
+              <Paperclip className="h-4 w-4" />
+            </Button>
             <Input
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
-              placeholder="Type a message..."
+              placeholder={pendingFile ? "Add a message (optional)..." : "Type a message..."}
               disabled={isSending}
               className="flex-1"
               autoFocus
             />
             <Button
               type="submit"
-              disabled={!newMessage.trim() || isSending}
+              disabled={(!newMessage.trim() && !pendingFile) || isSending}
               size="icon"
               className="shrink-0"
             >
@@ -509,7 +633,8 @@ export default function BondChatPage() {
             </Button>
           </form>
           <p className="text-xs text-muted-foreground text-center mt-2 flex items-center justify-center gap-1">
-            <Lock className="h-3 w-3" /> Messages are end-to-end encrypted
+            <Lock className="h-3 w-3" />
+            {isUploading ? 'Encrypting and uploading...' : 'Messages and files are end-to-end encrypted'}
           </p>
         </div>
       )}

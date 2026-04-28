@@ -87,11 +87,13 @@ export async function updateUserProfile(userId: string, updates: Partial<Omit<Us
     await db.delete(userAliases).where(eq(userAliases.userId, userId));
     // Insert new aliases
     if (updates.aliases.length > 0) {
+      const { avatarSvg } = await import('@/lib/placeholder-svg');
       await db.insert(userAliases).values(
         updates.aliases.map(alias => ({
           id: `alias-${userId}-${crypto.randomUUID().substring(0, 8)}`,
           userId,
           alias,
+          avatar: avatarSvg(alias),
         }))
       );
     }

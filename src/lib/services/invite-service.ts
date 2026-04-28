@@ -39,6 +39,7 @@ function generateRandomCode(): string {
  */
 export async function validateInviteCode(code: string): Promise<{
   id: string;
+  type: string;
   grantsPlanId: string;
   planName: string;
   remainingUses: number;
@@ -71,6 +72,7 @@ export async function validateInviteCode(code: string): Promise<{
 
   return {
     id: invite.id,
+    type: invite.type ?? 'referral',
     grantsPlanId: invite.grantsPlanId,
     planName: plan?.name ?? invite.grantsPlanId,
     remainingUses: remaining,
@@ -114,8 +116,8 @@ export async function redeemInviteCode(
 
   if (!plan) throw new Error('Plan not found');
 
-  // Determine source based on code prefix
-  const source = normalizedCode.startsWith('TRIBE-') ? 'referral' : 'founding';
+  // Determine source from the code's type field
+  const source = validated.type === 'founding' ? 'founding' : 'referral';
   const subId = `sub-${userId}-${Date.now()}`;
   const redemptionId = `redemption-${userId}-${Date.now()}`;
 
@@ -218,6 +220,7 @@ export async function generateInviteCode(
 
   await db.insert(inviteCodes).values({
     id: code,
+    type: 'referral',
     createdBy: userId,
     grantsPlanId: 'free',
     maxUses: Math.min(maxUses, 10), // Cap at 10 uses per code
@@ -262,6 +265,7 @@ export async function createFoundingCodes(
     const code = generateRandomCode();
     await db.insert(inviteCodes).values({
       id: code,
+      type: 'founding',
       grantsPlanId: planId,
       maxUses: maxUsesEach,
       usedCount: 0,

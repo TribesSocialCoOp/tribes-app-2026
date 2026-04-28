@@ -2,28 +2,28 @@
 
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { HeartHandshake } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useBonds } from './bonds-context';
 
 export function BondFamilyCapacity() {
-  const { maxFamilyBonds, familyBondsCount, state } = useBonds();
+  const { maxInnerCircleBonds, innerCircleCount, state } = useBonds();
 
-  const isUnlimited = maxFamilyBonds === Infinity || maxFamilyBonds === null;
-  const progressValue = isUnlimited ? 0 : (familyBondsCount / maxFamilyBonds) * 100;
+  const isUnlimited = maxInnerCircleBonds === Infinity || maxInnerCircleBonds === null;
+  const progressValue = isUnlimited ? 0 : (innerCircleCount / maxInnerCircleBonds) * 100;
   const planName = state.planName;
 
   return (
     <Card className="shadow-lg">
       <CardHeader>
         <div className="flex items-center space-x-2">
-          <HeartHandshake className="h-6 w-6 text-pink-500" />
-          <CardTitle className="tracking-normal">Family Bond Capacity</CardTitle>
+          <ShieldCheck className="h-6 w-6 text-emerald-500" />
+          <CardTitle className="tracking-normal">Inner Circle</CardTitle>
         </div>
         <CardDescription>
           {isUnlimited
-            ? `Your ${planName} plan includes unlimited Family Bonds. You currently have ${familyBondsCount}.`
-            : `Your ${planName} plan allows for ${maxFamilyBonds} Family Bonds. You are currently using ${familyBondsCount}.`
+            ? `Your ${planName} plan includes unlimited Inner Circle bonds. You currently have ${innerCircleCount}.`
+            : `Your ${planName} plan allows for ${maxInnerCircleBonds} Inner Circle bonds. You are currently using ${innerCircleCount}.`
           }
         </CardDescription>
       </CardHeader>

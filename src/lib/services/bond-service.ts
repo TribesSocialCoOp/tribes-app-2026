@@ -6,11 +6,11 @@
 
 import { db } from '@/db';
 import { bonds, bondRequests, blockedUsers, users, tribes } from '@/db/schema';
-import { eq, and, or, count } from 'drizzle-orm';
+import { eq, and, or, count, sql } from 'drizzle-orm';
 import type { Bond, BondRequest, BondType, FormationMethod } from '@/lib/types';
 import {
   computePasskeyStatus, computeNewExpiry, isBondDegraded, getStatusDescription,
-  getExpiryDuration, daysUntilExpiry, AUTO_REFRESH_THRESHOLD_DAYS,
+  getExpiryDuration, daysUntilExpiry, normalizeBondType, AUTO_REFRESH_THRESHOLD_DAYS,
 } from '@/lib/crypto/passkey-lifecycle';
 
 /**
@@ -37,12 +37,14 @@ function rowToBond(row: typeof bonds.$inferSelect): Bond {
     targetId: row.targetId ?? undefined,
     targetName: row.targetName,
     targetType: row.targetType as Bond['targetType'],
-    bondType: row.bondType as Bond['bondType'],
+    bondType: normalizeBondType(row.bondType) as Bond['bondType'],
     formationMethod: row.formationMethod as Bond['formationMethod'],
     passkeyStatus: (row.passkeyStatus ?? 'active') as Bond['passkeyStatus'],
     expiresAt: row.expiresAt ?? new Date(),
     lastRefreshedAt: row.lastRefreshedAt ?? new Date(),
     reconnectsCount: row.reconnectsCount ?? 0,
+    connectionScore: row.connectionScore ?? 0,
+    lastInteractedAt: row.lastInteractedAt ?? undefined,
     pseudonym: row.pseudonym ?? undefined,
     targetPseudonymForMe: row.targetPseudonymForMe ?? undefined,
     tribeAssignedNickname: row.tribeAssignedNickname ?? undefined,
@@ -56,6 +58,9 @@ function rowToBond(row: typeof bonds.$inferSelect): Bond {
     eventId: row.eventId ?? undefined,
     accessTier: (row.accessTier ?? undefined) as Bond['accessTier'],
     publicKeyJwk: row.publicKeyJwk ?? undefined,
+    dormantAt: row.dormantAt ?? undefined,
+    reconnectRequestedAt: row.reconnectRequestedAt ?? undefined,
+    reconnectRequestedBy: row.reconnectRequestedBy ?? undefined,
   };
 }
 
@@ -92,12 +97,19 @@ export async function getBonds(userId: string): Promise<Bond[]> {
   const bondList = rows.map(rowToBond);
 
   for (const bond of bondList) {
-    // Phase 2D: Compute passkey status on read (check-on-read pattern)
-    const computedStatus = computePasskeyStatus(bond);
+    // Compute passkey status on read — uses bond type + target type for dormant vs expired
+    const rawBondType = rows.find(r => r.id === bond.id)?.bondType;
+    const computedStatus = computePasskeyStatus(bond, rawBondType, bond.targetType);
     if (computedStatus !== bond.passkeyStatus) {
       bond.passkeyStatus = computedStatus;
       // Persist the status change back to DB (lazy write-back)
-      await db.update(bonds).set({ passkeyStatus: computedStatus })
+      const updateData: Record<string, unknown> = { passkeyStatus: computedStatus };
+      // If transitioning to dormant, record the timestamp
+      if (computedStatus === 'dormant' && !bond.dormantAt) {
+        updateData.dormantAt = new Date();
+        bond.dormantAt = new Date();
+      }
+      await db.update(bonds).set(updateData)
         .where(eq(bonds.id, bond.id));
     }
 
@@ -126,26 +138,26 @@ export async function getBondCount(userId: string): Promise<number> {
 }
 
 /**
- * Fetches only family-type bonds for a user (for the introduce flow).
- * Returns bonds with targetType = 'user' and bondType = 'family'.
+ * Returns all Inner Circle bonds for a user.
+ * Inner Circle is a trust tier — any person bond can be promoted to Inner Circle.
  */
-export async function getFamilyBonds(userId: string): Promise<Bond[]> {
+export async function getInnerCircleBonds(userId: string): Promise<Bond[]> {
   const rows = await db.select().from(bonds)
-    .where(and(eq(bonds.userId, userId), eq(bonds.bondType, 'family'), eq(bonds.targetType, 'user')));
+    .where(and(eq(bonds.userId, userId), eq(bonds.innerCircle, true), eq(bonds.targetType, 'user')));
   return rows.map(rowToBond);
 }
 
 /**
- * Creates family introduction bond requests.
- * Sends a family bond request from the new member to each selected existing family member.
+ * Creates Inner Circle introduction bond requests.
+ * Sends a person bond request from the new member to each selected Inner Circle member.
  * Skips if a bond or pending request already exists between the two.
  *
  * @param introducerId - The user performing the introduction (for the message)
- * @param newMemberId - The user ID of the newly-connected family member
- * @param targetMemberIds - IDs of existing family members to introduce to
+ * @param newMemberId - The user ID of the newly-connected member
+ * @param targetMemberIds - IDs of existing Inner Circle members to introduce to
  * @returns Number of introduction requests actually sent
  */
-export async function createFamilyIntroductions(
+export async function createInnerCircleIntroductions(
   introducerId: string,
   newMemberId: string,
   targetMemberIds: string[],
@@ -153,7 +165,7 @@ export async function createFamilyIntroductions(
   // Look up the introducer name for the request message
   const [introducer] = await db.select({ name: users.name }).from(users)
     .where(eq(users.id, introducerId)).limit(1);
-  const introducerName = introducer?.name ?? 'A family member';
+  const introducerName = introducer?.name ?? 'Someone in your circle';
 
   let sent = 0;
   for (const targetId of targetMemberIds) {
@@ -182,16 +194,16 @@ export async function createFamilyIntroductions(
       id,
       fromUserId: newMemberId,
       toUserId: targetId,
-      bondType: 'family',
-      formationMethod: 'family_introduction',
-      message: `Family introduction from ${introducerName}'s network`,
+      bondType: 'person',
+      formationMethod: 'inner_circle_introduction',
+      message: `Introduction from ${introducerName}'s Inner Circle`,
       status: 'pending',
       createdAt: new Date(),
     });
     sent++;
 
-    // Fire-and-forget: notify recipient via email (P4-2)
-    notifyFamilyIntroEmail(newMemberId, targetId, introducerName).catch(() => {});
+    // Fire-and-forget: notify recipient
+    notifyInnerCircleIntroEmail(newMemberId, targetId, introducerName).catch(() => { });
   }
 
   return sent;
@@ -260,13 +272,7 @@ export async function createBondRequest(
     throw new Error(`${bondCheck.planName} plan allows ${bondCheck.limit} bonds (you have ${bondCheck.current}). Upgrade to create more.`);
   }
 
-  // Validation: family bonds require paid feature
-  if (bondType === 'family') {
-    const { hasFeature } = await import('@/lib/services/subscription-guard');
-    if (!(await hasFeature(fromUserId, 'family_bonds'))) {
-      throw new Error('Family bonds require a paid membership. Upgrade to create family bonds.');
-    }
-  }
+
 
   const id = crypto.randomUUID();
   await db.insert(bondRequests).values({
@@ -283,7 +289,7 @@ export async function createBondRequest(
   const [row] = await db.select().from(bondRequests).where(eq(bondRequests.id, id)).limit(1);
 
   // Fire-and-forget: Email notification to recipient
-  notifyBondRequestEmail(fromUserId, toUserId, bondType).catch(() => {});
+  notifyBondRequestEmail(fromUserId, toUserId, bondType).catch(() => { });
 
   return enrichBondRequest(row!);
 }
@@ -311,7 +317,7 @@ export async function acceptBondRequest(requestId: string, acceptorUserId: strin
   const [toUser] = await db.select().from(users).where(eq(users.id, request.toUserId)).limit(1);
 
   const now = new Date();
-  const expiresAt = computeNewExpiry(request.bondType);
+  const expiresAt = computeNewExpiry('person');
 
   // Create bond for the requester (from → to)
   await db.insert(bonds).values({
@@ -320,33 +326,32 @@ export async function acceptBondRequest(requestId: string, acceptorUserId: strin
     targetId: request.toUserId,
     targetType: 'user',
     targetName: toUser?.name ?? 'Unknown',
-    bondType: request.bondType,
+    bondType: 'person',
     formationMethod: request.formationMethod,
     passkeyStatus: 'active',
     expiresAt,
     lastRefreshedAt: now,
     reconnectsCount: 0,
-    innerCircle: request.bondType === 'family', // Family bonds auto-join Inner Circle
   });
 
-  // For mutual bond types (family, friend, professional, collaborator), create the reverse bond too
-  const mutualTypes: BondType[] = ['family', 'friend', 'professional', 'collaborator'];
-  if (mutualTypes.includes(request.bondType as BondType)) {
-    await db.insert(bonds).values({
-      id: `bond-${request.toUserId.substring(0, 8)}-${request.fromUserId.substring(0, 8)}-${Date.now()}`,
-      userId: request.toUserId,
-      targetId: request.fromUserId,
-      targetType: 'user',
-      targetName: fromUser?.name ?? 'Unknown',
-      bondType: request.bondType,
-      formationMethod: request.formationMethod,
-      passkeyStatus: 'active',
-      expiresAt,
-      lastRefreshedAt: now,
-      reconnectsCount: 0,
-      innerCircle: request.bondType === 'family', // Family bonds auto-join Inner Circle
-    });
-  }
+  // Person bonds are always mutual — create the reverse bond
+  await db.insert(bonds).values({
+    id: `bond-${request.toUserId.substring(0, 8)}-${request.fromUserId.substring(0, 8)}-${Date.now()}`,
+    userId: request.toUserId,
+    targetId: request.fromUserId,
+    targetType: 'user',
+    targetName: fromUser?.name ?? 'Unknown',
+    bondType: 'person',
+    formationMethod: request.formationMethod,
+    passkeyStatus: 'active',
+    expiresAt,
+    lastRefreshedAt: now,
+    reconnectsCount: 0,
+  });
+
+  // Strengthen bond connection (+5 for acceptance)
+  void strengthenBondConnection(request.fromUserId, request.toUserId, 5);
+  void strengthenBondConnection(request.toUserId, request.fromUserId, 5);
 }
 
 /**
@@ -445,15 +450,15 @@ export async function getPendingBondRequests(userId: string): Promise<{
 // ============================================================
 
 /**
- * Creates a follower/supporter bond immediately (no acceptance needed).
- * Used for tribe joins and one-way follows.
+ * Creates a tribe/event bond immediately (no acceptance needed).
+ * Used for tribe joins and event attendance. One-sided.
  */
-export async function createFollowerBond(
+export async function createTribeBond(
   userId: string,
   targetId: string,
   targetType: 'user' | 'tribe',
   targetName: string,
-  bondType: 'follower' | 'supporter' = 'follower',
+  bondType: 'tribe' | 'event' = 'tribe',
 ): Promise<void> {
   // Check if bond already exists
   const existing = await db.select().from(bonds)
@@ -479,7 +484,7 @@ export async function createFollowerBond(
     bondType,
     formationMethod: 'virtual_request',
     passkeyStatus: 'active',
-    expiresAt: computeNewExpiry(bondType, tribeDurationDays),
+    expiresAt: computeNewExpiry(bondType, { tribeDurationDays }),
     lastRefreshedAt: now,
     reconnectsCount: 0,
   });
@@ -519,10 +524,10 @@ export async function createReferralBond(
       targetId: inviterId,
       targetType: 'user',
       targetName: inviterName,
-      bondType: 'friend',
+      bondType: 'person',
       formationMethod: 'digital_introduction',
       passkeyStatus: 'active',
-      expiresAt: new Date(now.getTime() + 365 * 86400000), // 1 year
+      expiresAt: computeNewExpiry('person'),
       lastRefreshedAt: now,
       reconnectsCount: 0,
     });
@@ -539,10 +544,10 @@ export async function createReferralBond(
       targetId: inviteeId,
       targetType: 'user',
       targetName: inviteeName,
-      bondType: 'friend',
+      bondType: 'person',
       formationMethod: 'digital_introduction',
       passkeyStatus: 'active',
-      expiresAt: new Date(now.getTime() + 365 * 86400000), // 1 year
+      expiresAt: computeNewExpiry('person'),
       lastRefreshedAt: now,
       reconnectsCount: 0,
     });
@@ -575,9 +580,15 @@ export async function refreshBond(bondId: string, userId: string): Promise<void>
   await db.update(bonds).set({
     passkeyStatus: 'active',
     lastRefreshedAt: new Date(),
-    expiresAt: computeNewExpiry(existing.bondType, tribeDurationDays),
+    expiresAt: computeNewExpiry(existing.bondType, {
+      innerCircle: existing.innerCircle ?? false,
+      tribeDurationDays,
+    }),
     reconnectsCount: (existing.reconnectsCount ?? 0) + 1,
     publicKeyJwk: null, // Clear public key — client must regenerate
+    dormantAt: null,    // Clear dormant state
+    reconnectRequestedAt: null,
+    reconnectRequestedBy: null,
   }).where(eq(bonds.id, bondId));
 }
 
@@ -594,38 +605,32 @@ export async function revokeBond(bondId: string, userId: string): Promise<void> 
 }
 
 /**
- * Upgrades a user bond to a family bond. Only the bond owner can upgrade.
+ * Toggles Inner Circle status for a bond.
+ * Inner Circle bonds get 365-day duration. Regular person bonds get 180-day.
+ * Refreshes the expiry when promoting to Inner Circle.
  */
-export async function upgradeToFamilyBond(bondId: string, userId: string): Promise<void> {
+export async function toggleInnerCircle(bondId: string, userId: string): Promise<boolean> {
   const [existing] = await db.select().from(bonds)
     .where(and(eq(bonds.id, bondId), eq(bonds.userId, userId)))
     .limit(1);
   if (!existing || existing.targetType !== 'user') throw new Error('Bond not found or unauthorized');
 
-  // Server-side guard: check plan-level bond capacity before allowing family upgrade
-  const { canCreateBond } = await import('@/lib/services/subscription-guard');
-  const bondCheck = await canCreateBond(userId);
-  // Free-tier users get a limited number of bonds (the plan's maxBonds).
-  // If they're at or over the limit, the upgrade is a privilege escalation.
-  if (bondCheck.limit !== null) {
-    // Count existing family bonds
-    const familyBonds = await db.select({ count: count() }).from(bonds)
-      .where(and(eq(bonds.userId, userId), eq(bonds.bondType, 'family')));
-    const familyCount = familyBonds[0]?.count ?? 0;
-    // Use same limit — family bonds are the premium subset
-    if (familyCount >= bondCheck.limit) {
-      throw new Error(`Your ${bondCheck.planName} plan allows up to ${bondCheck.limit} family bonds. Upgrade your plan to add more.`);
-    }
+  const newValue = !(existing.innerCircle ?? false);
+
+  // When promoting to Inner Circle, extend to 365-day duration
+  const updateData: Record<string, unknown> = {
+    innerCircle: newValue,
+  };
+  if (newValue) {
+    updateData.expiresAt = computeNewExpiry('person', { innerCircle: true });
+    updateData.passkeyStatus = 'active';
+    updateData.lastRefreshedAt = new Date();
+    updateData.reconnectsCount = (existing.reconnectsCount ?? 0) + 1;
+    updateData.publicKeyJwk = null; // Force key regen
   }
 
-  await db.update(bonds).set({
-    bondType: 'family',
-    passkeyStatus: 'active',
-    lastRefreshedAt: new Date(),
-    expiresAt: computeNewExpiry('family'), // Family bonds always use 365-day duration
-    reconnectsCount: (existing.reconnectsCount ?? 0) + 1,
-    publicKeyJwk: null, // Clear public key — type changed, regen required
-  }).where(eq(bonds.id, bondId));
+  await db.update(bonds).set(updateData).where(eq(bonds.id, bondId));
+  return newValue;
 }
 
 /**
@@ -754,10 +759,66 @@ export async function touchBondOnActivity(
     await db.update(bonds).set({
       passkeyStatus: 'active',
       lastRefreshedAt: new Date(),
-      expiresAt: computeNewExpiry(bond.bondType, tribeDurationDays),
+      expiresAt: computeNewExpiry(bond.bondType, {
+        innerCircle: bond.innerCircle ?? false,
+        tribeDurationDays,
+      }),
+      dormantAt: null,  // Clear dormant state on activity
     }).where(eq(bonds.id, bond.id));
   } catch {
     // Fire-and-forget: never let auto-refresh failures break the main action
+  }
+}
+
+/**
+ * Daily cap for connection score growth to prevent gaming/farming.
+ */
+const DAILY_CONNECTION_CAP = 15;
+
+/**
+ * Increments the connection score on a bond when meaningful interaction occurs.
+ * Fires in parallel with the main action (fire-and-forget).
+ * 
+ * Logic:
+ * 1. Checks the daily cap (+15 per bond per day).
+ * 2. Updates connectionScore and lastInteractedAt.
+ * 3. Logs an anonymous cap-hit counter for monitoring.
+ */
+export async function strengthenBondConnection(
+  userId: string,
+  targetId: string,
+  increment: number,
+): Promise<void> {
+  try {
+    const [bond] = await db.select().from(bonds)
+      .where(and(eq(bonds.userId, userId), eq(bonds.targetId, targetId)))
+      .limit(1);
+
+    if (!bond) return;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const lastInteracted = bond.lastInteractedAt;
+    const isNewDay = !lastInteracted || lastInteracted < today;
+
+    // Reset daily counter on new day
+    const currentDaily = isNewDay ? 0 : (bond.dailyScoreAdded ?? 0);
+
+    if (currentDaily >= DAILY_CONNECTION_CAP) {
+      // Anonymous cap-hit tracking
+      console.log(`[connect-vibe-cap] bond_type=${bond.bondType} cap_hit_count=1 date=${today.toISOString().slice(0, 10)}`);
+      return;
+    }
+
+    const effectiveIncrement = Math.min(increment, DAILY_CONNECTION_CAP - currentDaily);
+
+    await db.update(bonds).set({
+      connectionScore: sql`COALESCE(${bonds.connectionScore}, 0) + ${effectiveIncrement}`,
+      lastInteractedAt: now,
+      dailyScoreAdded: isNewDay ? effectiveIncrement : sql`COALESCE(${bonds.dailyScoreAdded}, 0) + ${effectiveIncrement}`,
+    }).where(eq(bonds.id, bond.id));
+  } catch {
+    // Fire-and-forget: never let scoring failures break the main action
   }
 }
 
@@ -784,7 +845,7 @@ async function notifyBondRequestEmail(fromUserId: string, toUserId: string, bond
       body: `${fromUser?.name ?? 'Someone'} wants to form a ${bondType} bond with you.`,
       url: '/bonds?tab=requests',
       tag: `bond-request-${fromUserId}`,
-    }).catch(() => {});
+    }).catch(() => { });
   }
 
   // Email notification
@@ -798,7 +859,7 @@ async function notifyBondRequestEmail(fromUserId: string, toUserId: string, bond
   }
 }
 
-async function notifyFamilyIntroEmail(newMemberId: string, targetId: string, introducerName: string): Promise<void> {
+async function notifyInnerCircleIntroEmail(newMemberId: string, targetId: string, introducerName: string): Promise<void> {
   const { getPreferences } = await import('@/lib/services/notification-service');
   const prefs = await getPreferences(targetId);
 
@@ -813,21 +874,116 @@ async function notifyFamilyIntroEmail(newMemberId: string, targetId: string, int
   if (prefs.pushEnabled && prefs.bondMessagesEnabled) {
     const { sendPushNotification } = await import('@/lib/services/push-service');
     sendPushNotification(targetId, {
-      title: 'Family Introduction',
-      body: `${introducerName} introduced you to ${fromUser?.name ?? 'a new family member'}.`,
+      title: 'Inner Circle Introduction',
+      body: `${introducerName} introduced you to ${fromUser?.name ?? 'someone new'}.`,
       url: '/bonds?tab=requests',
-      tag: `family-intro-${newMemberId}`,
-    }).catch(() => {});
+      tag: `intro-${newMemberId}`,
+    }).catch(() => { });
   }
 
   // Email notification
   if (prefs.emailEnabled && prefs.bondMessagesEnabled && toUser.email) {
     const { sendEmail } = await import('@/lib/services/email-service');
-    const { familyIntroEmail } = await import('@/lib/services/email-templates');
+    const { innerCircleIntroEmail } = await import('@/lib/services/email-templates');
     const { generateUnsubscribeUrl } = await import('@/lib/services/email-unsubscribe-service');
     const unsubUrl = generateUnsubscribeUrl(targetId, 'bondMessages');
-    const email = familyIntroEmail(toUser.name, fromUser?.name ?? 'A new member', introducerName, unsubUrl);
+    const email = innerCircleIntroEmail(toUser.name, fromUser?.name ?? 'Someone new', introducerName, unsubUrl);
     await sendEmail({ to: toUser.email, ...email }, targetId);
   }
 }
 
+// ============================================================
+// RECONNECT FLOW
+// ============================================================
+
+/**
+ * Sends a reconnect request to a dormant bond partner.
+ * The partner must approve before the bond is restored.
+ */
+export async function requestReconnect(bondId: string, userId: string): Promise<void> {
+  const [bond] = await db.select().from(bonds)
+    .where(and(eq(bonds.id, bondId), eq(bonds.userId, userId)))
+    .limit(1);
+  if (!bond) throw new Error('Bond not found');
+  if (bond.passkeyStatus !== 'dormant') throw new Error('Only dormant bonds can be reconnected');
+  if (bond.reconnectRequestedBy) throw new Error('A reconnect request is already pending');
+
+  // Mark this side as reconnect-requested
+  await db.update(bonds).set({
+    reconnectRequestedAt: new Date(),
+    reconnectRequestedBy: userId,
+  }).where(eq(bonds.id, bondId));
+
+  // Also mark the partner's side (if it exists)
+  if (bond.targetId) {
+    await db.update(bonds).set({
+      reconnectRequestedAt: new Date(),
+      reconnectRequestedBy: userId,
+    }).where(and(eq(bonds.userId, bond.targetId), eq(bonds.targetId, userId)));
+  }
+}
+
+/**
+ * Approves a reconnect request — restores both sides of the bond to active.
+ */
+export async function approveReconnect(bondId: string, userId: string): Promise<void> {
+  const [bond] = await db.select().from(bonds)
+    .where(and(eq(bonds.id, bondId), eq(bonds.userId, userId)))
+    .limit(1);
+  if (!bond) throw new Error('Bond not found');
+  if (!bond.reconnectRequestedBy) throw new Error('No reconnect request pending');
+  if (bond.reconnectRequestedBy === userId) throw new Error('Cannot approve your own reconnect request');
+
+  const now = new Date();
+  const newExpiry = computeNewExpiry('person', { innerCircle: bond.innerCircle ?? false });
+  const refreshData = {
+    passkeyStatus: 'active' as const,
+    lastRefreshedAt: now,
+    expiresAt: newExpiry,
+    reconnectsCount: (bond.reconnectsCount ?? 0) + 1,
+    dormantAt: null,
+    reconnectRequestedAt: null,
+    reconnectRequestedBy: null,
+    publicKeyJwk: null, // Force key regen
+  };
+
+  // Refresh this side
+  await db.update(bonds).set(refreshData).where(eq(bonds.id, bondId));
+
+  // Refresh the partner's side
+  if (bond.targetId) {
+    const [partnerBond] = await db.select().from(bonds)
+      .where(and(eq(bonds.userId, bond.targetId), eq(bonds.targetId, userId)))
+      .limit(1);
+    if (partnerBond) {
+      await db.update(bonds).set({
+        ...refreshData,
+        reconnectsCount: (partnerBond.reconnectsCount ?? 0) + 1,
+      }).where(eq(bonds.id, partnerBond.id));
+    }
+  }
+}
+
+/**
+ * Declines a reconnect request — bond stays dormant.
+ */
+export async function declineReconnect(bondId: string, userId: string): Promise<void> {
+  const [bond] = await db.select().from(bonds)
+    .where(and(eq(bonds.id, bondId), eq(bonds.userId, userId)))
+    .limit(1);
+  if (!bond) throw new Error('Bond not found');
+  if (!bond.reconnectRequestedBy) throw new Error('No reconnect request to decline');
+
+  // Clear the reconnect request on both sides
+  await db.update(bonds).set({
+    reconnectRequestedAt: null,
+    reconnectRequestedBy: null,
+  }).where(eq(bonds.id, bondId));
+
+  if (bond.targetId) {
+    await db.update(bonds).set({
+      reconnectRequestedAt: null,
+      reconnectRequestedBy: null,
+    }).where(and(eq(bonds.userId, bond.targetId), eq(bonds.targetId, userId)));
+  }
+}

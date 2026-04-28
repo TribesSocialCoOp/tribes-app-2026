@@ -21,7 +21,17 @@ import { useUser } from '@/hooks/use-user';
 import { useToast } from '@/hooks/use-toast';
 
 
+import { AuthGuard } from '@/components/providers/auth-guard';
+
 export default function EventDetailPage() {
+  return (
+    <AuthGuard message="Sign in to view event details and RSVP.">
+      <EventDetailContent />
+    </AuthGuard>
+  );
+}
+
+function EventDetailContent() {
   const router = useRouter();
   const params = useParams();
   const eventId = params.eventId as string;

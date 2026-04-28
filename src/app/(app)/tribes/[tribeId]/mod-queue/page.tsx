@@ -26,6 +26,7 @@ import { dismissReport, removePost, getActiveReportsForTribe, escalateReport } f
 import { checkTribeAccess } from '@/lib/actions/tribe-actions';
 import type { TribePost, ReportedPost } from '@/lib/types';
 import type { Tribe } from '@/lib/types';
+import { AuthGuard } from "@/components/providers/auth-guard";
 
 
 const ITEMS_PER_PAGE_OPTIONS = [5, 10, 15];
@@ -50,6 +51,14 @@ const sortOptionsTribe: SortOptionTribe[] = [
 
 
 export default function TribeModQueuePage() {
+  return (
+    <AuthGuard message="Sign in to moderate tribe reports.">
+      <TribeModQueueContent />
+    </AuthGuard>
+  );
+}
+
+function TribeModQueueContent() {
   const router = useRouter();
   const { toast } = useToast();
   const { role } = useUser();

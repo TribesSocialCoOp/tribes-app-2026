@@ -6,9 +6,11 @@
 import { db } from '@/db';
 import { posts, bonds, postMoodTags, blockedUsers, tribeMembers, tribes, users } from '@/db/schema';
 import { eq, desc, and, or, inArray } from 'drizzle-orm';
+import { getBlockedAuthorIds, getUserTribeIds } from './query-helpers';
 import type { CommunicationItem, Ring } from '@/lib/types';
 import { rowToTribePost } from '@/lib/mappers/post-mapper';
 import { moodsData } from '@/lib/moods-data';
+import { computePasskeyStatus } from '@/lib/crypto/passkey-lifecycle';
 
 interface UnifiedFeedParams {
   userId: string;
@@ -81,11 +83,6 @@ export async function getUnifiedFeed(params: UnifiedFeedParams): Promise<Communi
 
 // ─── Internal Helpers ───────────────────────────────────────────────────────
 
-async function getBlockedAuthorIds(userId: string): Promise<string[]> {
-  const rows = await db.select({ blockedId: blockedUsers.blockedUserId })
-    .from(blockedUsers).where(eq(blockedUsers.userId, userId));
-  return rows.map(r => r.blockedId);
-}
 
 interface BondInfo {
   id: string;
@@ -95,6 +92,21 @@ interface BondInfo {
   bondType: string;
   innerCircle: boolean;
   lastRefreshedAt: Date | null;
+  expiresAt: Date | null;
+}
+
+/**
+ * Returns true if the bond is active or fading (not dormant/expired).
+ * This is the trust boundary: dormant/expired bonds lose content access.
+ */
+function isActiveBond(bond: BondInfo): boolean {
+  if (!bond.expiresAt) return true; // Legacy bonds without expiry are treated as active
+  const status = computePasskeyStatus(
+    { expiresAt: bond.expiresAt },
+    bond.bondType,
+    bond.targetType,
+  );
+  return status === 'active' || status === 'fading';
 }
 
 async function getUserBonds(userId: string): Promise<BondInfo[]> {
@@ -106,20 +118,17 @@ async function getUserBonds(userId: string): Promise<BondInfo[]> {
     bondType: bonds.bondType,
     innerCircle: bonds.innerCircle,
     lastRefreshedAt: bonds.lastRefreshedAt,
+    expiresAt: bonds.expiresAt,
   }).from(bonds).where(eq(bonds.userId, userId));
 
   return rows.map(r => ({
     ...r,
     innerCircle: r.innerCircle ?? false,
     lastRefreshedAt: r.lastRefreshedAt ?? null,
+    expiresAt: r.expiresAt ?? null,
   }));
 }
 
-async function getUserTribeIds(userId: string): Promise<string[]> {
-  const rows = await db.select({ tribeId: tribeMembers.tribeId })
-    .from(tribeMembers).where(eq(tribeMembers.userId, userId));
-  return rows.map(r => r.tribeId);
-}
 
 /**
  * Builds bond chat preview items from the user's bonds.
@@ -135,9 +144,10 @@ async function buildBondMessageItems(
 
   const relevantBonds = userBonds
     .filter(b => b.targetType === 'user' && !blockedIds.includes(b.targetId ?? ''))
+    .filter(b => isActiveBond(b)) // Enforce bond status boundary
     .filter(b => {
       if (ringFilter === 'inner_circle') return b.innerCircle;
-      return b.bondType === 'family' || b.bondType === 'friend';
+      return b.bondType === 'person' || b.targetType === 'user';
     });
 
   for (const b of relevantBonds) {
@@ -145,9 +155,10 @@ async function buildBondMessageItems(
     const initials = b.targetName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
     items.push({
       id: `bond-msg-${b.id}`,
-      type: b.bondType === 'family' ? 'family-bond' : 'regular-bond',
+      type: b.innerCircle ? 'inner-circle-bond' : 'person-bond',
       sender: b.targetName,
       bondName: b.targetName,
+      bondId: b.id,
       bondTargetId: b.targetId ?? undefined,
       message: latestMsg?.preview || 'Start a conversation!',
       vibes: 0,
@@ -189,6 +200,7 @@ async function fetchRingPosts(
   if (ringFilter === 'all' || ringFilter === 'inner_circle') {
     const innerCircleBondTargetIds = userBonds
       .filter(b => b.innerCircle && b.targetType === 'user' && b.targetId)
+      .filter(b => isActiveBond(b)) // Enforce bond status boundary
       .map(b => b.targetId!)
       .filter(id => !blockedIds.includes(id));
 
@@ -219,6 +231,7 @@ async function fetchRingPosts(
   if (ringFilter === 'all' || ringFilter === 'my_people') {
     const allBondTargetIds = userBonds
       .filter(b => b.targetType === 'user' && b.targetId)
+      .filter(b => isActiveBond(b)) // Enforce bond status boundary
       .map(b => b.targetId!)
       .filter(id => !blockedIds.includes(id));
 
@@ -279,37 +292,42 @@ async function fetchMoodStreamPosts(
   const postIds = [...new Set(tagRows.map(t => t.postId))];
   if (postIds.length === 0) return [];
 
+  // 2. Batch-fetch all posts
+  const allPosts = await db.select().from(posts)
+    .where(inArray(posts.id, postIds));
+
+  // 3. Batch-fetch all tribes referenced
+  const tribeIds = [...new Set(allPosts.map(p => p.tribeId).filter(Boolean) as string[])];
+  const allTribes = tribeIds.length > 0
+    ? await db.select({ id: tribes.id, name: tribes.name }).from(tribes).where(inArray(tribes.id, tribeIds))
+    : [];
+  const tribeMap = new Map(allTribes.map(t => [t.id, t.name]));
+
+  // 4. Batch-fetch all promoters
+  const promoterIds = [...new Set(tagRows.map(t => t.promotedBy).filter(Boolean) as string[])];
+  const allPromoters = promoterIds.length > 0
+    ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, promoterIds))
+    : [];
+  const promoterMap = new Map(allPromoters.map(u => [u.id, u.name]));
+
   const items: CommunicationItem[] = [];
 
-  for (const postId of postIds) {
-    const [postRow] = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
-    if (!postRow || postRow.isRemoved) continue;
+  for (const postRow of allPosts) {
+    if (postRow.isRemoved) continue;
     if (blockedIds.includes(postRow.authorId)) continue;
 
-    const tags = tagRows.filter(t => t.postId === postId);
+    const tags = tagRows.filter(t => t.postId === postRow.id);
     const moodSlug = tags[0]?.moodSlug;
     if (moodSlugs.length > 0 && moodSlug && !moodSlugs.includes(moodSlug)) continue;
 
     const moodDetails = moodsData.find(m => m.slug === moodSlug);
-    let tribeName: string | undefined;
-    if (postRow.tribeId) {
-      const [tribe] = await db.select({ name: tribes.name }).from(tribes)
-        .where(eq(tribes.id, postRow.tribeId)).limit(1);
-      tribeName = tribe?.name;
-    }
-
-    // Get promoter name
-    const promotedBy = tags[0]?.promotedBy;
-    let promotedByName: string | undefined;
-    if (promotedBy) {
-      const [promoter] = await db.select({ name: users.name }).from(users)
-        .where(eq(users.id, promotedBy)).limit(1);
-      promotedByName = promoter?.name;
-    }
+    const tribeName = postRow.tribeId ? tribeMap.get(postRow.tribeId) : undefined;
+    const promotedByName = tags[0]?.promotedBy ? promoterMap.get(tags[0].promotedBy) : undefined;
 
     items.push({
       id: postRow.id,
       type: 'mood-stream',
+      authorId: postRow.authorId,
       tribeName,
       tribeId: postRow.tribeId ?? undefined,
       content: postRow.content,
@@ -322,6 +340,7 @@ async function fetchMoodStreamPosts(
       vibes: postRow.vibeCount ?? 0,
       dataAiHint: postRow.dataAiHintAvatar ?? undefined,
       imageUrl: postRow.imageUrl ?? undefined,
+      imageUrls: postRow.imageUrls ?? undefined,
       imageAlt: postRow.imageAlt ?? undefined,
       dataAiHintImage: postRow.dataAiHintImage ?? undefined,
       sender: postRow.authorName,
@@ -372,6 +391,7 @@ function postRowToFeedItem(
     id: row.id,
     type: 'ring-post',
     ring,
+    authorId: row.authorId,
     sender: row.authorName,
     content: row.content,
     title: row.title ?? undefined,
@@ -381,11 +401,16 @@ function postRowToFeedItem(
     vibes: row.vibeCount ?? 0,
     dataAiHint: row.dataAiHintAvatar ?? undefined,
     imageUrl: row.imageUrl ?? undefined,
+    imageUrls: row.imageUrls ?? undefined,
     imageAlt: row.imageAlt ?? undefined,
     dataAiHintImage: row.dataAiHintImage ?? undefined,
     moodSlug: row.moodTag ?? undefined,
     moodName: row.moodTag ? (moodsData.find(m => m.slug === row.moodTag)?.name || row.moodTag) : undefined,
     tribeId: row.tribeId ?? undefined,
     pinnedToWall: isPinnedWallUpdate || (row.pinnedToWall ?? false),
+    // E2E encryption data (Phase 3)
+    isEncrypted: row.isEncrypted ?? false,
+    ciphertextBase64: row.ciphertext ? Buffer.from(row.ciphertext as Buffer).toString('base64') : undefined,
+    encryptionIv: row.encryptionIv ?? undefined,
   };
 }

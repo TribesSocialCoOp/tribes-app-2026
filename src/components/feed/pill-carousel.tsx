@@ -50,7 +50,7 @@ export function PillCarousel({ children, className }: PillCarouselProps) {
   };
 
   return (
-    <div className={cn("relative group", className)}>
+    <div className={cn("relative group overflow-x-hidden min-w-0", className)}>
       {/* Left fade + arrow */}
       <div
         className={cn(
@@ -72,7 +72,7 @@ export function PillCarousel({ children, className }: PillCarouselProps) {
       {/* Scrollable content */}
       <div
         ref={scrollRef}
-        className="flex gap-1.5 overflow-x-auto scrollbar-none scroll-smooth snap-x snap-mandatory px-1 py-1"
+        className="flex gap-1.5 overflow-x-auto scrollbar-none scroll-smooth snap-x snap-mandatory px-1 py-1 w-full"
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         {React.Children.map(children, (child) => (

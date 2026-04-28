@@ -5,7 +5,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppHeader } from "@/components/layout/app-header";
 import { WebSocketProvider } from "@/components/providers/websocket-provider";
 import { UserProvider } from "@/components/providers/user-provider";
-import { ComposeFAB } from "@/components/compose/compose-fab";
+
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import React from "react";
 
@@ -20,11 +20,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <SidebarRail />
           <SidebarInset className="flex flex-col flex-1">
             <AppHeader />
-            <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 pb-20 md:pb-8 bg-background">
+            <main className="flex-1 overflow-y-auto overflow-x-hidden px-2 pt-3 pb-20 sm:p-6 lg:p-8 md:pb-8 bg-background">
               {children}
             </main>
           </SidebarInset>
-          <ComposeFAB />
+
           <MobileTabBar />
         </SidebarProvider>
       </WebSocketProvider>

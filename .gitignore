@@ -24,6 +24,12 @@
 .DS_Store
 *.pem
 
+# Terraform — NEVER commit state or variable files containing secrets
+infra/terraform/terraform.tfstate
+infra/terraform/terraform.tfstate.backup
+infra/terraform/terraform.tfvars
+infra/terraform/.terraform/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
@@ -73,3 +79,9 @@ vibe_working.png
 # Infrastructure secrets
 infra/terraform/terraform.tfvars
 infra/terraform/.terraform/
+
+# Admin tooling (local-only, gitignored)
+tools/
+scratch.*
+query_*.ts
+*.admin.ts

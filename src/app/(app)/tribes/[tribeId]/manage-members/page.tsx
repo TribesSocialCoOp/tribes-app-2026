@@ -32,7 +32,17 @@ import { getTribeById, getTribeMembers, getPendingMembers, updateMemberNickname,
 import { banMemberFromTribe } from '@/lib/actions/content-actions';
 
 
+import { AuthGuard } from "@/components/providers/auth-guard";
+
 export default function ManageMembersPage() {
+  return (
+    <AuthGuard message="Sign in to manage tribe members.">
+      <ManageMembersContent />
+    </AuthGuard>
+  );
+}
+
+function ManageMembersContent() {
   const router = useRouter();
   const { tribeId } = useTribeIdFromParams();
   const { toast } = useToast();

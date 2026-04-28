@@ -18,7 +18,17 @@ interface MailboxEntry {
   sentAt: string;
 }
 
+import { AuthGuard } from "@/components/providers/auth-guard";
+
 export default function DevMailboxPage() {
+  return (
+    <AuthGuard requiredRole="Admin" message="This page is for development and administration only.">
+      <DevMailboxContent />
+    </AuthGuard>
+  );
+}
+
+function DevMailboxContent() {
   const [entries, setEntries] = useState<MailboxEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);

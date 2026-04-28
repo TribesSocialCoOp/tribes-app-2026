@@ -41,15 +41,6 @@ export default async function TapRedemptionPage({ params }: TapRedemptionPagePro
     try {
       await redeemTapToken(decodedToken, uid);
       revalidatePath('/bonds');
-
-      // Family bonds → redirect to introduce flow so the user can
-      // introduce the new connection to existing family members
-      if (tokenInfo?.bondType === 'family') {
-        const name = encodeURIComponent(tokenInfo.initiatorName);
-        const memberId = encodeURIComponent(tokenInfo.initiatorId);
-        redirect(`/family/start?name=${name}&memberId=${memberId}`);
-      }
-
       redirect('/bonds');
     } catch {
       redirect('/bonds?error=tap-failed');
@@ -102,19 +93,16 @@ export default async function TapRedemptionPage({ params }: TapRedemptionPagePro
           <div className="text-left">
             <div className="font-semibold text-white">{tokenInfo.initiatorName}</div>
             <div className="text-sm text-gray-400">
-              wants to form a <span className="font-medium text-purple-400">{tokenInfo.bondType}</span> bond
+              wants to connect with you
             </div>
           </div>
         </div>
 
         {/* Bond Type Badge */}
         <div className="mb-6 inline-block rounded-full bg-purple-500/20 px-4 py-2 text-sm font-medium text-purple-300">
-          {tokenInfo.bondType === 'family' && '👨‍👩‍👦 Family Bond (365-day passkey)'}
-          {tokenInfo.bondType === 'friend' && '🤝 Friend Bond (30-day passkey)'}
-          {tokenInfo.bondType === 'professional' && '💼 Professional Bond (30-day passkey)'}
-          {tokenInfo.bondType === 'collaborator' && '🔧 Collaborator Bond (30-day passkey)'}
-          {tokenInfo.bondType === 'follower' && '👤 Follower Bond'}
-          {tokenInfo.bondType === 'supporter' && '💎 Supporter Bond'}
+          {tokenInfo.bondType === 'person' && '🤝 Person Bond (180-day passkey)'}
+          {tokenInfo.bondType === 'tribe' && '👥 Tribe Bond'}
+          {tokenInfo.bondType === 'event' && '🎫 Event Pass'}
         </div>
 
         {isSelf ? (

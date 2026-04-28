@@ -40,7 +40,7 @@ export function RingFilterBar({ value, onChange, className }: RingFilterBarProps
             key={filter.value}
             onClick={() => handleSelect(filter.value)}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap",
+              "flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-xs font-medium whitespace-nowrap",
               "transition-all duration-200 border",
               isActive
                 ? "bg-primary text-primary-foreground border-primary shadow-sm"

@@ -5,6 +5,7 @@ import { eq, and } from 'drizzle-orm';
 import { createSession } from '@/lib/auth/session';
 import { cookies } from 'next/headers';
 import { loginLimiter, getClientIp } from '@/lib/auth/rate-limit';
+import { buildUrl } from '@/lib/url';
 
 /**
  * Google OAuth 2.0 — Callback Handler
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
   try {
     await loginLimiter.check(ip);
   } catch {
-    return NextResponse.redirect(new URL('/login?error=too_many_attempts', request.url));
+    return NextResponse.redirect(buildUrl('/login?error=too_many_attempts', request));
   }
 
   const searchParams = request.nextUrl.searchParams;
@@ -33,11 +34,11 @@ export async function GET(request: NextRequest) {
   const error = searchParams.get('error');
 
   if (error) {
-    return NextResponse.redirect(new URL('/login?error=google_denied', request.url));
+    return NextResponse.redirect(buildUrl('/login?error=google_denied', request));
   }
 
   if (!code) {
-    return NextResponse.redirect(new URL('/login?error=no_code', request.url));
+    return NextResponse.redirect(buildUrl('/login?error=no_code', request));
   }
 
   // Verify CSRF state
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
   cookieStore.set('oauth_state', '', { expires: new Date(0), path: '/' });
 
   if (!savedState || savedState !== state) {
-    return NextResponse.redirect(new URL('/login?error=invalid_state', request.url));
+    return NextResponse.redirect(buildUrl('/login?error=invalid_state', request));
   }
 
   // Retrieve invite code from cookie (set during OAuth initiation)
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
 
   if (!clientId || !clientSecret) {
     console.error('[Google OAuth] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not configured.');
-    return NextResponse.redirect(new URL('/login?error=sso_misconfigured', request.url));
+    return NextResponse.redirect(buildUrl('/login?error=sso_misconfigured', request));
   }
 
   try {
@@ -79,7 +80,7 @@ export async function GET(request: NextRequest) {
     if (!tokenResponse.ok) {
       const err = await tokenResponse.text();
       console.error('[Google OAuth] Token exchange failed:', err);
-      return NextResponse.redirect(new URL('/login?error=token_exchange_failed', request.url));
+      return NextResponse.redirect(buildUrl('/login?error=token_exchange_failed', request));
     }
 
     const tokens = await tokenResponse.json();
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     if (!userInfoResponse.ok) {
       console.error('[Google OAuth] Userinfo fetch failed');
-      return NextResponse.redirect(new URL('/login?error=userinfo_failed', request.url));
+      return NextResponse.redirect(buildUrl('/login?error=userinfo_failed', request));
     }
 
     const googleUser = await userInfoResponse.json();
@@ -123,13 +124,13 @@ export async function GET(request: NextRequest) {
         const inviteOnly = process.env.NEXT_PUBLIC_INVITE_ONLY === 'true';
         if (inviteOnly) {
           if (!inviteCode) {
-            return NextResponse.redirect(new URL('/signup?error=invite_required', request.url));
+            return NextResponse.redirect(buildUrl('/signup?error=invite_required', request));
           }
           try {
             const { validateInviteCode } = await import('@/lib/services/invite-service');
             await validateInviteCode(inviteCode);
           } catch {
-            return NextResponse.redirect(new URL('/signup?error=invalid_invite', request.url));
+            return NextResponse.redirect(buildUrl('/signup?error=invalid_invite', request));
           }
         }
 
@@ -170,9 +171,9 @@ export async function GET(request: NextRequest) {
     // 4. Create session and redirect
     await createSession(userId);
 
-    return NextResponse.redirect(new URL('/your-comms', request.url));
+    return NextResponse.redirect(buildUrl('/your-comms', request));
   } catch (err) {
     console.error('[Google OAuth] Error:', err);
-    return NextResponse.redirect(new URL('/login?error=sso_failed', request.url));
+    return NextResponse.redirect(buildUrl('/login?error=sso_failed', request));
   }
 }

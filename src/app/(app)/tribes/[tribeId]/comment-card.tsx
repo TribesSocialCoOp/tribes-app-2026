@@ -20,12 +20,13 @@ interface CommentCardProps {
   onReportComment: (comment: DiscussionComment) => void;
   onOpenReplyDialog: (context: CommentContext) => void;
   isLoggedIn: boolean;
+  isMember: boolean;
   currentUserId?: string | null;
 }
 
 export const CommentCard: React.FC<CommentCardProps> = ({
   comment, postId, level = 0,
-  onReportComment, onOpenReplyDialog, isLoggedIn, currentUserId,
+  onReportComment, onOpenReplyDialog, isLoggedIn, isMember, currentUserId,
 }) => {
   const isCurrentUserAuthor = comment.authorId === currentUserId;
   const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
@@ -80,9 +81,10 @@ export const CommentCard: React.FC<CommentCardProps> = ({
           <p className="text-sm whitespace-pre-line mt-1">{comment.content}</p>
         </div>
       </div>
-      {isLoggedIn && (
-        <div className="ml-11 flex items-center space-x-2 text-xs">
-          <Popover>
+      <div className="ml-11 flex items-center space-x-2 text-xs">
+        {isLoggedIn && isMember ? (
+          <>
+            <Popover>
             <PopoverTrigger asChild>
               <Button
                 variant="ghost"
@@ -117,11 +119,22 @@ export const CommentCard: React.FC<CommentCardProps> = ({
             </PopoverContent>
           </Popover>
 
-          <Button variant="ghost" size="sm" onClick={() => onOpenReplyDialog({ postId, parentCommentId: comment.id, parentAuthorName: comment.authorName })} className="px-1 text-muted-foreground hover:text-primary h-6 text-xs">
-            Reply
+            <Button variant="ghost" size="sm" onClick={() => onOpenReplyDialog({ postId, parentCommentId: comment.id, parentAuthorName: comment.authorName })} className="px-1 text-muted-foreground hover:text-primary h-6 text-xs">
+              Reply
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="px-1 text-muted-foreground hover:text-primary h-6 text-xs"
+            onClick={() => { if (!isLoggedIn) { /* Could redirect to login */ } }}
+          >
+            <Smile className="mr-1 h-3.5 w-3.5" />
+            {vibeCount}
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {comment.replies && comment.replies.length > 0 && (
         <div className="border-l-2 ml-5 pl-1 pb-2">
@@ -134,6 +147,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               onReportComment={onReportComment}
               onOpenReplyDialog={onOpenReplyDialog}
               isLoggedIn={isLoggedIn}
+              isMember={isMember}
               currentUserId={currentUserId}
             />
           ))}

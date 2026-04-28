@@ -24,7 +24,17 @@ const CONTRIBUTION_LABELS: Record<string, string> = {
   tribe_created: '🏛️ Tribe Created',
 };
 
+import { AuthGuard } from '@/components/providers/auth-guard';
+
 export default function CreatorAnalyticsPage() {
+  return (
+    <AuthGuard message="Sign in to view your creator analytics and engagement data.">
+      <AnalyticsContent />
+    </AuthGuard>
+  );
+}
+
+function AnalyticsContent() {
   const router = useRouter();
   const { role, user } = useUser();
   const [data, setData] = useState<CreatorData | null>(null);

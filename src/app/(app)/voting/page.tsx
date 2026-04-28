@@ -29,7 +29,17 @@ const STATUS_STYLES: Record<string, { variant: 'default' | 'secondary' | 'destru
   canceled: { variant: 'destructive', icon: XCircle },
 };
 
+import { AuthGuard } from '@/components/providers/auth-guard';
+
 export default function VotingPage() {
+  return (
+    <AuthGuard message="Sign in to participate in platform governance and vote on community proposals.">
+      <VotingContent />
+    </AuthGuard>
+  );
+}
+
+function VotingContent() {
   const router = useRouter();
   const { role, user } = useUser();
   const { toast } = useToast();

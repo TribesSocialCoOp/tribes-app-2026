@@ -29,6 +29,7 @@ import VideoBlock from '@/components/wall-blocks/video-block';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { moodsData } from '@/lib/moods-data';
+import { AuthGuard } from '@/components/providers/auth-guard';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -46,7 +47,16 @@ export interface WallStyles {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
+
 export default function MyWallPage() {
+  return (
+    <AuthGuard message="Sign in to view and customize your personal wall.">
+      <WallContent />
+    </AuthGuard>
+  );
+}
+
+function WallContent() {
   const { user } = useUser();
   const name = user?.name;
   const avatar = user?.avatar;

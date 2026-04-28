@@ -14,6 +14,7 @@ import { getEvents } from '@/lib/actions/event-actions';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import type { Event } from '@/lib/types';
+import { AuthGuard } from '@/components/providers/auth-guard';
 
 const EventCard: React.FC<{ event: Event }> = ({ event }) => {
   return (
@@ -76,6 +77,14 @@ const EventCard: React.FC<{ event: Event }> = ({ event }) => {
 };
 
 export default function EventsPage() {
+  return (
+    <AuthGuard message="Sign in to browse upcoming gatherings and workshops.">
+      <EventsContent />
+    </AuthGuard>
+  );
+}
+
+function EventsContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoading, setIsLoading] = useState(true);

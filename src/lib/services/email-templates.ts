@@ -9,13 +9,28 @@
  *   2. verifyEmailTemplate  — Email verification link
  *   3. passKeyRecoveryEmail — Account recovery magic link
  *   4. bondRequestEmail     — New bond request notification
- *   5. familyIntroEmail     — Family introduction notification
+ *   5. innerCircleIntroEmail — Inner Circle introduction notification
  *   6. eventReminderEmail   — Upcoming event reminder
  */
 
 // ============================================================
 // SHARED LAYOUT
 // ============================================================
+
+// ============================================================
+// SECURITY: HTML escape helper
+// All user-supplied values interpolated into HTML must be escaped
+// to prevent stored XSS via email clients that render HTML.
+// ============================================================
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
 
 const BRAND_COLOR = '#6366f1'; // Indigo-500
 const BRAND_GRADIENT = 'linear-gradient(135deg, #6366f1, #8b5cf6)';
@@ -92,13 +107,14 @@ function ctaButton(label: string, url: string): string {
 // ============================================================
 
 export function welcomeEmail(name: string): { subject: string; html: string; text: string } {
-  const subject = `Welcome to Tribes, ${name}! 🎉`;
+  const safeName = escapeHtml(name);
+  const subject = `Welcome to Tribes, ${safeName}! 🎉`;
 
   const html = emailLayout({
     content: `
     <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Welcome to Tribes!</h1>
     <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
-      Hey <strong>${name}</strong>, you're in! Here's what you can do:
+      Hey <strong>${safeName}</strong>, you're in! Here's what you can do:
     </p>
     <ul style="margin:0 0 16px;padding-left:20px;font-size:15px;color:#52525b;line-height:1.8;">
       <li><strong>Form Bonds</strong> — Connect with friends and family through encrypted channels</li>
@@ -123,13 +139,14 @@ export function welcomeEmail(name: string): { subject: string; html: string; tex
 // ============================================================
 
 export function verifyEmailTemplate(name: string, verifyUrl: string): { subject: string; html: string; text: string } {
+  const safeName = escapeHtml(name);
   const subject = 'Verify your email — Tribes';
 
   const html = emailLayout({
     content: `
     <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Verify Your Email</h1>
     <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
-      Hi <strong>${name}</strong>, please verify your email address to help us keep your account secure.
+      Hi <strong>${safeName}</strong>, please verify your email address to help us keep your account secure.
     </p>
     ${ctaButton('Verify Email', verifyUrl)}
     <p style="margin:0;font-size:13px;color:#a1a1aa;line-height:1.5;">
@@ -149,13 +166,14 @@ export function verifyEmailTemplate(name: string, verifyUrl: string): { subject:
 // ============================================================
 
 export function passKeyRecoveryEmail(name: string, recoveryUrl: string): { subject: string; html: string; text: string } {
+  const safeName = escapeHtml(name);
   const subject = 'Account Recovery — Tribes';
 
   const html = emailLayout({
     content: `
     <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Account Recovery</h1>
     <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
-      Hi <strong>${name}</strong>, we received a request to recover your account.
+      Hi <strong>${safeName}</strong>, we received a request to recover your account.
       Use the link below to sign in and register a new passkey.
     </p>
     ${ctaButton('Recover Account', recoveryUrl)}
@@ -187,10 +205,12 @@ export function bondRequestEmail(
   bondType: string,
   unsubscribeUrl?: string,
 ): { subject: string; html: string; text: string } {
-  const subject = `${fromName} wants to form a ${bondType} bond — Tribes`;
+  const safeName = escapeHtml(name);
+  const safeFromName = escapeHtml(fromName);
+  const safeBondType = escapeHtml(bondType);
+  const subject = `${safeFromName} wants to form a ${safeBondType} bond — Tribes`;
 
   const bondEmoji: Record<string, string> = {
-    family: '👨‍👩‍👦',
     friend: '🤝',
     professional: '💼',
     collaborator: '🔧',
@@ -204,13 +224,13 @@ export function bondRequestEmail(
     content: `
     <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">New Bond Request</h1>
     <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
-      Hi <strong>${name}</strong>, you have a new bond request!
+      Hi <strong>${safeName}</strong>, you have a new bond request!
     </p>
     <div style="margin:16px 0;padding:16px;background-color:#f4f4f5;border-radius:8px;text-align:center;">
       <div style="font-size:40px;margin-bottom:8px;">${emoji}</div>
-      <p style="margin:0;font-size:18px;font-weight:600;color:#18181b;">${fromName}</p>
+      <p style="margin:0;font-size:18px;font-weight:600;color:#18181b;">${safeFromName}</p>
       <p style="margin:4px 0 0;font-size:14px;color:#71717a;">
-        wants to form a <strong style="color:${BRAND_COLOR};">${bondType}</strong> bond with you
+        wants to form a <strong style="color:${BRAND_COLOR};">${safeBondType}</strong> bond with you
       </p>
     </div>
     ${ctaButton('View Bond Request', '/bonds')}
@@ -228,28 +248,32 @@ export function bondRequestEmail(
 }
 
 // ============================================================
-// 5. FAMILY INTRODUCTION (unsubscribable: bondMessages)
+// 5. INNER CIRCLE INTRODUCTION (unsubscribable: bondMessages)
 // ============================================================
 
-export function familyIntroEmail(
+
+export function innerCircleIntroEmail(
   name: string,
   fromName: string,
   introducerName: string,
   unsubscribeUrl?: string,
 ): { subject: string; html: string; text: string } {
-  const subject = `Family introduction from ${introducerName} — Tribes`;
+  const safeName = escapeHtml(name);
+  const safeFromName = escapeHtml(fromName);
+  const safeIntroducerName = escapeHtml(introducerName);
+  const subject = `Inner Circle introduction from ${safeIntroducerName} — Tribes`;
 
   const html = emailLayout({
     content: `
-    <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Family Introduction</h1>
+    <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Inner Circle Introduction</h1>
     <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
-      Hi <strong>${name}</strong>, you've been introduced to <strong>${fromName}</strong> 
-      through <strong>${introducerName}</strong>'s family network.
+      Hi <strong>${safeName}</strong>, you've been introduced to <strong>${safeFromName}</strong> 
+      through <strong>${safeIntroducerName}</strong>'s Inner Circle.
     </p>
     <div style="margin:16px 0;padding:16px;background-color:#f0fdf4;border-radius:8px;text-align:center;">
-      <div style="font-size:40px;margin-bottom:8px;">👨‍👩‍👦</div>
+      <div style="font-size:40px;margin-bottom:8px;">🤝</div>
       <p style="margin:0;font-size:16px;color:#166534;">
-        You have a pending family bond request from <strong>${fromName}</strong>
+        You have a pending bond request from <strong>${safeFromName}</strong>
       </p>
     </div>
     ${ctaButton('View Bond Request', '/bonds')}
@@ -258,7 +282,7 @@ export function familyIntroEmail(
     unsubscribeUrl,
   });
 
-  const text = `Hi ${name}, you've been introduced to ${fromName} through ${introducerName}'s family network.\n\nLog in to accept the bond request.`;
+  const text = `Hi ${name}, you've been introduced to ${fromName} through ${introducerName}'s Inner Circle.\n\nLog in to accept the bond request.`;
 
   return { subject, html, text };
 }
@@ -273,18 +297,21 @@ export function eventReminderEmail(
   dateStr: string,
   unsubscribeUrl?: string,
 ): { subject: string; html: string; text: string } {
-  const subject = `Reminder: ${eventName} is coming up — Tribes`;
+  const safeName = escapeHtml(name);
+  const safeEventName = escapeHtml(eventName);
+  const safeDateStr = escapeHtml(dateStr);
+  const subject = `Reminder: ${safeEventName} is coming up — Tribes`;
 
   const html = emailLayout({
     content: `
     <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Event Reminder</h1>
     <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
-      Hi <strong>${name}</strong>, just a reminder that you're attending an upcoming event:
+      Hi <strong>${safeName}</strong>, just a reminder that you're attending an upcoming event:
     </p>
     <div style="margin:16px 0;padding:16px;background-color:#eff6ff;border-radius:8px;text-align:center;">
       <div style="font-size:40px;margin-bottom:8px;">📅</div>
-      <p style="margin:0;font-size:18px;font-weight:600;color:#18181b;">${eventName}</p>
-      <p style="margin:4px 0 0;font-size:14px;color:#3b82f6;">${dateStr}</p>
+      <p style="margin:0;font-size:18px;font-weight:600;color:#18181b;">${safeEventName}</p>
+      <p style="margin:4px 0 0;font-size:14px;color:#3b82f6;">${safeDateStr}</p>
     </div>
     ${ctaButton('View Event', '/events')}
   `,

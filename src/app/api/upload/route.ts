@@ -81,6 +81,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
+    // SECURITY: application/octet-stream is only valid for E2E bond attachments.
+    // Allowing it for other contexts would let clients bypass MIME-type checks.
+    if (file.type === 'application/octet-stream' && context !== 'bond-attachment') {
+      return NextResponse.json(
+        { error: 'application/octet-stream is only allowed for bond-attachment uploads' },
+        { status: 400 }
+      );
+    }
+
     // Validate file type
     if (!ALLOWED_TYPES.includes(file.type)) {
       return NextResponse.json(

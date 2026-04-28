@@ -123,7 +123,8 @@ async function firePostRegistrationEmails(userId: string) {
 
   // Verification email
   const token = await createVerificationToken(userId, 'verify_email');
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:9002';
+  const { getBaseUrl } = await import('@/lib/url');
+  const baseUrl = await getBaseUrl();
   const verifyUrl = `${baseUrl}/api/auth/verify-email?token=${encodeURIComponent(token)}`;
   const verify = verifyEmailTemplate(user.name, verifyUrl);
   await sendEmail({ to: user.email, ...verify });

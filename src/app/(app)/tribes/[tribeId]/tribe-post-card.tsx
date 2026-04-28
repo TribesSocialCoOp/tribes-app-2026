@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2 } from "lucide-react";
+import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,6 +18,7 @@ import { toggleVibe } from '@/lib/actions/content-actions';
 import type { TribePost, DiscussionComment } from '@/lib/types';
 import { CommentCard } from './comment-card';
 import { useTribeDetail } from './tribe-detail-context';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 
 interface TribePostCardProps {
   post: TribePost;
@@ -33,7 +34,8 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
     state, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker,
     handleOpenPromoteDialog, handleOpenReportPostDialog,
     handleOpenRepostDialog, handleOpenReportCommentDialog,
-    handleOpenCommentDialog, handleDeletePost,
+    handleOpenCommentDialog, handleDeletePost, 
+    handleTogglePinPost, handleRemovePostAsMod,
   } = useTribeDetail();
 
   const router = useRouter();
@@ -122,6 +124,14 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                       <DropdownMenuItem onClick={() => handleOpenPromoteDialog(post)} disabled={isPromoted}>
                         <Rss className="mr-2 h-4 w-4" /> {isPromoted ? "Already Promoted" : "Promote to Mood Stream"}
                       </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleTogglePinPost(post.id)}>
+                        <Pin className="mr-2 h-4 w-4" /> {post.isPinned ? "Unpin Post" : "Pin to Top"}
+                      </DropdownMenuItem>
+                      {isTribeSpeaker && !isCurrentUserAuthor && (
+                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleRemovePostAsMod(post.id)}>
+                          <ShieldAlert className="mr-2 h-4 w-4" /> Remove Post (Mod)
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuSeparator />
                     </>
                   )}
@@ -142,13 +152,33 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
         </CardHeader>
         <CardContent className="p-4 pt-2">
           {post.title && <h3 className="text-xl font-semibold mb-2 text-foreground tracking-tight">{post.title}</h3>}
-          {post.imageUrl && (
-            <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-lg border">
+          {/* Multi-image support */}
+          {post.imageUrls && post.imageUrls.length > 0 ? (
+            <div className={cn(
+              "mb-3 grid gap-2 overflow-hidden rounded-lg border bg-muted/20",
+              post.imageUrls.length === 1 ? "grid-cols-1" : 
+              post.imageUrls.length === 2 ? "grid-cols-2" : 
+              post.imageUrls.length === 3 ? "grid-cols-2" :
+              "grid-cols-2"
+            )}>
+              {post.imageUrls.map((url, idx) => (
+                <div key={idx} className={cn(
+                  "relative overflow-hidden",
+                  post.imageUrls!.length === 1 ? "aspect-video" : "aspect-square",
+                  post.imageUrls!.length === 3 && idx === 0 && "row-span-2 aspect-auto"
+                )}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt={`${post.imageAlt || "Post image"} ${idx + 1}`} className="w-full h-full object-cover" />
+                </div>
+              ))}
+            </div>
+          ) : post.imageUrl ? (
+            <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-lg border bg-muted/20">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={post.imageUrl} alt={post.imageAlt || "Post image"} className="w-full h-full object-cover" data-ai-hint={post.dataAiHintImage || "post image"} />
             </div>
-          )}
-          <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{post.content}</p>
+          ) : null}
+          <MarkdownContent content={post.content} />
           {(post.commentsData && post.commentsData.length > 0) && (
             <div className="mt-4 pt-3 border-t">
               {post.commentsData.map(comment => (
@@ -159,6 +189,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                   onReportComment={handleOpenReportCommentDialog}
                   onOpenReplyDialog={handleOpenCommentDialog}
                   isLoggedIn={isLoggedIn}
+                  isMember={isMember}
                   currentUserId={isCurrentUserAuthor ? post.authorId : undefined}
                 />
               ))}
@@ -166,7 +197,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
           )}
         </CardContent>
         <CardFooter className="p-4 pt-2 flex items-center justify-start space-x-4 border-t bg-muted/30">
-          {isLoggedIn ? (
+          {isLoggedIn && isMember ? (
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
@@ -185,11 +216,11 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
               </PopoverContent>
             </Popover>
           ) : (
-            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => router.push('/signup')}>
+            <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => { if (!isLoggedIn) router.push('/signup'); }}>
               <Smile className="mr-1.5 h-4 w-4" /> {post.vibes || 0}
             </Button>
           )}
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => isLoggedIn && handleOpenCommentDialog({ postId: post.id, postTitle: post.title })}>
+          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => isLoggedIn && isMember && handleOpenCommentDialog({ postId: post.id, postTitle: post.title })}>
             <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
           </Button>
           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>

@@ -36,6 +36,7 @@ export {
   markKeyRotated,
   clearAllKeys,
   isKeyStoreAvailable,
+  hasAnyKeys,
   type StoredBondKey,
 } from './key-store';
 
@@ -57,3 +58,13 @@ export {
   isBondDegraded,
   daysUntilExpiry,
 } from './passkey-lifecycle';
+
+// Passkey PRF vault (Phase 3)
+export {
+  isPrfSupported,
+  getPrfSalt,
+  getPrfSaltBytes,
+  derivePrfWrappingKey,
+  encryptVaultWithPrf,
+  decryptAndRestoreVault,
+} from './prf-vault';

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserCircle, Loader2, PlusCircle, AtSign, X, Star, CreditCard, Mail, AlertTriangle, Cpu } from "lucide-react";
+import { UserCircle, Loader2, PlusCircle, AtSign, X, Star, CreditCard, Mail, AlertTriangle, Cpu, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { UserProfile } from '@/lib/types';
 import { getUserProfile, updateUserProfile } from '@/lib/actions/profile-actions';
@@ -26,7 +26,18 @@ import { SecuritySection } from '@/components/settings/security-section';
 import { SessionsSection } from '@/components/settings/sessions-section';
 import { AppearanceSection, BillingSection, AccountActionsSection } from '@/components/settings/minor-sections';
 import { AiSettingsSection } from '@/components/settings/ai-settings-section';
+import { VaultBackupSection } from '@/components/settings/vault-backup-section';
+import { AuthGuard } from '@/components/providers/auth-guard';
+
 export default function SettingsPage() {
+  return (
+    <AuthGuard message="Sign in to manage your account settings and privacy.">
+      <SettingsContent />
+    </AuthGuard>
+  );
+}
+
+function SettingsContent() {
   const { toast } = useToast();
   const { role, user: sessionUser, isLoading: isUserLoading } = useUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -380,7 +391,18 @@ export default function SettingsPage() {
               <p className="text-xs text-muted-foreground">This is your main profile name.</p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email Address</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="email">Email Address</Label>
+                {profile.emailVerified ? (
+                  <span className="text-xs font-medium text-green-600 dark:text-green-400 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" /> Verified
+                  </span>
+                ) : (
+                  <span className="text-xs font-medium text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> Unverified
+                  </span>
+                )}
+              </div>
               <Input id="email" type="email" value={profile.email} disabled />
             </div>
           <div className="space-y-1.5">
@@ -491,6 +513,9 @@ export default function SettingsPage() {
         aiDataSharingEnabled={userAiSharing}
         onPasskeysChanged={loadPasskeys}
       />
+
+      <Separator />
+      <VaultBackupSection />
 
       <Separator />
       <SessionsSection

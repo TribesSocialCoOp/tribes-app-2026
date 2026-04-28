@@ -13,6 +13,7 @@
  *   Decrypt:  wrappedKey → AES-KW⁻¹(bondKey) → randomKey
  *             ciphertext → AES-GCM⁻¹(randomKey, iv) → plaintext
  */
+import { toBase64, fromBase64 } from './encoding';
 
 export interface EncryptionMeta {
   /** Algorithm identifier */
@@ -21,8 +22,8 @@ export interface EncryptionMeta {
   iv: string;
   /** Base64-encoded wrapped (encrypted) file key */
   wrappedKey: string;
-  /** Key wrapping algorithm */
-  kwAlgo: 'AES-KW';
+  /** Key wrapping algorithm ('AES-KW' for standard wrap, 'AES-GCM' for GCM-wrapped) */
+  kwAlgo: 'AES-KW' | 'AES-GCM';
 }
 
 export interface EncryptedFile {
@@ -32,25 +33,6 @@ export interface EncryptedFile {
   meta: EncryptionMeta;
 }
 
-// ── Helpers ──────────────────────────────────────────────────
-
-function toBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
-
-function fromBase64(base64: string): ArrayBuffer {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
 
 // ── Key Derivation ───────────────────────────────────────────
 
@@ -217,5 +199,112 @@ export async function decryptDownloadedFile(
 ): Promise<Blob> {
   const wrappingKey = await deriveWrappingKey(bondSharedSecret);
   const plaintext = await decryptFile(encryptedData, meta, wrappingKey);
+  return new Blob([plaintext], { type: originalType });
+}
+
+// ── CryptoKey-based helpers (for non-extractable shared secrets) ──
+
+/**
+ * Encrypt a File using a CryptoKey (AES-256-GCM shared secret) directly.
+ *
+ * Instead of AES-KW wrapping, we use the shared secret to AES-GCM encrypt
+ * the raw per-file key bytes. This works with non-extractable CryptoKeys
+ * since we only need encrypt/decrypt permissions (not wrapKey/unwrapKey).
+ */
+export async function encryptFileWithKey(
+  file: File,
+  sharedSecretKey: CryptoKey,
+): Promise<{ encryptedFile: File; meta: EncryptionMeta }> {
+  const fileData = await file.arrayBuffer();
+
+  // Generate a random per-file AES-256-GCM key
+  const fileKey = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    true, // extractable so we can wrap it
+    ['encrypt', 'decrypt'],
+  );
+
+  // Generate a random 12-byte IV for file content
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+
+  // Encrypt the file content
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, tagLength: 128 },
+    fileKey,
+    fileData,
+  );
+
+  // Export the per-file key as raw bytes
+  const rawFileKey = await crypto.subtle.exportKey('raw', fileKey);
+
+  // Encrypt the raw file key with the shared secret (AES-GCM)
+  const wrapIv = crypto.getRandomValues(new Uint8Array(12));
+  const wrappedKeyData = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: wrapIv },
+    sharedSecretKey,
+    rawFileKey,
+  );
+
+  // Pack wrap IV + wrapped key together
+  const wrappedKeyWithIv = new Uint8Array(wrapIv.length + wrappedKeyData.byteLength);
+  wrappedKeyWithIv.set(wrapIv, 0);
+  wrappedKeyWithIv.set(new Uint8Array(wrappedKeyData), wrapIv.length);
+
+  const encryptedFile = new File(
+    [ciphertext],
+    `${file.name}.enc`,
+    { type: 'application/octet-stream' },
+  );
+
+  return {
+    encryptedFile,
+    meta: {
+      algo: 'AES-256-GCM',
+      iv: toBase64(iv.buffer),
+      wrappedKey: toBase64(wrappedKeyWithIv.buffer),
+      kwAlgo: 'AES-GCM', // AES-GCM key wrapping (not AES-KW despite compatible metadata shape)
+    },
+  };
+}
+
+/**
+ * Decrypt a file using a CryptoKey (AES-256-GCM shared secret) directly.
+ */
+export async function decryptFileWithKey(
+  encryptedData: ArrayBuffer,
+  meta: EncryptionMeta,
+  sharedSecretKey: CryptoKey,
+  originalType: string = 'application/octet-stream',
+): Promise<Blob> {
+  const iv = new Uint8Array(fromBase64(meta.iv));
+  const wrappedKeyWithIv = new Uint8Array(fromBase64(meta.wrappedKey));
+
+  // Unpack wrap IV + wrapped key
+  const wrapIv = wrappedKeyWithIv.slice(0, 12);
+  const wrappedKeyData = wrappedKeyWithIv.slice(12);
+
+  // Decrypt the per-file key with the shared secret
+  const rawFileKey = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: wrapIv },
+    sharedSecretKey,
+    wrappedKeyData,
+  );
+
+  // Import the per-file key
+  const fileKey = await crypto.subtle.importKey(
+    'raw',
+    rawFileKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt'],
+  );
+
+  // Decrypt the file content
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv, tagLength: 128 },
+    fileKey,
+    encryptedData,
+  );
+
   return new Blob([plaintext], { type: originalType });
 }

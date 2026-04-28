@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
@@ -9,12 +9,26 @@ import { useIntercom } from './intercom-context';
 import { IntercomFeedItem } from './intercom-feed-item';
 import { RingFilterBar } from '@/components/feed/ring-filter-bar';
 import { MoodFilterBar } from '@/components/feed/mood-filter-bar';
+import { usePostDecryption } from '@/hooks/use-post-decryption';
 
 export function IntercomFeedTab() {
   const { state, feedItems, setRingFilter, setMoodSlugs } = useIntercom();
 
+  // Decrypt encrypted posts client-side (E2E)
+  const { getContent, isDecrypting } = usePostDecryption(feedItems);
+
+  // Merge decrypted content into feed items
+  const decryptedFeedItems = useMemo(() =>
+    feedItems.map(item => {
+      if (!item.isEncrypted) return item;
+      const content = getContent(item);
+      return { ...item, content };
+    }),
+    [feedItems, getContent],
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0">
       {/* Ring Filter Bar */}
       <RingFilterBar
         value={state.ringFilter}
@@ -36,16 +50,19 @@ export function IntercomFeedTab() {
       )}
 
       {/* Feed Items */}
-      {!state.isLoading && feedItems.length > 0 && (
+      {!state.isLoading && decryptedFeedItems.length > 0 && (
         <div className="space-y-4 mt-4">
-          {feedItems.map(item => (
+          {isDecrypting && (
+            <p className="text-xs text-muted-foreground text-center animate-pulse">🔓 Decrypting posts...</p>
+          )}
+          {decryptedFeedItems.map(item => (
             <IntercomFeedItem key={item.id} item={item} />
           ))}
         </div>
       )}
 
       {/* Empty State */}
-      {!state.isLoading && feedItems.length === 0 && (
+      {!state.isLoading && decryptedFeedItems.length === 0 && (
         <Card className="text-center py-12 shadow-none border border-dashed mt-4">
           <CardContent className="p-4 sm:p-6">
             {state.ringFilter === 'journal' ? (

@@ -30,3 +30,32 @@ export function buildUrl(path: string, request: NextRequest | Request): URL {
   // Local dev fallback
   return new URL(path, request.url);
 }
+
+/**
+ * Get the base URL from within a Server Action or Server Component.
+ * Uses next/headers to inspect forwarded headers.
+ */
+export async function getBaseUrl(): Promise<string> {
+  // Use dynamic import so it doesn't break client-side execution if accidentally imported
+  const { headers } = await import('next/headers');
+  const headersList = await headers();
+  
+  const forwardedHost = headersList.get('x-forwarded-host');
+  const forwardedProto = headersList.get('x-forwarded-proto') || 'https';
+
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+  if (appUrl) {
+    return appUrl;
+  }
+
+  const host = headersList.get('host');
+  if (host) {
+    return `http://${host}`;
+  }
+
+  return 'http://localhost:9002';
+}

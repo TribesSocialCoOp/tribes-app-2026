@@ -22,7 +22,7 @@ SQLD_CONTAINER="tribes-sqld-1"
 APP_CONTAINER="tribes-app-1"
 COMPOSE_FILE="docker-compose.prod.yml"
 LOCAL_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-HEALTH_URL="http://localhost:9002/api/health"
+HEALTH_URL="http://127.0.0.1:9002/api/health"
 
 # ── Colors ─────────────────────────────────────────────────────
 RED='\033[0;31m'
@@ -82,77 +82,26 @@ SQLD_IP=$(ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
 SQLD_URL="http://${SQLD_IP}:8080"
 log "  sqld endpoint: $SQLD_URL"
 
-# Ensure the migration tracking table exists
-ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" "curl -sf -X POST '${SQLD_URL}/v2/pipeline' \
-  -H 'Content-Type: application/json' \
-  -d '{\"requests\":[{\"type\":\"execute\",\"stmt\":{\"sql\":\"CREATE TABLE IF NOT EXISTS __drizzle_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, hash TEXT NOT NULL, created_at INTEGER NOT NULL)\"}}]}'" > /dev/null 2>&1
-ok "Migration tracking table ready"
+# Run the Python migration runner on the server
+# (migrate.py was synced in Step 2 along with the drizzle/ directory)
+MIGRATE_OUTPUT=$(ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
+  "cd $REMOTE_DIR && python3 scripts/migrate.py '$SQLD_URL' drizzle" 2>&1)
+MIGRATE_EXIT=$?
 
-# Get already-applied migration hashes
-APPLIED=$(ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" "curl -sf -X POST '${SQLD_URL}/v2/pipeline' \
-  -H 'Content-Type: application/json' \
-  -d '{\"requests\":[{\"type\":\"execute\",\"stmt\":{\"sql\":\"SELECT hash FROM __drizzle_migrations ORDER BY id\"}}]}'" 2>/dev/null)
-
-MIGRATION_COUNT=0
-SKIPPED_COUNT=0
-
-# Process each migration file in order
-for migration_file in "$LOCAL_DIR"/drizzle/[0-9]*.sql; do
-  [ -f "$migration_file" ] || continue
-  filename=$(basename "$migration_file" .sql)
-  
-  # Use the filename as the hash (matches Drizzle convention)
-  hash="$filename"
-  
-  # Check if already applied
-  if echo "$APPLIED" | grep -q "\"$hash\""; then
-    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
-    continue
+echo "$MIGRATE_OUTPUT" | while IFS= read -r line; do
+  if echo "$line" | grep -q '✗'; then
+    fail "  $line"
+  elif echo "$line" | grep -q '⚠'; then
+    warn "  $line"
+  else
+    log "  $line"
   fi
-  
-  log "  Applying: $filename..."
-  
-  # Read migration SQL and split on statement breakpoints
-  # Drizzle uses `--> statement-breakpoint` as delimiter
-  while IFS= read -r statement; do
-    # Skip empty statements
-    trimmed=$(echo "$statement" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-    [ -z "$trimmed" ] && continue
-    
-    # Escape the SQL for JSON (handle quotes, newlines)
-    escaped_sql=$(echo "$trimmed" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read().strip()))')
-    
-    result=$(ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" "curl -sf -X POST '${SQLD_URL}/v2/pipeline' \
-      -H 'Content-Type: application/json' \
-      -d '{\"requests\":[{\"type\":\"execute\",\"stmt\":{\"sql\":${escaped_sql}}}]}'" 2>&1)
-    
-    # Check for errors (but allow "already exists" type errors for idempotency)
-    if echo "$result" | grep -q '"type":"error"'; then
-      error_msg=$(echo "$result" | python3 -c 'import sys,json; r=json.load(sys.stdin); [print(x["error"]["message"]) for x in r.get("results",[]) if x.get("type")=="error"]' 2>/dev/null || echo "$result")
-      # Skip "duplicate column" or "already exists" errors (idempotent migrations)
-      if echo "$error_msg" | grep -qi "already exists\|duplicate column"; then
-        warn "  Skipped (already exists): $trimmed"
-      else
-        fail "Migration failed for $filename: $error_msg"
-      fi
-    fi
-  done < <(cat "$migration_file" | sed 's/-->[[:space:]]*statement-breakpoint/\x00/g' | tr '\0' '\n' | grep -v '^--' | grep -v '^$')
-  
-  # Record the migration as applied
-  now_ms=$(date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1000))')
-  ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" "curl -sf -X POST '${SQLD_URL}/v2/pipeline' \
-    -H 'Content-Type: application/json' \
-    -d '{\"requests\":[{\"type\":\"execute\",\"stmt\":{\"sql\":\"INSERT INTO __drizzle_migrations (hash, created_at) VALUES ('\''${hash}'\\''', ${now_ms})\"}}]}'" > /dev/null 2>&1
-  
-  MIGRATION_COUNT=$((MIGRATION_COUNT + 1))
-  ok "  Applied: $filename"
 done
 
-if [ "$MIGRATION_COUNT" -eq 0 ]; then
-  ok "No pending migrations ($SKIPPED_COUNT already applied)"
-else
-  ok "$MIGRATION_COUNT migration(s) applied, $SKIPPED_COUNT skipped"
+if [ "$MIGRATE_EXIT" -ne 0 ]; then
+  fail "Migration failed — see errors above"
 fi
+ok "Migrations complete"
 
 if [ "$MIGRATE_ONLY" = true ]; then
   ok "Migration-only mode — skipping build"
@@ -163,23 +112,41 @@ fi
 if [ "$SKIP_BUILD" = true ]; then
   warn "Skipping build (--skip-build flag)"
 else
-  log "Building and restarting app container..."
+  log "Building and restarting all containers..."
   ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
-    "cd $REMOTE_DIR && docker compose -f $COMPOSE_FILE up -d --build app 2>&1" \
+    "cd $REMOTE_DIR && docker compose -f $COMPOSE_FILE up -d --build 2>&1" \
     | tail -10
-  ok "Container rebuilt and restarted"
+  ok "Containers rebuilt and restarted"
 fi
 
 # ── Step 5: Health check ─────────────────────────────────────
-log "Waiting for health check..."
-sleep 5
-HEALTH_RESULT=$(ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
-  "docker exec $APP_CONTAINER wget -qO- $HEALTH_URL 2>/dev/null || echo 'UNHEALTHY'")
+log "Waiting for app to boot (10s)..."
+sleep 10
 
-if echo "$HEALTH_RESULT" | grep -qi "ok\|healthy\|status"; then
-  ok "App is healthy!"
-else
-  warn "Health check returned: $HEALTH_RESULT (app may still be starting)"
+MAX_RETRIES=5
+RETRY_COUNT=0
+HEALTHY=false
+
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+  log "Health check attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+  
+  HEALTH_RESULT=$(ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
+    "docker exec $APP_CONTAINER wget -qO- $HEALTH_URL 2>/dev/null || echo 'UNHEALTHY'")
+
+  # Improved regex: must contain 'ok' or 'healthy' but NOT be exactly 'UNHEALTHY'
+  if [[ "$HEALTH_RESULT" =~ \"status\":\"ok\" ]] || [[ "$HEALTH_RESULT" == *"healthy"* && "$HEALTH_RESULT" != "UNHEALTHY" ]]; then
+    ok "App is healthy!"
+    HEALTHY=true
+    break
+  else
+    warn "Health check failed: $HEALTH_RESULT"
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    [ $RETRY_COUNT -lt $MAX_RETRIES ] && sleep 5
+  fi
+done
+
+if [ "$HEALTHY" = false ]; then
+  fail "App failed health check after $MAX_RETRIES attempts"
 fi
 
 echo ""

@@ -40,8 +40,10 @@ export interface UserProfile {
 }
 
 // Bond related types, centralized here
-export type BondType = "family" | "friend" | "professional" | "collaborator" | "follower" | "supporter";
-export type FormationMethod = "rfid_tap" | "digital_introduction" | "virtual_request" | "family_introduction";
+// Legacy types (family, friend, professional, collaborator, follower, supporter) are preserved in DB
+// but the application logic only distinguishes between these three:
+export type BondType = "person" | "tribe" | "event";
+export type FormationMethod = "rfid_tap" | "digital_introduction" | "virtual_request" | "inner_circle_introduction";
 export type KeyType = "standard" | "event_promo" | "event_attendee";
 export type AccessTier = "spectator" | "attendee" | "vip";
 
@@ -55,10 +57,12 @@ export interface Bond {
   targetType: "user" | "tribe";
   bondType: BondType;
   formationMethod: FormationMethod;
-  passkeyStatus: "active" | "expires_soon" | "expired" | "needs_refresh";
+  passkeyStatus: "active" | "fading" | "dormant" | "expired";
   expiresAt: Date;
   lastRefreshedAt: Date;
   reconnectsCount: number;
+  connectionScore: number;
+  lastInteractedAt?: Date;
   showInIntercom?: boolean;
   allowChatInitiation?: boolean;
   innerCircle?: boolean; // Concentric Rings trust level (PRIVATE — never shown to other users)
@@ -72,12 +76,18 @@ export interface Bond {
   tribeNicknameVibe?: 'love_it' | 'okay' | 'not_for_me'; // User's feedback on the nickname
   isTribeNicknameReported?: boolean; // Flag if the nickname has been reported
 
+  // Dormant/reconnect state
+  dormantAt?: Date;                // When the bond went dormant (null = not dormant)
+  reconnectRequestedAt?: Date;     // Pending reconnect request timestamp
+  reconnectRequestedBy?: string;   // userId who sent the reconnect request
+
   // Cryptographic layer (Phase 2B/2C)
   publicKeyJwk?: string; // Our JWK-exported public key (JSON string)
   peerPublicKeyJwk?: string; // The other party's public key (JSON string, from their bond row)
 }
 
-export type BondRequestStatus = 'pending' | 'accepted' | 'rejected' | 'expired';
+
+export type BondRequestStatus = 'pending' | 'accepted' | 'rejected' | 'expired' | 'reconnect_pending';
 
 export interface BondRequest {
   id: string;
@@ -130,6 +140,7 @@ export interface TribePost {
   title?: string;
   content: string;
   imageUrl?: string;
+  imageUrls?: string[];
   imageAlt?: string;
   dataAiHintAvatar?: string;
   dataAiHintImage?: string;
@@ -146,6 +157,11 @@ export interface TribePost {
   ring?: Ring;
   moodTag?: string;
   pinnedToWall?: boolean;
+
+  // Encryption (E2E)
+  isEncrypted?: boolean;
+  ciphertextBase64?: string;  // Base64 encoded ciphertext for client-side decryption
+  encryptionIv?: string;      // Base64 IV for decryption
 }
 
 export interface ReportedPost {
@@ -157,7 +173,7 @@ export interface ReportedPost {
 }
 
 export interface DiscussionComment {
-  id:string;
+  id: string;
   authorId: string;
   authorName: string;
   authorAvatar?: string;
@@ -199,6 +215,7 @@ export interface MoodStreamPost {
   tribeName?: string;
   tribeId?: string;
   imageUrl?: string;
+  imageUrls?: string[];
   imageAlt?: string;
   moodTags: string[];
   timestamp: Date;
@@ -262,10 +279,12 @@ export interface SourceArticle {
 // For YourCommsPage
 export interface CommunicationItem {
   id: string;
-  type: "family-bond" | "regular-bond" | "mood-stream" | "ring-post";
+  type: "inner-circle-bond" | "person-bond" | "mood-stream" | "ring-post";
   ring?: Ring;
+  authorId?: string;
   sender?: string;
   bondName?: string;
+  bondId?: string;
   bondTargetId?: string;
   tribeName?: string;
   tribeId?: string;
@@ -279,9 +298,15 @@ export interface CommunicationItem {
   vibes?: number;
   dataAiHint?: string;
   imageUrl?: string;
+  imageUrls?: string[];
   imageAlt?: string;
   dataAiHintImage?: string;
   title?: string;
   promotedByName?: string;
   pinnedToWall?: boolean;
+
+  // E2E encryption (Phase 3)
+  isEncrypted?: boolean;
+  ciphertextBase64?: string;  // Base64-encoded ciphertext for client-side decryption
+  encryptionIv?: string;       // Base64-encoded IV
 }

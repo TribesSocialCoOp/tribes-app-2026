@@ -16,7 +16,17 @@ import { getProposalById, castVote, closeProposal, cancelProposal } from "@/lib/
 import { getMySubscription } from "@/lib/actions/profile-actions";
 import type { Proposal } from "@/lib/services/voting-service";
 
+import { AuthGuard } from '@/components/providers/auth-guard';
+
 export default function ProposalDetailPage() {
+  return (
+    <AuthGuard message="Sign in to view proposal details and cast your vote.">
+      <ProposalDetailContent />
+    </AuthGuard>
+  );
+}
+
+function ProposalDetailContent() {
   const router = useRouter();
   const params = useParams();
   const proposalId = params.proposalId as string;

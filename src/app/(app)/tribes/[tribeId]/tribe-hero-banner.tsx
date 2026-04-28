@@ -16,9 +16,40 @@ import { moodsData } from '@/lib/moods-data';
 import { useTribeDetail } from './tribe-detail-context';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
 
+/** Shift a hex color's hue by `deg` degrees to create a gradient companion. */
+function shiftHue(hex: string, deg: number): string {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0, s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+  h = ((h * 360 + deg) % 360) / 360;
+  const hue2rgb = (p: number, q: number, t: number) => {
+    if (t < 0) t += 1; if (t > 1) t -= 1;
+    if (t < 1/6) return p + (q - p) * 6 * t;
+    if (t < 1/2) return q;
+    if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+    return p;
+  };
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const toHex = (v: number) => Math.round(v * 255).toString(16).padStart(2, '0');
+  return `#${toHex(hue2rgb(p, q, h + 1/3))}${toHex(hue2rgb(p, q, h))}${toHex(hue2rgb(p, q, h - 1/3))}`;
+}
+
 export function TribeHeroBanner() {
   const router = useRouter();
-  const { state, tribeId, isTribeAdmin, handleJoinTribe, handleLeaveTribe } = useTribeDetail();
+  const { state, tribeId, isTribeAdmin, handleInitiateJoinTribe, handleLeaveTribe } = useTribeDetail();
   const { tribe, isMember, isJoining } = state;
 
   if (!tribe) return null;
@@ -60,14 +91,29 @@ export function TribeHeroBanner() {
         </div>
       )}
       <div className="relative h-48 md:h-64 w-full">
-        <Image
-          src={tribe.cover}
-          alt={`${tribe.name} cover image`}
-          fill
-          style={{ objectFit: "cover", objectPosition: tribe.coverPosition || "center" }}
-          data-ai-hint={tribe.dataAiHint || "community group"}
-          priority
-        />
+        {tribe.cover ? (
+          <Image
+            src={tribe.cover}
+            alt={`${tribe.name} cover image`}
+            fill
+            style={{ objectFit: "cover", objectPosition: tribe.coverPosition || "center" }}
+            data-ai-hint={tribe.dataAiHint || "community group"}
+            priority
+          />
+        ) : (
+          <div
+            className="absolute inset-0"
+            style={{
+              background: `linear-gradient(135deg, ${tribe.brandColor || '#6366f1'}, ${shiftHue(tribe.brandColor || '#6366f1', 40)})`,
+            }}
+          >
+            {/* Subtle pattern overlay */}
+            <div className="absolute inset-0 opacity-[0.07]" style={{
+              backgroundImage: 'radial-gradient(circle at 25% 25%, white 1px, transparent 1px), radial-gradient(circle at 75% 75%, white 1px, transparent 1px)',
+              backgroundSize: '32px 32px',
+            }} />
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
       </div>
       <CardHeader className="relative -mt-16 z-10 p-4 md:p-6 bg-transparent">
@@ -102,7 +148,7 @@ export function TribeHeroBanner() {
         )}
         {!isMember && tribe.isPublic && (
           <div className="mt-4 pt-4 border-t">
-            <Button onClick={handleJoinTribe} disabled={isJoining}>
+            <Button onClick={handleInitiateJoinTribe} disabled={isJoining}>
               <UserPlus className="mr-2 h-4 w-4" />
               {isJoining ? 'Joining...' : 'Join Tribe'}
             </Button>

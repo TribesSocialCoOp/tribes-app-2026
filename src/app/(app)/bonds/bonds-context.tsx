@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
-import { getBonds, refreshBond, revokeBond, upgradeToFamilyBond, saveBondSettings, fetchPendingBondRequests, respondToBondRequest, blockUser, sendBondRequest } from '@/lib/actions/bond-actions';
+import { getBonds, refreshBond, revokeBond, toggleInnerCircle, saveBondSettings, fetchPendingBondRequests, respondToBondRequest, blockUser, sendBondRequest, requestReconnect, respondToReconnect } from '@/lib/actions/bond-actions';
 import { getFeatureSummary } from '@/lib/actions/profile-actions';
 import type { Bond, BondRequest } from '@/lib/types';
 
@@ -93,7 +93,7 @@ function reducer(state: BondsState, action: Action): BondsState {
 // ─── Sort helper ─────────────────────────────────────────────────────────────
 
 const passkeySortOrder: Record<Bond["passkeyStatus"], number> = {
-  active: 1, expires_soon: 2, needs_refresh: 3, expired: 4,
+  active: 1, fading: 2, dormant: 3, expired: 4,
 };
 
 // ─── Derived data ────────────────────────────────────────────────────────────
@@ -161,13 +161,13 @@ interface BondsContextValue {
   dispatch: React.Dispatch<Action>;
   derived: ReturnType<typeof useBondsDerived>;
   userRole: string | null | undefined;
-  maxFamilyBonds: number;
-  familyBondsCount: number;
+  maxInnerCircleBonds: number;
+  innerCircleCount: number;
 
   reloadData: () => Promise<void>;
   handleRefreshBond: (bondId: string) => Promise<void>;
   handleRevokeBond: (bondId: string) => Promise<void>;
-  handleUpgradeToFamilyBond: (bondId: string) => Promise<void>;
+  handleToggleInnerCircle: (bondId: string) => Promise<void>;
   handleToggleShowInIntercom: (bondId: string, checked: boolean) => void;
   handleBlockBond: (bondId: string, targetName: string) => void;
   handleSaveBondSettings: (updatedBond: Bond) => Promise<void>;
@@ -175,6 +175,8 @@ interface BondsContextValue {
   calculateTimeProgress: (bond: Bond) => number;
   handleSort: (key: SortableBondKeys) => void;
   handleRespondToRequest: (reqId: string, accept: boolean, fromUserName: string) => Promise<void>;
+  handleRequestReconnect: (bondId: string) => Promise<void>;
+  handleRespondToReconnect: (bondId: string, accept: boolean) => Promise<void>;
 }
 
 const BondsContext = createContext<BondsContextValue | null>(null);
@@ -194,8 +196,8 @@ export function BondsProvider({ children }: { children: React.ReactNode }) {
 
   const derived = useBondsDerived(state);
 
-  const maxFamilyBonds = state.maxBondsLimit ?? Infinity;
-  const familyBondsCount = state.bonds ? state.bonds.filter(b => b.bondType === 'family').length : 0;
+  const maxInnerCircleBonds = state.maxBondsLimit ?? Infinity;
+  const innerCircleCount = state.bonds ? state.bonds.filter(b => b.innerCircle).length : 0;
 
   const reloadData = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', payload: true });
@@ -230,15 +232,16 @@ export function BondsProvider({ children }: { children: React.ReactNode }) {
     toast({ title: "Bond Revoked", description: "The bond has been removed.", variant: "destructive" });
   }, [reloadData, toast]);
 
-  const handleUpgradeToFamilyBond = useCallback(async (bondId: string) => {
-    if (familyBondsCount >= maxFamilyBonds) {
-      toast({ title: "Family Bond Limit Reached", description: "Upgrade your plan to add more family bonds.", variant: "destructive" });
-      return;
-    }
-    await upgradeToFamilyBond(bondId);
+  const handleToggleInnerCircle = useCallback(async (bondId: string) => {
+    const result = await toggleInnerCircle(bondId);
     reloadData();
-    toast({ title: "Bond Upgraded", description: "The bond has been upgraded to a Family Bond." });
-  }, [familyBondsCount, maxFamilyBonds, reloadData, toast]);
+    toast({
+      title: result ? "Added to Inner Circle" : "Removed from Inner Circle",
+      description: result
+        ? "This person is now in your Inner Circle with a 365-day bond."
+        : "This person has been removed from your Inner Circle.",
+    });
+  }, [reloadData, toast]);
 
   const handleToggleShowInIntercom = useCallback((bondId: string, checked: boolean) => {
     // Optimistic update
@@ -285,7 +288,6 @@ export function BondsProvider({ children }: { children: React.ReactNode }) {
     try {
       await sendBondRequest(
         bondToIntroduceTo.targetId,
-        'friend',
         `Introduction: I'd like to introduce you to ${from.targetName}.`,
         'digital_introduction'
       );
@@ -298,7 +300,7 @@ export function BondsProvider({ children }: { children: React.ReactNode }) {
   }, [state.introductionDialog.bond, toast]);
 
   const calculateTimeProgress = useCallback((bond: Bond): number => {
-    if (bond.passkeyStatus === 'expired') return 0;
+    if (bond.passkeyStatus === 'expired' || bond.passkeyStatus === 'dormant') return 0;
     if (!(bond.expiresAt instanceof Date) || !(bond.lastRefreshedAt instanceof Date) || isNaN(bond.expiresAt.getTime()) || isNaN(bond.lastRefreshedAt.getTime())) return 0;
     const now = Date.now();
     const expiresAtTime = bond.expiresAt.getTime();
@@ -311,9 +313,10 @@ export function BondsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const handleSort = useCallback((keyToSort: SortableBondKeys) => {
-    dispatch({ type: 'SET_SORT', payload: state.sortConfig.key === keyToSort && state.sortConfig.direction === 'ascending'
-      ? { key: keyToSort, direction: 'descending' }
-      : { key: keyToSort, direction: 'ascending' }
+    dispatch({
+      type: 'SET_SORT', payload: state.sortConfig.key === keyToSort && state.sortConfig.direction === 'ascending'
+        ? { key: keyToSort, direction: 'descending' }
+        : { key: keyToSort, direction: 'ascending' }
     });
   }, [state.sortConfig]);
 
@@ -333,16 +336,41 @@ export function BondsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [reloadData, toast]);
 
+  const handleRequestReconnect = useCallback(async (bondId: string) => {
+    try {
+      await requestReconnect(bondId);
+      toast({ title: 'Reconnect Sent', description: 'A reconnect request has been sent. Waiting for their approval.' });
+      await reloadData();
+    } catch (e: unknown) {
+      toast({ title: 'Error', description: ((e instanceof Error) ? e.message : 'Failed to send reconnect request'), variant: 'destructive' });
+    }
+  }, [reloadData, toast]);
+
+  const handleRespondToReconnect = useCallback(async (bondId: string, accept: boolean) => {
+    try {
+      await respondToReconnect(bondId, accept);
+      toast({
+        title: accept ? 'Reconnected!' : 'Reconnect Declined',
+        description: accept ? 'Your bond has been restored.' : 'The reconnect request has been declined.',
+      });
+      await reloadData();
+    } catch (e: unknown) {
+      toast({ title: 'Error', description: ((e instanceof Error) ? e.message : 'An error occurred'), variant: 'destructive' });
+    }
+  }, [reloadData, toast]);
+
   const value = useMemo(() => ({
-    state, dispatch, derived, userRole, maxFamilyBonds, familyBondsCount,
-    reloadData, handleRefreshBond, handleRevokeBond, handleUpgradeToFamilyBond,
+    state, dispatch, derived, userRole, maxInnerCircleBonds, innerCircleCount,
+    reloadData, handleRefreshBond, handleRevokeBond, handleToggleInnerCircle,
     handleToggleShowInIntercom, handleBlockBond, handleSaveBondSettings,
     handleConfirmIntroduction, calculateTimeProgress, handleSort, handleRespondToRequest,
+    handleRequestReconnect, handleRespondToReconnect,
   }), [
-    state, derived, userRole, maxFamilyBonds, familyBondsCount,
-    reloadData, handleRefreshBond, handleRevokeBond, handleUpgradeToFamilyBond,
+    state, derived, userRole, maxInnerCircleBonds, innerCircleCount,
+    reloadData, handleRefreshBond, handleRevokeBond, handleToggleInnerCircle,
     handleToggleShowInIntercom, handleBlockBond, handleSaveBondSettings,
     handleConfirmIntroduction, calculateTimeProgress, handleSort, handleRespondToRequest,
+    handleRequestReconnect, handleRespondToReconnect,
   ]);
 
   return (

@@ -16,6 +16,7 @@ export interface TribeCardData {
   cover?: string | null;
   isPublic?: boolean;
   members?: number;
+  brandColor?: string | null;
 }
 
 interface TribeCardProps {
@@ -44,8 +45,11 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
                   <Image src={tribe.cover} alt={tribe.name} fill className="object-cover" />
                 </div>
               ) : (
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                  <Tent className="h-5 w-5 text-primary" />
+                <div
+                  className="h-10 w-10 rounded-lg flex items-center justify-center shrink-0"
+                  style={tribe.brandColor ? { background: tribe.brandColor } : undefined}
+                >
+                  <Tent className={cn("h-5 w-5", tribe.brandColor ? 'text-white' : 'text-primary')} />
                 </div>
               )}
               <div className="flex-1 min-w-0">
@@ -93,8 +97,15 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
             )}
           </div>
         ) : (
-          <div className="relative h-28 w-full overflow-hidden bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-            <Tent className="h-12 w-12 text-primary/40" />
+          <div
+            className="relative h-28 w-full overflow-hidden flex items-center justify-center"
+            style={tribe.brandColor
+              ? { background: `linear-gradient(135deg, ${tribe.brandColor}, ${tribe.brandColor}99)` }
+              : undefined
+            }
+          >
+            {!tribe.brandColor && <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5" />}
+            <Tent className={cn("h-12 w-12 relative z-[1]", tribe.brandColor ? 'text-white/60' : 'text-primary/40')} />
             {tribe.isPublic !== undefined && (
               <div className="absolute bottom-2 left-3">
                 <Badge variant="secondary" className="text-[10px]">

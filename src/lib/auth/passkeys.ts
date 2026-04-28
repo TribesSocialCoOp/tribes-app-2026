@@ -45,6 +45,9 @@ export async function startRegistration(userId: string) {
       residentKey: 'required',
       userVerification: 'preferred',
     },
+    extensions: {
+      prf: {}, // Request PRF support during registration
+    } as unknown as Record<string, unknown>,
   });
 
   // Store challenge in a cookie for verification
@@ -99,6 +102,11 @@ export async function finishRegistration(userId: string, body: RegistrationRespo
 // -------------------------------------------------------------------------
 
 export async function startAuthentication() {
+  // NOTE: The PRF extension is NOT included here.
+  // generateAuthenticationOptions returns JSON (PublicKeyCredentialRequestOptionsJSON),
+  // and Node Buffer / Uint8Array values in extensions don't survive JSON serialization.
+  // The PRF extension is injected client-side in the login page where a real
+  // Uint8Array can be created in the browser's memory space.
   const options = await generateAuthenticationOptions({
     rpID: RP_ID,
     userVerification: 'preferred',

@@ -12,6 +12,7 @@
 
 const { WebSocketServer, WebSocket } = require('ws');
 const jwt = require('jsonwebtoken');
+const http = require('http');
 
 // ============================================================
 // CONFIG
@@ -246,6 +247,22 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   console.log('[ws-relay] Shutting down...');
   wss.close(() => process.exit(0));
+});
+
+// --- HEALTH CHECK SERVER (HTTP 9004) ---
+const healthServer = http.createServer((req, res) => {
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', connections: wss.clients.size }));
+  } else {
+    res.writeHead(404);
+    res.end();
+  }
+});
+
+const HEALTH_PORT = process.env.HEALTH_PORT || '9004';
+healthServer.listen(HEALTH_PORT, '0.0.0.0', () => {
+  console.log(`[ws-relay] Health check listening on http://0.0.0.0:${HEALTH_PORT}/health`);
 });
 
 console.log(`[ws-relay] Ready. Awaiting connections.`);

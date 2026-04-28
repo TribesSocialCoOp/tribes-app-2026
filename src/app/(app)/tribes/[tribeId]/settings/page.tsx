@@ -30,6 +30,7 @@ import { getTribeById, getTribeBySlug, updateTribeSettings, checkTribeAccess, de
 import type { Tribe } from '@/lib/types';
 import { moodsData as allMoodsData } from '@/lib/moods-data';
 import { REPUTATION_GATE_OPTIONS, type ReputationStatus } from '@/lib/constants';
+import { AuthGuard } from "@/components/providers/auth-guard";
 
 // Use canonical reputation levels from shared constants
 const reputationLevels = REPUTATION_GATE_OPTIONS;
@@ -53,6 +54,14 @@ const tribeSettingsFormSchema = z.object({
 type TribeSettingsFormValues = z.infer<typeof tribeSettingsFormSchema>;
 
 export default function TribeSettingsPage() {
+  return (
+    <AuthGuard message="Sign in to manage your tribe's settings.">
+      <TribeSettingsContent />
+    </AuthGuard>
+  );
+}
+
+function TribeSettingsContent() {
   const router = useRouter();
   const params = useParams();
   const slugParam = params.slug as string | undefined;

@@ -20,12 +20,17 @@ import { IntroductionDialog } from '@/components/dialogs/introduction-dialog';
 import { BondPendingRequests } from '../bonds/bond-pending-requests';
 import { BondFamilyCapacity } from '../bonds/bond-family-capacity';
 import { BondTable } from '../bonds/bond-table';
+import { RecentChats } from '@/components/circles/recent-chats';
+
+import { AuthGuard } from '@/components/providers/auth-guard';
 
 export default function CirclesPage() {
   return (
-    <BondsProvider>
-      <CirclesContent />
-    </BondsProvider>
+    <AuthGuard message="Sign in to see your bonds and tribes.">
+      <BondsProvider>
+        <CirclesContent />
+      </BondsProvider>
+    </AuthGuard>
   );
 }
 
@@ -111,6 +116,7 @@ function CirclesContent() {
             </div>
           ) : (
             <>
+              <RecentChats />
               <BondPendingRequests />
               <BondFamilyCapacity />
               <BondTable />

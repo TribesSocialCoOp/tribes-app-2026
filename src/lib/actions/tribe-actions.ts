@@ -188,10 +188,10 @@ export async function deleteTribe(tribeId: string): Promise<void> {
   return fn(userId, tribeId);
 }
 
-export async function requestToJoinTribe(tribeId: string): Promise<'joined' | 'pending' | 'rejected'> {
+export async function requestToJoinTribe(tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected'> {
   const userId = await requireAuth();
   const { requestToJoinTribe: fn } = await import('@/lib/services/tribe-service');
-  return fn(userId, tribeId);
+  return fn(userId, tribeId, aliasName, aliasAvatar);
 }
 
 // ======== TRIBE ANALYTICS ========

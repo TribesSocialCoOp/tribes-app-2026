@@ -19,7 +19,17 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+import { AuthGuard } from '@/components/providers/auth-guard';
+
 export default function AiAssistantPage() {
+  return (
+    <AuthGuard message="Sign in to chat with T-Codex Prime, your personal AI guide.">
+      <AssistantContent />
+    </AuthGuard>
+  );
+}
+
+function AssistantContent() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);

@@ -51,7 +51,17 @@ const sortOptions: SortOption[] = [
 ];
 
 
+import { AuthGuard } from '@/components/providers/auth-guard';
+
 export default function ModQueuePage() {
+  return (
+    <AuthGuard requiredRole="Admin" message="This page is for platform administrators only.">
+      <ModQueueContent />
+    </AuthGuard>
+  );
+}
+
+function ModQueueContent() {
   const router = useRouter();
   const { toast } = useToast();
   const { role } = useUser();

@@ -8,7 +8,7 @@ import { getCurrentUserId } from '@/lib/auth/session';
 import { createTapToken } from '@/lib/services/bond-tap-service';
 import type { BondType } from '@/lib/types';
 
-const VALID_BOND_TYPES: BondType[] = ['family', 'friend', 'professional', 'collaborator', 'follower', 'supporter'];
+const VALID_BOND_TYPES: BondType[] = ['person', 'tribe', 'event'];
 
 export async function POST(request: NextRequest) {
   try {

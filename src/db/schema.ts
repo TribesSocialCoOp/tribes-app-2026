@@ -28,6 +28,7 @@ export const userAliases = sqliteTable('user_aliases', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   alias: text('alias').notNull(),
+  avatar: text('avatar'), // Generated SVG or custom image url
 });
 
 export const credentials = sqliteTable('credentials', {
@@ -65,6 +66,22 @@ export const vaultBackups = sqliteTable('vault_backups', {
   createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const keyVaults = sqliteTable('key_vaults', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  credentialId: text('credential_id'),       // WebAuthn credential ID (NULL for passphrase vaults)
+  vaultType: text('vault_type').notNull(),    // 'prf' | 'passphrase'
+  encryptedVault: blob('encrypted_vault').notNull(),
+  salt: text('salt').notNull(),               // HKDF salt (PRF) or PBKDF2 salt (passphrase)
+  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }),
+}, (table) => [
+  // NOTE: SQLite treats NULL != NULL, so this index does NOT enforce uniqueness across
+  // passphrase vaults (where credentialId IS NULL). The service-layer "delete before insert"
+  // pattern in key-vault-service.ts compensates for this intentionally.
+  uniqueIndex('key_vaults_user_credential_idx').on(table.userId, table.credentialId),
+]);
+
 // ============================================================
 // SUBSCRIPTION & BILLING (Phase 3)
 // ============================================================
@@ -101,7 +118,8 @@ export const subscriptions = sqliteTable('subscriptions', {
 });
 
 export const inviteCodes = sqliteTable('invite_codes', {
-  id: text('id').primaryKey(),              // The code itself, e.g. 'FOUNDING-ALPHA-42'
+  id: text('id').primaryKey(),              // The code itself, format: TRIBE-XXXX-XXXX
+  type: text('type', { enum: ['founding', 'referral'] }).notNull().default('referral'), // 'founding' = admin grants paid plan; 'referral' = user shares free access
   createdBy: text('created_by').references(() => users.id),
   grantsPlanId: text('grants_plan_id').notNull().references(() => plans.id), // Which plan this code unlocks
   maxUses: integer('max_uses').default(1),
@@ -166,6 +184,16 @@ export const bonds = sqliteTable('bonds', {
 
   // Cryptographic layer (Phase 2B)
   publicKeyJwk: text('public_key_jwk'), // JWK-exported public key for this side of the bond
+
+  // Connection vibe (Organic engagement)
+  connectionScore: integer('connection_score').default(0),
+  lastInteractedAt: integer('last_interacted_at', { mode: 'timestamp' }),
+  dailyScoreAdded: integer('daily_score_added').default(0),
+
+  // Dormant/reconnect state
+  dormantAt: integer('dormant_at', { mode: 'timestamp' }),           // When bond went dormant
+  reconnectRequestedAt: integer('reconnect_requested_at', { mode: 'timestamp' }),
+  reconnectRequestedBy: text('reconnect_requested_by'),               // userId who requested reconnect
 });
 
 export const bondRequests = sqliteTable('bond_requests', {
@@ -228,6 +256,8 @@ export const tribeMembers = sqliteTable('tribe_members', {
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   role: text('role').default('member'),
   tribeAssignedNickname: text('tribe_assigned_nickname'),
+  joinedAsAlias: text('joined_as_alias'),
+  joinedAsAvatar: text('joined_as_avatar'),
   reputationStatus: text('reputation_status'),
   joinedAt: integer('joined_at', { mode: 'timestamp' }),
 });
@@ -236,6 +266,8 @@ export const pendingMembers = sqliteTable('pending_members', {
   id: text('id').primaryKey(),
   tribeId: text('tribe_id').notNull().references(() => tribes.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  joinedAsAlias: text('joined_as_alias'),
+  joinedAsAvatar: text('joined_as_avatar'),
   requestedAt: integer('requested_at', { mode: 'timestamp' }),
 });
 
@@ -253,6 +285,7 @@ export const posts = sqliteTable('posts', {
   title: text('title'),
   content: text('content').notNull(),
   imageUrl: text('image_url'),
+  imageUrls: text('image_urls', { mode: 'json' }).$type<string[]>(),
   imageAlt: text('image_alt'),
   dataAiHintAvatar: text('data_ai_hint_avatar'),
   dataAiHintImage: text('data_ai_hint_image'),
@@ -269,6 +302,11 @@ export const posts = sqliteTable('posts', {
   ring: text('ring').default('tribes'), // 'journal' | 'inner_circle' | 'my_people' | 'tribes'
   moodTag: text('mood_tag'),            // Primary mood slug (e.g. 'chill', 'kin') — for feed filtering
   pinnedToWall: integer('pinned_to_wall', { mode: 'boolean' }).default(false), // Journal → Wall promotion
+
+  // E2E encryption (Phase 3)
+  ciphertext: blob('ciphertext'),                                         // Encrypted post body (AES-256-GCM)
+  isEncrypted: integer('is_encrypted', { mode: 'boolean' }).default(false), // True if content is encrypted
+  encryptionIv: text('encryption_iv'),                                     // Base64-encoded IV
 
   createdAt: integer('created_at', { mode: 'timestamp' }),
 });
@@ -294,6 +332,16 @@ export const comments = sqliteTable('comments', {
   content: text('content').notNull(),
   vibeCount: integer('vibe_count').default(0),
   createdAt: integer('created_at', { mode: 'timestamp' }),
+});
+
+// Per-recipient key grants for encrypted posts (sender key model)
+export const postKeyGrants = sqliteTable('post_key_grants', {
+  id: text('id').primaryKey(),
+  postId: text('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
+  recipientId: text('recipient_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  bondId: text('bond_id').references(() => bonds.id, { onDelete: 'cascade' }),  // nullable for tribe group key grants
+  wrappedKey: text('wrapped_key').notNull(),  // Base64: post key encrypted with recipient's shared secret (AES-GCM)
+  wrapIv: text('wrap_iv').notNull(),          // Base64: IV used for the key wrapping
 });
 
 export const vibes = sqliteTable('vibes', {
@@ -435,6 +483,12 @@ export const messages = sqliteTable('messages', {
   senderId: text('sender_id').notNull().references(() => users.id),
   ciphertext: blob('ciphertext'),
   plaintext: text('plaintext'),
+  // Encrypted file attachment (Phase 2B)
+  attachmentFileId: text('attachment_file_id'),       // References media_files.id
+  attachmentName: text('attachment_name'),             // Original filename (encrypted in ciphertext if sensitive)
+  attachmentType: text('attachment_type'),             // MIME type
+  attachmentSize: integer('attachment_size'),          // Original file size in bytes
+  attachmentEncryptionMeta: text('attachment_encryption_meta'), // JSON: EncryptionMeta for client-side decryption
   sentAt: integer('sent_at', { mode: 'timestamp' }),
   readAt: integer('read_at', { mode: 'timestamp' }),
 });

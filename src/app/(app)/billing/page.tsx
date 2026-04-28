@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/hooks/use-user";
 import { validateInviteCode, redeemInviteCode, createCheckoutSession, getMySubscription, getContributionSummary, getMyInviteCodes, revokeInviteCode, getAllInviteCodes, createFoundingCode } from '@/lib/actions/profile-actions';
+import { useActionError } from '@/hooks/use-action-error';
 
 const freeTier = {
     name: "Always Free",
@@ -131,6 +132,8 @@ export default function BillingPage() {
   const [adminCodes, setAdminCodes] = useState<Awaited<ReturnType<typeof getAllInviteCodes>>>([]);
   const [isCreatingFoundingCode, setIsCreatingFoundingCode] = useState(false);
 
+  const { handleError } = useActionError();
+
   useEffect(() => {
     if (user) {
       getMySubscription().then(setSubscription).catch(() => {});
@@ -152,7 +155,7 @@ export default function BillingPage() {
       const result = await createCheckoutSession(planId, interval);
       window.location.href = result.url;
     } catch (err: unknown) {
-      toast({ title: "Checkout Error", description: ((err instanceof Error) ? err.message : 'An error occurred'), variant: "destructive" });
+      handleError(err, "Checkout Error");
     } finally {
       setLoadingPlan(null);
     }
@@ -166,7 +169,7 @@ export default function BillingPage() {
       toast({ title: "Code Valid!", description: `This code grants ${result.planName} membership.` });
     } catch (err: unknown) {
       setInviteStatus({ valid: false });
-      toast({ title: "Invalid Code", description: ((err instanceof Error) ? err.message : 'An error occurred'), variant: "destructive" });
+      handleError(err, "Invalid Code");
     }
   };
 
@@ -183,7 +186,7 @@ export default function BillingPage() {
       setInviteStatus(null);
       setTimeout(() => window.location.reload(), 1500);
     } catch (err: unknown) {
-      toast({ title: "Redemption Failed", description: ((err instanceof Error) ? err.message : 'An error occurred'), variant: "destructive" });
+      handleError(err, "Redemption Failed");
     } finally {
       setIsRedeeming(false);
     }

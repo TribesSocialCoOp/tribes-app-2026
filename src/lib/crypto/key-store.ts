@@ -226,3 +226,22 @@ export async function clearAllKeys(): Promise<void> {
 export function isKeyStoreAvailable(): boolean {
   return typeof indexedDB !== 'undefined';
 }
+
+/**
+ * Checks if the keystore contains any keys.
+ * Used during login to determine if a vault restore is necessary.
+ */
+export async function hasAnyKeys(): Promise<boolean> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.count();
+
+    request.onsuccess = () => resolve(request.result > 0);
+    request.onerror = () => reject(new Error('Failed to check keystore status'));
+
+    tx.oncomplete = () => db.close();
+  });
+}

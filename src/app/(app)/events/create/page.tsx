@@ -28,6 +28,8 @@ import { getMyTribes } from '@/lib/actions/tribe-actions';
 import { uploadFile } from '@/lib/upload';
 import type { Tribe } from '@/lib/types';
 import type { Event } from '@/lib/types';
+import { useActionError } from '@/hooks/use-action-error';
+import { AuthGuard } from "@/components/providers/auth-guard";
 
 
 const eventCreateFormSchema = z.object({
@@ -46,7 +48,16 @@ const eventCreateFormSchema = z.object({
 
 type EventCreateFormValues = z.infer<typeof eventCreateFormSchema>;
 
+
 export default function CreateEventPage() {
+  return (
+    <AuthGuard message="Sign in to create an event for your tribe.">
+      <CreateEventContent />
+    </AuthGuard>
+  );
+}
+
+function CreateEventContent() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
@@ -57,6 +68,8 @@ export default function CreateEventPage() {
   const [myTribes, setMyTribes] = useState<Tribe[]>([]);
   const [isClient, setIsClient] = useState(false);
   const [rsvpCap, setRsvpCap] = useState<{ max: number; reputation: number }>({ max: 10, reputation: 0 });
+
+  const { handleError } = useActionError();
 
   const form = useForm<EventCreateFormValues>({
     resolver: zodResolver(eventCreateFormSchema),
@@ -116,11 +129,7 @@ export default function CreateEventPage() {
       router.push('/events');
     } catch (error) {
       console.error("Failed to create event:", error);
-      toast({
-        variant: "destructive",
-        title: "Creation Failed",
-        description: "There was an error creating your event. Please try again."
-      });
+      handleError(error, "Creation Failed");
     } finally {
       setIsLoading(false);
     }

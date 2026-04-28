@@ -1,7 +1,7 @@
 'use server';
 
 import { requireAuth, getCurrentUserId } from './shared';
-import type { Bond, BondRequest, BondType, FormationMethod } from '@/lib/types';
+import type { Bond, BondRequest, FormationMethod } from '@/lib/types';
 import { bondLimiter } from '@/lib/auth/rate-limit';
 
 // ======== BOND SERVICE ========
@@ -24,9 +24,9 @@ export async function revokeBond(bondId: string): Promise<void> {
   return fn(bondId, userId);
 }
 
-export async function upgradeToFamilyBond(bondId: string): Promise<void> {
+export async function toggleInnerCircle(bondId: string): Promise<boolean> {
   const userId = await requireAuth();
-  const { upgradeToFamilyBond: fn } = await import('@/lib/services/bond-service');
+  const { toggleInnerCircle: fn } = await import('@/lib/services/bond-service');
   return fn(bondId, userId);
 }
 
@@ -36,11 +36,11 @@ export async function saveBondSettings(updatedBond: Bond): Promise<void> {
   return fn(updatedBond, userId);
 }
 
-export async function sendBondRequest(toUserId: string, bondType: BondType, message?: string, formationMethod: FormationMethod = 'virtual_request'): Promise<BondRequest> {
+export async function sendBondRequest(toUserId: string, message?: string, formationMethod: FormationMethod = 'virtual_request'): Promise<BondRequest> {
   const userId = await requireAuth();
   await bondLimiter.check(userId);
   const { createBondRequest: fn } = await import('@/lib/services/bond-service');
-  return fn(userId, toUserId, bondType, formationMethod, message);
+  return fn(userId, toUserId, 'person', formationMethod, message);
 }
 
 export async function respondToBondRequest(requestId: string, accept: boolean): Promise<void> {
@@ -87,27 +87,45 @@ export async function getPeerPublicKey(bondId: string): Promise<string | null> {
   return fn(bondId, userId);
 }
 
-// ======== FAMILY INTRODUCE (P4-2) ========
-export async function getFamilyBonds(): Promise<Bond[]> {
+// ======== INNER CIRCLE INTRODUCTIONS ========
+export async function getInnerCircleBonds(): Promise<Bond[]> {
   const userId = await getCurrentUserId();
   if (!userId) return [];
-  const { getFamilyBonds: fn } = await import('@/lib/services/bond-service');
+  const { getInnerCircleBonds: fn } = await import('@/lib/services/bond-service');
   return fn(userId);
 }
 
-export async function sendFamilyIntroductions(
+export async function sendInnerCircleIntroductions(
   newMemberUserId: string,
-  selectedFamilyMemberIds: string[],
+  selectedMemberIds: string[],
 ): Promise<number> {
   const userId = await requireAuth();
-  if (selectedFamilyMemberIds.length === 0) throw new Error('Select at least one family member');
-  const { createFamilyIntroductions: fn } = await import('@/lib/services/bond-service');
-  return fn(userId, newMemberUserId, selectedFamilyMemberIds);
+  if (selectedMemberIds.length === 0) throw new Error('Select at least one Inner Circle member');
+  const { createInnerCircleIntroductions: fn } = await import('@/lib/services/bond-service');
+  return fn(userId, newMemberUserId, selectedMemberIds);
 }
 
-export async function createFamilyInviteLink(): Promise<{ url: string; expiresAt: Date }> {
+export async function createBondInviteLink(): Promise<{ url: string; expiresAt: Date }> {
   const userId = await requireAuth();
   const { createTapToken: fn } = await import('@/lib/services/bond-tap-service');
-  const result = await fn(userId, 'family');
+  const result = await fn(userId, 'person');
   return { url: result.url, expiresAt: result.expiresAt };
+}
+
+// ======== RECONNECT FLOW ========
+export async function requestReconnect(bondId: string): Promise<void> {
+  const userId = await requireAuth();
+  const { requestReconnect: fn } = await import('@/lib/services/bond-service');
+  return fn(bondId, userId);
+}
+
+export async function respondToReconnect(bondId: string, accept: boolean): Promise<void> {
+  const userId = await requireAuth();
+  if (accept) {
+    const { approveReconnect: fn } = await import('@/lib/services/bond-service');
+    return fn(bondId, userId);
+  } else {
+    const { declineReconnect: fn } = await import('@/lib/services/bond-service');
+    return fn(bondId, userId);
+  }
 }

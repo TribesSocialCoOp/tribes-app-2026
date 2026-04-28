@@ -11,6 +11,7 @@ import { Edit3, MessageSquareText, CalendarDays, MapPin } from "lucide-react";
 import type { Event, TribePost } from '@/lib/types';
 import { TribePostCard } from './tribe-post-card';
 import { useTribeDetail } from './tribe-detail-context';
+import { ComposeBox } from '@/components/compose/compose-box';
 
 // ─── EventHighlightCard ──────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ type FeedItem =
 // ─── TribeFeedSection ────────────────────────────────────────────────────────
 
 export function TribeFeedSection() {
-  const { state, dispatch, isLoggedIn, currentUserId } = useTribeDetail();
+  const { state, dispatch, isLoggedIn, currentUserId, syncAllData } = useTribeDetail();
   const { tribe, posts, events, isMember, promotedPostIds, reportedPostIds } = state;
 
   const combinedFeedItems = useMemo(() => {
@@ -67,7 +68,7 @@ export function TribeFeedSection() {
       data: event,
     }));
 
-    const postItems = (isMember ? posts : posts.filter(p => p.isPinned || promotedPostIds.has(p.id)))
+    const postItems = (isMember || tribe?.isPublic ? posts : posts.filter(p => p.isPinned || promotedPostIds.has(p.id)))
       .map(post => ({
         id: `post-${post.id}`,
         type: 'post' as const,
@@ -94,18 +95,19 @@ export function TribeFeedSection() {
     <section className="space-y-4">
       <div className="flex items-center justify-between px-1">
         <h2 className="text-xl font-semibold text-foreground tracking-normal">
-          {isMember ? "Feed" : "Featured Posts in Mood Streams"}
+          {(isMember || tribe?.isPublic) ? "Feed" : "Featured Posts in Mood Streams"}
         </h2>
-        {isMember && isLoggedIn && (
-          <Button
-            size="sm"
-            className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            onClick={() => dispatch({ type: 'OPEN_CREATE_POST' })}
-          >
-            <Edit3 className="mr-1.5 h-4 w-4" /> New Post
-          </Button>
-        )}
       </div>
+
+      {isMember && isLoggedIn && (
+        <div className="mb-6">
+          <ComposeBox
+            onPostCreated={syncAllData}
+            defaultRing="tribes"
+            defaultTribeId={tribe.id}
+          />
+        </div>
+      )}
       {combinedFeedItems.length > 0 ? (
         combinedFeedItems.map(item => {
           if (item.type === 'event') {
@@ -129,10 +131,10 @@ export function TribeFeedSection() {
           <CardContent className="flex flex-col items-center justify-center">
             <MessageSquareText className="h-16 w-16 text-muted-foreground opacity-50 mb-4" />
             <h3 className="text-xl font-semibold text-foreground mb-1">
-              {isMember ? `No Posts Yet in ${tribe.name}` : `No Featured Posts from ${tribe.name} in Mood Streams`}
+              {(isMember || tribe?.isPublic) ? `No Posts Yet in ${tribe.name}` : `No Featured Posts from ${tribe.name} in Mood Streams`}
             </h3>
             <p className="text-muted-foreground">
-              {isMember ? `Be the first to share something!` : "Check back later for promoted content from this tribe."}
+              {(isMember || tribe?.isPublic) ? `Be the first to share something!` : "Check back later for promoted content from this tribe."}
             </p>
           </CardContent>
         </Card>

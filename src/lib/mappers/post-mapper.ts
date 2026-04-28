@@ -25,6 +25,7 @@ export function rowToTribePost(
     title: row.title ?? undefined,
     content: row.content,
     imageUrl: row.imageUrl ?? undefined,
+    imageUrls: row.imageUrls ?? undefined,
     imageAlt: row.imageAlt ?? undefined,
     dataAiHintImage: row.dataAiHintImage ?? undefined,
     vibes: row.vibeCount ?? 0,
@@ -38,5 +39,11 @@ export function rowToTribePost(
     moodTag: row.moodTag ?? undefined,
     pinnedToWall: row.pinnedToWall ?? false,
     commentsData,
+    // Encryption fields — pass to client for E2E decryption
+    isEncrypted: row.isEncrypted ?? false,
+    ciphertextBase64: row.ciphertext
+      ? Buffer.from(row.ciphertext as Buffer).toString('base64')
+      : undefined,
+    encryptionIv: row.encryptionIv ?? undefined,
   };
 }

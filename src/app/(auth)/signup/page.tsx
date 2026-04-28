@@ -105,6 +105,40 @@ export default function SignupPage() {
       // 3. Finish registration on server (auto-redeems invite code)
       await finishRegistrationAction(userId, regResponse, validatedCode);
 
+      // 4. Initialize E2E Vault (Phase 3: PRF)
+      try {
+        const { derivePrfWrappingKey, encryptVaultWithPrf } = await import('@/lib/crypto');
+        const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
+        const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
+
+        // Create the initial personal journal key (stored in IndexedDB)
+        console.log('[auth] Initializing E2E journal key...');
+        await getOrCreateJournalKey();
+
+        // Evaluate PRF output from registration
+        // @ts-expect-error — PRF extension results type not yet in @simplewebauthn/browser types
+        const rawPrf = regResponse.clientExtensionResults?.prf?.results?.first;
+        // Validate it is actually an ArrayBuffer of the expected size before use
+        const prfOutput = rawPrf instanceof ArrayBuffer && rawPrf.byteLength >= 32 ? rawPrf : null;
+
+        if (prfOutput) {
+          console.log('[auth] PRF extension found, creating initial vault...');
+          const wrappingKey = await derivePrfWrappingKey(prfOutput);
+          const encryptedVault = await encryptVaultWithPrf(wrappingKey);
+          
+          // Efficiently convert ArrayBuffer to base64 via Buffer (O(n), not O(n^2))
+          const base64Vault = Buffer.from(encryptedVault).toString('base64');
+
+          await savePrfVaultAction(base64Vault, regResponse.id);
+          console.log('[auth] Initial PRF vault saved.');
+        } else {
+          console.warn('[auth] Authenticator did not provide a valid PRF output. Skipping vault creation.');
+        }
+      } catch (cryptoErr) {
+        console.error('[auth] E2E initialization failed:', cryptoErr);
+        // We don't block registration if vault creation fails, but it is a degraded state.
+      }
+
       toast({
         title: "Account Created!",
         description: "Your passkey has been registered successfully.",
@@ -124,10 +158,11 @@ export default function SignupPage() {
         return; // Don't show the generic error
       }
 
+      // Sanitize error messages — never expose raw browser/server internals to users
       toast({
         variant: "destructive",
         title: "Registration Failed",
-        description: ((error instanceof Error) ? error.message : 'An error occurred') || "There was an error creating your account.",
+        description: "There was an error creating your account. Please try again.",
       });
       // Reset Turnstile so the user gets a fresh token on retry
       turnstileRef.current?.reset();
