@@ -92,6 +92,48 @@
       "when": 1777163730885,
       "tag": "0012_vengeful_power_man",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1777226103550,
+      "tag": "0013_curly_lionheart",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1777230444059,
+      "tag": "0014_glorious_purple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1777230956794,
+      "tag": "0015_marvelous_misty_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1777313741240,
+      "tag": "0016_smiling_dexter_bennett",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1777319947916,
+      "tag": "0017_cuddly_marvex",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1777340382594,
+      "tag": "0018_freezing_skin",
+      "breakpoints": true
     }
   ]
 }
