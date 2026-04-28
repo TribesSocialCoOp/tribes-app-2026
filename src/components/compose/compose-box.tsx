@@ -233,7 +233,7 @@ export function ComposeBox({
                 }}
                 className="w-full text-left text-sm text-muted-foreground bg-muted/40 hover:bg-muted/60 rounded-lg px-3 py-2.5 transition-colors"
               >
-                What&apos;s on your mind?
+                What do you have to share?
               </button>
             ) : (
               /* Expanded state — full compose form */
