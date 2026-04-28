@@ -102,7 +102,7 @@ export function TribeFeedSection() {
       {isMember && isLoggedIn && (
         <div className="mb-6">
           <ComposeBox
-            onPostCreated={syncAllData}
+            onPostCreated={() => syncAllData(true)}
             defaultRing="tribes"
             defaultTribeId={tribe.id}
           />

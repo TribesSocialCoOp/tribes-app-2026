@@ -136,7 +136,7 @@ interface TribeDetailContextValue {
   isTribeSpeaker: boolean;
 
   // Actions
-  syncAllData: () => Promise<void>;
+  syncAllData: (isBackground?: boolean | Event) => Promise<void>;
   handleInitiateJoinTribe: () => void;
   handleConfirmJoinTribe: (tribe: Tribe, selectedAlias?: string) => Promise<void>;
   handleOpenPromoteDialog: (post: TribePost) => void;
@@ -189,8 +189,11 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
   const [state, dispatch] = useReducer(reducer, initialState);
 
   // ── Data Sync ──
-  const syncAllData = useCallback(async () => {
-    dispatch({ type: 'SET_LOADING', payload: true });
+  const syncAllData = useCallback(async (isBackground: boolean | Event = false) => {
+    if (typeof isBackground !== 'boolean') isBackground = false;
+    if (!isBackground) {
+      dispatch({ type: 'SET_LOADING', payload: true });
+    }
 
     // Resolve tribe: by slug (new route) or by ID (legacy route)
     let tribeData: Tribe | null = null;
@@ -263,8 +266,9 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
 
   useEffect(() => { syncAllData(); }, [slugParam, tribeIdParam, syncAllData]);
   useEffect(() => {
-    window.addEventListener('focus', syncAllData);
-    return () => window.removeEventListener('focus', syncAllData);
+    const handleFocus = () => syncAllData(true);
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, [syncAllData]);
 
   // ── Handlers ──
