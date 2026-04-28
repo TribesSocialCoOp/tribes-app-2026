@@ -157,8 +157,7 @@ export function ComposeBox({
         if (imageFiles.length > 0) {
           try {
             const uploadPromises = imageFiles.map(async (file) => {
-              const result = await uploadFile(file, 'posts', 'public-tribe-post');
-              return typeof result === 'string' ? result : result.url || result.fileId;
+              return await uploadFile(file, 'posts', 'public-tribe-post');
             });
             finalImageUrls = await Promise.all(uploadPromises);
           } catch (uploadErr) {

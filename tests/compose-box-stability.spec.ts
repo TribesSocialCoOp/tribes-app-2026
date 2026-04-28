@@ -1,20 +1,20 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('ComposeBox Stability', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page }: { page: any }) => {
     // Navigate to login and use dev bypass
     await page.goto('http://localhost:3000/login');
     await page.click('button:has-text("Dev Login (dustin)")');
     await page.waitForURL('**/your-comms');
   });
 
-  test('should not reload page on image upload failure', async ({ page }) => {
+  test('should not reload page on image upload failure', async ({ page }: { page: any }) => {
     // 1. Enter some text
     const testContent = 'Stable testing content ' + Date.now();
     await page.fill('textarea[placeholder*="Share your thoughts"]', testContent);
 
     // 2. Mock the upload API to return 500
-    await page.route('**/api/upload', route => route.fulfill({
+    await page.route('**/api/upload', (route: any) => route.fulfill({
       status: 500,
       contentType: 'application/json',
       body: JSON.stringify({ error: 'Simulated upload failure' }),
@@ -45,13 +45,13 @@ test.describe('ComposeBox Stability', () => {
     await expect(page.locator('img[alt*="Preview"]')).toBeVisible();
   });
 
-  test('should handle multi-image upload successfully', async ({ page }) => {
+  test('should handle multi-image upload successfully', async ({ page }: { page: any }) => {
     // 1. Enter some text
     const testContent = 'Multi-image success ' + Date.now();
     await page.fill('textarea[placeholder*="Share your thoughts"]', testContent);
 
     // 2. Mock successful uploads
-    await page.route('**/api/upload', route => route.fulfill({
+    await page.route('**/api/upload', (route: any) => route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ url: 'http://example.com/image.png' }),

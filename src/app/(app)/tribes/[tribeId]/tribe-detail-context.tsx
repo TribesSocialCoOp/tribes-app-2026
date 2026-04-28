@@ -388,8 +388,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       let finalImageUrls: string[] = [];
       if (values.images && values.images.length > 0) {
         const uploadPromises = values.images.map(async (file) => {
-          const result = await uploadFile(file, 'posts', 'public-tribe-post');
-          return typeof result === 'string' ? result : result.url || result.fileId;
+          return await uploadFile(file, 'posts', 'public-tribe-post');
         });
         finalImageUrls = await Promise.all(uploadPromises);
       }
