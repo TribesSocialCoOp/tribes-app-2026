@@ -3,24 +3,44 @@
 
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Share2, Users, FileText, PlusCircle } from "lucide-react";
+import { Share2, Users, FileText, PlusCircle, Pencil } from "lucide-react";
 import Image from "next/image";
 import type { TribePost } from '@/lib/types';
 
 interface MyPostsBlockProps {
   posts: (Partial<TribePost> & { id: string, sharedWith?: Record<string, string> })[];
   onShare: (post: Partial<TribePost> & { id: string, sharedWith?: Record<string, string> }) => void;
+  onEditPost?: (post: Partial<TribePost> & { id: string }) => void;
   onCreatePost: () => void;
   readOnly?: boolean;
 }
 
-const WallItemCard = ({ post, onShare, readOnly }: { post: Partial<TribePost> & { id: string, sharedWith?: Record<string, string> }, onShare: (post: Partial<TribePost> & { id: string, sharedWith?: Record<string, string> }) => void, readOnly?: boolean }) => {
+import { formatDistance } from 'date-fns';
+
+const WallItemCard = ({ post, onShare, onEditPost, readOnly }: { 
+  post: Partial<TribePost> & { id: string, sharedWith?: Record<string, string> }, 
+  onShare: (post: Partial<TribePost> & { id: string, sharedWith?: Record<string, string> }) => void, 
+  onEditPost?: (post: Partial<TribePost> & { id: string }) => void,
+  readOnly?: boolean 
+}) => {
   const sharedTribes = post.sharedWith ? Object.keys(post.sharedWith) : [];
 
   return (
     <Card className="overflow-hidden shadow-lg hover:shadow-xl transition-shadow flex flex-col">
       <CardHeader>
-        <CardTitle className="tracking-normal text-xl">{post.title}</CardTitle>
+        <div className="flex justify-between items-start">
+          <CardTitle className="tracking-normal text-xl">{post.title}</CardTitle>
+          {!readOnly && onEditPost && (
+            <Button variant="ghost" size="icon" className="h-8 w-8 -mt-1 -mr-2 text-muted-foreground" onClick={() => onEditPost(post as any)}>
+              <Pencil className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+        {post.editedAt && (
+          <CardDescription className="text-xs text-muted-foreground/60 italic">
+            Edited {formatDistance(post.editedAt as Date, new Date(), { addSuffix: true })}
+          </CardDescription>
+        )}
       </CardHeader>
       <CardContent className="flex-grow">
         {post.imageUrl &&
@@ -49,16 +69,23 @@ const WallItemCard = ({ post, onShare, readOnly }: { post: Partial<TribePost> & 
           </div>
         )}
         {!readOnly && (
-          <Button variant="outline" size="sm" onClick={() => onShare(post)}>
-            <Share2 className="mr-2 h-4 w-4" /> Share
-          </Button>
+          <div className="flex gap-2 w-full">
+            <Button variant="outline" size="sm" className="flex-1" onClick={() => onShare(post)}>
+              <Share2 className="mr-2 h-4 w-4" /> Share
+            </Button>
+            {onEditPost && (
+              <Button variant="ghost" size="sm" onClick={() => onEditPost(post as any)}>
+                <Pencil className="mr-2 h-4 w-4" /> Edit
+              </Button>
+            )}
+          </div>
         )}
       </CardFooter>
     </Card>
   );
 };
 
-export default function MyPostsBlock({ posts, onShare, onCreatePost, readOnly }: MyPostsBlockProps) {
+export default function MyPostsBlock({ posts, onShare, onEditPost, onCreatePost, readOnly }: MyPostsBlockProps) {
   return (
     <Card className="bg-muted/30">
         <CardHeader>
@@ -84,7 +111,7 @@ export default function MyPostsBlock({ posts, onShare, onCreatePost, readOnly }:
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {posts.length > 0 ? (
                     posts.map((post) => (
-                        <WallItemCard key={post.id} post={post} onShare={onShare} readOnly={readOnly} />
+                        <WallItemCard key={post.id} post={post} onShare={onShare} onEditPost={onEditPost} readOnly={readOnly} />
                     ))
                  ) : (
                     <div className="col-span-full text-center py-12">

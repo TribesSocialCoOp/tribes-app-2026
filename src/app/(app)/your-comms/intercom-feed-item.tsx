@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { MessageSquareText, User, HeartHandshake, Rss, Loader2, Smile, Send, Megaphone, Pin, Lock, Trash2 } from "lucide-react";
+import { MessageSquareText, User, HeartHandshake, Rss, Loader2, Smile, Send, Megaphone, Pin, Lock, Trash2, Pencil } from "lucide-react";
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
@@ -18,10 +18,12 @@ import { toggleVibe, createComment, getCommentsForPost, togglePinToWall, deleteO
 import type { CommunicationItem, DiscussionComment } from '@/lib/types';
 import { CommentInline } from './comment-inline';
 import { MarkdownContent } from '@/components/ui/markdown-content';
+import { useIntercom } from './intercom-context';
 
 export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   const { toast } = useToast();
   const { user } = useUser();
+  const { handleOpenEditPostDialog } = useIntercom();
   const displayTime = useTimeSince(item.timestamp);
   const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
   const [vibeCount, setVibeCount] = useState(item.vibes ?? 0);
@@ -148,7 +150,10 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
           <div className="flex-1">
             <div className="flex justify-between items-center">
               <CardTitle className="text-base font-semibold tracking-normal">{title}</CardTitle>
-              <span className="text-xs text-muted-foreground whitespace-nowrap">{displayTime}</span>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {displayTime}
+                {item.editedAt && <span className="ml-1 opacity-70" title={`Edited ${item.editedAt.toLocaleString()}`}>(edited)</span>}
+              </span>
             </div>
             <CardDescription className="text-xs">
               {subtitle}
@@ -286,6 +291,16 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
             onClick={() => setConfirmDelete(true)}
           >
             <Trash2 className="mr-1.5 h-4 w-4" /> Delete
+          </Button>
+        )}
+        {isOwnPost && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-primary"
+            onClick={() => handleOpenEditPostDialog(item)}
+          >
+            <Pencil className="mr-1.5 h-4 w-4" /> Edit
           </Button>
         )}
         {isOwnPost && confirmDelete && (

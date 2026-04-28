@@ -8,6 +8,7 @@ import { IntercomFeedTab } from './intercom-feed-tab';
 import { IntercomActivityTab } from './intercom-activity-tab';
 import { ComposeBox } from '@/components/compose/compose-box';
 import { AuthGuard } from '@/components/providers/auth-guard';
+import { EditPostDialog } from '@/components/dialogs/edit-post-dialog';
 
 function IntercomContent() {
   const { state, dispatch, activityCount, refreshFeed } = useIntercom();
@@ -66,6 +67,14 @@ function IntercomContent() {
           <IntercomActivityTab />
         </div>
       )}
+
+      {/* Edit Dialog */}
+      <EditPostDialog
+        open={state.editPostDialog.open}
+        onOpenChange={(open) => !open && dispatch({ type: 'CLOSE_EDIT_POST' })}
+        post={state.editPostDialog.target as any}
+        onSuccess={refreshFeed}
+      />
     </div>
   );
 }

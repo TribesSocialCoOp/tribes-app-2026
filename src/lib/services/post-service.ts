@@ -132,6 +132,7 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
       tribeName,
       tribeId: postRow.tribeId ?? undefined,
       timestamp: postRow.createdAt ?? new Date(),
+      editedAt: postRow.editedAt ?? undefined,
       title: postRow.title ?? undefined,
       content: postRow.content,
       imageUrl: postRow.imageUrl ?? undefined,

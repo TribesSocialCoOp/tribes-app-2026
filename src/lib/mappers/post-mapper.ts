@@ -45,5 +45,6 @@ export function rowToTribePost(
       ? Buffer.from(row.ciphertext as Buffer).toString('base64')
       : undefined,
     encryptionIv: row.encryptionIv ?? undefined,
+    editedAt: row.editedAt ?? undefined,
   };
 }

@@ -105,7 +105,57 @@ export async function encryptPostForRecipients(
   };
 }
 
-// ── Decryption (Recipient side) ──────────────────────────────
+// ── Decryption & Editing ────────────────────────────────────
+
+/**
+ * Unwraps a post key from a key grant using the provided shared secret.
+ * Returns the post key as a CryptoKey usable for encrypt + decrypt.
+ */
+export async function unwrapPostKey(
+  wrappedKey: string,
+  wrapIv: string,
+  sharedSecret: CryptoKey,
+): Promise<CryptoKey> {
+  const wrapIvBytes = new Uint8Array(fromBase64(wrapIv));
+  const wrappedKeyData = fromBase64(wrappedKey);
+
+  const rawPostKey = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: wrapIvBytes },
+    sharedSecret,
+    wrappedKeyData,
+  );
+
+  return crypto.subtle.importKey(
+    'raw',
+    rawPostKey,
+    { name: 'AES-GCM', length: 256 },
+    true, // extractable — needed for re-encryption
+    ['encrypt', 'decrypt'],
+  );
+}
+
+/**
+ * Re-encrypts edited content using an existing post key.
+ * Used when the author edits an encrypted post.
+ */
+export async function reEncryptPost(
+  newPlaintext: string,
+  postKey: CryptoKey,
+): Promise<{ ciphertextBase64: string; iv: string }> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const contentBytes = new TextEncoder().encode(newPlaintext);
+
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, tagLength: 128 },
+    postKey,
+    contentBytes,
+  );
+
+  return {
+    ciphertextBase64: toBase64(ciphertext),
+    iv: toBase64(iv.buffer),
+  };
+}
 
 /**
  * Decrypts a post using a wrapped key grant and the recipient's shared secret.
@@ -124,24 +174,8 @@ export async function decryptPost(
   wrapIv: string,
   sharedSecret: CryptoKey,
 ): Promise<string> {
-  // Step 1: Unwrap the post key
-  const wrapIvBytes = new Uint8Array(fromBase64(wrapIv));
-  const wrappedKeyData = fromBase64(wrappedKey);
-
-  const rawPostKey = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: wrapIvBytes },
-    sharedSecret,
-    wrappedKeyData,
-  );
-
-  // Step 2: Import the post key
-  const postKey = await crypto.subtle.importKey(
-    'raw',
-    rawPostKey,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['decrypt'],
-  );
+  // Step 1 & 2: Unwrap and import the post key
+  const postKey = await unwrapPostKey(wrappedKey, wrapIv, sharedSecret);
 
   // Step 3: Decrypt the post content
   const ivBytes = new Uint8Array(fromBase64(iv));

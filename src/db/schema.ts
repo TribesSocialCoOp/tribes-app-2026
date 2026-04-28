@@ -308,6 +308,7 @@ export const posts = sqliteTable('posts', {
   isEncrypted: integer('is_encrypted', { mode: 'boolean' }).default(false), // True if content is encrypted
   encryptionIv: text('encryption_iv'),                                     // Base64-encoded IV
 
+  editedAt: integer('edited_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }),
 });
 

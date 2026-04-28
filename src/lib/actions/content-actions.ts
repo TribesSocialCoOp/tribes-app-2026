@@ -40,6 +40,71 @@ export async function togglePinToWall(postId: string): Promise<{ pinned: boolean
 }
 
 /**
+ * Server action: Edit a plaintext post.
+ */
+export async function editPost(postId: string, newContent: string): Promise<void> {
+  const userId = await requireAuth();
+  await postLimiter.check(userId);
+  if (!newContent.trim()) throw new Error('Post content cannot be empty.');
+
+  const { db } = await import('@/db');
+  const { posts } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+
+  const [post] = await db.select({
+    authorId: posts.authorId,
+    isEncrypted: posts.isEncrypted,
+  }).from(posts).where(eq(posts.id, postId)).limit(1);
+
+  if (!post) throw new Error('Post not found.');
+  if (post.authorId !== userId) throw new Error('You can only edit your own posts.');
+  if (post.isEncrypted) throw new Error('Use editEncryptedPost for encrypted content.');
+
+  await db.update(posts).set({
+    content: newContent.trim(),
+    editedAt: new Date(),
+  }).where(eq(posts.id, postId));
+
+  // Fire-and-forget: re-process @mentions for new content
+  import('@/lib/services/mention-service').then(({ processMentions }) =>
+    processMentions(newContent, userId, 'post', postId)
+  ).catch(() => {});
+}
+
+/**
+ * Server action: Edit an E2E encrypted post.
+ * The server receives a new ciphertext blob + IV from the client.
+ */
+export async function editEncryptedPost(
+  postId: string,
+  ciphertextBase64: string,
+  iv: string,
+): Promise<void> {
+  const userId = await requireAuth();
+  await postLimiter.check(userId);
+
+  const { db } = await import('@/db');
+  const { posts } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+
+  const [post] = await db.select({
+    authorId: posts.authorId,
+    isEncrypted: posts.isEncrypted,
+  }).from(posts).where(eq(posts.id, postId)).limit(1);
+
+  if (!post) throw new Error('Post not found.');
+  if (post.authorId !== userId) throw new Error('You can only edit your own posts.');
+  if (!post.isEncrypted) throw new Error('Post is not encrypted.');
+
+  await db.update(posts).set({
+    ciphertext: Buffer.from(ciphertextBase64, 'base64'),
+    encryptionIv: iv,
+    editedAt: new Date(),
+  }).where(eq(posts.id, postId));
+}
+
+
+/**
  * Server action: Get pinned wall posts for a user (their journal posts where pinnedToWall=true).
  */
 export async function getPinnedWallPosts(targetUserId?: string): Promise<TribePost[]> {

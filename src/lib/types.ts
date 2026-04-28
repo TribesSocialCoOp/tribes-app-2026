@@ -162,6 +162,7 @@ export interface TribePost {
   isEncrypted?: boolean;
   ciphertextBase64?: string;  // Base64 encoded ciphertext for client-side decryption
   encryptionIv?: string;      // Base64 IV for decryption
+  editedAt?: Date;
 }
 
 export interface ReportedPost {
@@ -224,6 +225,7 @@ export interface MoodStreamPost {
   promotedByName?: string;
   dataAiHintAvatar?: string;
   dataAiHintImage?: string;
+  editedAt?: Date;
 }
 
 
@@ -309,4 +311,5 @@ export interface CommunicationItem {
   isEncrypted?: boolean;
   ciphertextBase64?: string;  // Base64-encoded ciphertext for client-side decryption
   encryptionIv?: string;       // Base64-encoded IV
+  editedAt?: Date;
 }

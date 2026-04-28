@@ -325,11 +325,18 @@ function WallContent() {
                         Unpin
                       </Button>
                     </div>
-                    {post.moodTag && (
-                      <CardDescription className="text-xs">
-                        {moodsData.find(m => m.slug === post.moodTag)?.emoji} {post.moodTag}
-                      </CardDescription>
-                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      {post.moodTag && (
+                        <CardDescription className="text-xs">
+                          {moodsData.find(m => m.slug === post.moodTag)?.emoji} {post.moodTag}
+                        </CardDescription>
+                      )}
+                      {post.editedAt && (
+                        <span className="text-[10px] text-muted-foreground/60 italic">
+                          (edited)
+                        </span>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent className="p-4 pt-2">
                     {post.imageUrl && (

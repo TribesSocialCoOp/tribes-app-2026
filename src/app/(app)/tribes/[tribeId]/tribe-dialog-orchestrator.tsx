@@ -8,6 +8,7 @@ import { ReportCommentDialog } from '@/components/dialogs/report-comment-dialog'
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { CreatePostDialog } from '@/components/dialogs/create-post-dialog';
 import { JoinTribeDialog } from '@/components/dialogs/join-tribe-dialog';
+import { EditPostDialog } from '@/components/dialogs/edit-post-dialog';
 import { useTribeDetail } from './tribe-detail-context';
 
 export function TribeDialogOrchestrator() {
@@ -16,9 +17,10 @@ export function TribeDialogOrchestrator() {
     handleConfirmPromotion, handleConfirmReportPost,
     handleConfirmReportComment, handleConfirmRepost,
     handleConfirmComment, handleCreatePost, handleConfirmJoinTribe,
+    syncAllData,
   } = useTribeDetail();
 
-  const { tribe, promoteDialog, reportPostDialog, reportCommentDialog, repostDialog, commentDialog, createPostDialog, joinTribeDialog, reportReason, isJoining } = state;
+  const { tribe, promoteDialog, reportPostDialog, reportCommentDialog, repostDialog, editPostDialog, commentDialog, createPostDialog, joinTribeDialog, reportReason, isJoining } = state;
 
   return (
     <>
@@ -77,6 +79,12 @@ export function TribeDialogOrchestrator() {
         tribe={tribe}
         onConfirmJoin={handleConfirmJoinTribe}
         isJoining={isJoining}
+      />
+      <EditPostDialog
+        open={editPostDialog.open}
+        onOpenChange={(open) => !open && dispatch({ type: 'CLOSE_EDIT_POST' })}
+        post={editPostDialog.target}
+        onSuccess={syncAllData}
       />
     </>
   );

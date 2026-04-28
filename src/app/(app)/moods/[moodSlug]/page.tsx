@@ -129,7 +129,14 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
             <CardTitle className="text-sm font-semibold leading-tight tracking-normal">
                 {post.author} {post.tribeName && <span className="text-xs text-muted-foreground font-normal">in <Link href={`/tribes/${post.tribeId}`} className="font-medium text-primary hover:underline">{post.tribeName}</Link></span>}
             </CardTitle>
-            <CardDescription className="text-xs">{displayTime}</CardDescription>
+            <CardDescription className="text-xs">
+              {displayTime}
+              {post.editedAt && (
+                <span className="text-muted-foreground/70 ml-1" title={`Edited ${format(post.editedAt, 'MMM d, h:mm a')}`}>
+                  (edited)
+                </span>
+              )}
+            </CardDescription>
           </div>
         </div>
       </CardHeader>

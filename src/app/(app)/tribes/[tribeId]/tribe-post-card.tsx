@@ -7,8 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert } from "lucide-react";
+import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatDistance } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from '@/lib/utils';
@@ -36,6 +37,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
     handleOpenRepostDialog, handleOpenReportCommentDialog,
     handleOpenCommentDialog, handleDeletePost, 
     handleTogglePinPost, handleRemovePostAsMod,
+    handleOpenEditPostDialog,
   } = useTribeDetail();
 
   const router = useRouter();
@@ -93,7 +95,14 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
             <div className="flex-1">
               <CardTitle className="text-md font-semibold tracking-normal">{post.authorName}</CardTitle>
               <div className="flex items-center space-x-2">
-                <CardDescription className="text-xs">{displayTime}</CardDescription>
+                <CardDescription className="text-xs">
+                  {displayTime}
+                  {post.editedAt && (
+                    <span className="text-muted-foreground/70 ml-1" title={`Edited ${formatDistance(post.editedAt, new Date(), { addSuffix: true })}`}>
+                      (edited)
+                    </span>
+                  )}
+                </CardDescription>
                 {post.isPinned && (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
                     <div className="flex items-center text-xs text-primary"><Pin className="h-3.5 w-3.5" /></div>
@@ -141,9 +150,14 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                     </DropdownMenuItem>
                   )}
                   {isCurrentUserAuthor && (
-                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeletePost(post.id)}>
-                      <Trash2 className="mr-2 h-4 w-4" /> Delete Post
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem onClick={() => handleOpenEditPostDialog(post)}>
+                        <Pencil className="mr-2 h-4 w-4" /> Edit Post
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeletePost(post.id)}>
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete Post
+                      </DropdownMenuItem>
+                    </>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>

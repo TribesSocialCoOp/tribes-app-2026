@@ -23,6 +23,7 @@ interface IntercomState {
   activeTab: 'feed' | 'activity';
   activityItems: ActivityItem[];
   isLoadingActivity: boolean;
+  editPostDialog: { open: boolean; target: CommunicationItem | null };
 }
 
 type Action =
@@ -34,7 +35,9 @@ type Action =
   | { type: 'SET_LOADED_FROM_STORAGE' }
   | { type: 'SET_ACTIVE_TAB'; payload: 'feed' | 'activity' }
   | { type: 'SET_ACTIVITY_ITEMS'; payload: ActivityItem[] }
-  | { type: 'SET_LOADING_ACTIVITY'; payload: boolean };
+  | { type: 'SET_LOADING_ACTIVITY'; payload: boolean }
+  | { type: 'OPEN_EDIT_POST'; payload: CommunicationItem }
+  | { type: 'CLOSE_EDIT_POST' };
 
 function reducer(state: IntercomState, action: Action): IntercomState {
   switch (action.type) {
@@ -52,6 +55,8 @@ function reducer(state: IntercomState, action: Action): IntercomState {
     case 'SET_ACTIVE_TAB': return { ...state, activeTab: action.payload };
     case 'SET_ACTIVITY_ITEMS': return { ...state, activityItems: action.payload, isLoadingActivity: false };
     case 'SET_LOADING_ACTIVITY': return { ...state, isLoadingActivity: action.payload };
+    case 'OPEN_EDIT_POST': return { ...state, editPostDialog: { open: true, target: action.payload } };
+    case 'CLOSE_EDIT_POST': return { ...state, editPostDialog: { open: false, target: null } };
     default: return state;
   }
 }
@@ -67,6 +72,7 @@ interface IntercomContextValue {
   refreshFeed: () => void;
   setRingFilter: (ring: RingFilterValue) => void;
   setMoodSlugs: (slugs: string[]) => void;
+  handleOpenEditPostDialog: (item: CommunicationItem) => void;
 }
 
 const IntercomContext = createContext<IntercomContextValue | null>(null);
@@ -89,6 +95,7 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
     activeTab: 'feed',
     activityItems: [],
     isLoadingActivity: false,
+    editPostDialog: { open: false, target: null },
   });
 
   // Load filter state from localStorage
@@ -156,6 +163,10 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
     fetchFeed();
   }, [fetchFeed]);
 
+  const handleOpenEditPostDialog = useCallback((item: CommunicationItem) => {
+    dispatch({ type: 'OPEN_EDIT_POST', payload: item });
+  }, []);
+
   // Load activity feed when tab switches + fire local notifications for new items
   const prevActivityCountRef = React.useRef(0);
   useEffect(() => {
@@ -193,7 +204,8 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<IntercomContextValue>(() => ({
     state, dispatch, feedItems: state.feedItems, activityCount, allMoods,
     refreshFeed, setRingFilter, setMoodSlugs,
-  }), [state, activityCount, refreshFeed, setRingFilter, setMoodSlugs]);
+    handleOpenEditPostDialog,
+  }), [state, activityCount, refreshFeed, setRingFilter, setMoodSlugs, handleOpenEditPostDialog]);
 
   return <IntercomContext.Provider value={value}>{children}</IntercomContext.Provider>;
 }

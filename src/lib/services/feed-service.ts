@@ -337,6 +337,7 @@ async function fetchMoodStreamPosts(
       avatarSrc: postRow.authorAvatar ?? undefined,
       avatarFallback: postRow.authorAvatarFallback ?? postRow.authorName?.substring(0, 2) ?? 'U',
       timestamp: postRow.createdAt ?? new Date(),
+      editedAt: postRow.editedAt ?? undefined,
       vibes: postRow.vibeCount ?? 0,
       dataAiHint: postRow.dataAiHintAvatar ?? undefined,
       imageUrl: postRow.imageUrl ?? undefined,
@@ -412,5 +413,6 @@ function postRowToFeedItem(
     isEncrypted: row.isEncrypted ?? false,
     ciphertextBase64: row.ciphertext ? Buffer.from(row.ciphertext as Buffer).toString('base64') : undefined,
     encryptionIv: row.encryptionIv ?? undefined,
+    editedAt: row.editedAt ?? undefined,
   };
 }

@@ -413,7 +413,10 @@ function TribeModQueueContent() {
                                     </Avatar>
                                     <div>
                                         <p className="text-xs font-semibold">{post.authorName}</p>
-                                        <p className="text-xs text-muted-foreground">{format(new Date(post.timestamp), "MMM d, yyyy 'at' h:mm a")}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                          {format(new Date(post.timestamp), "MMM d, yyyy 'at' h:mm a")}
+                                          {post.editedAt && <span className="ml-1 opacity-70 italic">(edited)</span>}
+                                        </p>
                                     </div>
                                 </div>
                                 {post.title && <h5 className="font-semibold text-sm mb-1">{post.title}</h5>}

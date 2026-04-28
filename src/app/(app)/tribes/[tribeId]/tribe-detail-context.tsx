@@ -46,6 +46,7 @@ interface TribeDetailState {
   reportCommentDialog: DialogState<DiscussionComment | null>;
   commentDialog: DialogState<CommentContext | null>;
   repostDialog: DialogState<TribePost | null>;
+  editPostDialog: DialogState<TribePost | null>;
   createPostDialog: { open: boolean };
   joinTribeDialog: { open: boolean };
 }
@@ -71,6 +72,8 @@ type Action =
   | { type: 'CLOSE_COMMENT' }
   | { type: 'OPEN_REPOST'; payload: TribePost }
   | { type: 'CLOSE_REPOST' }
+  | { type: 'OPEN_EDIT_POST'; payload: TribePost }
+  | { type: 'CLOSE_EDIT_POST' }
   | { type: 'OPEN_CREATE_POST' }
   | { type: 'CLOSE_CREATE_POST' }
   | { type: 'OPEN_JOIN_TRIBE' }
@@ -87,6 +90,7 @@ const initialState: TribeDetailState = {
   reportCommentDialog: { open: false, target: null },
   commentDialog: { open: false, target: null },
   repostDialog: { open: false, target: null },
+  editPostDialog: { open: false, target: null },
   createPostDialog: { open: false },
   joinTribeDialog: { open: false },
 };
@@ -110,6 +114,8 @@ function reducer(state: TribeDetailState, action: Action): TribeDetailState {
     case 'CLOSE_COMMENT': return { ...state, commentDialog: { open: false, target: null } };
     case 'OPEN_REPOST': return { ...state, repostDialog: { open: true, target: action.payload } };
     case 'CLOSE_REPOST': return { ...state, repostDialog: { open: false, target: null } };
+    case 'OPEN_EDIT_POST': return { ...state, editPostDialog: { open: true, target: action.payload } };
+    case 'CLOSE_EDIT_POST': return { ...state, editPostDialog: { open: false, target: null } };
     case 'OPEN_CREATE_POST': return { ...state, createPostDialog: { open: true } };
     case 'CLOSE_CREATE_POST': return { ...state, createPostDialog: { open: false } };
     case 'OPEN_JOIN_TRIBE': return { ...state, joinTribeDialog: { open: true } };
@@ -141,6 +147,7 @@ interface TribeDetailContextValue {
   handleConfirmReportComment: () => Promise<void>;
   handleOpenRepostDialog: (post: TribePost) => void;
   handleConfirmRepost: (editedContent: string) => Promise<void>;
+  handleOpenEditPostDialog: (post: TribePost) => void;
   handleOpenCommentDialog: (context: CommentContext) => void;
   handleConfirmComment: (content: string) => Promise<void>;
   handleCreatePost: (values: PostFormValues) => Promise<void>;
@@ -346,6 +353,10 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
   const handleOpenRepostDialog = useCallback((post: TribePost) => {
     dispatch({ type: 'OPEN_REPOST', payload: post });
   }, []);
+  
+  const handleOpenEditPostDialog = useCallback((post: TribePost) => {
+    dispatch({ type: 'OPEN_EDIT_POST', payload: post });
+  }, []);
 
   const handleConfirmRepost = useCallback(async (editedContent: string) => {
     if (!state.repostDialog.target || !state.tribe) return;
@@ -450,6 +461,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     handleOpenReportPostDialog, handleConfirmReportPost,
     handleOpenReportCommentDialog, handleConfirmReportComment,
     handleOpenRepostDialog, handleConfirmRepost,
+    handleOpenEditPostDialog,
     handleOpenCommentDialog, handleConfirmComment,
     handleCreatePost, handleDeletePost, handleTogglePinPost, handleRemovePostAsMod, handleLeaveTribe,
   }), [
@@ -459,6 +471,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     handleOpenReportPostDialog, handleConfirmReportPost,
     handleOpenReportCommentDialog, handleConfirmReportComment,
     handleOpenRepostDialog, handleConfirmRepost,
+    handleOpenEditPostDialog,
     handleOpenCommentDialog, handleConfirmComment,
     handleCreatePost, handleDeletePost, handleTogglePinPost, handleRemovePostAsMod, handleLeaveTribe,
   ]);
