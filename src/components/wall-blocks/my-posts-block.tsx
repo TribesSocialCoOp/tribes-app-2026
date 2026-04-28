@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Share2, Users, FileText, PlusCircle, Pencil } from "lucide-react";
 import Image from "next/image";
+import { useState } from "react";
+import { ImageLightbox } from "@/components/ui/image-lightbox";
 import type { TribePost } from '@/lib/types';
 
 interface MyPostsBlockProps {
@@ -24,6 +26,7 @@ const WallItemCard = ({ post, onShare, onEditPost, readOnly }: {
   readOnly?: boolean 
 }) => {
   const sharedTribes = post.sharedWith ? Object.keys(post.sharedWith) : [];
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   return (
     <Card className="overflow-hidden shadow-lg hover:shadow-xl transition-shadow flex flex-col">
@@ -44,12 +47,16 @@ const WallItemCard = ({ post, onShare, onEditPost, readOnly }: {
       </CardHeader>
       <CardContent className="flex-grow">
         {post.imageUrl &&
-          <div className="relative aspect-video w-full overflow-hidden rounded-md border mb-4">
+          <div 
+            className="relative aspect-video w-full overflow-hidden rounded-md border mb-4 cursor-pointer group"
+            onClick={() => setLightboxOpen(true)}
+          >
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img 
               src={post.imageUrl}
               alt={post.title || "Wall post image"}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               data-ai-hint={post.dataAiHintImage || "user content"}
             />
           </div>
@@ -81,6 +88,12 @@ const WallItemCard = ({ post, onShare, onEditPost, readOnly }: {
           </div>
         )}
       </CardFooter>
+
+      <ImageLightbox 
+        images={post.imageUrl ? [post.imageUrl] : []}
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+      />
     </Card>
   );
 };

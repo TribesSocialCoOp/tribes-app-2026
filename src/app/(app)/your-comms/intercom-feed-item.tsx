@@ -20,6 +20,7 @@ import type { CommunicationItem, DiscussionComment } from '@/lib/types';
 import { CommentInline } from './comment-inline';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { useIntercom } from './intercom-context';
+import { ImageLightbox } from '@/components/ui/image-lightbox';
 
 export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   const { toast } = useToast();
@@ -40,6 +41,8 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const [isDeleted, setIsDeleted] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const emoticons = VIBE_EMOTICONS;
   const isPost = item.type === 'mood-stream' || item.type === 'ring-post';
   const isOwnPost = isPost && !!user?.id && item.authorId === user.id;
@@ -238,23 +241,32 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
                   "grid-cols-2"
           )}>
             {item.imageUrls.map((url, idx) => (
-              <div key={idx} className={cn(
-                "relative overflow-hidden",
-                item.imageUrls!.length === 1 ? "aspect-video" : "aspect-square",
-                item.imageUrls!.length === 3 && idx === 0 && "row-span-2 aspect-auto"
-              )}>
+              <div 
+                key={idx} 
+                className={cn(
+                  "relative overflow-hidden cursor-pointer group",
+                  item.imageUrls!.length === 1 ? "aspect-video" : "aspect-square",
+                  item.imageUrls!.length === 3 && idx === 0 && "row-span-2 aspect-auto"
+                )}
+                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLightboxIndex(idx); setLightboxOpen(true); }}
+              >
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10" />
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`${item.imageAlt || "Communication media"} ${idx + 1}`} className="w-full h-full object-cover" />
+                <img src={url} alt={`${item.imageAlt || "Communication media"} ${idx + 1}`} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
               </div>
             ))}
           </div>
         ) : item.imageUrl ? (
-          <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-md bg-muted/20">
+          <div 
+            className="mb-3 relative aspect-video w-full overflow-hidden rounded-md bg-muted/20 cursor-pointer group"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLightboxIndex(0); setLightboxOpen(true); }}
+          >
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={item.imageUrl}
               alt={item.imageAlt || "Communication media"}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
               data-ai-hint={item.dataAiHintImage || "media content"}
             />
           </div>
@@ -403,6 +415,12 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
           </Button>
         </div>
       )}
+      <ImageLightbox 
+        images={item.imageUrls?.length ? item.imageUrls : (item.imageUrl ? [item.imageUrl] : [])} 
+        initialIndex={lightboxIndex}
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+      />
     </Card>
   );
   // Wrap bond cards in a Link to the encrypted chat page

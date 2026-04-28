@@ -20,6 +20,7 @@ import type { TribePost, DiscussionComment } from '@/lib/types';
 import { CommentCard } from './comment-card';
 import { useTribeDetail } from './tribe-detail-context';
 import { MarkdownContent } from '@/components/ui/markdown-content';
+import { ImageLightbox } from '@/components/ui/image-lightbox';
 
 interface TribePostCardProps {
   post: TribePost;
@@ -45,6 +46,8 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   const isMember = state.isMember;
   const displayTime = useTimeSince(post.timestamp);
   const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
   const emoticons = VIBE_EMOTICONS;
 
   const handleVibeSelection = async (vibe: string) => {
@@ -176,20 +179,29 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
               "grid-cols-2"
             )}>
               {post.imageUrls.map((url, idx) => (
-                <div key={idx} className={cn(
-                  "relative overflow-hidden",
-                  post.imageUrls!.length === 1 ? "aspect-video" : "aspect-square",
-                  post.imageUrls!.length === 3 && idx === 0 && "row-span-2 aspect-auto"
-                )}>
+                <div 
+                  key={idx} 
+                  className={cn(
+                    "relative overflow-hidden cursor-pointer group",
+                    post.imageUrls!.length === 1 ? "aspect-video" : "aspect-square",
+                    post.imageUrls!.length === 3 && idx === 0 && "row-span-2 aspect-auto"
+                  )}
+                  onClick={() => { setLightboxIndex(idx); setLightboxOpen(true); }}
+                >
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10" />
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`${post.imageAlt || "Post image"} ${idx + 1}`} className="w-full h-full object-cover" />
+                  <img src={url} alt={`${post.imageAlt || "Post image"} ${idx + 1}`} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
                 </div>
               ))}
             </div>
           ) : post.imageUrl ? (
-            <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-lg border bg-muted/20">
+            <div 
+              className="mb-3 relative aspect-video w-full overflow-hidden rounded-lg border bg-muted/20 cursor-pointer group"
+              onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }}
+            >
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10" />
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={post.imageUrl} alt={post.imageAlt || "Post image"} className="w-full h-full object-cover" data-ai-hint={post.dataAiHintImage || "post image"} />
+              <img src={post.imageUrl} alt={post.imageAlt || "Post image"} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" data-ai-hint={post.dataAiHintImage || "post image"} />
             </div>
           ) : null}
           <MarkdownContent content={post.content} />
@@ -242,6 +254,13 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
           </Button>
         </CardFooter>
       </div>
+
+      <ImageLightbox 
+        images={post.imageUrls?.length ? post.imageUrls : (post.imageUrl ? [post.imageUrl] : [])} 
+        initialIndex={lightboxIndex}
+        open={lightboxOpen}
+        onOpenChange={setLightboxOpen}
+      />
     </Card>
   );
 };
