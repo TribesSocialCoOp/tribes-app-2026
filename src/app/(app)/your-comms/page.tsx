@@ -16,9 +16,9 @@ function IntercomContent() {
   return (
     <div className="space-y-3 md:space-y-6 min-w-0">
       <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1">
-        <div>
+        <div className="flex flex-col md:flex-row md:items-baseline md:gap-3">
           <h1 className="text-2xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Feed</h1>
-          <p className="text-sm md:text-lg text-muted-foreground mt-1">
+          <p className="text-sm md:text-lg text-muted-foreground mt-1 md:mt-0">
             Your world, tuned your way.
           </p>
         </div>

@@ -222,9 +222,9 @@ function WallContent() {
             <AvatarFallback className="text-2xl font-bold">{initials}</AvatarFallback>
           </Avatar>
 
-          <div>
+          <div className="flex flex-col md:flex-row md:items-baseline md:gap-3">
             <h1 className="text-2xl md:text-3xl font-bold tracking-normal text-foreground font-mono">{name || 'Your Wall'}</h1>
-            {bio && <p className="text-sm text-muted-foreground mt-1 max-w-md">{bio}</p>}
+            {bio && <p className="text-sm text-muted-foreground mt-1 md:mt-0 max-w-md">{bio}</p>}
           </div>
 
           {/* Current Mood (Task 4.3) */}

@@ -21,7 +21,7 @@ export function AppHeader() {
         </div>
 
         <div className="flex items-center space-x-4">
-          {/* Add any header actions here if needed */}
+          <div id="header-actions-portal" className="flex items-center space-x-2"></div>
           <UserNav />
         </div>
       </div>

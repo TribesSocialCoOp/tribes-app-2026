@@ -70,12 +70,12 @@ export default function SearchPage() {
   return (
     <div className="space-y-6 pb-12 max-w-3xl mx-auto">
       {/* Header */}
-      <div className="space-y-2">
+      <div className="flex flex-col md:flex-row md:items-baseline md:gap-3 mb-6">
         <h1 className="text-3xl font-bold font-mono tracking-tight flex items-center gap-3">
           <SearchIcon className="h-8 w-8 text-primary" />
           Discover
         </h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground mt-1 md:mt-0">
           Search across tribes, events, and members.
         </p>
       </div>

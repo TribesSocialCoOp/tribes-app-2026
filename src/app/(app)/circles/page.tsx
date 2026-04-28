@@ -68,9 +68,9 @@ function CirclesContent() {
   return (
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-4">
-        <div>
+        <div className="flex flex-col md:flex-row md:items-baseline md:gap-3">
           <h1 className="text-3xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Circles</h1>
-          <p className="text-md md:text-lg text-muted-foreground mt-1">
+          <p className="text-md md:text-lg text-muted-foreground mt-1 md:mt-0">
             Your bonds and tribes — all your people in one place.
           </p>
         </div>

@@ -80,12 +80,12 @@ function DevMailboxContent() {
   return (
     <div className="container max-w-4xl mx-auto py-8 px-4 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex flex-col md:flex-row md:items-baseline md:gap-3">
           <h1 className="text-3xl font-bold font-mono flex items-center gap-3">
             <Mail className="h-8 w-8 text-primary" />
             Dev Mailbox
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 md:mt-0">
             All transactional emails sent in development mode.
           </p>
         </div>

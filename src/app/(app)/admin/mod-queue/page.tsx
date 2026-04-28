@@ -363,12 +363,12 @@ function ModQueueContent() {
 
   return (
     <div className="space-y-8 max-w-4xl mx-auto">
-      <header className="mb-6">
-        <div className="flex items-center space-x-3">
-          <ShieldAlert className="h-10 w-10 text-primary" />
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-normal text-foreground font-mono">Global Moderation Queue</h1>
-        </div>
-        <p className="text-md sm:text-lg text-muted-foreground mt-2">
+      <header className="mb-6 flex flex-col md:flex-row md:items-baseline md:gap-3">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-normal text-foreground font-mono flex items-center gap-3">
+          <ShieldAlert className="h-8 w-8 sm:h-10 sm:w-10 text-primary" />
+          Global Moderation Queue
+        </h1>
+        <p className="text-md sm:text-lg text-muted-foreground mt-2 md:mt-0">
           Review and manage reported content from across all tribes. Admins see all; tribe owners/moderators see content for their tribes only. Reports for already removed posts are hidden.
         </p>
       </header>

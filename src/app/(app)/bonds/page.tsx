@@ -23,12 +23,12 @@ function BondsContent() {
 
   return (
     <div className="space-y-8">
-      <header className="mb-8">
-        <div className="flex items-center space-x-3 mb-2">
-          <Link2 className="h-10 w-10 text-primary" />
-          <h1 className="text-2xl sm:text-4xl font-bold tracking-normal text-foreground font-mono">Manage Bonds</h1>
-        </div>
-        <p className="text-lg text-muted-foreground mt-1">
+      <header className="mb-8 flex flex-col md:flex-row md:items-baseline md:gap-3">
+        <h1 className="text-2xl sm:text-4xl font-bold tracking-normal text-foreground font-mono flex items-center gap-3">
+          <Link2 className="h-8 w-8 sm:h-10 sm:w-10 text-primary" />
+          Manage Bonds
+        </h1>
+        <p className="text-lg text-muted-foreground mt-1 md:mt-0">
           Oversee connections, manage passkeys, pseudonyms, and family bonds.
         </p>
       </header>

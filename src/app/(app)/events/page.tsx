@@ -113,9 +113,9 @@ function EventsContent() {
   return (
     <div className="space-y-8">
       <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-        <div>
+        <div className="flex flex-col md:flex-row md:items-baseline md:gap-3">
           <h1 className="text-2xl sm:text-4xl font-bold tracking-normal text-foreground font-mono">Discover Events</h1>
-          <p className="text-lg text-muted-foreground mt-1">
+          <p className="text-lg text-muted-foreground mt-1 md:mt-0">
             Find upcoming gatherings, workshops, and more from all tribes.
           </p>
         </div>

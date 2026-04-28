@@ -68,9 +68,9 @@ export default function DiscoverPage() {
   return (
     <div className="space-y-4 md:space-y-6">
       <header className="flex items-start justify-between gap-2 min-w-0">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 flex flex-col md:flex-row md:items-baseline md:gap-3">
           <h1 className="text-2xl md:text-4xl font-bold tracking-normal text-foreground font-mono">Discover</h1>
-          <p className="text-sm md:text-lg text-muted-foreground mt-1">
+          <p className="text-sm md:text-lg text-muted-foreground mt-1 md:mt-0">
             Explore tribes, mood streams, events, and more.
           </p>
         </div>
