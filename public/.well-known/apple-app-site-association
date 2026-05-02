@@ -1,0 +1,21 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "7U9W7X2Y5Z.app.tribes.mobile",
+        "paths": [
+          "/bond/tap/*",
+          "/tribe/*",
+          "/post/*",
+          "/signup"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "7U9W7X2Y5Z.app.tribes.mobile"
+    ]
+  }
+}

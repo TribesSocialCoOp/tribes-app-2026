@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils';
 import { useActionError } from '@/hooks/use-action-error';
 import { uploadFile } from '@/lib/upload';
 import { useKeySync } from '@/components/providers/key-sync-provider';
+import { triggerHaptic } from '@/lib/capacitor/haptics';
+import { ImpactStyle } from '@capacitor/haptics';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -358,6 +360,8 @@ export function ComposeBox({
         if (result && 'serverError' in result) {
           throw result;
         }
+
+        triggerHaptic(ImpactStyle.Medium);
 
         // Cleanup object URLs
         previewUrls.forEach(url => URL.revokeObjectURL(url));

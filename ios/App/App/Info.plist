@@ -47,5 +47,13 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NFCReaderUsageDescription</key>
+	<string>Tribes uses NFC to create secure cryptographic bonds by tapping phones together.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Tribes uses the camera to scan bond QR codes and capture profile media.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Tribes needs permission to save images to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Tribes needs permission to access your photos for profile media.</string>
 </dict>
 </plist>

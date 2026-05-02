@@ -21,6 +21,9 @@ import { CommentCard } from './comment-card';
 import { useTribeDetail } from './tribe-detail-context';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
+import { triggerHaptic, triggerSelectionHaptic } from '@/lib/capacitor/haptics';
+import { ImpactStyle } from '@capacitor/haptics';
+import { shareContent } from '@/lib/capacitor/share';
 
 interface TribePostCardProps {
   post: TribePost;
@@ -64,6 +67,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
     const isRemoving = currentUserHasVibed;
     const newCount = isRemoving ? Math.max(0, currentVibesCount - 1) : currentVibesCount + 1;
     
+    triggerHaptic(isRemoving ? ImpactStyle.Light : ImpactStyle.Medium);
     setLocalHasVibed(!isRemoving);
     setLocalVibesCount(newCount);
 
@@ -294,10 +298,32 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
               {currentVibesCount}
             </Button>
           )}
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => isLoggedIn && isMember && handleOpenCommentDialog({ postId: post.id, postTitle: post.title })}>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-muted-foreground hover:text-primary" 
+            disabled={post.isRemoved} 
+            onClick={() => {
+              triggerHaptic(ImpactStyle.Light);
+              if (isLoggedIn && isMember) handleOpenCommentDialog({ postId: post.id, postTitle: post.title });
+            }}
+          >
             <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
           </Button>
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="text-muted-foreground hover:text-primary" 
+            disabled={post.isRemoved}
+            onClick={() => {
+              triggerHaptic(ImpactStyle.Medium);
+              shareContent({
+                title: post.title || 'Check out this post on Tribes',
+                text: post.content.substring(0, 100),
+                url: `${typeof window !== 'undefined' ? window.location.origin : ''}/post/${post.id}`
+              });
+            }}
+          >
             <SquareArrowUp className="mr-1.5 h-4 w-4" /> Share
           </Button>
         </CardFooter>
