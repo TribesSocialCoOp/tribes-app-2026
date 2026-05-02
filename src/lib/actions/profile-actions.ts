@@ -10,11 +10,19 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   return fn(userId);
 }
 
-export async function updateUserProfile(userId: string, updates: Partial<Omit<UserProfile, 'id' | 'role' | 'email'>>): Promise<UserProfile | null> {
+export async function updateUserProfile(userId: string, updates: Partial<Omit<UserProfile, 'id' | 'role' | 'email'>>): Promise<
+  { success: true; profile: UserProfile } | { success: false; error: string }
+> {
   const sessionUserId = await requireAuth();
-  if (sessionUserId !== userId) throw new Error('Forbidden');
-  const { updateUserProfile: fn } = await import('@/lib/services/user-service');
-  return fn(userId, updates);
+  if (sessionUserId !== userId) return { success: false, error: 'Forbidden' };
+  try {
+    const { updateUserProfile: fn } = await import('@/lib/services/user-service');
+    const profile = await fn(userId, updates);
+    if (!profile) return { success: false, error: 'Profile not found.' };
+    return { success: true, profile };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'An unexpected error occurred.' };
+  }
 }
 
 export async function graduateUserFromOnboarding(): Promise<UserProfile | null> {
@@ -111,6 +119,24 @@ export async function getMyInviteCodes() {
   return getUserInviteCodes(userId);
 }
 
+/**
+ * Gets or creates a personal referral invite code for embedding in share links.
+ * Reuses an existing code with remaining uses, or generates a new one.
+ */
+export async function getOrCreatePersonalInviteCode(): Promise<string> {
+  const userId = await requireAuth();
+  const { getUserInviteCodes, generateInviteCode: genCode } = await import('@/lib/services/invite-service');
+
+  // Check for an existing code with remaining uses
+  const codes = await getUserInviteCodes(userId);
+  const active = codes.find(c => (c.usedCount ?? 0) < (c.maxUses ?? 1));
+  if (active) return active.id;
+
+  // Generate a new one
+  const { code } = await genCode(userId, 5);
+  return code;
+}
+
 export async function revokeInviteCode(codeId: string) {
   const userId = await requireAuth();
   const { db } = await import('@/db');
@@ -136,7 +162,7 @@ async function _isAdmin(userId: string): Promise<boolean> {
   const { users } = await import('@/db/schema');
   const { eq } = await import('drizzle-orm');
   const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
-  return user?.role === 'Admin';
+  return user?.role === 'Admin' || user?.role === 'System';
 }
 
 export async function getAllInviteCodes() {

@@ -16,7 +16,7 @@ import { buildUrl } from '@/lib/url';
  */
 
 // Routes that don't require authentication
-const publicRoutes = ['/login', '/signup', '/'];
+const publicRoutes = ['/login', '/signup', '/', '/terms', '/privacy', '/cookies', '/community-guidelines'];
 
 function isPublicRoute(pathname: string): boolean {
   // Exact match public routes
@@ -76,32 +76,32 @@ export async function proxy(request: NextRequest) {
       return response;
     }
 
-    // SECURITY: Validate sessionId against the DB to enforce revocation.
-    // A valid JWT signature is not enough — the session may have been
-    // explicitly revoked (e.g. "sign out all devices"). This check ensures
-    // revoked sessions stop working immediately rather than waiting for
-    // the 7-day JWT TTL to expire.
-    try {
-      const { db } = await import('@/db');
-      const { sessions } = await import('@/db/schema');
-      const { eq } = await import('drizzle-orm');
-      const [dbSession] = await db
-        .select({ revokedAt: sessions.revokedAt, expiresAt: sessions.expiresAt })
-        .from(sessions)
-        .where(eq(sessions.id, parsed.sessionId as string))
-        .limit(1);
+    // SECURITY: Validate session via internal HTTP endpoint (edge-ready).
+    // Uses fetch() instead of direct DB import so this works on any runtime.
+    const checkUrl = buildUrl(`/api/internal/session-check?sessionId=${parsed.sessionId}`, request);
+    const internalSecret = process.env.INTERNAL_API_SECRET;
+    
+    if (internalSecret) {
+      const res = await fetch(checkUrl.toString(), {
+        headers: { Authorization: `Bearer ${internalSecret}` },
+        // Use a short timeout to prevent hanging the proxy
+        signal: AbortSignal.timeout(2000),
+      });
 
-      if (!dbSession || dbSession.revokedAt || (dbSession.expiresAt && dbSession.expiresAt < new Date())) {
+      if (!res.ok) {
+        throw new Error(`Session check failed: ${res.status}`);
+      }
+
+      const { valid } = await res.json();
+      if (!valid) {
         // Session revoked or expired in DB — clear cookie and redirect
         const loginUrl = buildUrl('/login', request);
         const response = NextResponse.redirect(loginUrl);
         response.cookies.set(SESSION_COOKIE_NAME, '', { expires: new Date(0), path: '/' });
         return response;
       }
-    } catch (dbErr) {
-      // DB unavailable — fail open to avoid locking out all users during
-      // transient DB issues. Log for alerting.
-      console.error('[proxy] Session DB check failed, failing open:', dbErr);
+    } else {
+      console.warn('[proxy] INTERNAL_API_SECRET not set, skipping DB session revocation check');
     }
 
     // Check if account is pending deletion — redirect to recovery page

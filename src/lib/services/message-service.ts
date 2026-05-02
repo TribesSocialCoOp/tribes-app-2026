@@ -168,7 +168,7 @@ export async function getMessages(
   const rows = await query;
   return rows.map(r => ({
     ...r,
-    ciphertext: r.ciphertext ? Buffer.from(r.ciphertext as string) : null,
+    ciphertext: r.ciphertext ? Buffer.from(r.ciphertext as Buffer) : null,
   })) as MessageRow[];
 }
 
@@ -314,6 +314,6 @@ export async function getMessagesByDateRange(
 
   return rows.map(r => ({
     ...r,
-    ciphertext: r.ciphertext ? Buffer.from(r.ciphertext as string) : null,
+    ciphertext: r.ciphertext ? Buffer.from(r.ciphertext as Buffer) : null,
   })) as MessageRow[];
 }

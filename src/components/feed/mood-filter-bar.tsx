@@ -49,7 +49,7 @@ export function MoodFilterBar({ selectedSlugs, onChange, className }: MoodFilter
               "flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium whitespace-nowrap",
               "transition-all duration-200 border",
               isActive
-                ? "bg-accent/20 text-accent-foreground border-accent/40 shadow-sm"
+                ? "bg-accent/20 text-accent-foreground dark:text-accent border-accent/40 shadow-sm"
                 : "bg-background text-muted-foreground border-border/60 hover:bg-muted/40 hover:text-foreground"
             )}
           >

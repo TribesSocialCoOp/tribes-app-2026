@@ -10,16 +10,24 @@ import { revalidatePath } from 'next/cache';
 
 interface TapRedemptionPageProps {
   params: Promise<{ token: string }>;
+  searchParams: Promise<{ invite?: string; [key: string]: string | string[] | undefined }>;
 }
 
-export default async function TapRedemptionPage({ params }: TapRedemptionPageProps) {
+export default async function TapRedemptionPage({ params, searchParams }: TapRedemptionPageProps) {
   const { token } = await params;
+  const { invite } = await searchParams;
   const decodedToken = decodeURIComponent(token);
 
-  // Check auth — redirect to login if not authenticated
+  // Check auth — redirect to login/signup if not authenticated
+  // Preserve the invite code through the auth flow so new users
+  // aren't blocked by the invite-only gate.
   const userId = await getCurrentUserId();
   if (!userId) {
-    redirect(`/login?returnTo=${encodeURIComponent(`/bond/tap/${token}`)}`);
+    const returnPath = invite
+      ? `/bond/tap/${token}?invite=${encodeURIComponent(invite)}`
+      : `/bond/tap/${token}`;
+    const loginUrl = `/signup?returnTo=${encodeURIComponent(returnPath)}${invite ? `&invite=${encodeURIComponent(invite)}` : ''}`;
+    redirect(loginUrl);
   }
 
   // Validate the token

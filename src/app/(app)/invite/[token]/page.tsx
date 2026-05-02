@@ -1,23 +1,34 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { getTribeByInviteToken, requestToJoinTribe } from '@/lib/actions/tribe-actions';
 import type { Tribe } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Users, Shield, ArrowRight, XCircle } from 'lucide-react';
+import { Loader2, Users, Shield, ArrowRight, XCircle, LogIn } from 'lucide-react';
+import { JoinTribeDialog } from '@/components/dialogs/join-tribe-dialog';
+import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/components/providers/user-provider';
+import Link from 'next/link';
 
 export default function InvitePage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
+  const { user, isLoading: isUserLoading } = useUser();
   const token = params.token as string;
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
+
+  // Carry forward the ?invite= param so it reaches the signup page
+  const inviteParam = searchParams.get('invite');
 
   useEffect(() => {
     if (!token) return;
@@ -30,27 +41,48 @@ export default function InvitePage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  const handleJoin = async () => {
+  const handleJoinClick = () => {
+    if (!tribe) return;
+    // If user is not logged in, redirect to signup/login with returnTo
+    if (!user) {
+      const returnTo = `/invite/${token}${inviteParam ? `?invite=${inviteParam}` : ''}`;
+      const signupUrl = `/signup?returnTo=${encodeURIComponent(returnTo)}${inviteParam ? `&invite=${inviteParam}` : ''}`;
+      router.push(signupUrl);
+      return;
+    }
+    setIsJoinDialogOpen(true);
+  };
+
+  const handleConfirmJoin = async (selectedTribe: Tribe, selectedAlias?: string, aliasAvatar?: string) => {
     if (!tribe) return;
     setJoining(true);
+    setIsJoinDialogOpen(false);
     try {
-      const result = await requestToJoinTribe(tribe.id);
+      const result = await requestToJoinTribe(tribe.id, selectedAlias, aliasAvatar);
       if (result === 'joined') {
+        toast({ title: 'Welcome!', description: `You have successfully joined ${tribe.name}.` });
         router.push(`/t/${tribe.slug}`);
       } else if (result === 'pending') {
-        setError('Your request to join has been submitted. The tribe admins will review it.');
+        toast({ title: 'Request Sent', description: 'Your request to join has been submitted. The tribe admins will review it.' });
         setJoining(false);
       } else {
-        setError('You do not meet the requirements to join this tribe.');
+        toast({ title: 'Cannot Join', description: 'You do not meet the requirements to join this tribe.', variant: 'destructive' });
         setJoining(false);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to join tribe.');
+      const msg = err instanceof Error ? err.message : 'Failed to join tribe.';
+      // Already a member — just redirect them to the tribe
+      if (msg.includes('Already a member')) {
+        toast({ title: 'Already a member!', description: `You're already in ${tribe.name}. Redirecting...` });
+        router.push(`/t/${tribe.slug}`);
+        return;
+      }
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
       setJoining(false);
     }
   };
 
-  if (loading) {
+  if (loading || isUserLoading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -76,6 +108,8 @@ export default function InvitePage() {
       </div>
     );
   }
+
+  const isLoggedIn = !!user;
 
   return (
     <div className="flex items-center justify-center min-h-[60vh]">
@@ -108,20 +142,50 @@ export default function InvitePage() {
           <p className="text-sm text-muted-foreground text-center">
             You&apos;ve been invited to join this tribe.
           </p>
-          <Button
-            className="w-full"
-            size="lg"
-            onClick={handleJoin}
-            disabled={joining}
-          >
-            {joining ? (
-              <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Joining...</>
-            ) : (
-              <>Join {tribe.name} <ArrowRight className="ml-2 h-4 w-4" /></>
-            )}
-          </Button>
+
+          {isLoggedIn ? (
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={handleJoinClick}
+              disabled={joining}
+            >
+              {joining ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Joining...</>
+              ) : (
+                <>Join {tribe.name} <ArrowRight className="ml-2 h-4 w-4" /></>
+              )}
+            </Button>
+          ) : (
+            <div className="space-y-3">
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={handleJoinClick}
+              >
+                Sign Up & Join <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+              <p className="text-xs text-center text-muted-foreground">
+                Already have an account?{' '}
+                <Link
+                  href={`/login?returnTo=${encodeURIComponent(`/invite/${token}${inviteParam ? `?invite=${inviteParam}` : ''}`)}`}
+                  className="text-primary font-semibold hover:underline"
+                >
+                  Log In
+                </Link>
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
+
+      <JoinTribeDialog
+        isOpen={isJoinDialogOpen}
+        onOpenChange={setIsJoinDialogOpen}
+        tribe={tribe}
+        onConfirmJoin={handleConfirmJoin}
+        isJoining={joining}
+      />
     </div>
   );
 }

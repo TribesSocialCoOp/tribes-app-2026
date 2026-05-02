@@ -5,8 +5,8 @@
  */
 
 import { db } from '@/db';
-import { bonds, bondRequests, blockedUsers, users, tribes } from '@/db/schema';
-import { eq, and, or, count, sql } from 'drizzle-orm';
+import { bonds, bondRequests, blockedUsers, users, tribes, tribeMembers } from '@/db/schema';
+import { eq, and, or, count, sql, ne } from 'drizzle-orm';
 import type { Bond, BondRequest, BondType, FormationMethod } from '@/lib/types';
 import {
   computePasskeyStatus, computeNewExpiry, isBondDegraded, getStatusDescription,
@@ -122,6 +122,24 @@ export async function getBonds(userId: string): Promise<Bond[]> {
           .where(and(eq(bonds.userId, targetId), eq(bonds.targetId, userId)))
           .limit(1);
         bond.peerPublicKeyJwk = peerBondRow?.publicKeyJwk ?? undefined;
+      }
+    }
+
+    // Enrich tribe bonds with tribe_members data (nickname + identity)
+    if (bond.targetType === 'tribe' && bond.targetId) {
+      const [member] = await db.select({
+        tribeAssignedNickname: tribeMembers.tribeAssignedNickname,
+        joinedAsAlias: tribeMembers.joinedAsAlias,
+        joinedAsAvatar: tribeMembers.joinedAsAvatar,
+      }).from(tribeMembers)
+        .where(and(eq(tribeMembers.userId, userId), eq(tribeMembers.tribeId, bond.targetId)))
+        .limit(1);
+      if (member) {
+        bond.tribeAssignedNickname = member.tribeAssignedNickname ?? undefined;
+        // If the user joined as an alias, reflect it as the bond pseudonym for display
+        if (member.joinedAsAlias) {
+          bond.pseudonym = member.joinedAsAlias;
+        }
       }
     }
   }
@@ -306,47 +324,49 @@ export async function acceptBondRequest(requestId: string, acceptorUserId: strin
   if (!request) throw new Error('Bond request not found or already resolved');
   if (request.toUserId !== acceptorUserId) throw new Error('Only the recipient can accept a bond request');
 
-  // Resolve the request
-  await db.update(bondRequests).set({
-    status: 'accepted',
-    resolvedAt: new Date(),
-  }).where(eq(bondRequests.id, requestId));
+  await db.transaction(async (tx) => {
+    // Resolve the request
+    await tx.update(bondRequests).set({
+      status: 'accepted',
+      resolvedAt: new Date(),
+    }).where(eq(bondRequests.id, requestId));
 
-  // Lookup user names for bond rows
-  const [fromUser] = await db.select().from(users).where(eq(users.id, request.fromUserId)).limit(1);
-  const [toUser] = await db.select().from(users).where(eq(users.id, request.toUserId)).limit(1);
+    // Lookup user names for bond rows
+    const [fromUser] = await tx.select().from(users).where(eq(users.id, request.fromUserId)).limit(1);
+    const [toUser] = await tx.select().from(users).where(eq(users.id, request.toUserId)).limit(1);
 
-  const now = new Date();
-  const expiresAt = computeNewExpiry('person');
+    const now = new Date();
+    const expiresAt = computeNewExpiry('person');
 
-  // Create bond for the requester (from → to)
-  await db.insert(bonds).values({
-    id: `bond-${request.fromUserId.substring(0, 8)}-${request.toUserId.substring(0, 8)}-${Date.now()}`,
-    userId: request.fromUserId,
-    targetId: request.toUserId,
-    targetType: 'user',
-    targetName: toUser?.name ?? 'Unknown',
-    bondType: 'person',
-    formationMethod: request.formationMethod,
-    passkeyStatus: 'active',
-    expiresAt,
-    lastRefreshedAt: now,
-    reconnectsCount: 0,
-  });
+    // Create bond for the requester (from → to)
+    await tx.insert(bonds).values({
+      id: `bond-${request.fromUserId.substring(0, 8)}-${request.toUserId.substring(0, 8)}-${Date.now()}`,
+      userId: request.fromUserId,
+      targetId: request.toUserId,
+      targetType: 'user',
+      targetName: toUser?.name ?? 'Unknown',
+      bondType: 'person',
+      formationMethod: request.formationMethod,
+      passkeyStatus: 'active',
+      expiresAt,
+      lastRefreshedAt: now,
+      reconnectsCount: 0,
+    });
 
-  // Person bonds are always mutual — create the reverse bond
-  await db.insert(bonds).values({
-    id: `bond-${request.toUserId.substring(0, 8)}-${request.fromUserId.substring(0, 8)}-${Date.now()}`,
-    userId: request.toUserId,
-    targetId: request.fromUserId,
-    targetType: 'user',
-    targetName: fromUser?.name ?? 'Unknown',
-    bondType: 'person',
-    formationMethod: request.formationMethod,
-    passkeyStatus: 'active',
-    expiresAt,
-    lastRefreshedAt: now,
-    reconnectsCount: 0,
+    // Person bonds are always mutual — create the reverse bond
+    await tx.insert(bonds).values({
+      id: `bond-${request.toUserId.substring(0, 8)}-${request.fromUserId.substring(0, 8)}-${Date.now()}`,
+      userId: request.toUserId,
+      targetId: request.fromUserId,
+      targetType: 'user',
+      targetName: fromUser?.name ?? 'Unknown',
+      bondType: 'person',
+      formationMethod: request.formationMethod,
+      passkeyStatus: 'active',
+      expiresAt,
+      lastRefreshedAt: now,
+      reconnectsCount: 0,
+    });
   });
 
   // Strengthen bond connection (+5 for acceptance)
@@ -431,18 +451,29 @@ export async function getPendingBondRequests(userId: string): Promise<{
   incoming: BondRequest[];
   outgoing: BondRequest[];
 }> {
-  const rows = await db.select().from(bondRequests)
-    .where(and(
-      eq(bondRequests.status, 'pending'),
-      or(eq(bondRequests.fromUserId, userId), eq(bondRequests.toUserId, userId)),
-    ));
-
-  const enriched = await Promise.all(rows.map(enrichBondRequest));
+  const incomingRows = await db.select().from(bondRequests).where(and(eq(bondRequests.toUserId, userId), eq(bondRequests.status, 'pending'), ne(bondRequests.fromUserId, bondRequests.toUserId)));
+  const outgoingRows = await db.select().from(bondRequests).where(and(eq(bondRequests.fromUserId, userId), eq(bondRequests.status, 'pending'), ne(bondRequests.fromUserId, bondRequests.toUserId)));
 
   return {
-    incoming: enriched.filter(r => r.toUserId === userId),
-    outgoing: enriched.filter(r => r.fromUserId === userId),
+    incoming: await Promise.all(incomingRows.map(enrichBondRequest)),
+    outgoing: await Promise.all(outgoingRows.map(enrichBondRequest)),
   };
+}
+
+/**
+ * Checks if there is an active pending bond request from A to B.
+ */
+export async function hasOutgoingRequest(fromUserId: string, toUserId: string): Promise<boolean> {
+  const [row] = await db.select({ id: bondRequests.id })
+    .from(bondRequests)
+    .where(and(
+      eq(bondRequests.fromUserId, fromUserId),
+      eq(bondRequests.toUserId, toUserId),
+      eq(bondRequests.status, 'pending'),
+      ne(bondRequests.fromUserId, bondRequests.toUserId)
+    ))
+    .limit(1);
+  return !!row;
 }
 
 // ============================================================
@@ -513,45 +544,47 @@ export async function createReferralBond(
   const inviteeName = invitee?.name ?? 'Unknown';
   const now = new Date();
 
-  // Bond: invitee → inviter
-  const existingForward = await db.select().from(bonds)
-    .where(and(eq(bonds.userId, inviteeId), eq(bonds.targetId, inviterId)))
-    .limit(1);
-  if (existingForward.length === 0) {
-    await db.insert(bonds).values({
-      id: `bond-ref-${inviteeId.substring(0, 8)}-${inviterId.substring(0, 8)}-${Date.now()}`,
-      userId: inviteeId,
-      targetId: inviterId,
-      targetType: 'user',
-      targetName: inviterName,
-      bondType: 'person',
-      formationMethod: 'digital_introduction',
-      passkeyStatus: 'active',
-      expiresAt: computeNewExpiry('person'),
-      lastRefreshedAt: now,
-      reconnectsCount: 0,
-    });
-  }
+  await db.transaction(async (tx) => {
+    // Bond: invitee → inviter
+    const existingForward = await tx.select().from(bonds)
+      .where(and(eq(bonds.userId, inviteeId), eq(bonds.targetId, inviterId)))
+      .limit(1);
+    if (existingForward.length === 0) {
+      await tx.insert(bonds).values({
+        id: `bond-ref-${inviteeId.substring(0, 8)}-${inviterId.substring(0, 8)}-${Date.now()}`,
+        userId: inviteeId,
+        targetId: inviterId,
+        targetType: 'user',
+        targetName: inviterName,
+        bondType: 'person',
+        formationMethod: 'digital_introduction',
+        passkeyStatus: 'active',
+        expiresAt: computeNewExpiry('person'),
+        lastRefreshedAt: now,
+        reconnectsCount: 0,
+      });
+    }
 
-  // Bond: inviter → invitee
-  const existingReverse = await db.select().from(bonds)
-    .where(and(eq(bonds.userId, inviterId), eq(bonds.targetId, inviteeId)))
-    .limit(1);
-  if (existingReverse.length === 0) {
-    await db.insert(bonds).values({
-      id: `bond-ref-${inviterId.substring(0, 8)}-${inviteeId.substring(0, 8)}-${Date.now()}`,
-      userId: inviterId,
-      targetId: inviteeId,
-      targetType: 'user',
-      targetName: inviteeName,
-      bondType: 'person',
-      formationMethod: 'digital_introduction',
-      passkeyStatus: 'active',
-      expiresAt: computeNewExpiry('person'),
-      lastRefreshedAt: now,
-      reconnectsCount: 0,
-    });
-  }
+    // Bond: inviter → invitee
+    const existingReverse = await tx.select().from(bonds)
+      .where(and(eq(bonds.userId, inviterId), eq(bonds.targetId, inviteeId)))
+      .limit(1);
+    if (existingReverse.length === 0) {
+      await tx.insert(bonds).values({
+        id: `bond-ref-${inviterId.substring(0, 8)}-${inviteeId.substring(0, 8)}-${Date.now()}`,
+        userId: inviterId,
+        targetId: inviteeId,
+        targetType: 'user',
+        targetName: inviteeName,
+        bondType: 'person',
+        formationMethod: 'digital_introduction',
+        passkeyStatus: 'active',
+        expiresAt: computeNewExpiry('person'),
+        lastRefreshedAt: now,
+        reconnectsCount: 0,
+      });
+    }
+  });
 }
 
 // ============================================================

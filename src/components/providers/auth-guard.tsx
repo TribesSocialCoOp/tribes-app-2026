@@ -86,7 +86,7 @@ export function AuthGuard({
   }
 
   // 3. Unauthorized role state
-  if (requiredRole && role !== requiredRole && role !== 'Admin') {
+  if (requiredRole && role !== requiredRole && role !== 'Admin' && role !== 'System') {
     return (
       <div className="container mx-auto flex items-center justify-center py-12 px-4 min-h-[60vh]">
         <Card className="max-w-md w-full shadow-2xl border-destructive/10 bg-card/50 backdrop-blur-sm">

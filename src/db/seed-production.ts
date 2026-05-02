@@ -85,7 +85,7 @@ async function seedProduction() {
       description: 'For small creators, vendors, and organizations ready to build.',
       priceMonthly: 4900,
       priceYearly: 49000,
-      maxBonds: 500,
+      maxBonds: null,
       maxTribesOwned: 10,
       maxMembers: 1000,
       targetRole: 'Org_Base',
@@ -105,7 +105,7 @@ async function seedProduction() {
       description: 'For growing organizations that need more scale and insight.',
       priceMonthly: 9900,
       priceYearly: 99000,
-      maxBonds: 2000,
+      maxBonds: null,
       maxTribesOwned: 50,
       maxMembers: 10000,
       targetRole: 'Org_Pro',
@@ -163,7 +163,7 @@ async function seedProduction() {
           features: plan.features,
         },
       })
-      .run();
+      ;
   }
   console.log(`    ✓ ${planRows.length} plans upserted`);
 
@@ -177,8 +177,7 @@ async function seedProduction() {
   for (const code of foundingCodes) {
     await db.insert(schema.inviteCodes)
       .values(code)
-      .onConflictDoNothing({ target: schema.inviteCodes.id })
-      .run();
+      .onConflictDoNothing({ target: schema.inviteCodes.id });
   }
   console.log(`    ✓ ${foundingCodes.length} founding invite codes upserted`);
 
@@ -195,7 +194,7 @@ async function seedProduction() {
       createdAt: new Date(),
     })
     .onConflictDoNothing({ target: schema.users.id })
-    .run();
+    ;
   console.log('    ✓ T-Codex Prime created');
 
   // ---- 4. The Trials Tribe (id: 0) ----
@@ -214,14 +213,14 @@ async function seedProduction() {
       createdAt: new Date(),
     })
     .onConflictDoNothing({ target: schema.tribes.id })
-    .run();
+    ;
 
   // Add mood tags for The Trials
   for (const mood of ['learn', 'connect']) {
     try {
       await db.insert(schema.tribeMoodTags)
         .values({ tribeId: '0', moodSlug: mood })
-        .run();
+        ;
     } catch {
       // Already exists, skip
     }
@@ -257,7 +256,7 @@ Your reputation grows naturally as you participate. The more you contribute, the
       createdAt: new Date(),
     })
     .onConflictDoNothing({ target: schema.posts.id })
-    .run();
+    ;
 
   console.log('    ✓ The Trials tribe + welcome post created');
 

@@ -12,13 +12,14 @@ import type { TribePost, DiscussionComment, Ring } from '@/lib/types';
 export function rowToTribePost(
   row: typeof posts.$inferSelect,
   commentsData?: DiscussionComment[],
+  liveAvatar?: string | null,
 ): TribePost {
   return {
     id: row.id,
     tribeId: row.tribeId ?? undefined,
     authorId: row.authorId,
     authorName: row.authorName,
-    authorAvatar: row.authorAvatar ?? undefined,
+    authorAvatar: liveAvatar || (row.authorAvatar ?? undefined),
     authorAvatarFallback: row.authorAvatarFallback,
     dataAiHintAvatar: row.dataAiHintAvatar ?? undefined,
     timestamp: row.createdAt ?? new Date(),

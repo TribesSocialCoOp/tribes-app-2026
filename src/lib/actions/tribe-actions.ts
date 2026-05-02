@@ -3,6 +3,7 @@
 import { requireAuth, requireVerifiedEmail, getCurrentUserId } from './shared';
 import type { Tribe, TribeMember, PendingMember } from '@/lib/types';
 import { trackContribution } from './shared';
+import { withPublicErrors, PublicError } from './error-utils';
 import type { TribeAccessLevel } from '@/lib/services/tribe-auth';
 
 // ======== TRIBE DATA ACCESS ========
@@ -96,19 +97,19 @@ export async function checkTribeAccess(tribeId: string): Promise<TribeAccessLeve
 
 // ======== TRIBE SERVICE (MUTATIONS — all hardened with auth) ========
 
-export async function createTribe(payload: Parameters<typeof import('@/lib/services/tribe-service').createTribe>[0]): Promise<Tribe> {
+export const createTribe = withPublicErrors(async (payload: Parameters<typeof import('@/lib/services/tribe-service').createTribe>[0]): Promise<Tribe> => {
   const userId = await requireVerifiedEmail();
   // Subscription guard: check if user can create another tribe
   const { canCreateTribe } = await import('@/lib/services/subscription-guard');
   const check = await canCreateTribe(userId);
   if (!check.allowed) {
-    throw new Error(`You have reached your tribe creation limit (${check.current}/${check.limit}). Upgrade your plan to create more.`);
+    throw new PublicError(`You have reached your tribe creation limit (${check.current}/${check.limit}). Upgrade your plan to create more.`);
   }
   const { createTribe: fn } = await import('@/lib/services/tribe-service');
   const result = await fn({ ...payload, createdBy: userId });
   trackContribution(userId, 'tribe_created', result.id, `Created tribe: ${result.name}`);
   return result;
-}
+});
 
 export async function updateTribeSettings(tribeId: string, payload: Parameters<typeof import('@/lib/services/tribe-service').updateTribeSettings>[1]): Promise<Tribe | null> {
   const userId = await requireAuth();
@@ -194,6 +195,12 @@ export async function requestToJoinTribe(tribeId: string, aliasName?: string, al
   return fn(userId, tribeId, aliasName, aliasAvatar);
 }
 
+export async function updateTribeMemberIdentity(tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<void> {
+  const userId = await requireAuth();
+  const { updateTribeMemberIdentity: fn } = await import('@/lib/services/tribe-service');
+  return fn(userId, tribeId, aliasName, aliasAvatar);
+}
+
 // ======== TRIBE ANALYTICS ========
 export async function getTribeAnalytics(tribeId: string) {
   const userId = await requireAuth();
@@ -233,4 +240,81 @@ export async function getTribeOwnerVerified(tribeId: string): Promise<boolean> {
   if (!tribe?.createdBy) return false;
   const [user] = await db.select({ isVerified: users.isVerified }).from(users).where(eq(users.id, tribe.createdBy)).limit(1);
   return user?.isVerified ?? false;
+}
+
+// ======== TRIBE GROUP KEY MANAGEMENT ========
+
+/**
+ * Fetches the current user's tribe key grants for all active tribe keys.
+ * Called by the KeySyncProvider to populate the local tribe key store.
+ */
+export async function getMyTribeKeyGrants() {
+  const userId = await requireAuth();
+  const { getUserTribeKeyGrants } = await import('@/lib/services/tribe-key-service');
+  return getUserTribeKeyGrants(userId);
+}
+
+/**
+ * Creates a new tribe key record on the server.
+ * Called by the tribe founder's client after generating the AES key locally.
+ */
+export async function initializeTribeKey(tribeId: string): Promise<string> {
+  const userId = await requireAuth();
+  const { requireTribeFounder } = await import('@/lib/services/tribe-auth');
+  await requireTribeFounder(userId, tribeId);
+  const { createTribeKey } = await import('@/lib/services/tribe-key-service');
+  return createTribeKey(tribeId, userId);
+}
+
+/**
+ * Stores a wrapped tribe key grant for a specific recipient.
+ * Called by key admins (founders/speakers) to distribute the tribe key.
+ */
+export async function issueTribeKeyGrant(
+  tribeKeyId: string,
+  recipientId: string,
+  wrappedKey: string,
+  wrapIv: string,
+  bondId?: string,
+): Promise<void> {
+  const userId = await requireAuth();
+  const { createTribeKeyGrant } = await import('@/lib/services/tribe-key-service');
+  return createTribeKeyGrant(tribeKeyId, recipientId, wrappedKey, wrapIv, userId, bondId);
+}
+
+/**
+ * Gets the active tribe key metadata for a tribe.
+ */
+export async function getActiveTribeKeyForTribe(tribeId: string) {
+  const userId = await requireAuth();
+  // Verify membership
+  const { getTribeAccessLevel } = await import('@/lib/services/tribe-auth');
+  const access = await getTribeAccessLevel(userId, tribeId);
+  if (access === 'guest') throw new Error('Not a member of this tribe');
+  const { getActiveTribeKey } = await import('@/lib/services/tribe-key-service');
+  return getActiveTribeKey(tribeId);
+}
+
+/**
+ * Gets tribe members who don't yet have a key grant.
+ * Used by key admins to know who needs a wrapped key.
+ */
+export async function getUngrantedTribeMembers(tribeId: string): Promise<string[]> {
+  const userId = await requireAuth();
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
+  const { getMembersWithoutGrants } = await import('@/lib/services/tribe-key-service');
+  return getMembersWithoutGrants(tribeId);
+}
+
+/**
+ * Rotates the tribe key — deactivates current key and creates new version.
+ * Called when a member is removed from a private tribe.
+ */
+export async function rotateTribeGroupKey(tribeId: string): Promise<string> {
+  const userId = await requireAuth();
+  const { requireTribeFounder } = await import('@/lib/services/tribe-auth');
+  await requireTribeFounder(userId, tribeId);
+  const { rotateTribeKey } = await import('@/lib/services/tribe-key-service');
+  return rotateTribeKey(tribeId, userId);
 }

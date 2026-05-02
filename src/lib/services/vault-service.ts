@@ -26,16 +26,16 @@ export async function saveVaultBackup(
   const id = `vault-${userId}-${Date.now()}`;
   const vaultBuffer = Buffer.from(encryptedVault);
 
-  // Delete existing backups for this user (one-active-backup policy)
-  await db.delete(vaultBackups).where(eq(vaultBackups.userId, userId));
-
-  // Insert new backup
-  await db.insert(vaultBackups).values({
-    id,
-    userId,
-    encryptedVault: vaultBuffer,
-    salt,
-    createdAt: new Date(),
+  // Atomic delete + insert (one-active-backup policy)
+  await db.transaction(async (tx) => {
+    await tx.delete(vaultBackups).where(eq(vaultBackups.userId, userId));
+    await tx.insert(vaultBackups).values({
+      id,
+      userId,
+      encryptedVault: vaultBuffer,
+      salt,
+      createdAt: new Date(),
+    });
   });
 }
 

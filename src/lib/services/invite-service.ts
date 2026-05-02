@@ -121,45 +121,47 @@ export async function redeemInviteCode(
   const subId = `sub-${userId}-${Date.now()}`;
   const redemptionId = `redemption-${userId}-${Date.now()}`;
 
-  // Only create a subscription if the plan isn't 'free'
-  if (validated.grantsPlanId !== 'free') {
-    // Check if user already has an active subscription
-    const [existingSub] = await db.select().from(subscriptions)
-      .where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, 'active')))
-      .limit(1);
+  await db.transaction(async (tx) => {
+    // Only create a subscription if the plan isn't 'free'
+    if (validated.grantsPlanId !== 'free') {
+      // Check if user already has an active subscription
+      const [existingSub] = await tx.select().from(subscriptions)
+        .where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, 'active')))
+        .limit(1);
 
-    if (!existingSub) {
-      // Create subscription
-      await db.insert(subscriptions).values({
-        id: subId,
-        userId,
-        planId: validated.grantsPlanId,
-        status: 'active',
-        source,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      if (!existingSub) {
+        // Create subscription
+        await tx.insert(subscriptions).values({
+          id: subId,
+          userId,
+          planId: validated.grantsPlanId,
+          status: 'active',
+          source,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
 
-      // Upgrade user role
-      await db.update(users)
-        .set({ role: plan.targetRole })
-        .where(eq(users.id, userId));
+        // Upgrade user role
+        await tx.update(users)
+          .set({ role: plan.targetRole })
+          .where(eq(users.id, userId));
+      }
     }
-  }
 
-  // Record redemption
-  await db.insert(inviteRedemptions).values({
-    id: redemptionId,
-    inviteCodeId: normalizedCode,
-    userId,
+    // Record redemption
+    await tx.insert(inviteRedemptions).values({
+      id: redemptionId,
+      inviteCodeId: normalizedCode,
+      userId,
+    });
+
+    // Increment used count
+    const [currentCode] = await tx.select({ usedCount: inviteCodes.usedCount })
+      .from(inviteCodes).where(eq(inviteCodes.id, normalizedCode)).limit(1);
+    await tx.update(inviteCodes)
+      .set({ usedCount: (currentCode?.usedCount ?? 0) + 1 })
+      .where(eq(inviteCodes.id, normalizedCode));
   });
-
-  // Increment used count
-  const [currentCode] = await db.select({ usedCount: inviteCodes.usedCount })
-    .from(inviteCodes).where(eq(inviteCodes.id, normalizedCode)).limit(1);
-  await db.update(inviteCodes)
-    .set({ usedCount: (currentCode?.usedCount ?? 0) + 1 })
-    .where(eq(inviteCodes.id, normalizedCode));
 
   // Referral tracking: auto-bond inviter ↔ invitee + attempt referral points
   const [codeRecord] = await db.select({ createdBy: inviteCodes.createdBy })

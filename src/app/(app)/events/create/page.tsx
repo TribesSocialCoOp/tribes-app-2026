@@ -121,7 +121,10 @@ function CreateEventContent() {
       const mergedDate = new Date(values.eventDate);
       mergedDate.setHours(hours, minutes, 0, 0);
 
-      await createEvent({ ...values, eventDate: mergedDate, coverPreview: coverUrl });
+      const newEvent = await createEvent({ ...values, eventDate: mergedDate, coverPreview: coverUrl });
+      if (newEvent && 'serverError' in newEvent) {
+        throw newEvent;
+      }
       toast({
         title: "Event Created!",
         description: `Your event "${values.name}" has been successfully created.`,
@@ -281,9 +284,9 @@ function CreateEventContent() {
                     <FormControl>
                       <Input placeholder="e.g., Live Music, Networking, Technology, Art Show" {...field} className="text-base" />
                     </FormControl>
-                    <Button type="button" variant="outline" size="sm" onClick={handleSuggestKeywords} disabled={isAiSuggestingKeywords || isLoading || isAiGeneratingDesc} className="mt-2">
+                    {/* <Button type="button" variant="outline" size="sm" onClick={handleSuggestKeywords} disabled={isAiSuggestingKeywords || isLoading || isAiGeneratingDesc} className="mt-2">
                         <Lightbulb className="mr-2 h-4 w-4" /> {isAiSuggestingKeywords ? "Suggesting..." : "Suggest with AI"}
-                    </Button>
+                    </Button> */}
                     <FormDescription>Comma-separated keywords that describe your event. Used for AI description and discovery.</FormDescription>
                     <FormMessage />
                   </FormItem>
@@ -335,9 +338,9 @@ function CreateEventContent() {
                         {...field}
                       />
                     </FormControl>
-                     <Button type="button" variant="outline" size="sm" onClick={handleGenerateDescription} disabled={isAiGeneratingDesc || isLoading || isAiSuggestingKeywords} className="mt-2">
+                     {/* <Button type="button" variant="outline" size="sm" onClick={handleGenerateDescription} disabled={isAiGeneratingDesc || isLoading || isAiSuggestingKeywords} className="mt-2">
                         <Sparkles className="mr-2 h-4 w-4" /> {isAiGeneratingDesc ? "Generating..." : "Generate with AI"}
-                    </Button>
+                    </Button> */}
                     <FormDescription>A compelling summary to attract attendees.</FormDescription>
                     <FormMessage />
                   </FormItem>

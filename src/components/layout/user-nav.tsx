@@ -3,7 +3,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,13 +15,13 @@ import {
   DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { CreditCard, LayoutDashboard, LogOut, Settings, User } from "lucide-react";
+import { CreditCard, LayoutDashboard, LogOut, Settings, User, ShieldAlert } from "lucide-react";
 import { useUser } from "@/hooks/use-user";
 import { logoutAction } from "@/lib/auth-actions";
 
 export function UserNav() {
   const router = useRouter();
-  const { user, isLoading } = useUser();
+  const { user, role, isLoading } = useUser();
 
   const displayName = user?.name || "Guest";
   const displayEmail = user?.email || "";
@@ -35,10 +35,12 @@ export function UserNav() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-          <Avatar className="h-10 w-10">
-            <AvatarImage src={displayAvatar} alt={displayName} data-ai-hint="profile person" />
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
+          <UserAvatar 
+            user={{ name: displayName, avatar: displayAvatar }} 
+            className="h-10 w-10" 
+            fallback={initials}
+            dataAiHint="profile person"
+          />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-56" align="end" forceMount>
@@ -83,6 +85,15 @@ export function UserNav() {
                   <DropdownMenuShortcut>⌘S</DropdownMenuShortcut>
                 </DropdownMenuItem>
               </Link>
+              {(role === 'Admin' || role === 'System') && (
+                <Link href="/admin/mod-queue" passHref>
+                  <DropdownMenuItem className="text-amber-600 dark:text-amber-400 focus:text-amber-600 dark:focus:text-amber-400">
+                    <ShieldAlert className="mr-2 h-4 w-4" />
+                    <span>Admin Panel</span>
+                    <DropdownMenuShortcut>⇧⌘A</DropdownMenuShortcut>
+                  </DropdownMenuItem>
+                </Link>
+              )}
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem 

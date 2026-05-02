@@ -51,7 +51,7 @@ function buildSecurityHeaders() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
 
   // Build img-src from known PUBLIC image sources only
-  const imgSources = ["'self'", 'data:', 'blob:'];
+  const imgSources = ["'self'", 'data:', 'blob:', 'https://api.qrserver.com'];
   if (s3Public) imgSources.push(s3Public);
 
   // Build connect-src for API/WS targets (public endpoints only)
@@ -66,7 +66,7 @@ function buildSecurityHeaders() {
     "style-src 'self' 'unsafe-inline'",
     `img-src ${imgSources.join(' ')}`,
     `connect-src ${connectSources.join(' ')} https://challenges.cloudflare.com`,
-    "frame-src https://challenges.cloudflare.com",  // Turnstile renders inside an iframe
+    "frame-src https://challenges.cloudflare.com https://open.spotify.com https://w.soundcloud.com https://embed.music.apple.com https://embed.tidal.com https://www.youtube.com https://player.vimeo.com https://bandcamp.com",  // Turnstile + Media Embeds
     "font-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'self'",

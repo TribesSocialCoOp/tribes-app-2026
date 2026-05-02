@@ -115,6 +115,7 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
     .where(and(
       eq(bondRequests.toUserId, userId),
       eq(bondRequests.status, 'pending'),
+      ne(bondRequests.fromUserId, bondRequests.toUserId)
     ))
     .orderBy(desc(bondRequests.createdAt))
     .limit(10);

@@ -156,6 +156,14 @@ export async function GET(request: NextRequest) {
             console.warn('[Google OAuth] Invite redemption failed:', e);
           }
         }
+
+        // Auto-join the welcome tribe ("The Trials", id: 0)
+        try {
+          const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
+          await joinTribeDirectly(userId, '0');
+        } catch (e) {
+          console.warn('[Google OAuth] Auto-join welcome tribe failed:', e);
+        }
       }
 
       // Link the Google account to this user

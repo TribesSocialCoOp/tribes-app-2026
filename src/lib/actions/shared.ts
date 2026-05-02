@@ -6,20 +6,22 @@
  */
 
 import { getCurrentUserId as getUserIdFromSession } from '@/lib/auth/session';
-import { validateCsrfToken } from '@/lib/auth/csrf';
+import { PublicError } from './error-utils';
 
 export async function getCurrentUserId(): Promise<string | null> {
   return getUserIdFromSession();
 }
 
 /**
- * Guard: validates CSRF token + requires authenticated user.
+ * Guard: requires authenticated user.
  * Returns userId or throws.
+ *
+ * Note: Server actions are CSRF-protected by Next.js itself (Origin header
+ * + action ID hashing). API routes must call validateCsrfToken() directly.
  */
-export async function requireAuth(csrfToken?: string): Promise<string> {
-  await validateCsrfToken(csrfToken);
+export async function requireAuth(): Promise<string> {
   const userId = await getCurrentUserId();
-  if (!userId) throw new Error('Unauthorized');
+  if (!userId) throw new PublicError('Unauthorized');
 
   // Check platform-level ban
   const { isUserBanned } = await import('@/lib/services/moderation-service');
@@ -27,7 +29,7 @@ export async function requireAuth(csrfToken?: string): Promise<string> {
   if (ban) {
     const reason = ban.reason ? ` Reason: ${ban.reason}` : '';
     const expiry = ban.expiresAt ? ` Expires: ${ban.expiresAt.toLocaleDateString()}.` : ' This ban is permanent.';
-    throw new Error(`Your account has been suspended.${reason}${expiry}`);
+    throw new PublicError(`Your account has been suspended.${reason}${expiry}`);
   }
 
   return userId;
@@ -51,7 +53,7 @@ export async function requireAdmin(): Promise<string> {
   const { users } = await import('@/db/schema');
   const { eq } = await import('drizzle-orm');
   const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
-  if (user?.role !== 'Admin') throw new Error('Forbidden: Admin access required.');
+  if (user?.role !== 'Admin') throw new PublicError('Forbidden: Admin access required.');
   return userId;
 }
 
@@ -76,7 +78,7 @@ export async function requireVerifiedEmail(): Promise<string> {
   }).from(users).where(eq(users.id, userId)).limit(1);
 
   if (!user?.emailVerified) {
-    throw new Error(
+    throw new PublicError(
       'Please verify your email address before creating content. Check your inbox for a verification link, or request a new one from your profile settings.'
     );
   }

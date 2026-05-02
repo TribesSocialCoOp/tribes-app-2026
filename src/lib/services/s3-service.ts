@@ -34,7 +34,8 @@ export type UploadContext =
   | 'public-mood-board'
   | 'avatar'
   | 'bond-attachment'
-  | 'private-mood-board';
+  | 'private-mood-board'
+  | 'encrypted-post-image';
 
 /** Contexts that require CSAM scanning before storage */
 const SCAN_CONTEXTS = new Set<UploadContext>([
@@ -268,7 +269,7 @@ export async function recordMediaFile(input: RecordMediaInput): Promise<string> 
     encrypted: input.encrypted ?? false,
     encryptionMeta: input.encryptionMeta ? JSON.stringify(input.encryptionMeta) : null,
     publicUrl: input.publicUrl ?? null,
-  }).run();
+  });
 
   s3Logger.info({ fileId: id, userId: input.userId, bucket: input.bucket, context: input.context }, 'Media file recorded');
   return id;
@@ -354,9 +355,9 @@ export async function softDeleteMediaFile(fileId: string, userId: string): Promi
   const result = await db.update(mediaFiles)
     .set({ deletedAt: new Date() })
     .where(and(eq(mediaFiles.id, fileId), eq(mediaFiles.userId, userId), isNull(mediaFiles.deletedAt)))
-    .run();
+    ;
 
-  return (result.rowsAffected ?? 0) > 0;
+  return (result.rowCount ?? 0) > 0;
 }
 
 // ============================================================

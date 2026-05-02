@@ -1,6 +1,6 @@
 # Tribes.app — Architecture Guide
 
-> **Last updated**: 2026-04-01 | **Stack**: Next.js 15 · React 19 · Drizzle ORM · LibSQL/Turso · Garage S3
+> **Last updated**: 2026-04-29 | **Stack**: Next.js 15 · React 19 · Drizzle ORM · PostgreSQL 17 · PgBouncer · Garage S3
 
 ---
 
@@ -8,7 +8,7 @@
 
 Tribes.app is a local-first, privacy-centric social platform built around **Tribes** (communities), **Bonds** (cryptographic relationships), and **Mood Streams** (interest-based discovery). The architecture prioritizes:
 
-- **Local-first data**: SQLite via LibSQL with optional Turso cloud sync
+- **ACID-compliant data**: PostgreSQL 17 with PgBouncer connection pooling
 - **Zero external dependencies for UI**: All assets are local SVGs, no CDN/placeholder services
 - **Domain-driven server actions**: 7 domain modules replace a monolithic action file
 - **Co-located component decomposition**: God Components replaced with Context + useReducer patterns
@@ -36,7 +36,7 @@ src/
 │   ├── ui/                     # shadcn/ui primitives
 │   └── wall-blocks/            # My Wall block types
 ├── db/
-│   ├── index.ts                # Drizzle client (LibSQL)
+│   ├── index.ts                # Drizzle client (node-postgres Pool)
 │   ├── schema.ts               # 34 tables (see Schema section)
 │   └── seed.ts                 # Seed script (npx tsx src/db/seed.ts)
 ├── hooks/                      # Custom React hooks (use-toast, use-mobile, etc.)
@@ -82,12 +82,15 @@ src/
 
 ## Data Layer
 
-### Database: LibSQL + Drizzle ORM
+### Database: PostgreSQL 17 + Drizzle ORM
 
-- **Local**: SQLite file via `libsql` driver
-- **Cloud sync**: Optional Turso sync (`TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`)
-- **ORM**: Drizzle with `drizzle-orm/sqlite-core`
+- **Production**: PostgreSQL 17 via PgBouncer (transaction-mode pooling)
+- **Local dev**: PostgreSQL 17 via `docker-compose.dev.yml`
+- **Driver**: `node-postgres` (`pg`) with `drizzle-orm/node-postgres`
+- **ORM**: Drizzle with `drizzle-orm/pg-core`
 - **Migrations**: `drizzle-kit push` for schema sync
+- **Indexes**: 28 production indexes covering all FK columns + hot query paths
+- **Transactions**: Critical multi-table operations wrapped in `db.transaction()`
 
 ### Schema (34 tables)
 
@@ -147,7 +150,7 @@ Login  → WebAuthn Authentication → JWT Session Cookie
 All server actions use Next.js `'use server'` directives. They're organized into **7 domain modules** in `src/lib/actions/`:
 
 ```
-Consumer (page.tsx) → Action Module → Service → Drizzle → SQLite
+Consumer (page.tsx) → Action Module → Service → Drizzle → PostgreSQL
 ```
 
 | Module | Responsibility | Key Functions |
@@ -292,7 +295,7 @@ Tests that actively `grep` the codebase to prevent regression:
 ### Prerequisites
 
 - Node.js 20+
-- LibSQL database (local file or Turso cloud)
+- PostgreSQL 17 (via Docker or native install)
 - Garage S3 instance (for media uploads)
 
 ### Commands
@@ -308,8 +311,7 @@ npx tsx src/db/seed.ts  # Seed database with sample data
 
 ```env
 # Database
-TURSO_DATABASE_URL=   # LibSQL/Turso URL
-TURSO_AUTH_TOKEN=     # Turso auth token (optional for local)
+DATABASE_URL=         # PostgreSQL connection string
 
 # Auth
 JWT_SECRET=           # JWT signing key

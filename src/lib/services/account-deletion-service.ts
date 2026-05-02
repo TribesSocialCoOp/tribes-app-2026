@@ -175,12 +175,14 @@ export async function purgeExpiredAccounts(): Promise<number> {
 async function permanentlyDeleteUser(userId: string): Promise<void> {
   console.log(`[account-deletion] Starting permanent deletion for user ${userId}`);
 
-  await cleanupPosts(userId);
-  await cleanupComments(userId);
-  await cleanupNonCascadingReferences(userId);
+  await db.transaction(async (tx) => {
+    await cleanupPosts(userId, tx);
+    await cleanupComments(userId, tx);
+    await cleanupNonCascadingReferences(userId, tx);
 
-  // Delete the user row (cascades handle ~15 related tables)
-  await db.delete(users).where(eq(users.id, userId));
+    // Delete the user row (cascades handle ~15 related tables)
+    await tx.delete(users).where(eq(users.id, userId));
+  });
 
   console.log(`[account-deletion] Completed permanent deletion for user ${userId}`);
 }
@@ -238,14 +240,14 @@ async function cancelStripeSubscription(userId: string): Promise<void> {
  * Tombstone posts that have comments from other users.
  * Hard-delete posts with no comments from other users.
  */
-async function cleanupPosts(userId: string): Promise<void> {
-  const userPosts = await db.select({ id: posts.id })
+async function cleanupPosts(userId: string, tx: any = db): Promise<void> {
+  const userPosts = await tx.select({ id: posts.id })
     .from(posts)
     .where(eq(posts.authorId, userId));
 
   for (const post of userPosts) {
     // Check if any OTHER user has commented on this post
-    const externalComments = await db.select({ id: comments.id })
+    const externalComments = await tx.select({ id: comments.id })
       .from(comments)
       .where(and(
         eq(comments.postId, post.id),
@@ -256,7 +258,7 @@ async function cleanupPosts(userId: string): Promise<void> {
     if (externalComments.length > 0) {
       // Tombstone: hide post from feeds, remove PII and content,
       // but preserve thread integrity for existing replies
-      await db.update(posts).set({
+      await tx.update(posts).set({
         authorName: DELETED_USER_NAME,
         authorAvatar: null,
         authorAvatarFallback: DELETED_USER_AVATAR_FALLBACK,
@@ -271,9 +273,9 @@ async function cleanupPosts(userId: string): Promise<void> {
       }).where(eq(posts.id, post.id));
     } else {
       // No external comments → safe to hard-delete
-      await db.delete(postMoodTags).where(eq(postMoodTags.postId, post.id));
-      await db.delete(comments).where(eq(comments.postId, post.id));
-      await db.delete(posts).where(eq(posts.id, post.id));
+      await tx.delete(postMoodTags).where(eq(postMoodTags.postId, post.id));
+      await tx.delete(comments).where(eq(comments.postId, post.id));
+      await tx.delete(posts).where(eq(posts.id, post.id));
     }
   }
 }
@@ -282,13 +284,13 @@ async function cleanupPosts(userId: string): Promise<void> {
  * Tombstone comments that have replies from other users.
  * Hard-delete comments with no replies.
  */
-async function cleanupComments(userId: string): Promise<void> {
-  const userComments = await db.select({ id: comments.id })
+async function cleanupComments(userId: string, tx: any = db): Promise<void> {
+  const userComments = await tx.select({ id: comments.id })
     .from(comments)
     .where(eq(comments.authorId, userId));
 
   for (const comment of userComments) {
-    const externalReplies = await db.select({ id: comments.id })
+    const externalReplies = await tx.select({ id: comments.id })
       .from(comments)
       .where(and(
         eq(comments.parentCommentId, comment.id),
@@ -297,7 +299,7 @@ async function cleanupComments(userId: string): Promise<void> {
       .limit(1);
 
     if (externalReplies.length > 0) {
-      await db.update(comments).set({
+      await tx.update(comments).set({
         authorName: DELETED_USER_NAME,
         authorAvatar: null,
         authorAvatarFallback: DELETED_USER_AVATAR_FALLBACK,
@@ -305,7 +307,7 @@ async function cleanupComments(userId: string): Promise<void> {
         content: REMOVED_CONTENT_PLACEHOLDER,
       }).where(eq(comments.id, comment.id));
     } else {
-      await db.delete(comments).where(eq(comments.id, comment.id));
+      await tx.delete(comments).where(eq(comments.id, comment.id));
     }
   }
 }
@@ -313,44 +315,44 @@ async function cleanupComments(userId: string): Promise<void> {
 /**
  * Clean up tables that reference users.id WITHOUT onDelete: 'cascade'.
  */
-async function cleanupNonCascadingReferences(userId: string): Promise<void> {
+async function cleanupNonCascadingReferences(userId: string, tx: any = db): Promise<void> {
   // Bond requests
-  await db.delete(bondRequests).where(
+  await tx.delete(bondRequests).where(
     or(eq(bondRequests.fromUserId, userId), eq(bondRequests.toUserId, userId))
   );
 
   // Reports — anonymize reporter 
-  await db.update(reports).set({
+  await tx.update(reports).set({
     reporterId: null,
     reporterName: DELETED_USER_NAME,
   }).where(eq(reports.reporterId, userId));
 
   // Post mood tags — clear promotedBy
-  await db.update(postMoodTags).set({
+  await tx.update(postMoodTags).set({
     promotedBy: null,
   }).where(eq(postMoodTags.promotedBy, userId));
 
   // Vibes
-  await db.delete(vibes).where(eq(vibes.userId, userId));
+  await tx.delete(vibes).where(eq(vibes.userId, userId));
 
   // Mentions — clean up both sides
-  await db.delete(mentions).where(
+  await tx.delete(mentions).where(
     or(eq(mentions.mentionedUserId, userId), eq(mentions.mentionerUserId, userId))
   );
 
   // Tribes — nullify createdBy (don't delete the tribe itself)
-  await db.update(tribes).set({
+  await tx.update(tribes).set({
     createdBy: null,
   }).where(eq(tribes.createdBy, userId));
 
   // Events — creatorId is NOT NULL, can't nullify.
   // Delete events with no external RSVPs; leave others.
-  const userEvents = await db.select({ id: events.id })
+  const userEvents = await tx.select({ id: events.id })
     .from(events)
     .where(eq(events.creatorId, userId));
 
   for (const event of userEvents) {
-    const otherRsvps = await db.select({ id: eventRsvps.id })
+    const otherRsvps = await tx.select({ id: eventRsvps.id })
       .from(eventRsvps)
       .where(and(
         eq(eventRsvps.eventId, event.id),
@@ -359,19 +361,19 @@ async function cleanupNonCascadingReferences(userId: string): Promise<void> {
       .limit(1);
 
     if (otherRsvps.length === 0) {
-      await db.delete(eventStreamPosts).where(eq(eventStreamPosts.eventId, event.id));
-      await db.delete(eventRsvps).where(eq(eventRsvps.eventId, event.id));
-      await db.delete(events).where(eq(events.id, event.id));
+      await tx.delete(eventStreamPosts).where(eq(eventStreamPosts.eventId, event.id));
+      await tx.delete(eventRsvps).where(eq(eventRsvps.eventId, event.id));
+      await tx.delete(events).where(eq(events.id, event.id));
     }
   }
 
   // Story comments — tombstone content, anonymize author
-  const userStoryComments = await db.select({ id: storyComments.id })
+  const userStoryComments = await tx.select({ id: storyComments.id })
     .from(storyComments)
     .where(eq(storyComments.authorId, userId));
 
   for (const sc of userStoryComments) {
-    const externalReplies = await db.select({ id: storyComments.id })
+    const externalReplies = await tx.select({ id: storyComments.id })
       .from(storyComments)
       .where(and(
         eq(storyComments.parentCommentId, sc.id),
@@ -380,25 +382,25 @@ async function cleanupNonCascadingReferences(userId: string): Promise<void> {
       .limit(1);
 
     if (externalReplies.length > 0) {
-      await db.update(storyComments).set({
+      await tx.update(storyComments).set({
         authorName: DELETED_USER_NAME,
         authorAvatarFallback: DELETED_USER_AVATAR_FALLBACK,
         dataAiHintAvatar: null,
         content: REMOVED_CONTENT_PLACEHOLDER,
       }).where(eq(storyComments.id, sc.id));
     } else {
-      await db.delete(storyComments).where(eq(storyComments.id, sc.id));
+      await tx.delete(storyComments).where(eq(storyComments.id, sc.id));
     }
   }
 
   // Messages
-  await db.delete(messages).where(eq(messages.senderId, userId));
+  await tx.delete(messages).where(eq(messages.senderId, userId));
 
   // Event stream posts
-  await db.delete(eventStreamPosts).where(eq(eventStreamPosts.authorId, userId));
+  await tx.delete(eventStreamPosts).where(eq(eventStreamPosts.authorId, userId));
 
   // Revoke all active sessions
-  await db.update(sessions).set({
+  await tx.update(sessions).set({
     revokedAt: new Date(),
   }).where(eq(sessions.userId, userId));
 }

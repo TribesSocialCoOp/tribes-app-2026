@@ -170,39 +170,41 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const stripeSubscriptionId = session.subscription as string;
   const stripeCustomerId = session.customer as string;
 
-  // Get the plan to determine the target role
-  const [plan] = await db.select().from(plans).where(eq(plans.id, planId)).limit(1);
-  if (!plan) return;
+  await db.transaction(async (tx) => {
+    // Get the plan to determine the target role
+    const [plan] = await tx.select().from(plans).where(eq(plans.id, planId)).limit(1);
+    if (!plan) return;
 
-  // Upsert subscription
-  const [existing] = await db.select().from(subscriptions)
-    .where(eq(subscriptions.userId, userId))
-    .limit(1);
+    // Upsert subscription
+    const [existing] = await tx.select().from(subscriptions)
+      .where(eq(subscriptions.userId, userId))
+      .limit(1);
 
-  if (existing) {
-    await db.update(subscriptions).set({
-      planId,
-      status: 'active',
-      stripeCustomerId,
-      stripeSubscriptionId,
-      updatedAt: new Date(),
-    }).where(eq(subscriptions.id, existing.id));
-  } else {
-    await db.insert(subscriptions).values({
-      id: `sub-${userId}-${Date.now()}`,
-      userId,
-      planId,
-      status: 'active',
-      stripeCustomerId,
-      stripeSubscriptionId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-  }
+    if (existing) {
+      await tx.update(subscriptions).set({
+        planId,
+        status: 'active',
+        stripeCustomerId,
+        stripeSubscriptionId,
+        updatedAt: new Date(),
+      }).where(eq(subscriptions.id, existing.id));
+    } else {
+      await tx.insert(subscriptions).values({
+        id: `sub-${userId}-${Date.now()}`,
+        userId,
+        planId,
+        status: 'active',
+        stripeCustomerId,
+        stripeSubscriptionId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
 
-  // Upgrade user role
-  await db.update(users).set({ role: plan.targetRole }).where(eq(users.id, userId));
-  console.log(`[stripe] User ${userId} upgraded to ${plan.name} (role: ${plan.targetRole})`);
+    // Upgrade user role
+    await tx.update(users).set({ role: plan.targetRole }).where(eq(users.id, userId));
+    console.log(`[stripe] User ${userId} upgraded to ${plan.name} (role: ${plan.targetRole})`);
+  });
 }
 
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
@@ -241,20 +243,22 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   const userId = subscription.metadata?.tribesUserId;
   if (!userId) return;
 
-  // Downgrade user to free tier
-  await db.update(users).set({ role: 'Human_Free' }).where(eq(users.id, userId));
+  await db.transaction(async (tx) => {
+    // Downgrade user to free tier
+    await tx.update(users).set({ role: 'Human_Free' }).where(eq(users.id, userId));
 
-  // Update subscription status
-  const [sub] = await db.select().from(subscriptions)
-    .where(eq(subscriptions.stripeSubscriptionId, subscription.id))
-    .limit(1);
+    // Update subscription status
+    const [sub] = await tx.select().from(subscriptions)
+      .where(eq(subscriptions.stripeSubscriptionId, subscription.id))
+      .limit(1);
 
-  if (sub) {
-    await db.update(subscriptions).set({
-      status: 'canceled',
-      updatedAt: new Date(),
-    }).where(eq(subscriptions.id, sub.id));
-  }
+    if (sub) {
+      await tx.update(subscriptions).set({
+        status: 'canceled',
+        updatedAt: new Date(),
+      }).where(eq(subscriptions.id, sub.id));
+    }
+  });
 
   console.log(`[stripe] User ${userId} downgraded to Free (subscription canceled)`);
 }

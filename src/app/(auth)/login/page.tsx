@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { AppLogo } from "@/components/icons/app-logo";
@@ -11,10 +11,34 @@ import { startAuthentication } from "@simplewebauthn/browser";
 import { loginUserAction, finishLoginAction } from "@/lib/auth-actions";
 import { useToast } from "@/hooks/use-toast";
 
-export default function LoginPage() {
+function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  useEffect(() => {
+    const error = searchParams.get('error');
+    if (error) {
+      let description = "An unknown error occurred.";
+      if (error === 'google_denied') description = "Google authentication was denied.";
+      if (error === 'no_code') description = "No authorization code provided by Google.";
+      if (error === 'invalid_state') description = "Security state mismatch. Please try again.";
+      if (error === 'sso_misconfigured') description = "Google SSO is misconfigured on the server.";
+      if (error === 'token_exchange_failed') description = "Failed to exchange authorization code.";
+      if (error === 'userinfo_failed') description = "Failed to retrieve user information from Google.";
+      if (error === 'sso_failed') description = "Google authentication failed. Please try again.";
+      if (error === 'too_many_attempts') description = "Too many attempts. Please try again later.";
+
+      toast({
+        variant: "destructive",
+        title: "Sign In Error",
+        description,
+      });
+      // Clear the error from the URL
+      router.replace('/login', { scroll: false });
+    }
+  }, [searchParams, router, toast]);
 
   async function handleLogin() {
     setIsLoading(true);
@@ -94,7 +118,9 @@ export default function LoginPage() {
         description: "You have been logged in successfully.",
       });
 
-      router.push("/your-comms");
+      // Redirect to returnTo (from bond invite, etc.) or default feed
+      const returnTo = searchParams.get('returnTo');
+      router.push(returnTo || "/your-comms");
     } catch (error: unknown) {
       console.error("Login failed:", error);
 
@@ -177,7 +203,12 @@ export default function LoginPage() {
             variant="outline" 
             className="w-full h-12 border-primary/20 hover:bg-primary/5 flex items-center justify-center gap-2"
             disabled={isLoading}
-            onClick={() => window.location.href = '/api/auth/google'}
+            onClick={() => {
+              const url = new URL('/api/auth/google', window.location.origin);
+              const invite = searchParams.get('invite');
+              if (invite) url.searchParams.set('invite', invite);
+              window.location.href = url.toString();
+            }}
           >
             <Mail className="h-5 w-5" />
             Continue with Google
@@ -232,12 +263,37 @@ export default function LoginPage() {
         <CardFooter className="flex flex-col gap-4 border-t pt-8 bg-muted/30">
           <p className="text-center text-sm text-muted-foreground">
             Don&apos;t have an account?{" "}
-            <Link href="/signup" className="font-semibold text-primary hover:underline">
+            <Link href={(() => {
+              const parts: string[] = [];
+              const invite = searchParams.get('invite');
+              const returnTo = searchParams.get('returnTo');
+              if (invite) parts.push(`invite=${encodeURIComponent(invite)}`);
+              if (returnTo) parts.push(`returnTo=${encodeURIComponent(returnTo)}`);
+              return parts.length ? `/signup?${parts.join('&')}` : '/signup';
+            })()} className="font-semibold text-primary hover:underline">
               Sign Up
             </Link>
+          </p>
+          <p className="text-center text-xs text-muted-foreground">
+            By signing in, you agree to our{" "}
+            <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>
+            {" "}and{" "}
+            <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>.
           </p>
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

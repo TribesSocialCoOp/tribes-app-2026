@@ -9,8 +9,21 @@
 # ============================================================
 
 {$APP_DOMAIN:tribes.app} {
-    # Next.js app
-    reverse_proxy app:9002
+    # Next.js app — blue/green load balancing
+    # Caddy routes to whichever container is healthy; during deploys
+    # both may run briefly, but lb_policy=first prefers the first healthy one.
+    reverse_proxy app-blue:9002 app-green:9002 {
+        lb_policy first
+
+        # Passive health: mark upstream down after 2 failures
+        fail_duration 10s
+        max_fails 2
+
+        # Active health: probe /api/health on each upstream every 5s
+        health_uri /api/health
+        health_interval 5s
+        health_timeout 3s
+    }
 
     # Security headers (complement Next.js CSP headers)
     header {

@@ -10,12 +10,21 @@ import { X } from 'lucide-react';
 interface MoodTagSelectorProps {
   value: string | null;
   onChange: (moodSlug: string | null) => void;
+  allowedMoods?: string[];
 }
 
-export function MoodTagSelector({ value, onChange }: MoodTagSelectorProps) {
+export function MoodTagSelector({ value, onChange, allowedMoods }: MoodTagSelectorProps) {
   const [open, setOpen] = useState(false);
 
   const selectedMood = value ? moodsData.find(m => m.slug === value) : null;
+  
+  // Filter moods if allowedMoods is provided
+  const visibleMoods = allowedMoods && allowedMoods.length > 0
+    ? moodsData.filter(m => allowedMoods.includes(m.slug))
+    : moodsData;
+
+  // If there are no visible moods (e.g. strict filtering leaves 0), don't render the selector
+  if (allowedMoods && allowedMoods.length === 0) return null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -52,7 +61,7 @@ export function MoodTagSelector({ value, onChange }: MoodTagSelectorProps) {
           How are you feeling?
         </p>
         <div className="grid grid-cols-3 gap-1">
-          {moodsData.map(mood => (
+          {visibleMoods.map(mood => (
             <button
               key={mood.slug}
               onClick={() => {

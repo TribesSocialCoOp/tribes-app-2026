@@ -65,7 +65,8 @@ export function useBondCrypto(bondId: string | undefined): UseBondCryptoResult {
   const initRef = useRef(false);
 
   /**
-   * Core initialization flow
+   * Core initialization flow — now checks cached shared secrets first.
+   * Falls back to full key generation if cache is empty (first visit).
    */
   const initialize = useCallback(async () => {
     if (!bondId) return;
@@ -86,6 +87,10 @@ export function useBondCrypto(bondId: string | undefined): UseBondCryptoResult {
       setIsLoading(true);
       setError(null);
 
+      // Fast path: check if the KeySyncProvider has already cached everything
+      const { getSharedSecret, hashPublicKeyJwk } = await import('@/lib/crypto/key-store');
+      const cached = await getSharedSecret(bondId);
+
       // Step 1: Check for existing local key
       let storedKey = await getBondKey(bondId);
 
@@ -105,14 +110,35 @@ export function useBondCrypto(bondId: string | undefined): UseBondCryptoResult {
 
       setHasKey(true);
 
-      // Step 5: Fetch peer's public key
+      // Fast path: use cached shared secret if available and peer key hasn't rotated
+      if (cached && storedKey) {
+        // Verify the peer key hasn't changed since we cached
+        const peerKeyStr = await getPeerKeyAction(bondId);
+        if (peerKeyStr) {
+          const peerJwk: JsonWebKey = JSON.parse(peerKeyStr);
+          const currentHash = await hashPublicKeyJwk(peerJwk);
+          if (currentHash === cached.peerKeyHash) {
+            setSharedSecret(cached.sharedSecret);
+            setIsExchangeComplete(true);
+            setIsReady(true);
+            return;
+          }
+          // Peer key rotated — fall through to re-derive
+        }
+      }
+
+      // Slow path: Fetch peer's public key and derive shared secret
       const peerKeyStr = await getPeerKeyAction(bondId);
 
       if (peerKeyStr && storedKey) {
-        // Step 6: Derive shared secret
         const peerJwk: JsonWebKey = JSON.parse(peerKeyStr);
         const peerPublicKey = await importPublicKey(peerJwk);
         const secret = await deriveSharedSecret(storedKey.privateKey, peerPublicKey);
+
+        // Cache for future use
+        const { storeSharedSecret } = await import('@/lib/crypto/key-store');
+        const peerHash = await hashPublicKeyJwk(peerJwk);
+        await storeSharedSecret(bondId, secret, peerHash);
 
         setSharedSecret(secret);
         setIsExchangeComplete(true);

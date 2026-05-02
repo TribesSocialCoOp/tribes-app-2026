@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useCallback, useRef, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/icons/app-logo";
 import { Fingerprint, Loader2, Mail, Ticket, CheckCircle2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { startRegistration } from "@simplewebauthn/browser";
 import { registerUserAction, finishRegistrationAction } from "@/lib/auth-actions";
 import { validateInviteCode } from '@/lib/actions/profile-actions';
@@ -18,7 +19,7 @@ import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/turnstile
 
 const INVITE_ONLY = process.env.NEXT_PUBLIC_INVITE_ONLY === 'true';
 
-export default function SignupPage() {
+function SignupForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [inviteCode, setInviteCode] = useState("");
@@ -29,7 +30,53 @@ export default function SignupPage() {
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const turnstileRef = useRef<TurnstileWidgetRef | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+  const [tosAgreed, setTosAgreed] = useState(false);
+
+  useEffect(() => {
+    const error = searchParams.get('error');
+    if (error) {
+      let description = "An unknown error occurred.";
+      if (error === 'invite_required') description = "An invite code is required to sign up with Google.";
+      if (error === 'invalid_invite') description = "The provided invite code is invalid.";
+      if (error === 'invalid_state') description = "Security state mismatch. Please try again.";
+      if (error === 'google_denied') description = "Google authentication was denied.";
+
+      toast({
+        variant: "destructive",
+        title: "Sign In Error",
+        description,
+      });
+      // Clear the error from the URL
+      router.replace('/signup', { scroll: false });
+    }
+  }, [searchParams, router, toast]);
+
+  // Auto-fill invite code from URL (e.g. ?invite=TRIBE-XXXX-XXXX)
+  const [autoValidateAttempted, setAutoValidateAttempted] = useState(false);
+  useEffect(() => {
+    const urlInvite = searchParams.get('invite');
+    if (urlInvite && INVITE_ONLY && !isInviteValidated && !autoValidateAttempted) {
+      setAutoValidateAttempted(true);
+      const code = urlInvite.trim().toUpperCase();
+      setInviteCode(code);
+      // Auto-validate
+      (async () => {
+        setIsValidatingCode(true);
+        try {
+          const result = await validateInviteCode(code);
+          setIsInviteValidated(true);
+          setInvitePlanName(result.planName);
+          toast({ title: 'Invite Code Valid!', description: `This code grants access to the ${result.planName} plan.` });
+        } catch {
+          // Code invalid — let user enter a different one
+        } finally {
+          setIsValidatingCode(false);
+        }
+      })();
+    }
+  }, [searchParams, isInviteValidated, autoValidateAttempted, toast]);
 
   const handleTurnstileVerified = useCallback((token: string) => {
     setTurnstileToken(token);
@@ -139,12 +186,24 @@ export default function SignupPage() {
         // We don't block registration if vault creation fails, but it is a degraded state.
       }
 
+      // Record TOS acceptance (user checked the checkbox before submit)
+      try {
+        const { acceptTermsOfService } = await import('@/lib/actions/legal-actions');
+        const { getLatestTosVersion } = await import('@/lib/actions/legal-actions');
+        const latest = await getLatestTosVersion();
+        await acceptTermsOfService(latest.version);
+      } catch (tosErr) {
+        console.warn('[auth] Failed to record TOS acceptance at signup:', tosErr);
+      }
+
       toast({
         title: "Account Created!",
         description: "Your passkey has been registered successfully.",
       });
 
-      router.push("/your-comms");
+      // Redirect to returnTo (e.g. the tribe/bond invite) or default feed
+      const returnTo = searchParams.get('returnTo');
+      router.push(returnTo || "/your-comms");
     } catch (error: unknown) {
       console.error("Signup failed:", error);
 
@@ -258,10 +317,29 @@ export default function SignupPage() {
               className="mt-1"
             />
             
+            {/* TOS Agreement Checkbox */}
+            <div className="flex items-start gap-3 pt-2">
+              <Checkbox
+                id="tos-signup-agree"
+                checked={tosAgreed}
+                onCheckedChange={(checked) => setTosAgreed(checked === true)}
+                disabled={isLoading || !isInviteValidated}
+              />
+              <label
+                htmlFor="tos-signup-agree"
+                className="text-sm leading-relaxed cursor-pointer text-muted-foreground"
+              >
+                I agree to the{" "}
+                <Link href="/terms" target="_blank" className="text-primary underline">Terms of Service</Link>
+                {" "}and{" "}
+                <Link href="/privacy" target="_blank" className="text-primary underline">Privacy Policy</Link>.
+              </label>
+            </div>
+
             <div className="pt-4 space-y-3">
               <Button 
                 type="submit" 
-                disabled={isLoading || !name || !email || (INVITE_ONLY && !isInviteValidated)}
+                disabled={isLoading || !name || !email || !tosAgreed || (INVITE_ONLY && !isInviteValidated)}
                 className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg"
               >
                 {isLoading ? (
@@ -283,7 +361,7 @@ export default function SignupPage() {
                 type="button" 
                 variant="outline" 
                 className="w-full h-11 border-primary/20 hover:bg-primary/5"
-                disabled={isLoading}
+                disabled={isLoading || !tosAgreed || (INVITE_ONLY && !isInviteValidated)}
                 onClick={() => {
                   const url = new URL('/api/auth/google', window.location.origin);
                   if (inviteCode) url.searchParams.set('invite', inviteCode);
@@ -303,8 +381,27 @@ export default function SignupPage() {
               Log In
             </Link>
           </p>
+          <p className="text-center text-xs text-muted-foreground">
+            <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>
+            {" · "}
+            <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>
+            {" · "}
+            <Link href="/community-guidelines" className="underline hover:text-foreground">Guidelines</Link>
+          </p>
         </CardFooter>
       </Card>
     </div>
+  );
+}
+
+export default function SignupPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-background p-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    }>
+      <SignupForm />
+    </Suspense>
   );
 }

@@ -5,7 +5,8 @@ import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { UserNav } from "@/components/layout/user-nav";
 // AppLogo and Link are no longer needed here as the logo is only in the sidebar.
 // import { AppLogo } from "@/components/icons/app-logo";
-// import Link from "next/link";
+import Link from "next/link";
+import { Compass, Settings, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function AppHeader() {
@@ -20,7 +21,18 @@ export function AppHeader() {
           {/* Logo and App Name removed from here. It's in AppSidebar. */}
         </div>
 
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2 sm:space-x-4">
+          <div className="flex items-center space-x-1 mr-1">
+             <Link href="/search" className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors">
+                <Search className="h-5 w-5" />
+             </Link>
+             <Link href="/discover" className="md:hidden p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors">
+                <Compass className="h-5 w-5" />
+             </Link>
+             <Link href="/settings" className="md:hidden p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors">
+                <Settings className="h-5 w-5" />
+             </Link>
+          </div>
           <div id="header-actions-portal" className="flex items-center space-x-2"></div>
           <UserNav />
         </div>

@@ -247,24 +247,26 @@ export async function approveJoinRequest(tribeId: string, pendingMemberId: strin
     throw new Error(`This tribe has reached its member limit (${memberCheck.limit}). The tribe owner needs to upgrade their plan.`);
   }
 
-  // Remove from pending
-  await db.delete(pendingMembers).where(eq(pendingMembers.id, pendingMemberId));
+  await db.transaction(async (tx) => {
+    // Remove from pending
+    await tx.delete(pendingMembers).where(eq(pendingMembers.id, pendingMemberId));
 
-  // Add as member
-  await db.insert(tribeMembers).values({
-    id: `tm-${pending.userId}-${tribeId}`,
-    tribeId,
-    userId: pending.userId,
-    role: 'member',
-    joinedAsAlias: pending.joinedAsAlias,
-    joinedAsAvatar: pending.joinedAsAvatar,
-    joinedAt: new Date(),
+    // Add as member
+    await tx.insert(tribeMembers).values({
+      id: `tm-${pending.userId}-${tribeId}`,
+      tribeId,
+      userId: pending.userId,
+      role: 'member',
+      joinedAsAlias: pending.joinedAsAlias,
+      joinedAsAvatar: pending.joinedAsAvatar,
+      joinedAt: new Date(),
+    });
+
+    // Increment member count
+    await tx.update(tribes).set({ 
+      memberCount: sql`COALESCE(${tribes.memberCount}, 0) + 1` 
+    }).where(eq(tribes.id, tribeId));
   });
-
-  // Increment member count
-  await db.update(tribes).set({ 
-    memberCount: sql`COALESCE(${tribes.memberCount}, 0) + 1` 
-  }).where(eq(tribes.id, tribeId));
 
   // Auto-create follower bond for the new member → tribe
   const { createTribeBond } = await import('@/lib/services/bond-service');
@@ -297,6 +299,28 @@ export async function leaveTribe(userId: string, tribeId: string): Promise<void>
   for (const bond of tribeBonds) {
     await db.delete(bondsTable).where(eq(bondsTable.id, bond.id));
   }
+
+  // Rotate tribe group key if tribe is private (forward secrecy)
+  // The departed member's old key is deactivated; remaining members
+  // will receive a new key grant on their next KeySyncProvider cycle.
+  try {
+    const { isTribePrivate, rotateTribeKey, deleteGrantForUser, getActiveTribeKey } = await import('./tribe-key-service');
+    const isPrivate = await isTribePrivate(tribeId);
+
+    if (isPrivate) {
+      // Delete the departing user's grant for the current key
+      const activeKey = await getActiveTribeKey(tribeId);
+      if (activeKey) {
+        await deleteGrantForUser(activeKey.id, userId);
+        // Rotate to a new key version — old key becomes inactive
+        await rotateTribeKey(tribeId, userId);
+        console.info(`[tribe-service] Rotated tribe key for ${tribeId} after member ${userId.substring(0, 8)}... left`);
+      }
+    }
+  } catch (err) {
+    // Key rotation is best-effort — don't fail the leave operation
+    console.warn(`[tribe-service] Failed to rotate tribe key for ${tribeId}:`, err);
+  }
 }
 
 /**
@@ -312,32 +336,34 @@ export async function deleteTribe(userId: string, tribeId: string): Promise<void
   if (!tribe) throw new Error('Tribe not found');
   if (tribe.createdBy !== userId) throw new Error('Only the tribe founder can delete a tribe');
 
-  // 1. Delete all bonds targeting this tribe (all members' tribe bonds)
-  const tribeBonds = await db.select().from(bondsTable)
-    .where(eq(bondsTable.targetId, tribeId));
-  for (const bond of tribeBonds) {
-    await db.delete(bondsTable).where(eq(bondsTable.id, bond.id));
-  }
+  await db.transaction(async (tx) => {
+    // 1. Delete all bonds targeting this tribe (all members' tribe bonds)
+    const tribeBonds = await tx.select().from(bondsTable)
+      .where(eq(bondsTable.targetId, tribeId));
+    for (const bond of tribeBonds) {
+      await tx.delete(bondsTable).where(eq(bondsTable.id, bond.id));
+    }
 
-  // 2. Delete posts and their related data (comments, vibes, mood tags)
-  const tribePosts = await db.select({ id: posts.id }).from(posts)
-    .where(eq(posts.tribeId, tribeId));
-  for (const post of tribePosts) {
-    await db.delete(vibes).where(eq(vibes.targetId, post.id));
-    await db.delete(comments).where(eq(comments.postId, post.id));
-    await db.delete(postMoodTags).where(eq(postMoodTags.postId, post.id));
-  }
-  await db.delete(posts).where(eq(posts.tribeId, tribeId));
+    // 2. Delete posts and their related data (comments, vibes, mood tags)
+    const tribePosts = await tx.select({ id: posts.id }).from(posts)
+      .where(eq(posts.tribeId, tribeId));
+    for (const post of tribePosts) {
+      await tx.delete(vibes).where(eq(vibes.targetId, post.id));
+      await tx.delete(comments).where(eq(comments.postId, post.id));
+      await tx.delete(postMoodTags).where(eq(postMoodTags.postId, post.id));
+    }
+    await tx.delete(posts).where(eq(posts.tribeId, tribeId));
 
-  // 3. Delete members and pending members
-  await db.delete(tribeMembers).where(eq(tribeMembers.tribeId, tribeId));
-  await db.delete(pendingMembers).where(eq(pendingMembers.tribeId, tribeId));
+    // 3. Delete members and pending members
+    await tx.delete(tribeMembers).where(eq(tribeMembers.tribeId, tribeId));
+    await tx.delete(pendingMembers).where(eq(pendingMembers.tribeId, tribeId));
 
-  // 4. Delete mood tags
-  await db.delete(tribeMoodTags).where(eq(tribeMoodTags.tribeId, tribeId));
+    // 4. Delete mood tags
+    await tx.delete(tribeMoodTags).where(eq(tribeMoodTags.tribeId, tribeId));
 
-  // 5. Delete the tribe itself
-  await db.delete(tribes).where(eq(tribes.id, tribeId));
+    // 5. Delete the tribe itself
+    await tx.delete(tribes).where(eq(tribes.id, tribeId));
+  });
 }
 
 // ============================================================
@@ -438,6 +464,58 @@ export async function requestToJoinTribe(userId: string, tribeId: string, aliasN
   await createTribeBond(userId, tribeId, 'tribe', tribe.name);
 
   return 'joined';
+}
+
+/**
+ * Directly joins a user to a tribe — no gates, no approval flow.
+ * Used internally for system operations like auto-joining the welcome tribe.
+ * Silently no-ops if the user is already a member.
+ */
+export async function joinTribeDirectly(userId: string, tribeId: string): Promise<void> {
+  // Check if already a member — silently skip
+  const existing = await db.select({ id: tribeMembers.id }).from(tribeMembers)
+    .where(and(eq(tribeMembers.userId, userId), eq(tribeMembers.tribeId, tribeId)))
+    .limit(1);
+  if (existing.length > 0) return;
+
+  await db.insert(tribeMembers).values({
+    id: `tm-${userId}-${tribeId}`,
+    tribeId,
+    userId,
+    role: 'member',
+    joinedAt: new Date(),
+  });
+
+  // Increment member count
+  await db.update(tribes).set({
+    memberCount: sql`COALESCE(${tribes.memberCount}, 0) + 1`
+  }).where(eq(tribes.id, tribeId));
+}
+
+/**
+ * Updates a tribe member's identity (alias + avatar).
+ * Allows switching between main profile and aliases post-join.
+ */
+export async function updateTribeMemberIdentity(
+  userId: string,
+  tribeId: string,
+  aliasName?: string,
+  aliasAvatar?: string,
+): Promise<void> {
+  // Verify the user is actually a member
+  const [membership] = await db.select()
+    .from(tribeMembers)
+    .where(and(eq(tribeMembers.userId, userId), eq(tribeMembers.tribeId, tribeId)))
+    .limit(1);
+
+  if (!membership) {
+    throw new Error('You are not a member of this tribe.');
+  }
+
+  await db.update(tribeMembers).set({
+    joinedAsAlias: aliasName || null,
+    joinedAsAvatar: aliasAvatar || null,
+  }).where(eq(tribeMembers.id, membership.id));
 }
 
 // ============================================================

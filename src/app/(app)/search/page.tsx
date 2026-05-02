@@ -220,18 +220,20 @@ export default function SearchPage() {
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {results.users.map(user => (
-                  <Card key={user.id} className="hover:bg-accent/50 transition-colors border-border/50">
-                    <CardContent className="p-4 flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-sm font-semibold text-primary">
-                        {user.avatarUrl ? (
-                          <Image src={user.avatarUrl} alt={user.name} width={40} height={40} className="rounded-full object-cover" />
-                        ) : (
-                          user.name.charAt(0).toUpperCase()
-                        )}
-                      </div>
-                      <span className="font-medium text-foreground truncate">{user.name}</span>
-                    </CardContent>
-                  </Card>
+                  <Link key={user.id} href={`/profile/${user.id}`}>
+                    <Card className="hover:bg-accent/50 transition-all duration-300 border-border/50 hover:border-primary/30 hover:shadow-md group cursor-pointer">
+                      <CardContent className="p-4 flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-sm font-semibold text-primary group-hover:scale-110 transition-transform">
+                          {user.avatarUrl ? (
+                            <Image src={user.avatarUrl} alt={user.name} width={40} height={40} className="rounded-full object-cover" />
+                          ) : (
+                            user.name.charAt(0).toUpperCase()
+                          )}
+                        </div>
+                        <span className="font-medium text-foreground truncate">{user.name}</span>
+                      </CardContent>
+                    </Card>
+                  </Link>
                 ))}
               </div>
             </section>

@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { createCheckoutSession } from '@/lib/services/payment-service';
 import { checkoutLimiter } from '@/lib/auth/rate-limit';
+import { validateCsrfToken } from '@/lib/auth/csrf';
 
 export async function POST(request: NextRequest) {
   try {
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const csrfToken = request.headers.get('X-CSRF-Token') ?? undefined;
+    await validateCsrfToken(csrfToken);
 
     await checkoutLimiter.check(userId);
 

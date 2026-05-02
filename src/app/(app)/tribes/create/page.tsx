@@ -88,6 +88,9 @@ function CreateTribeContent() {
 
       const { coverImage, ...actionPayload } = values;
       const newTribe = await createTribe({ ...actionPayload, coverPreview: coverUrl });
+      if (newTribe && 'serverError' in newTribe) {
+        throw newTribe;
+      }
 
 
       toast({
@@ -273,9 +276,9 @@ function CreateTribeContent() {
                         {...field}
                       />
                     </FormControl>
-                     <Button type="button" variant="outline" size="sm" onClick={handleGenerateDescription} disabled={isLoading || isAiGeneratingDesc} className="mt-2">
+                     {/* <Button type="button" variant="outline" size="sm" onClick={handleGenerateDescription} disabled={isLoading || isAiGeneratingDesc} className="mt-2">
                         <Sparkles className="mr-2 h-4 w-4" /> {isAiGeneratingDesc ? "Generating..." : "Generate with AI"}
-                    </Button>
+                    </Button> */}
                     <FormDescription>A compelling summary to attract new members.</FormDescription>
                     <FormMessage />
                   </FormItem>

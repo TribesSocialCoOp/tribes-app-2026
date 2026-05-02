@@ -1,0 +1,24 @@
+/*
+ * pgloader command file for Tribes SQLite → PostgreSQL migration.
+ * Handles column mismatches between old SQLite schema and new PG schema.
+ */
+
+LOAD DATABASE
+  FROM /opt/tribes/backup-sqld-pre-pg.db
+  INTO postgresql://tribes:PGPASS@PGHOST:5432/tribes
+
+WITH data only, truncate, batch rows = 1000
+
+CAST type blob to bytea using byte-vector-to-bytea
+
+/* Skip the drizzle migrations table and any empty tables that have schema drift */
+EXCLUDING TABLE NAMES MATCHING '__drizzle_migrations', 'mentions', 'app_settings',
+  'blocked_users', 'bond_requests', 'connected_accounts', 'key_vaults',
+  'notification_preferences', 'oauth_accounts', 'pending_members',
+  'post_key_grants', 'post_mood_tags', 'posts', 'proposal_options',
+  'proposals', 'push_subscriptions', 'reports', 'stories',
+  'story_articles', 'story_comments', 'transactions',
+  'user_aliases', 'user_bans', 'user_preferences',
+  'vault_backups', 'vibes', 'votes', 'wall_blocks', 'wall_styles',
+  'comments', 'event_rsvps', 'event_stream_posts', 'events', 'messages'
+;
