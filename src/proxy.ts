@@ -32,6 +32,7 @@ function isPublicRoute(pathname: string): boolean {
   
   // Static assets and Next.js internals
   if (pathname.startsWith('/_next')) return true;
+  if (pathname.startsWith('/.well-known')) return true;
   if (pathname.match(/\.(ico|png|jpg|jpeg|svg|webp|gif|css|js|woff2?)$/)) return true;
   
   return false;
