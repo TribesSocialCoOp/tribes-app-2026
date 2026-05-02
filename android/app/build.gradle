@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "app.tribes.mobile"
+    namespace = "app.tribes.TribesApp"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "app.tribes.mobile"
+        applicationId "app.tribes.TribesApp"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

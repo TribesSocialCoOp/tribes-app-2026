@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.tribes.mobile',
+  appId: 'app.tribes.TribesApp',
   appName: 'Tribes',
   webDir: 'out',
   server: {

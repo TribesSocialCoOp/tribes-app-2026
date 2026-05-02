@@ -68,14 +68,14 @@ Before your first upload, you need to create the app in App Store Connect:
 3. Fill in:
    - **Platform:** iOS
    - **Name:** Tribes
-   - **Bundle ID:** `app.tribes.mobile`
+   - **Bundle ID:** `app.tribes.TribesApp`
    - **SKU:** `tribes-mobile-001`
    - **Primary Language:** English (U.S.)
 
 > [!IMPORTANT]
-> The Bundle ID `app.tribes.mobile` must be registered in your
+> The Bundle ID `app.tribes.TribesApp` must be registered in your
 > [Apple Developer Portal](https://developer.apple.com/account/resources/identifiers/list).
-> Go to Identifiers → **+** → App IDs → App → enter `app.tribes.mobile`.
+> Go to Identifiers → **+** → App IDs → App → enter `app.tribes.TribesApp`.
 
 ---
 
@@ -110,7 +110,7 @@ npm run ios:icons        # Generate app icon set
 - [ ] **Xcode installed** and `xcode-select -s /Applications/Xcode.app/Contents/Developer`
 - [ ] **Apple Developer membership** active ($99/year)
 - [ ] **`Apple Distribution` cert** in Keychain (you have this ✅)
-- [ ] **Bundle ID** registered: `app.tribes.mobile` in Apple Developer Portal
+- [ ] **Bundle ID** registered: `app.tribes.TribesApp` in Apple Developer Portal
 - [ ] **App created** in App Store Connect with matching Bundle ID
 - [ ] **App icon**: 1024×1024 PNG at `assets/icon-1024.png`, then run `npm run ios:icons`
 - [ ] Run `npm run ios:preflight` → all green
@@ -127,11 +127,11 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 ### "No account for team ABXVW6PWCW"
 Open Xcode → Settings → Accounts → add your Apple ID.
 
-### "No profiles for 'app.tribes.mobile'"
+### "No profiles for 'app.tribes.TribesApp'"
 Xcode auto-creates these. Open the project in Xcode (`npm run ios:open`), select the App target, and under Signing & Capabilities ensure "Automatically manage signing" is checked and your team is selected.
 
 ### "Provisioning profile doesn't include NFC capability"
-Go to Apple Developer Portal → Identifiers → `app.tribes.mobile` → enable "NFC Tag Reading" capability. Then re-download profiles (Xcode does this automatically).
+Go to Apple Developer Portal → Identifiers → `app.tribes.TribesApp` → enable "NFC Tag Reading" capability. Then re-download profiles (Xcode does this automatically).
 
 ### Archive succeeds but export fails
 Open the `.xcarchive` in Xcode Organizer and distribute from there:
@@ -152,4 +152,4 @@ After upload:
 
 ---
 
-*Team ID: ABXVW6PWCW | Bundle ID: app.tribes.mobile*
+*Team ID: ABXVW6PWCW | Bundle ID: app.tribes.TribesApp*

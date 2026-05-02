@@ -28,7 +28,7 @@ NC='\033[0m'
 
 # Configuration
 APP_NAME="Tribes"
-BUNDLE_ID="app.tribes.mobile"
+BUNDLE_ID="app.tribes.TribesApp"
 TEAM_ID="${TRIBES_TEAM_ID:-ABXVW6PWCW}"
 SCHEME="App"
 WORKSPACE="ios/App/App.xcworkspace"

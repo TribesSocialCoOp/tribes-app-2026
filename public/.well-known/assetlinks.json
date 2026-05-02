@@ -5,7 +5,7 @@
     ],
     "target": {
       "namespace": "android_app",
-      "package_name": "app.tribes.mobile",
+      "package_name": "app.tribes.TribesApp",
       "sha256_cert_fingerprints": [
         "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
       ]

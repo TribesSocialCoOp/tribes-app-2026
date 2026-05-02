@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appID": "7U9W7X2Y5Z.app.tribes.mobile",
+        "appID": "ABXVW6PWCW.app.tribes.TribesApp",
         "paths": [
           "/bond/tap/*",
           "/tribe/*",
@@ -15,7 +15,7 @@
   },
   "webcredentials": {
     "apps": [
-      "7U9W7X2Y5Z.app.tribes.mobile"
+      "ABXVW6PWCW.app.tribes.TribesApp"
     ]
   }
 }
