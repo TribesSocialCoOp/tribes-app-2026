@@ -109,6 +109,21 @@ const nextConfig: NextConfig = {
         source: '/(.*)',
         headers: buildSecurityHeaders(),
       },
+      // Apple App Site Association — required for passkeys (webcredentials)
+      // and Universal Links (applinks). Must be served as application/json.
+      {
+        source: '/.well-known/apple-app-site-association',
+        headers: [
+          { key: 'Content-Type', value: 'application/json' },
+        ],
+      },
+      // Android Digital Asset Links
+      {
+        source: '/.well-known/assetlinks.json',
+        headers: [
+          { key: 'Content-Type', value: 'application/json' },
+        ],
+      },
     ];
   },
 };
