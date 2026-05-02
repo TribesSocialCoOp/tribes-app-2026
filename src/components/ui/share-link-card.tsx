@@ -5,6 +5,9 @@ import { Check, Copy, Share2, X, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { shareContent } from '@/lib/capacitor/share';
+import { triggerHaptic } from '@/lib/capacitor/haptics';
+import { ImpactStyle } from '@capacitor/haptics';
 
 interface ShareLinkCardProps {
   url: string;
@@ -22,16 +25,17 @@ export function ShareLinkCard({ url, title, expiryLabel, onDismiss }: ShareLinkC
   const { toast } = useToast();
 
   const handleCopy = () => {
+    triggerHaptic(ImpactStyle.Light);
     navigator.clipboard.writeText(url);
     setCopied(true);
     toast({ title: 'Copied', description: 'Link copied to clipboard' });
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({ title, url });
-    } else {
+  const handleShare = async () => {
+    triggerHaptic(ImpactStyle.Medium);
+    const shared = await shareContent({ title, url });
+    if (!shared) {
       handleCopy();
     }
   };
