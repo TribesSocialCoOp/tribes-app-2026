@@ -6,8 +6,8 @@ import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil } from "lucide-react";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil, Lock, Globe } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDistance } from 'date-fns';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -45,19 +45,39 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
   const isMember = state.isMember;
   const displayTime = useTimeSince(post.timestamp);
-  const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
+  
+  // Track local override for optimistic updates
+  const [localVibesCount, setLocalVibesCount] = useState<number | null>(null);
+  const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string, count: number }[] | null>(null);
+  const [localHasVibed, setLocalHasVibed] = useState<boolean | null>(null);
+  
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const emoticons = VIBE_EMOTICONS;
 
+  const currentVibesCount = localVibesCount !== null ? localVibesCount : (post.vibes || 0);
+  const currentRecentVibes = localRecentVibes !== null ? localRecentVibes : (post.recentVibes || []);
+  const currentUserHasVibed = localHasVibed !== null ? localHasVibed : (post.hasVibed || false);
+
   const handleVibeSelection = async (vibe: string) => {
-    const wasSelected = selectedVibe === vibe;
-    setSelectedVibe(wasSelected ? null : vibe);
+    // Optimistic update
+    const isRemoving = currentUserHasVibed;
+    const newCount = isRemoving ? Math.max(0, currentVibesCount - 1) : currentVibesCount + 1;
+    
+    setLocalHasVibed(!isRemoving);
+    setLocalVibesCount(newCount);
+
     try {
       const result = await toggleVibe(post.id, 'post', vibe);
-      setSelectedVibe(result.vibed ? vibe : null);
+      setLocalHasVibed(result.vibed);
+      setLocalVibesCount(result.newCount);
+      if (result.recentVibes) {
+        setLocalRecentVibes(result.recentVibes);
+      }
     } catch {
-      setSelectedVibe(wasSelected ? vibe : null);
+      // Revert optimistic update on failure
+      setLocalHasVibed(currentUserHasVibed);
+      setLocalVibesCount(currentVibesCount);
     }
   };
 
@@ -91,10 +111,12 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
       <div className={cn(post.isRemoved && "opacity-40 pointer-events-none")}>
         <CardHeader className="p-4 pb-2">
           <div className="flex items-start space-x-3">
-            <Avatar className="h-10 w-10">
-              {post.authorAvatar && <AvatarImage src={post.authorAvatar} alt={post.authorName} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
-              <AvatarFallback>{post.authorAvatarFallback}</AvatarFallback>
-            </Avatar>
+            <UserAvatar 
+              user={{ name: post.authorName, avatar: post.authorAvatar }} 
+              className="h-10 w-10" 
+              fallback={post.authorAvatarFallback}
+              dataAiHint={post.dataAiHintAvatar || "avatar"}
+            />
             <div className="flex-1">
               <CardTitle className="text-md font-semibold tracking-normal">{post.authorName}</CardTitle>
               <div className="flex items-center space-x-2">
@@ -106,6 +128,15 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                     </span>
                   )}
                 </CardDescription>
+                {post.isEncrypted ? (
+                  <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
+                    <div className="flex items-center text-xs text-green-600"><Lock className="h-3 w-3" /></div>
+                  </TooltipTrigger><TooltipContent><p>End-to-end encrypted</p></TooltipContent></Tooltip></TooltipProvider>
+                ) : (
+                  <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
+                    <div className="flex items-center text-xs text-muted-foreground/50"><Globe className="h-3 w-3" /></div>
+                  </TooltipTrigger><TooltipContent><p>Public post</p></TooltipContent></Tooltip></TooltipProvider>
+                )}
                 {post.isPinned && (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
                     <div className="flex items-center text-xs text-primary"><Pin className="h-3.5 w-3.5" /></div>
@@ -226,9 +257,17 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
           {isLoggedIn && isMember ? (
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved}>
-                  {selectedVibe ? <span className="text-lg mr-1.5">{selectedVibe}</span> : <Smile className="mr-1.5 h-4 w-4" />}
-                  {post.vibes || 0}
+                <Button variant="ghost" size="sm" className={cn("text-muted-foreground hover:text-primary transition-all", currentUserHasVibed && "bg-primary/10 text-primary")} disabled={post.isRemoved}>
+                  {currentRecentVibes.length > 0 ? (
+                    <div className="flex -space-x-1.5 mr-2">
+                      {currentRecentVibes.map((rv, i) => (
+                        <span key={i} className="text-base z-10 bg-background rounded-full leading-none p-[1px] shadow-sm relative">{rv.emoji}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <Smile className="mr-1.5 h-4 w-4" />
+                  )}
+                  {currentVibesCount}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-2">
@@ -243,7 +282,16 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
             </Popover>
           ) : (
             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => { if (!isLoggedIn) router.push('/signup'); }}>
-              <Smile className="mr-1.5 h-4 w-4" /> {post.vibes || 0}
+              {currentRecentVibes.length > 0 ? (
+                <div className="flex -space-x-1.5 mr-2">
+                  {currentRecentVibes.map((rv, i) => (
+                    <span key={i} className="text-base z-10 bg-background rounded-full leading-none p-[1px] shadow-sm relative">{rv.emoji}</span>
+                  ))}
+                </div>
+              ) : (
+                <Smile className="mr-1.5 h-4 w-4" />
+              )}
+              {currentVibesCount}
             </Button>
           )}
           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => isLoggedIn && isMember && handleOpenCommentDialog({ postId: post.id, postTitle: post.title })}>

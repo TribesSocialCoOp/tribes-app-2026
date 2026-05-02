@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { VIBE_EMOTICONS } from '@/lib/constants';
 import { useTimeSince } from '@/hooks/use-time-since';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -21,13 +21,15 @@ import { CommentInline } from './comment-inline';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { useIntercom } from './intercom-context';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
+import { EncryptedImage } from '@/components/ui/encrypted-image';
 
 export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   const { toast } = useToast();
   const { user } = useUser();
   const { handleOpenEditPostDialog } = useIntercom();
   const displayTime = useTimeSince(item.timestamp);
-  const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
+  const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string, count: number }[] | null>(null);
+  const [localHasVibed, setLocalHasVibed] = useState<boolean | null>(null);
   const [vibeCount, setVibeCount] = useState(item.vibes ?? 0);
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState('');
@@ -35,7 +37,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const [showComments, setShowComments] = useState(false);
   const [loadedComments, setLoadedComments] = useState<DiscussionComment[]>([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
-  const [commentCount, setCommentCount] = useState(0);
+  const [commentCount, setCommentCount] = useState(item.comments ?? 0);
   const [isPinned, setIsPinned] = useState(item.pinnedToWall ?? false);
   const [isPinning, setIsPinning] = useState(false);
   const [isDeleted, setIsDeleted] = useState(false);
@@ -48,18 +50,30 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const isOwnPost = isPost && !!user?.id && item.authorId === user.id;
   const isTribeSpeaker = item.currentUserTribeRole ? ['founder', 'platform_admin', 'speaker'].includes(item.currentUserTribeRole) : false;
 
+  const currentRecentVibes = localRecentVibes !== null ? localRecentVibes : (item.recentVibes || []);
+  const currentUserHasVibed = localHasVibed !== null ? localHasVibed : (item.hasVibed || false);
+
   const handleVibeSelection = async (vibe: string) => {
     if (!isPost) return;
-    const wasSelected = selectedVibe === vibe;
-    setSelectedVibe(wasSelected ? null : vibe);
-    setVibeCount(prev => wasSelected ? Math.max(0, prev - 1) : prev + 1);
+    
+    // Optimistic update
+    const isRemoving = currentUserHasVibed;
+    const newCount = isRemoving ? Math.max(0, vibeCount - 1) : vibeCount + 1;
+    
+    setLocalHasVibed(!isRemoving);
+    setVibeCount(newCount);
+
     try {
       const result = await toggleVibe(item.id, 'post', vibe);
+      setLocalHasVibed(result.vibed);
       setVibeCount(result.newCount);
-      setSelectedVibe(result.vibed ? vibe : null);
+      if (result.recentVibes) {
+        setLocalRecentVibes(result.recentVibes);
+      }
     } catch {
-      setSelectedVibe(wasSelected ? vibe : null);
-      setVibeCount(item.vibes ?? 0);
+      // Revert optimistic update on failure
+      setLocalHasVibed(currentUserHasVibed);
+      setVibeCount(vibeCount);
     }
   };
 
@@ -86,7 +100,10 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
     if (!replyText.trim() || !isPost) return;
     setIsSendingReply(true);
     try {
-      await createComment(item.id, replyText.trim());
+      const result = await createComment(item.id, replyText.trim());
+      if (result && typeof result === 'object' && 'serverError' in result) {
+        throw new Error(result.serverError as string);
+      }
       toast({ title: 'Reply sent', description: 'Your comment has been posted.' });
       setReplyText('');
       setShowReply(false);
@@ -148,10 +165,12 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
     )}>
       <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
         <div className="flex items-start space-x-3">
-          <Avatar className="h-10 w-10">
-            {item.avatarSrc && <AvatarImage src={item.avatarSrc} alt={item.sender || item.tribeName || "Avatar"} data-ai-hint={item.dataAiHint || "avatar"} />}
-            <AvatarFallback>{item.avatarFallback || "N/A"}</AvatarFallback>
-          </Avatar>
+          <UserAvatar 
+            user={{ name: item.sender || item.tribeName, avatar: item.avatarSrc }} 
+            className="h-10 w-10" 
+            fallback={item.avatarFallback || "N/A"}
+            dataAiHint={item.dataAiHint || "avatar"}
+          />
           <div className="flex-1">
             <div className="flex justify-between items-center">
               <CardTitle className="text-base font-semibold tracking-normal">{title}</CardTitle>
@@ -240,7 +259,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
                 item.imageUrls.length === 3 ? "grid-cols-2" :
                   "grid-cols-2"
           )}>
-            {item.imageUrls.map((url, idx) => (
+            {item.imageUrls.map((urlOrId, idx) => (
               <div 
                 key={idx} 
                 className={cn(
@@ -251,8 +270,12 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLightboxIndex(idx); setLightboxOpen(true); }}
               >
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10" />
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={url} alt={`${item.imageAlt || "Communication media"} ${idx + 1}`} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                {item.isEncrypted ? (
+                  <EncryptedImage fileId={urlOrId} postId={item.id} alt={`${item.imageAlt || "Communication media"} ${idx + 1}`} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={urlOrId} alt={`${item.imageAlt || "Communication media"} ${idx + 1}`} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                )}
               </div>
             ))}
           </div>
@@ -262,13 +285,17 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setLightboxIndex(0); setLightboxOpen(true); }}
           >
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10" />
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={item.imageUrl}
-              alt={item.imageAlt || "Communication media"}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-              data-ai-hint={item.dataAiHintImage || "media content"}
-            />
+            {item.isEncrypted ? (
+              <EncryptedImage fileId={item.imageUrl} postId={item.id} alt={item.imageAlt || "Communication media"} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+            ) : (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={item.imageUrl}
+                alt={item.imageAlt || "Communication media"}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                data-ai-hint={item.dataAiHintImage || "media content"}
+              />
+            )}
           </div>
         ) : null}
         {body && <MarkdownContent content={body} />}
@@ -282,9 +309,13 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
         {isPost && (
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
-                {selectedVibe ? (
-                  <span className="text-lg mr-1.5">{selectedVibe}</span>
+              <Button variant="ghost" size="sm" className={cn("text-muted-foreground hover:text-primary transition-all", currentUserHasVibed && "bg-primary/10 text-primary")}>
+                {currentRecentVibes.length > 0 ? (
+                  <div className="flex -space-x-1.5 mr-2">
+                    {currentRecentVibes.map((rv, i) => (
+                      <span key={i} className="text-base z-10 bg-background rounded-full leading-none p-[1px] shadow-sm relative">{rv.emoji}</span>
+                    ))}
+                  </div>
                 ) : (
                   <Smile className="mr-1.5 h-4 w-4" />
                 )}

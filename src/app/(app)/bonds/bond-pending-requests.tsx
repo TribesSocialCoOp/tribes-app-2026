@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { UserCheck, Loader2 } from "lucide-react";
 import { cn } from '@/lib/utils';
 import { useBonds } from './bonds-context';
@@ -36,10 +36,11 @@ export function BondPendingRequests() {
             {pendingIncoming.map(req => (
               <div key={req.id} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors">
                 <div className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10">
-                    {req.fromUserAvatar && <AvatarImage src={req.fromUserAvatar} alt={req.fromUserName} />}
-                    <AvatarFallback>{req.fromUserName.substring(0, 2).toUpperCase()}</AvatarFallback>
-                  </Avatar>
+                  <UserAvatar 
+                    user={{ name: req.fromUserName, avatar: req.fromUserAvatar }} 
+                    className="h-10 w-10" 
+                    fallback={req.fromUserName.substring(0, 2).toUpperCase()}
+                  />
                   <div>
                     <p className="text-sm font-semibold">{req.fromUserName}</p>
                     <div className="flex items-center gap-2">
@@ -80,10 +81,11 @@ export function BondPendingRequests() {
             {pendingOutgoing.map(req => (
               <div key={req.id} className="flex items-center justify-between p-3 rounded-lg border bg-card">
                 <div className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10">
-                    {req.toUserAvatar && <AvatarImage src={req.toUserAvatar} alt={req.toUserName} />}
-                    <AvatarFallback>{req.toUserName.substring(0, 2).toUpperCase()}</AvatarFallback>
-                  </Avatar>
+                  <UserAvatar 
+                    user={{ name: req.toUserName, avatar: req.toUserAvatar }} 
+                    className="h-10 w-10" 
+                    fallback={req.toUserName.substring(0, 2).toUpperCase()}
+                  />
                   <div>
                     <p className="text-sm font-semibold">{req.toUserName}</p>
                     <div className="flex items-center gap-2">

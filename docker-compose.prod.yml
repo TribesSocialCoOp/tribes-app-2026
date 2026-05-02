@@ -1,24 +1,54 @@
 services:
-  # ── App ───────────────────────────────────────────────────────
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+  # ── App (Blue/Green) ─────────────────────────────────────────
+  # Two identical app services gated by Docker Compose profiles.
+  # Only one runs at a time; deploy.sh orchestrates the swap.
+  app-blue:
+    image: tribes-app:latest
+    container_name: tribes-app-blue
     restart: unless-stopped
     env_file: .env.production
-    volumes:
-      - app-data:/app/data          # Local SQLite replica (low-latency reads)
     depends_on:
-      sqld:
-        condition: service_started
+      postgres:
+        condition: service_healthy
       valkey:
         condition: service_started
     networks: [tribes]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9002/api/health"]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 3
     logging:
       driver: json-file
       options:
         max-size: "50m"
         max-file: "5"
+    profiles: ["blue"]
+
+  app-green:
+    image: tribes-app:latest
+    container_name: tribes-app-green
+    restart: unless-stopped
+    env_file: .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_started
+    networks: [tribes]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9002/api/health"]
+      interval: 5s
+      timeout: 3s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    profiles: ["green"]
 
   # ── WebSocket Relay ───────────────────────────────────────────
   ws-relay:
@@ -34,22 +64,42 @@ services:
         max-size: "20m"
         max-file: "3"
 
-  # ── Database (LibSQL / sqld) ──────────────────────────────────
-  sqld:
-    image: ghcr.io/tursodatabase/libsql-server:latest
+  # ── Database (PostgreSQL) ──────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
     restart: unless-stopped
-    volumes:
-      - sqld-data:/var/lib/sqld     # Persistent DB files
     environment:
-      - SQLD_HTTP_LISTEN_ADDR=0.0.0.0:8080
-      # Uncomment for auth token enforcement:
-      # - SQLD_AUTH_JWT_KEY_FILE=/run/secrets/sqld_jwt_key
+      POSTGRES_DB: tribes
+      POSTGRES_USER: tribes
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg-data:/var/lib/postgresql/data
     networks: [tribes]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tribes"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     logging:
       driver: json-file
       options:
-        max-size: "20m"
-        max-file: "3"
+        max-size: "50m"
+        max-file: "5"
+
+  # ── Connection Pooling (PgBouncer) ─────────────────────────
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URLS: "postgres://tribes:${POSTGRES_PASSWORD}@postgres:5432/tribes,postgres://tribes_app:${TRIBES_APP_PASSWORD}@postgres:5432/tribes"
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 200
+      DEFAULT_POOL_SIZE: 20
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [tribes]
 
   # ── Rate Limiting (Valkey — Redis-compatible, BSD licensed) ───
   valkey:
@@ -110,12 +160,17 @@ services:
       - APP_DOMAIN=${APP_DOMAIN:-tribes.app}
       - WS_DOMAIN=${WS_DOMAIN:-ws.tribes.app}
       - MEDIA_DOMAIN=${MEDIA_DOMAIN:-media.tribes.app}
-    depends_on: [app, ws-relay, seaweedfs-filer]
+    depends_on:
+      ws-relay:
+        condition: service_started
+      seaweedfs-filer:
+        condition: service_started
     networks: [tribes]
 
 # ── Volumes ───────────────────────────────────────────────────
 volumes:
-  app-data:
+  pg-data:
+  # Preserve sqld-data temporarily for backup
   sqld-data:
   valkey-data:
   seaweed-master:

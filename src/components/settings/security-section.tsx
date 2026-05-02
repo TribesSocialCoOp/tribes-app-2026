@@ -309,7 +309,7 @@ export function SecuritySection({
         </div>
 
         {/* ── AI Data Sharing ────────────────────────────── */}
-        <div className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-muted/50 border-t">
+        {/* <div className="flex items-center justify-between gap-3 p-3 rounded-md border hover:bg-muted/50 border-t">
           <div className="min-w-0 flex-1">
             <Label htmlFor="dataSharing" className="font-medium">Allow AI Assistant Access to My Data</Label>
             <p className="text-xs text-muted-foreground mt-1">
@@ -323,7 +323,7 @@ export function SecuritySection({
             onCheckedChange={handleAiSharingToggle}
             disabled={isSavingAi}
           />
-        </div>
+        </div> */}
 
       </CardContent>
     </Card>

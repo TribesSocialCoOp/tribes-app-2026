@@ -55,8 +55,10 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
   const { toast } = useToast();
   const isLoggedIn = !!role;
   const displayTime = useTimeSince(post.timestamp);
-  const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
-  const [vibeCount, setVibeCount] = useState(post.vibes ?? 0);
+  const [localVibesCount, setLocalVibesCount] = useState<number | null>(null);
+  const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string, count: number }[] | null>(null);
+  const [localHasVibed, setLocalHasVibed] = useState<boolean | null>(null);
+
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
@@ -66,18 +68,31 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
   const [commentCount, setCommentCount] = useState(post.comments ?? 0);
   const emoticons = VIBE_EMOTICONS;
 
+  const currentVibesCount = localVibesCount !== null ? localVibesCount : (post.vibes || 0);
+  const currentRecentVibes = localRecentVibes !== null ? localRecentVibes : (post.recentVibes || []);
+  const currentUserHasVibed = localHasVibed !== null ? localHasVibed : (post.hasVibed || false);
+
   const handleVibeSelection = async (vibe: string) => {
     if (!isLoggedIn) return;
-    const wasSelected = selectedVibe === vibe;
-    setSelectedVibe(wasSelected ? null : vibe);
-    setVibeCount(prev => wasSelected ? Math.max(0, prev - 1) : prev + 1);
+    
+    // Optimistic update
+    const isRemoving = currentUserHasVibed;
+    const newCount = isRemoving ? Math.max(0, currentVibesCount - 1) : currentVibesCount + 1;
+    
+    setLocalHasVibed(!isRemoving);
+    setLocalVibesCount(newCount);
+
     try {
       const result = await toggleVibe(post.id, 'post', vibe);
-      setVibeCount(result.newCount);
-      setSelectedVibe(result.vibed ? vibe : null);
+      setLocalHasVibed(result.vibed);
+      setLocalVibesCount(result.newCount);
+      if (result.recentVibes) {
+        setLocalRecentVibes(result.recentVibes);
+      }
     } catch {
-      setSelectedVibe(wasSelected ? vibe : null);
-      setVibeCount(post.vibes ?? 0);
+      // Revert optimistic update on failure
+      setLocalHasVibed(currentUserHasVibed);
+      setLocalVibesCount(currentVibesCount);
     }
   };
 
@@ -103,7 +118,10 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
     if (!replyText.trim()) return;
     setIsSendingReply(true);
     try {
-      await createComment(post.id, replyText.trim());
+      const result = await createComment(post.id, replyText.trim());
+      if (result && typeof result === 'object' && 'serverError' in result) {
+        throw new Error(result.serverError as string);
+      }
       toast({ title: 'Reply sent', description: 'Your comment has been posted.' });
       setReplyText('');
       setShowReply(false);
@@ -166,13 +184,17 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
             isLoggedIn ? (
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary">
-                    {selectedVibe ? (
-                      <span className="text-lg mr-1.5">{selectedVibe}</span>
+                  <Button variant="ghost" size="sm" className={cn("text-muted-foreground hover:text-primary transition-all", currentUserHasVibed && "bg-primary/10 text-primary")}>
+                    {currentRecentVibes.length > 0 ? (
+                      <div className="flex -space-x-1.5 mr-2">
+                        {currentRecentVibes.map((rv, i) => (
+                          <span key={i} className="text-base z-10 bg-background rounded-full leading-none p-[1px] shadow-sm relative">{rv.emoji}</span>
+                        ))}
+                      </div>
                     ) : (
                       <Smile className="mr-1.5 h-4 w-4" />
                     )}
-                    {vibeCount}
+                    {currentVibesCount}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-2">
@@ -192,15 +214,23 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
                 </PopoverContent>
               </Popover>
             ) : (
-              <Button 
-                variant="ghost" 
-                size="sm" 
-                className="text-muted-foreground hover:text-primary"
-                onClick={() => router.push('/signup')}
-              >
-                <Smile className="mr-1.5 h-4 w-4" />
-                {vibeCount}
-              </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="text-muted-foreground hover:text-primary"
+                  onClick={() => router.push('/signup')}
+                >
+                  {currentRecentVibes.length > 0 ? (
+                    <div className="flex -space-x-1.5 mr-2">
+                      {currentRecentVibes.map((rv, i) => (
+                        <span key={i} className="text-base z-10 bg-background rounded-full leading-none p-[1px] shadow-sm relative">{rv.emoji}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <Smile className="mr-1.5 h-4 w-4" />
+                  )}
+                  {currentVibesCount}
+                </Button>
             )
           )}
           {isLoggedIn && (

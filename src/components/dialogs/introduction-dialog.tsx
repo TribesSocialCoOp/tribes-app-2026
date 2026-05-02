@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import type { Bond } from '@/lib/types';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { User, Search } from 'lucide-react';
 import {
   ResponsiveDialog, ResponsiveDialogHeader, ResponsiveDialogTitle,
@@ -90,9 +90,10 @@ export function IntroductionDialog({
                     className="flex items-center space-x-3 p-3 rounded-md border hover:bg-muted/50 cursor-pointer has-[:checked]:bg-accent has-[:checked]:text-accent-foreground transition-colors"
                   >
                     <RadioGroupItem value={bond.id} id={`bond-intro-${bond.id}`} className="sr-only" />
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
-                    </Avatar>
+                    <UserAvatar 
+                      user={{ name: bond.targetName }} 
+                      className="h-8 w-8" 
+                    />
                     <span className="font-medium text-xs">{bond.targetName}</span>
                   </Label>
                 ))}

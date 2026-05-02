@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { Tribe } from '@/lib/types';
 import { UserPlus, Loader2 } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { avatarSvg } from "@/lib/placeholder-svg";
 import type { UserProfile } from '@/lib/types';
 import { getUserProfile } from '@/lib/actions/profile-actions';
@@ -22,7 +22,7 @@ interface JoinTribeDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   tribe: Tribe | null;
-  onConfirmJoin: (tribe: Tribe, selectedAlias?: string) => void;
+  onConfirmJoin: (tribe: Tribe, selectedAlias?: string, aliasAvatar?: string) => void;
   isJoining: boolean;
 }
 
@@ -53,21 +53,27 @@ export function JoinTribeDialog({
 
   if (!tribe) return null;
 
+  const resolveAvatarForIdentity = (value: string): string | undefined => {
+    if (value === "main_profile") return userProfile?.avatar || undefined;
+    if (userProfile?.reservedAlias === value) return userProfile?.reservedAliasAvatar || avatarSvg(value);
+    const matchedAlias = userProfile?.aliases.find(a => a.name === value);
+    return matchedAlias?.avatar || avatarSvg(value);
+  };
+
   const handleConfirm = () => {
     const isAlias = selectedIdentity !== "main_profile";
-    const aliasName = isAlias ? selectedIdentity : undefined;
-    
-    // We can generate the SVG avatar client-side or use a server action. 
-    // Wait, let's use the local generator or a fallback.
-    // If it's an alias, generate its avatarSvg directly here or let the backend do it.
-    // Since `avatarSvg` is in `src/lib/placeholder-svg.ts`, we can't easily use it here if it's server-only? No, it's just a TS function.
-    // But since `onConfirmJoin` accepts `(tribe, alias)` we can just pass the aliasName, and the backend can generate it!
-    onConfirmJoin(tribe, aliasName);
+    // Strip '@' prefix from reserved aliases so DB stores bare name
+    const aliasName = isAlias ? selectedIdentity.replace(/^@/, '') : undefined;
+    const aliasAvatarUrl = isAlias ? resolveAvatarForIdentity(selectedIdentity) : undefined;
+    onConfirmJoin(tribe, aliasName, aliasAvatarUrl);
   };
   
   const identityOptions = [
     { value: "main_profile", label: userProfile?.name || "Main Profile", isAlias: false },
-    ...(userProfile?.aliases.map(alias => ({ value: alias, label: alias, isAlias: true })) || [])
+    ...(userProfile?.reservedAlias
+      ? [{ value: userProfile.reservedAlias, label: userProfile.reservedAlias, isAlias: true, isReserved: true }]
+      : []),
+    ...(userProfile?.aliases.map(a => ({ value: a.name, label: a.name, isAlias: true, isReserved: false })) || [])
   ];
 
   return (
@@ -77,7 +83,7 @@ export function JoinTribeDialog({
           <UserPlus className="mr-2 h-5 w-5 text-primary" /> Join {tribe.name}
         </ResponsiveDialogTitle>
         <ResponsiveDialogDescription>
-          Choose how you want to appear in this tribe. Your choice can be changed later in your Bond settings for this tribe.
+          Choose how you want to appear in this tribe. You can change this later from your Bond Settings.
         </ResponsiveDialogDescription>
       </ResponsiveDialogHeader>
 
@@ -97,12 +103,11 @@ export function JoinTribeDialog({
                     className="flex items-center space-x-3 p-3 rounded-md border hover:bg-muted/50 cursor-pointer has-[:checked]:bg-accent has-[:checked]:border-primary has-[:checked]:text-accent-foreground transition-colors"
                   >
                     <RadioGroupItem value={option.value} id={`identity-${option.value}`} className="border-primary" />
-                    <Avatar className="h-8 w-8 rounded-md shrink-0">
-                      <AvatarImage src={option.isAlias ? avatarSvg(option.value) : (userProfile?.avatar || undefined)} />
-                      <AvatarFallback className="rounded-md">
-                        {option.isAlias ? option.value.substring(0, 2).toUpperCase() : (userProfile?.name?.substring(0, 2).toUpperCase() || '??')}
-                      </AvatarFallback>
-                    </Avatar>
+                    <UserAvatar 
+                      user={{ name: option.label, avatar: resolveAvatarForIdentity(option.value) }} 
+                      className="h-8 w-8 rounded-md shrink-0" 
+                      fallback={option.isAlias ? option.value.substring(0, 2).toUpperCase() : (userProfile?.name?.substring(0, 2).toUpperCase() || '??')}
+                    />
                     <span className="font-medium text-sm">{option.label}</span>
                   </Label>
                 ))}

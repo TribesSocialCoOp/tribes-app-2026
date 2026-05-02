@@ -24,7 +24,7 @@ export async function GET() {
     const { sql } = await import('drizzle-orm');
 
     // Verify DB is responsive
-    await db.run(sql`SELECT 1`);
+    await db.execute(sql`SELECT 1`);
 
     return NextResponse.json({
       status: 'ok',

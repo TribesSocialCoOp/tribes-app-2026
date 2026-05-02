@@ -24,6 +24,7 @@ interface RingSelectorProps {
   onChange: (ring: Ring) => void;
   selectedTribeIds: string[];
   onTribeIdsChange: (ids: string[]) => void;
+  onTribesLoaded?: (tribes: any[]) => void;
   defaultRing?: Ring;
   defaultTribeId?: string;
 }
@@ -33,6 +34,7 @@ export function RingSelector({
   onChange,
   selectedTribeIds,
   onTribeIdsChange,
+  onTribesLoaded,
   defaultTribeId,
 }: RingSelectorProps) {
   const [tribes, setTribes] = useState<{ id: string; name: string }[]>([]);
@@ -45,6 +47,7 @@ export function RingSelector({
       setLoadingTribes(true);
       getMyTribesList().then(t => {
         setTribes(t);
+        onTribesLoaded?.(t);
         // Auto-select default tribe or first tribe if none selected
         if (t.length > 0 && selectedTribeIds.length === 0) {
           const defaultId = defaultTribeId && t.find(tr => tr.id === defaultTribeId)

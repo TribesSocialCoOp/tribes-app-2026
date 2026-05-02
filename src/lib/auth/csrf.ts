@@ -36,12 +36,8 @@ export async function validateCsrfToken(submittedToken?: string): Promise<void> 
     return;
   }
 
-  // If no token was submitted, allow the request.
-  // This covers Next.js server actions, which can't send custom headers.
-  // Server actions are already CSRF-protected by the framework via
-  // Same-Origin policy, action ID hashing, and Origin header validation.
   if (!submittedToken) {
-    return;
+    throw new Error('CSRF validation failed: no token submitted');
   }
 
   // A token WAS submitted (e.g., from the manual fetch() in upload.ts).

@@ -21,13 +21,19 @@
  */
 export type UserRole = "Admin" | "Creator" | "Human_Member" | "Human_Free" | "Human_Paid" | "Speaker" | "Bot" | "System" | "Org_Base" | "Org_Pro" | "Org_Enterprise";
 
+export interface UserAlias {
+  name: string;
+  avatar?: string;
+}
+
 export interface UserProfile {
   id: string;
   name: string; // This is the "Given Name"
   email: string;
   role: UserRole;
-  aliases: string[];
+  aliases: UserAlias[];
   reservedAlias?: string;
+  reservedAliasAvatar?: string;
   bio?: string;
   avatar?: string;
   reputationScore?: number;
@@ -36,6 +42,7 @@ export interface UserProfile {
   totpEnabled?: boolean;
   aiDataSharingEnabled?: boolean;
   isVerified?: boolean;
+  tosAcceptedVersion?: string | null;
   accountCreatedAt?: Date;
 }
 
@@ -145,6 +152,8 @@ export interface TribePost {
   dataAiHintAvatar?: string;
   dataAiHintImage?: string;
   vibes?: number;
+  recentVibes?: { emoji: string; count: number }[];
+  hasVibed?: boolean;
   comments?: number;
   commentsData?: DiscussionComment[]; // Array of root-level comments
   isRemoved?: boolean;
@@ -221,6 +230,8 @@ export interface MoodStreamPost {
   moodTags: string[];
   timestamp: Date;
   vibes?: number;
+  recentVibes?: { emoji: string; count: number }[];
+  hasVibed?: boolean;
   comments?: number;
   promotedByName?: string;
   dataAiHintAvatar?: string;
@@ -299,6 +310,9 @@ export interface CommunicationItem {
   avatarFallback?: string;
   timestamp: Date;
   vibes?: number;
+  recentVibes?: { emoji: string; count: number }[];
+  hasVibed?: boolean;
+  comments?: number;
   dataAiHint?: string;
   imageUrl?: string;
   imageUrls?: string[];

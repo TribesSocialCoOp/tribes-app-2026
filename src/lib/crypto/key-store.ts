@@ -1,14 +1,16 @@
 /**
- * @fileoverview IndexedDB-backed secure key store for bond private keys.
- * Phase 2B: Client-Side Key Infrastructure.
+ * @fileoverview IndexedDB-backed secure key store for bond private keys,
+ * cached shared secrets, and tribe group keys.
  *
  * Stores CryptoKey objects directly in IndexedDB. When keys are created
  * with `extractable: false`, they remain as opaque handles in browser-managed
  * memory — never serialized to plaintext JavaScript strings.
  *
  * Database: 'tribes_keystore'
- * Object Store: 'bond_keys'
- * Key Path: 'bondId'
+ * Object Stores:
+ *   - 'bond_keys'       (keyPath: bondId)   — ECDH private keys per bond
+ *   - 'shared_secrets'  (keyPath: bondId)   — pre-derived AES-256-GCM shared secrets
+ *   - 'tribe_keys'      (keyPath: tribeId)  — AES-256-GCM group symmetric keys
  *
  * This module runs ONLY in the browser.
  */
@@ -25,13 +27,32 @@ export interface StoredBondKey {
   rotatedAt?: number; // timestamp ms of last rotation
 }
 
+export interface CachedSharedSecret {
+  bondId: string;
+  sharedSecret: CryptoKey; // Non-extractable AES-256-GCM key
+  derivedAt: number; // timestamp ms
+  peerKeyHash: string; // SHA-256 hex of peer's public JWK — detect rotations
+}
+
+export interface StoredTribeKey {
+  tribeId: string;
+  key: CryptoKey; // AES-256-GCM symmetric key (extractable for wrapping)
+  version: number;
+  receivedAt: number; // timestamp ms
+}
+
 // ============================================================
 // DATABASE SETUP
 // ============================================================
 
 const DB_NAME = 'tribes_keystore';
-const DB_VERSION = 1;
-const STORE_NAME = 'bond_keys';
+const DB_VERSION = 2; // Bumped from 1 → 2 for new stores
+const BOND_KEYS_STORE = 'bond_keys';
+const SHARED_SECRETS_STORE = 'shared_secrets';
+const TRIBE_KEYS_STORE = 'tribe_keys';
+
+/** @deprecated Use BOND_KEYS_STORE instead. Kept for compatibility with existing callers. */
+const STORE_NAME = BOND_KEYS_STORE;
 
 /**
  * Opens (or creates) the IndexedDB database.
@@ -44,9 +65,19 @@ function openDatabase(): Promise<IDBDatabase> {
     request.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result;
 
-      // Create the bond_keys store if it doesn't exist
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'bondId' });
+      // V1: bond_keys store
+      if (!db.objectStoreNames.contains(BOND_KEYS_STORE)) {
+        db.createObjectStore(BOND_KEYS_STORE, { keyPath: 'bondId' });
+      }
+
+      // V2: shared_secrets store (pre-derived ECDH shared secrets)
+      if (!db.objectStoreNames.contains(SHARED_SECRETS_STORE)) {
+        db.createObjectStore(SHARED_SECRETS_STORE, { keyPath: 'bondId' });
+      }
+
+      // V2: tribe_keys store (group symmetric keys)
+      if (!db.objectStoreNames.contains(TRIBE_KEYS_STORE)) {
+        db.createObjectStore(TRIBE_KEYS_STORE, { keyPath: 'tribeId' });
       }
     };
 
@@ -241,6 +272,195 @@ export async function hasAnyKeys(): Promise<boolean> {
 
     request.onsuccess = () => resolve(request.result > 0);
     request.onerror = () => reject(new Error('Failed to check keystore status'));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+// ============================================================
+// SHARED SECRET CACHE (Phase 2 — Background Key Sync)
+// ============================================================
+
+/**
+ * Computes a SHA-256 hex hash of a JWK for change detection.
+ * Used to detect when a peer has rotated their public key.
+ */
+export async function hashPublicKeyJwk(jwk: JsonWebKey): Promise<string> {
+  const encoded = new TextEncoder().encode(JSON.stringify(jwk));
+  const hash = await crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Stores a pre-derived shared secret for a bond.
+ * Used by the background key sync to avoid re-deriving on every compose/chat.
+ */
+export async function storeSharedSecret(
+  bondId: string,
+  sharedSecret: CryptoKey,
+  peerKeyHash: string,
+): Promise<void> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SHARED_SECRETS_STORE, 'readwrite');
+    const store = tx.objectStore(SHARED_SECRETS_STORE);
+
+    const entry: CachedSharedSecret = {
+      bondId,
+      sharedSecret,
+      derivedAt: Date.now(),
+      peerKeyHash,
+    };
+
+    const request = store.put(entry);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error(`Failed to cache shared secret for bond ${bondId}`));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * Retrieves a cached shared secret for a bond.
+ * Returns null if no secret is cached (peer key not yet available or key rotated).
+ */
+export async function getSharedSecret(bondId: string): Promise<CachedSharedSecret | null> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SHARED_SECRETS_STORE, 'readonly');
+    const store = tx.objectStore(SHARED_SECRETS_STORE);
+    const request = store.get(bondId);
+
+    request.onsuccess = () => resolve(request.result ?? null);
+    request.onerror = () => reject(new Error(`Failed to get shared secret for bond ${bondId}`));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * Retrieves all cached shared secrets.
+ * Used by the compose box to quickly look up encryption keys.
+ */
+export async function getAllSharedSecrets(): Promise<CachedSharedSecret[]> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SHARED_SECRETS_STORE, 'readonly');
+    const store = tx.objectStore(SHARED_SECRETS_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(new Error('Failed to list shared secrets'));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * Deletes a cached shared secret for a bond.
+ * Called when a bond is revoked or a peer key rotates.
+ */
+export async function deleteSharedSecret(bondId: string): Promise<void> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(SHARED_SECRETS_STORE, 'readwrite');
+    const store = tx.objectStore(SHARED_SECRETS_STORE);
+    const request = store.delete(bondId);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error(`Failed to delete shared secret for bond ${bondId}`));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+// ============================================================
+// TRIBE KEY STORE (Phase 3 — Group Encryption)
+// ============================================================
+
+/**
+ * Stores a tribe's group symmetric key.
+ */
+export async function storeTribeKey(
+  tribeId: string,
+  key: CryptoKey,
+  version: number,
+): Promise<void> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TRIBE_KEYS_STORE, 'readwrite');
+    const store = tx.objectStore(TRIBE_KEYS_STORE);
+
+    const entry: StoredTribeKey = {
+      tribeId,
+      key,
+      version,
+      receivedAt: Date.now(),
+    };
+
+    const request = store.put(entry);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error(`Failed to store tribe key for ${tribeId}`));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * Retrieves a tribe's group symmetric key.
+ */
+export async function getTribeKey(tribeId: string): Promise<StoredTribeKey | null> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TRIBE_KEYS_STORE, 'readonly');
+    const store = tx.objectStore(TRIBE_KEYS_STORE);
+    const request = store.get(tribeId);
+
+    request.onsuccess = () => resolve(request.result ?? null);
+    request.onerror = () => reject(new Error(`Failed to get tribe key for ${tribeId}`));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * Retrieves all stored tribe keys.
+ */
+export async function getAllTribeKeys(): Promise<StoredTribeKey[]> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TRIBE_KEYS_STORE, 'readonly');
+    const store = tx.objectStore(TRIBE_KEYS_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(new Error('Failed to list tribe keys'));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * Deletes a tribe's group key from local storage.
+ * Called when the user leaves a tribe or the key is rotated.
+ */
+export async function deleteTribeKey(tribeId: string): Promise<void> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(TRIBE_KEYS_STORE, 'readwrite');
+    const store = tx.objectStore(TRIBE_KEYS_STORE);
+    const request = store.delete(tribeId);
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error(`Failed to delete tribe key for ${tribeId}`));
 
     tx.oncomplete = () => db.close();
   });

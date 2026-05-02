@@ -184,12 +184,12 @@ export default function TribesPage() {
     setIsJoinDialogOpen(true);
   };
 
-  const handleConfirmJoin = async (tribeToJoin: Tribe, selectedAlias?: string) => {
+  const handleConfirmJoin = async (tribeToJoin: Tribe, selectedAlias?: string, aliasAvatar?: string) => {
     setJoiningStates(prev => ({ ...prev, [tribeToJoin.id]: true }));
     setIsJoinDialogOpen(false); // Close the dialog immediately for better UX
 
     try {
-      const result = await requestToJoinTribe(tribeToJoin.id);
+      const result = await requestToJoinTribe(tribeToJoin.id, selectedAlias, aliasAvatar);
       if (result === 'pending') {
         toast({ title: "Request Sent", description: `Your request to join ${tribeToJoin.name} is pending approval.` });
       } else if (result === 'joined') {

@@ -46,7 +46,7 @@ export async function canCreateBond(userId: string): Promise<{
 }> {
   const plan = await getUserPlan(userId);
   const [result] = await db.select({ count: count() }).from(bonds)
-    .where(eq(bonds.userId, userId));
+    .where(and(eq(bonds.userId, userId), eq(bonds.targetType, 'user')));
   const currentCount = result?.count ?? 0;
 
   if (plan.maxBonds === null) {

@@ -40,6 +40,7 @@ const VALID_CONTEXTS = new Set<UploadContext>([
   'avatar',
   'bond-attachment',
   'private-mood-board',
+  'encrypted-post-image',
 ]);
 
 export async function POST(request: NextRequest) {
@@ -81,11 +82,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 });
     }
 
-    // SECURITY: application/octet-stream is only valid for E2E bond attachments.
+    // SECURITY: application/octet-stream is only valid for E2E encrypted uploads.
     // Allowing it for other contexts would let clients bypass MIME-type checks.
-    if (file.type === 'application/octet-stream' && context !== 'bond-attachment') {
+    const ENCRYPTED_CONTEXTS = new Set(['bond-attachment', 'encrypted-post-image']);
+    if (file.type === 'application/octet-stream' && !ENCRYPTED_CONTEXTS.has(context)) {
       return NextResponse.json(
-        { error: 'application/octet-stream is only allowed for bond-attachment uploads' },
+        { error: 'application/octet-stream is only allowed for encrypted uploads' },
         { status: 400 }
       );
     }

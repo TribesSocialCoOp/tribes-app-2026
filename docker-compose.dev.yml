@@ -1,0 +1,29 @@
+# ============================================================
+# Tribes.app — Local Development (Stack Parity with Production)
+# ============================================================
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   DATABASE_URL=postgresql://tribes:tribes_dev@localhost:5432/tribes npm run dev
+# ============================================================
+
+services:
+  # ── Database (PostgreSQL — same version as production) ─────
+  postgres-dev:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_DB: tribes
+      POSTGRES_USER: tribes
+      POSTGRES_PASSWORD: tribes_dev
+    volumes:
+      - pgdev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tribes"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdev-data:

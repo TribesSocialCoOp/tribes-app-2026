@@ -1,6 +1,7 @@
 'use server';
 
 import { requireAuth, requireVerifiedEmail, getCurrentUserId, trackContribution } from './shared';
+import { withPublicErrors } from './error-utils';
 import type { TribePost, MoodStreamPost, ReportedPost, Tribe, StoryTopic, SourceArticle, DiscussionComment, Ring, CommunicationItem } from '@/lib/types';
 import type { PostFormValues } from '@/components/dialogs/create-post-dialog';
 import { postLimiter, commentLimiter, rsvpLimiter } from '@/lib/auth/rate-limit';
@@ -39,13 +40,29 @@ export async function togglePinToWall(postId: string): Promise<{ pinned: boolean
   return { pinned: newPinned };
 }
 
+/** Structured payload for editing a post. */
+export interface EditPostPayload {
+  content: string;
+  title?: string | null;
+  imageUrl?: string | null;
+  imageUrls?: string[] | null;
+  moodTag?: string | null;
+}
+
 /**
  * Server action: Edit a plaintext post.
+ * Accepts a full payload so callers can update content, title, images, and mood.
  */
-export async function editPost(postId: string, newContent: string): Promise<void> {
+export async function editPost(postId: string, payload: string | EditPostPayload): Promise<void> {
   const userId = await requireAuth();
   await postLimiter.check(userId);
-  if (!newContent.trim()) throw new Error('Post content cannot be empty.');
+
+  // Backward-compat: accept a bare string as content-only edit
+  const data: EditPostPayload = typeof payload === 'string'
+    ? { content: payload }
+    : payload;
+
+  if (!data.content.trim()) throw new Error('Post content cannot be empty.');
 
   const { db } = await import('@/db');
   const { posts } = await import('@/db/schema');
@@ -60,25 +77,47 @@ export async function editPost(postId: string, newContent: string): Promise<void
   if (post.authorId !== userId) throw new Error('You can only edit your own posts.');
   if (post.isEncrypted) throw new Error('Use editEncryptedPost for encrypted content.');
 
-  await db.update(posts).set({
-    content: newContent.trim(),
+  const updateSet: Record<string, unknown> = {
+    content: data.content.trim(),
     editedAt: new Date(),
-  }).where(eq(posts.id, postId));
+  };
+
+  // Conditionally update metadata fields when provided (explicit null clears them)
+  if (data.title !== undefined) updateSet.title = data.title;
+  if (data.imageUrl !== undefined) updateSet.imageUrl = data.imageUrl;
+  if (data.imageUrls !== undefined) updateSet.imageUrls = data.imageUrls;
+  if (data.moodTag !== undefined) updateSet.moodTag = data.moodTag;
+
+  // Update image alt text based on whether images are present
+  if (data.imageUrl !== undefined || data.imageUrls !== undefined) {
+    const hasImgs = !!(data.imageUrl || (data.imageUrls && data.imageUrls.length > 0));
+    updateSet.imageAlt = hasImgs ? 'User uploaded image' : null;
+    updateSet.dataAiHintImage = hasImgs ? 'user upload' : null;
+  }
+
+  await db.update(posts).set(updateSet).where(eq(posts.id, postId));
 
   // Fire-and-forget: re-process @mentions for new content
   import('@/lib/services/mention-service').then(({ processMentions }) =>
-    processMentions(newContent, userId, 'post', postId)
+    processMentions(data.content, userId, 'post', postId)
   ).catch(() => {});
 }
 
 /**
  * Server action: Edit an E2E encrypted post.
  * The server receives a new ciphertext blob + IV from the client.
+ * Optional metadata (title, images, mood) can also be updated — these remain unencrypted.
  */
 export async function editEncryptedPost(
   postId: string,
   ciphertextBase64: string,
   iv: string,
+  metadata?: {
+    title?: string | null;
+    imageUrl?: string | null;
+    imageUrls?: string[] | null;
+    moodTag?: string | null;
+  },
 ): Promise<void> {
   const userId = await requireAuth();
   await postLimiter.check(userId);
@@ -96,11 +135,27 @@ export async function editEncryptedPost(
   if (post.authorId !== userId) throw new Error('You can only edit your own posts.');
   if (!post.isEncrypted) throw new Error('Post is not encrypted.');
 
-  await db.update(posts).set({
+  const updateSet: Record<string, unknown> = {
     ciphertext: Buffer.from(ciphertextBase64, 'base64'),
     encryptionIv: iv,
     editedAt: new Date(),
-  }).where(eq(posts.id, postId));
+  };
+
+  // Apply unencrypted metadata updates if provided
+  if (metadata) {
+    if (metadata.title !== undefined) updateSet.title = metadata.title;
+    if (metadata.imageUrl !== undefined) updateSet.imageUrl = metadata.imageUrl;
+    if (metadata.imageUrls !== undefined) updateSet.imageUrls = metadata.imageUrls;
+    if (metadata.moodTag !== undefined) updateSet.moodTag = metadata.moodTag;
+
+    if (metadata.imageUrl !== undefined || metadata.imageUrls !== undefined) {
+      const hasImgs = !!(metadata.imageUrl || (metadata.imageUrls && metadata.imageUrls.length > 0));
+      updateSet.imageAlt = hasImgs ? 'User uploaded image' : null;
+      updateSet.dataAiHintImage = hasImgs ? 'user upload' : null;
+    }
+  }
+
+  await db.update(posts).set(updateSet).where(eq(posts.id, postId));
 }
 
 
@@ -193,6 +248,10 @@ export interface CreateRingPostPayload {
   moodTag?: string;
   tribeIds?: string[]; // Required when ring = 'tribes'
 
+  /** Override the author name/avatar for this specific post (must be one of user's valid aliases) */
+  overrideName?: string;
+  overrideAvatar?: string;
+
   // E2E encryption (Phase 3) — provided by the client when encrypting
   encryption?: {
     /** Base64-encoded ciphertext (AES-256-GCM encrypted post body) */
@@ -213,7 +272,7 @@ export interface CreateRingPostPayload {
  * Universal post creation — routes to the correct ring.
  * This is the primary compose action for the Concentric Rings model.
  */
-export async function createRingPost(payload: CreateRingPostPayload): Promise<TribePost> {
+export const createRingPost = withPublicErrors(async (payload: CreateRingPostPayload): Promise<TribePost> => {
   const userId = await requireVerifiedEmail();
   await postLimiter.check(userId);
 
@@ -250,7 +309,10 @@ export async function createRingPost(payload: CreateRingPostPayload): Promise<Tr
       content: payload.encryption ? '🔒 Encrypted post' : payload.content.trim(),
       imageUrl: payload.imageUrl,
       imageUrls: payload.imageUrls,
-    }, userId);
+    }, userId, {
+      name: payload.overrideName,
+      avatar: payload.overrideAvatar
+    });
 
     // Update with ring metadata + encryption if present
     const updateData: Record<string, unknown> = {
@@ -288,9 +350,9 @@ export async function createRingPost(payload: CreateRingPostPayload): Promise<Tr
     id,
     tribeId: null, // No tribe for non-tribe rings
     authorId: userId,
-    authorName,
-    authorAvatar: author?.avatar ?? null,
-    authorAvatarFallback: initials,
+    authorName: payload.overrideName || authorName,
+    authorAvatar: payload.overrideAvatar || author?.avatar || null,
+    authorAvatarFallback: (payload.overrideName || authorName).substring(0, 2).toUpperCase() || '??',
     title: payload.title || null,
     content: isEncrypted ? '🔒 Encrypted post' : payload.content.trim(),
     imageUrl: payload.imageUrl || null,
@@ -328,7 +390,7 @@ export async function createRingPost(payload: CreateRingPostPayload): Promise<Tr
 
   trackContribution(userId, 'post', id, `Posted to ${payload.ring}`);
   return result;
-}
+});
 
 /**
  * Fetches the current user's key grants for a batch of encrypted post IDs.
@@ -535,15 +597,19 @@ export async function getEncryptionRecipients(
 /**
  * Returns a lightweight list of the user's tribes for the compose tribe selector.
  */
-export async function getMyTribesList(): Promise<{ id: string; name: string; slug: string | null; description: string | null; cover: string | null; isPublic: boolean; members: number; brandColor: string | null }[]> {
+export async function getMyTribesList(): Promise<{ id: string; name: string; slug: string | null; description: string | null; cover: string | null; isPublic: boolean; members: number; brandColor: string | null; joinedAsAlias: string | null; joinedAsAvatar: string | null; moods: string[] }[]> {
   const userId = await getCurrentUserId();
   if (!userId) return [];
   const { db } = await import('@/db');
-  const { tribeMembers, tribes } = await import('@/db/schema');
+  const { tribeMembers, tribes, tribeMoodTags } = await import('@/db/schema');
   const { eq, inArray } = await import('drizzle-orm');
 
-  // Single query: get tribe IDs the user belongs to
-  const memberRows = await db.select({ tribeId: tribeMembers.tribeId })
+  // Single query: get tribe IDs the user belongs to, including alias info
+  const memberRows = await db.select({ 
+    tribeId: tribeMembers.tribeId,
+    joinedAsAlias: tribeMembers.joinedAsAlias,
+    joinedAsAvatar: tribeMembers.joinedAsAvatar
+  })
     .from(tribeMembers)
     .where(eq(tribeMembers.userId, userId));
 
@@ -564,13 +630,36 @@ export async function getMyTribesList(): Promise<{ id: string; name: string; slu
   })
     .from(tribes)
     .where(inArray(tribes.id, tribeIds));
+    
+  // Batch fetch moods for these tribes
+  const moodRows = await db.select({
+    tribeId: tribeMoodTags.tribeId,
+    moodSlug: tribeMoodTags.moodSlug,
+  })
+    .from(tribeMoodTags)
+    .where(inArray(tribeMoodTags.tribeId, tribeIds));
+    
+  const moodMap = new Map<string, string[]>();
+  for (const m of moodRows) {
+    const arr = moodMap.get(m.tribeId) ?? [];
+    arr.push(m.moodSlug);
+    moodMap.set(m.tribeId, arr);
+  }
 
-  return tribeRows.map(t => ({
-    ...t,
-    isPublic: t.isPublic ?? true,
-    members: t.members ?? 0,
-    brandColor: t.brandColor ?? null,
-  }));
+  const memberMap = new Map(memberRows.map(r => [r.tribeId, r]));
+
+  return tribeRows.map(t => {
+    const mem = memberMap.get(t.id);
+    return {
+      ...t,
+      isPublic: t.isPublic ?? true,
+      members: t.members ?? 0,
+      brandColor: t.brandColor ?? null,
+      joinedAsAlias: mem?.joinedAsAlias ?? null,
+      joinedAsAvatar: mem?.joinedAsAvatar ?? null,
+      moods: moodMap.get(t.id) ?? [],
+    };
+  });
 }
 
 // ======== STORIES ========
@@ -652,7 +741,7 @@ export async function toggleVibe(targetId: string, targetType: 'post' | 'comment
 }
 
 // ======== COMMENTS ========
-export async function createComment(postId: string, content: string, parentCommentId?: string) {
+export const createComment = withPublicErrors(async (postId: string, content: string, parentCommentId?: string) => {
   const userId = await requireVerifiedEmail();
   await commentLimiter.check(userId);
   if (!content.trim()) throw new Error('Comment cannot be empty');
@@ -661,7 +750,7 @@ export async function createComment(postId: string, content: string, parentComme
   // Fire-and-forget contribution tracking (comment type, not post)
   trackContribution(userId, 'comment', comment.id, `Commented on post ${postId}`);
   return comment;
-}
+});
 
 export async function getCommentsForPost(postId: string) {
   const userId = await getCurrentUserId();

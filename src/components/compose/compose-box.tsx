@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useRef, useTransition } from 'react';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import React, { useState, useRef, useTransition, useEffect } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,10 +12,20 @@ import { useUser } from '@/hooks/use-user';
 import { useToast } from '@/hooks/use-toast';
 import { createRingPost, type CreateRingPostPayload } from '@/lib/actions/content-actions';
 import type { Ring } from '@/lib/types';
-import { ImagePlus, Send, Loader2, X } from 'lucide-react';
+import { ImagePlus, Send, Loader2, X, Lock, Globe } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActionError } from '@/hooks/use-action-error';
 import { uploadFile } from '@/lib/upload';
+import { useKeySync } from '@/components/providers/key-sync-provider';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { ChevronDown, AtSign } from 'lucide-react';
 
 const STORAGE_KEY = 'tribes_last_ring';
 
@@ -45,9 +56,36 @@ export function ComposeBox({
   const { user } = useUser();
   const { toast } = useToast();
   const { handleError } = useActionError();
+  const { triggerSync } = useKeySync();
   const [isPending, startTransition] = useTransition();
   const [isExpanded, setIsExpanded] = useState(false);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (searchParams?.get('compose') === 'true') {
+      setIsExpanded(true);
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 50);
+
+      // Clean up the URL parameter
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('compose');
+      const newUrl = `${pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+      router.replace(newUrl, { scroll: false });
+    }
+  }, [searchParams, pathname, router]);
+
+  // Encryption status for UI feedback
+  const [encryptionStatus, setEncryptionStatus] = useState<{
+    encrypted: boolean;
+    totalRecipients: number;
+    encryptedRecipients: number;
+  } | null>(null);
 
   // Ring state
   const savedRing = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) as Ring | null : null;
@@ -61,6 +99,29 @@ export function ComposeBox({
   const [moodTag, setMoodTag] = useState<string | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  const [loadedTribes, setLoadedTribes] = useState<any[]>([]);
+
+  // Identity state
+  const [selectedIdentity, setSelectedIdentity] = useState<{ name: string; avatar?: string } | null>(null);
+
+  const activeTribe = ring === 'tribes' && selectedTribeIds.length > 0 
+    ? loadedTribes.find(t => t.id === selectedTribeIds[0]) 
+    : null;
+
+  const defaultIdentity = {
+    name: activeTribe?.joinedAsAlias || user?.name || "Unknown",
+    avatar: activeTribe?.joinedAsAvatar || user?.avatar || undefined,
+  };
+
+  useEffect(() => {
+    if (ring === 'tribes' && activeTribe && activeTribe.moods) {
+      if (moodTag && !activeTribe.moods.includes(moodTag)) {
+        setMoodTag(null);
+      }
+    }
+  }, [ring, activeTribe, moodTag]);
+
+  const composeUser = selectedIdentity || defaultIdentity;
 
   const initials = (user?.name ?? 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
@@ -71,6 +132,7 @@ export function ComposeBox({
     startTransition(async () => {
       try {
         let encryption: CreateRingPostPayload['encryption'] | undefined;
+        let imageEncryptionKey: CryptoKey | undefined; // Key for encrypting images
 
         // E2E encryption — journal uses personal key, rings use sender key model
         if (ring === 'journal') {
@@ -85,32 +147,130 @@ export function ComposeBox({
               iv: result.iv,
               keyGrants: [], // No recipients — only the author decrypts
             };
+            imageEncryptionKey = journalKey; // Use journal key for images too
           } catch (encErr) {
             console.warn('[ComposeBox] Journal encryption failed, posting unencrypted:', encErr);
           }
-        } else {
-          // Rings: encrypt for bond recipients (sender key model)
+        } else if (ring === 'tribes' && selectedTribeIds.length > 0) {
+          // TRIBE RING: Use group symmetric key for private tribes (O(1) encryption)
           try {
             const { getEncryptionRecipients } = await import('@/lib/actions/content-actions');
             const recipients = await getEncryptionRecipients(
-              ring as 'inner_circle' | 'my_people' | 'tribes',
-              ring === 'tribes' ? selectedTribeIds : undefined,
+              'tribes',
+              selectedTribeIds,
             );
 
             if (recipients.length > 0) {
-              // Derive shared secrets for each recipient
+              // Private tribe detected — try group key encryption first
+              const { getTribeKey } = await import('@/lib/crypto/key-store');
+
+              // Check if we have a cached tribe group key for the primary tribe
+              const primaryTribeId = selectedTribeIds[0];
+              const cachedTribeKey = primaryTribeId ? await getTribeKey(primaryTribeId) : null;
+
+              if (cachedTribeKey) {
+                // O(1) path: encrypt once with tribe group key
+                const { encryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
+                const { toBase64 } = await import('@/lib/crypto/encoding');
+
+                const result = await encryptWithTribeKey(content.trim(), cachedTribeKey.key);
+
+                encryption = {
+                  ciphertextBase64: toBase64(result.ciphertext),
+                  iv: result.iv,
+                  keyGrants: [], // No per-recipient grants — all members share the tribe key
+                };
+                imageEncryptionKey = cachedTribeKey.key;
+
+                setEncryptionStatus({ encrypted: true, totalRecipients: recipients.length, encryptedRecipients: recipients.length });
+              } else {
+                // Fallback: pairwise encryption (group key not yet distributed)
+                const { getSharedSecret } = await import('@/lib/crypto/key-store');
+                const { getBondKey, importPublicKey, deriveSharedSecret } = await import('@/lib/crypto');
+                const { getBonds } = await import('@/lib/actions/bond-actions');
+                const allBonds = await getBonds();
+                const bondMap = new Map(allBonds.map(b => [b.id, b]));
+
+                const recipientKeys: Array<{ userId: string; bondId?: string; sharedSecret: CryptoKey }> = [];
+
+                for (const r of recipients) {
+                  const cached = await getSharedSecret(r.bondId);
+                  if (cached) {
+                    recipientKeys.push({ userId: r.userId, bondId: r.bondId, sharedSecret: cached.sharedSecret });
+                    continue;
+                  }
+
+                  const bondKey = await getBondKey(r.bondId);
+                  const bond = bondMap.get(r.bondId);
+                  if (!bondKey || !bond?.peerPublicKeyJwk) continue;
+
+                  const peerPub = await importPublicKey(JSON.parse(bond.peerPublicKeyJwk));
+                  const shared = await deriveSharedSecret(bondKey.privateKey, peerPub);
+                  recipientKeys.push({ userId: r.userId, bondId: r.bondId, sharedSecret: shared });
+                }
+
+                setEncryptionStatus({
+                  encrypted: recipientKeys.length > 0,
+                  totalRecipients: recipients.length,
+                  encryptedRecipients: recipientKeys.length,
+                });
+
+                if (recipientKeys.length > 0) {
+                  try {
+                    const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
+                    const personalKey = await getOrCreateJournalKey();
+                    recipientKeys.push({ userId: user!.id, bondId: undefined, sharedSecret: personalKey });
+                  } catch {
+                    console.warn('[ComposeBox] Could not add self-grant');
+                  }
+
+                  const { encryptPostForRecipients } = await import('@/lib/crypto/post-encryption');
+                  const { toBase64 } = await import('@/lib/crypto/encoding');
+                  const result = await encryptPostForRecipients(content.trim(), recipientKeys);
+
+                  encryption = {
+                    ciphertextBase64: toBase64(result.ciphertext),
+                    iv: result.iv,
+                    keyGrants: result.keyGrants,
+                  };
+                  imageEncryptionKey = result.postKey;
+                }
+              }
+            } else {
+              // Public tribe — no encryption needed
+              setEncryptionStatus({ encrypted: false, totalRecipients: 0, encryptedRecipients: 0 });
+            }
+          } catch (encErr) {
+            console.error('[ComposeBox] Tribe encryption failed:', encErr);
+            setEncryptionStatus({ encrypted: false, totalRecipients: 0, encryptedRecipients: 0 });
+            toast({
+              variant: 'destructive',
+              title: 'Encryption Error',
+              description: 'Could not encrypt this post. It will be stored unencrypted.',
+            });
+          }
+        } else if (ring === 'inner_circle' || ring === 'my_people') {
+          // BOND RINGS: Pairwise sender key model
+          try {
+            const { getEncryptionRecipients } = await import('@/lib/actions/content-actions');
+            const recipients = await getEncryptionRecipients(ring);
+
+            if (recipients.length > 0) {
+              const { getSharedSecret } = await import('@/lib/crypto/key-store');
               const { getBondKey, importPublicKey, deriveSharedSecret } = await import('@/lib/crypto');
               const { getBonds } = await import('@/lib/actions/bond-actions');
               const allBonds = await getBonds();
               const bondMap = new Map(allBonds.map(b => [b.id, b]));
 
-              const recipientKeys: Array<{
-                userId: string;
-                bondId?: string;
-                sharedSecret: CryptoKey;
-              }> = [];
+              const recipientKeys: Array<{ userId: string; bondId?: string; sharedSecret: CryptoKey }> = [];
 
               for (const r of recipients) {
+                const cached = await getSharedSecret(r.bondId);
+                if (cached) {
+                  recipientKeys.push({ userId: r.userId, bondId: r.bondId, sharedSecret: cached.sharedSecret });
+                  continue;
+                }
+
                 const bondKey = await getBondKey(r.bondId);
                 const bond = bondMap.get(r.bondId);
                 if (!bondKey || !bond?.peerPublicKeyJwk) continue;
@@ -120,19 +280,19 @@ export function ComposeBox({
                 recipientKeys.push({ userId: r.userId, bondId: r.bondId, sharedSecret: shared });
               }
 
+              setEncryptionStatus({
+                encrypted: recipientKeys.length > 0,
+                totalRecipients: recipients.length,
+                encryptedRecipients: recipientKeys.length,
+              });
+
               if (recipientKeys.length > 0) {
-                // Add author as a recipient so they can decrypt their own posts.
-                // Uses the personal journal key as the wrapping secret (bondId = null).
                 try {
                   const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
                   const personalKey = await getOrCreateJournalKey();
-                  recipientKeys.push({
-                    userId: user!.id,
-                    bondId: undefined,  // No bond — self-grant
-                    sharedSecret: personalKey,
-                  });
+                  recipientKeys.push({ userId: user!.id, bondId: undefined, sharedSecret: personalKey });
                 } catch {
-                  console.warn('[ComposeBox] Could not add self-grant — author will not be able to decrypt own posts');
+                  console.warn('[ComposeBox] Could not add self-grant');
                 }
 
                 const { encryptPostForRecipients } = await import('@/lib/crypto/post-encryption');
@@ -144,19 +304,36 @@ export function ComposeBox({
                   iv: result.iv,
                   keyGrants: result.keyGrants,
                 };
+                imageEncryptionKey = result.postKey;
               }
+            } else {
+              setEncryptionStatus({ encrypted: false, totalRecipients: 0, encryptedRecipients: 0 });
             }
           } catch (encErr) {
-            console.warn('[ComposeBox] Encryption failed, posting unencrypted:', encErr);
-            // Graceful degradation: post unencrypted if crypto fails
+            console.error('[ComposeBox] Encryption failed:', encErr);
+            setEncryptionStatus({ encrypted: false, totalRecipients: 0, encryptedRecipients: 0 });
+            toast({
+              variant: 'destructive',
+              title: 'Encryption Error',
+              description: 'Could not encrypt this post. It will be stored unencrypted.',
+            });
           }
         }
 
-        // Upload images first if any
+        // Upload images — encrypt if we have an encryption key
         let finalImageUrls: string[] = [];
         if (imageFiles.length > 0) {
           try {
             const uploadPromises = imageFiles.map(async (file) => {
+              if (imageEncryptionKey) {
+                // Encrypted upload — returns fileId (no public URL)
+                const result = await uploadFile(file, 'posts', {
+                  context: 'encrypted-post-image',
+                  encryptionKey: imageEncryptionKey,
+                });
+                return result.fileId;
+              }
+              // Unencrypted upload — returns CDN URL
               return await uploadFile(file, 'posts', 'public-tribe-post');
             });
             finalImageUrls = await Promise.all(uploadPromises);
@@ -166,16 +343,21 @@ export function ComposeBox({
           }
         }
 
-        await createRingPost({
+        const result = await createRingPost({
           content: content.trim(),
           ring,
           moodTag: moodTag ?? undefined,
           imageUrls: finalImageUrls.length > 0 ? finalImageUrls : undefined,
-          // For backward compatibility, also send the first image to imageUrl
           imageUrl: finalImageUrls.length > 0 ? finalImageUrls[0] : undefined,
           tribeIds: ring === 'tribes' ? selectedTribeIds : undefined,
+          overrideName: selectedIdentity?.name,
+          overrideAvatar: selectedIdentity?.avatar,
           encryption,
         });
+
+        if (result && 'serverError' in result) {
+          throw result;
+        }
 
         // Cleanup object URLs
         previewUrls.forEach(url => URL.revokeObjectURL(url));
@@ -232,10 +414,68 @@ export function ComposeBox({
     <Card className={cn("overflow-hidden border-none shadow-sm bg-card/50 backdrop-blur-sm", className)}>
       <CardContent className="p-3 sm:p-4">
         <div className="flex gap-3 sm:gap-4">
-          <Avatar className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0">
-            {user?.avatar && <AvatarImage src={user.avatar} alt={user?.name ?? 'You'} />}
-            <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-          </Avatar>
+          <div className="flex flex-col items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="group relative focus:outline-none" aria-label="Select identity">
+                  <UserAvatar 
+                    user={composeUser} 
+                    className="h-8 w-8 sm:h-9 sm:w-9 flex-shrink-0 cursor-pointer ring-2 ring-transparent group-hover:ring-primary/30 transition-all shadow-sm" 
+                  />
+                  <div className="absolute -bottom-1 -right-1 bg-background rounded-full border shadow-sm p-0.5">
+                    <ChevronDown className="h-2 w-2 text-muted-foreground" />
+                  </div>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 px-2 py-1">Identity Selection</DropdownMenuLabel>
+                <DropdownMenuItem 
+                  className={cn("flex items-center gap-2 cursor-pointer", !selectedIdentity && "bg-accent")}
+                  onClick={() => setSelectedIdentity(null)}
+                >
+                  <UserAvatar user={defaultIdentity} className="h-6 w-6" />
+                  <div className="flex flex-col">
+                    <span className="text-xs font-medium">Auto (Default)</span>
+                    <span className="text-[10px] text-muted-foreground truncate max-w-[140px]">{defaultIdentity.name}</span>
+                  </div>
+                </DropdownMenuItem>
+                
+                <DropdownMenuSeparator />
+                
+                <DropdownMenuItem 
+                  className={cn("flex items-center gap-2 cursor-pointer", selectedIdentity?.name === user?.name && "bg-accent")}
+                  onClick={() => setSelectedIdentity({ name: user?.name || 'Unknown', avatar: user?.avatar || undefined })}
+                >
+                  <UserAvatar user={{ name: user?.name || '', avatar: user?.avatar || undefined }} className="h-6 w-6" />
+                  <span className="text-xs">Main Profile</span>
+                </DropdownMenuItem>
+
+                {user?.reservedAlias && (
+                  <DropdownMenuItem 
+                    className={cn("flex items-center gap-2 cursor-pointer", selectedIdentity?.name === user.reservedAlias && "bg-accent")}
+                    onClick={() => setSelectedIdentity({ name: user.reservedAlias!, avatar: user.reservedAliasAvatar })}
+                  >
+                    <UserAvatar user={{ name: user.reservedAlias, avatar: user.reservedAliasAvatar }} className="h-6 w-6" />
+                    <span className="text-xs font-medium text-primary">{user.reservedAlias}</span>
+                  </DropdownMenuItem>
+                )}
+
+                {user?.aliases && user.aliases.length > 0 && user.aliases.map((alias) => (
+                  <DropdownMenuItem 
+                    key={alias.name}
+                    className={cn("flex items-center gap-2 cursor-pointer", selectedIdentity?.name === alias.name && "bg-accent")}
+                    onClick={() => setSelectedIdentity({ name: alias.name, avatar: alias.avatar })}
+                  >
+                    <UserAvatar user={alias} className="h-6 w-6" />
+                    <span className="text-xs">{alias.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {selectedIdentity && (
+              <span className="text-[8px] font-bold text-primary uppercase tracking-tighter">Alias</span>
+            )}
+          </div>
 
           <div className="flex-1 min-w-0">
             {!isExpanded ? (
@@ -295,9 +535,20 @@ export function ComposeBox({
                       onChange={setRing}
                       selectedTribeIds={selectedTribeIds}
                       onTribeIdsChange={setSelectedTribeIds}
+                      onTribesLoaded={setLoadedTribes}
                       defaultTribeId={defaultTribeId}
                     />
-                    <MoodTagSelector value={moodTag} onChange={setMoodTag} />
+                    
+                    {(() => {
+                      let allowedMoods: string[] | undefined = undefined;
+                      if (ring === 'tribes' && activeTribe) {
+                        if (activeTribe.moods) {
+                          allowedMoods = activeTribe.moods;
+                        }
+                      }
+                      return <MoodTagSelector value={moodTag} onChange={setMoodTag} allowedMoods={allowedMoods} />;
+                    })()}
+
 
                     {/* Image upload */}
                     <label className="cursor-pointer">
@@ -319,6 +570,25 @@ export function ComposeBox({
                     {previewUrls.length > 0 && (
                       <span className="text-[10px] text-muted-foreground font-medium">
                         {previewUrls.length}/{IMAGE_LIMITS[user?.role || 'Human_Free'] || 1}
+                      </span>
+                    )}
+
+                    {/* Encryption indicator */}
+                    {ring === 'journal' ? (
+                      <span className="flex items-center gap-0.5 text-[10px] text-green-600 font-medium" title="Journal entries are encrypted with your personal key">
+                        <Lock className="h-3 w-3" /> Private
+                      </span>
+                    ) : ring === 'inner_circle' || ring === 'my_people' ? (
+                      <span className="flex items-center gap-0.5 text-[10px] text-green-600 font-medium" title="End-to-end encrypted for your bonds">
+                        <Lock className="h-3 w-3" /> E2E
+                      </span>
+                    ) : ring === 'tribes' && activeTribe && !activeTribe.isPublic ? (
+                      <span className="flex items-center gap-0.5 text-[10px] text-green-600 font-medium" title="Private tribe — end-to-end encrypted">
+                        <Lock className="h-3 w-3" /> E2E
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground font-medium" title="Public tribe posts are not encrypted">
+                        <Globe className="h-3 w-3" /> Public
                       </span>
                     )}
                   </div>

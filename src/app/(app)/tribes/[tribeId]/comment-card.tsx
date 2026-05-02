@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -53,10 +53,12 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   return (
     <div className={`ml-${level * 2} sm:ml-${level * 4}`}>
       <div className="flex items-start space-x-3 mt-3">
-        <Avatar className="h-8 w-8">
-          {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} data-ai-hint={comment.dataAiHintAvatar || "avatar"} />}
-          <AvatarFallback className="text-xs">{comment.authorAvatarFallback}</AvatarFallback>
-        </Avatar>
+        <UserAvatar 
+          user={{ name: comment.authorName, avatar: comment.authorAvatar }} 
+          className="h-8 w-8" 
+          fallback={comment.authorAvatarFallback}
+          dataAiHint={comment.dataAiHintAvatar || "avatar"}
+        />
         <div className="flex-1 bg-muted/50 rounded-lg p-2.5">
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold">{comment.authorName}</p>

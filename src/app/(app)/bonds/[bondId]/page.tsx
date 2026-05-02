@@ -268,7 +268,7 @@ function BondChatContent() {
         formData.append('context', 'bond-attachment');
         formData.append('encryptionMeta', JSON.stringify(meta));
 
-        const csrfToken = document.cookie.match(/(?:^;\s*)__tribes_csrf=([^;]*)/)?.[1] ?? '';
+        const csrfToken = document.cookie.match(/(?:^|;\s*)__tribes_csrf=([^;]*)/)?.[1] ?? '';
         const response = await fetch('/api/upload', {
           method: 'POST',
           body: formData,

@@ -101,9 +101,31 @@ export function avatarSvg(displayName: string): string {
   const { bg, fg } = getColorPair(displayName);
   const initials = getInitials(displayName);
 
+  let hash = 0;
+  for (let i = 0; i < displayName.length; i++) {
+    hash = ((hash << 5) - hash + displayName.charCodeAt(i)) | 0;
+  }
+  const patternType = Math.abs(hash) % 3; // 0: dots, 1: grid, 2: diagonal lines
+
+  let patternDef = '';
+  let patternFill = '';
+
+  if (patternType === 0) {
+    patternDef = `<pattern id="avatar-dots" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="5" cy="5" r="1.5" fill="${fg}" opacity="0.3"/></pattern>`;
+    patternFill = `url(#avatar-dots)`;
+  } else if (patternType === 1) {
+    patternDef = `<pattern id="avatar-grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="${fg}" stroke-width="0.5" opacity="0.4"/></pattern>`;
+    patternFill = `url(#avatar-grid)`;
+  } else {
+    patternDef = `<pattern id="avatar-lines" width="10" height="10" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><line x1="0" y1="0" x2="0" y2="10" stroke="${fg}" stroke-width="1.5" opacity="0.3" /></pattern>`;
+    patternFill = `url(#avatar-lines)`;
+  }
+
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
-    <rect width="80" height="80" rx="40" fill="${bg}"/>
-    <text x="40" y="42" font-family="system-ui,-apple-system,sans-serif" font-size="28" font-weight="600" fill="${fg}" text-anchor="middle" dominant-baseline="central">${escapeXml(initials)}</text>
+    <defs>${patternDef}</defs>
+    <rect width="80" height="80" fill="${bg}"/>
+    <rect width="80" height="80" fill="${patternFill}"/>
+    <text x="50%" y="50%" font-family="system-ui,-apple-system,sans-serif" font-size="28" font-weight="600" fill="${fg}" text-anchor="middle" dominant-baseline="central">${escapeXml(initials)}</text>
   </svg>`;
 
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;

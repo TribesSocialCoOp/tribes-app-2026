@@ -37,7 +37,20 @@ export {
   clearAllKeys,
   isKeyStoreAvailable,
   hasAnyKeys,
+  // Shared secret cache (Phase 2)
+  hashPublicKeyJwk,
+  storeSharedSecret,
+  getSharedSecret,
+  getAllSharedSecrets,
+  deleteSharedSecret,
+  // Tribe key store (Phase 3)
+  storeTribeKey,
+  getTribeKey,
+  getAllTribeKeys,
+  deleteTribeKey,
   type StoredBondKey,
+  type CachedSharedSecret,
+  type StoredTribeKey,
 } from './key-store';
 
 // Vault backup/restore
@@ -68,3 +81,12 @@ export {
   encryptVaultWithPrf,
   decryptAndRestoreVault,
 } from './prf-vault';
+
+// Tribe group encryption (Phase 3)
+export {
+  generateTribeGroupKey,
+  wrapTribeKey,
+  unwrapTribeKey,
+  encryptWithTribeKey,
+  decryptWithTribeKey,
+} from './tribe-encryption';

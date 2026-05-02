@@ -306,8 +306,8 @@ export default function BillingPage() {
                 variant="outline"
                 onClick={async () => {
                   try {
-                    const { createBillingPortalSession } = await import('@/lib/services/payment-service');
-                    const session = await createBillingPortalSession(user.id);
+                    const { createBillingPortalAction } = await import('@/lib/actions/profile-actions');
+                    const session = await createBillingPortalAction();
                     window.location.href = session.url;
                   } catch (e) {
                     toast({ title: "Error", description: "Could not open billing portal.", variant: "destructive" });
@@ -627,19 +627,9 @@ export default function BillingPage() {
                       </ul>
                     </CardContent>
                     <CardFooter>
-                      {tier.planId === 'org_enterprise' ? (
-                        <Button className="w-full" variant="outline">{tier.cta}</Button>
-                      ) : (
-                        <Button
-                          className="w-full"
-                          variant={tier.isPopular ? "default" : "outline"}
-                          disabled={loadingPlan === `${tier.planId}-monthly`}
-                          onClick={() => handleCheckout(tier.planId, 'monthly')}
-                        >
-                          {loadingPlan === `${tier.planId}-monthly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                          Upgrade — {tier.price}/mo
-                        </Button>
-                      )}
+                      <Button className="w-full" variant="outline" disabled>
+                        Coming Soon
+                      </Button>
                     </CardFooter>
                   </Card>
                 ))}
@@ -921,20 +911,9 @@ export default function BillingPage() {
                   </ul>
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                  {tier.planId === 'org_enterprise' ? (
-                    <Button className="w-full" variant="outline">{tier.cta}</Button>
-                  ) : (
-                    <>
-                      <Button className="w-full" variant={tier.isPopular ? "default" : "outline"} disabled={loadingPlan === `${tier.planId}-monthly`} onClick={() => handleCheckout(tier.planId, 'monthly')}>
-                        {loadingPlan === `${tier.planId}-monthly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                        {tier.cta} — {tier.price}/mo
-                      </Button>
-                      <Button className="w-full" variant="outline" disabled={loadingPlan === `${tier.planId}-yearly`} onClick={() => handleCheckout(tier.planId, 'yearly')}>
-                        {loadingPlan === `${tier.planId}-yearly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                        Annual (save 17%)
-                      </Button>
-                    </>
-                  )}
+                  <Button className="w-full" variant="outline" disabled>
+                    Coming Soon
+                  </Button>
                 </CardFooter>
               </Card>
             ))}

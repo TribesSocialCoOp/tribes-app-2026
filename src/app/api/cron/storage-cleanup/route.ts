@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         // Hard-delete the DB row
         await db.delete(mediaFiles)
           .where(eq(mediaFiles.id, file.id))
-          .run();
+          ;
 
         purged++;
         bytesReclaimed += file.sizeBytes;

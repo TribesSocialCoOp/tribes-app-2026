@@ -14,6 +14,8 @@ export interface UploadOptions {
   context?: string;
   /** Bond shared secret — if provided, file is E2E encrypted before upload */
   bondSharedSecret?: ArrayBuffer;
+  /** CryptoKey for post image encryption — encrypts file with AES-256-GCM before upload */
+  encryptionKey?: CryptoKey;
 }
 
 export interface UploadResult {
@@ -32,11 +34,15 @@ export interface UploadResult {
  * client-side before upload. The encryption metadata must be sent
  * to the bond partner (e.g., alongside the chat message) so they
  * can decrypt.
+ *
+ * For encrypted post images, pass an `encryptionKey` (CryptoKey) and
+ * set context to 'encrypted-post-image'. The file is encrypted with
+ * AES-256-GCM before leaving the browser.
  */
 export async function uploadFile(
   file: File,
   folder: string,
-  optionsOrContext?: UploadOptions | string
+  optionsOrContext?: string
 ): Promise<string>;
 export async function uploadFile(
   file: File,
@@ -56,10 +62,18 @@ export async function uploadFile(
   let fileToUpload = file;
   let encryptionMeta: EncryptionMeta | undefined;
 
-  // Client-side encryption for bond attachments
+  // Client-side encryption for bond attachments (ArrayBuffer shared secret)
   if (options.bondSharedSecret && options.context === 'bond-attachment') {
     const { encryptFileForUpload } = await import('@/lib/crypto/file-encryption');
     const result = await encryptFileForUpload(file, options.bondSharedSecret);
+    fileToUpload = result.encryptedFile;
+    encryptionMeta = result.meta;
+  }
+
+  // Client-side encryption for post images (CryptoKey)
+  if (options.encryptionKey && options.context === 'encrypted-post-image') {
+    const { encryptFileWithKey } = await import('@/lib/crypto/file-encryption');
+    const result = await encryptFileWithKey(file, options.encryptionKey);
     fileToUpload = result.encryptedFile;
     encryptionMeta = result.meta;
   }

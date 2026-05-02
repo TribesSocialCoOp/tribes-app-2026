@@ -15,6 +15,7 @@ import { bondRequests, users } from '@/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { createHmac, randomBytes } from 'crypto';
 import type { BondType } from '@/lib/types';
+import { getBaseUrl } from '@/lib/url';
 
 // ============================================================
 // CONSTANTS
@@ -59,6 +60,31 @@ export async function createTapToken(
   userId: string,
   bondType: BondType,
 ): Promise<{ token: string; url: string; expiresAt: Date }> {
+  const baseUrl = await getBaseUrl();
+
+  // Check for existing valid token
+  const existingReqs = await db.query.bondRequests.findMany({
+    where: and(
+      eq(bondRequests.fromUserId, userId),
+      eq(bondRequests.toUserId, userId), // Self-referential = placeholder
+      eq(bondRequests.formationMethod, 'rfid_tap'),
+      eq(bondRequests.status, 'pending')
+    ),
+    orderBy: (requests, { desc }) => [desc(requests.createdAt)],
+    limit: 1,
+  });
+
+  const existing = existingReqs[0];
+  if (existing && existing.createdAt && existing.message) {
+    const existingExpiry = new Date(existing.createdAt.getTime() + TOKEN_TTL_MS);
+    if (existingExpiry > new Date()) {
+      // Re-use existing token
+      const token = existing.message;
+      const url = `${baseUrl}/bond/tap/${encodeURIComponent(token)}`;
+      return { token, url, expiresAt: existingExpiry };
+    }
+  }
+
   const nonce = randomBytes(16).toString('hex');
   const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
 
@@ -66,16 +92,7 @@ export async function createTapToken(
   // Use initiator's own ID as placeholder — will be updated to the actual acceptor on redemption
   // The self-bond validation in redeemTapToken prevents the initiator from accepting their own token
   const requestId = `tap-${Date.now()}-${nonce.substring(0, 8)}`;
-  await db.insert(bondRequests).values({
-    id: requestId,
-    fromUserId: userId,
-    toUserId: userId, // Placeholder — updated on redemption
-    bondType,
-    formationMethod: 'rfid_tap',
-    status: 'pending',
-    createdAt: new Date(),
-  });
-
+  
   // Build payload
   const payload: TapTokenPayload = {
     v: TOKEN_VERSION,
@@ -91,8 +108,18 @@ export async function createTapToken(
   const signature = createHmac('sha256', getHmacSecret()).update(payloadStr).digest('base64url');
   const token = `${payloadStr}.${signature}`;
 
-  // URL uses relative path (host determined at runtime)
-  const url = `/bond/tap/${encodeURIComponent(token)}`;
+  await db.insert(bondRequests).values({
+    id: requestId,
+    fromUserId: userId,
+    toUserId: userId, // Placeholder — updated on redemption
+    bondType,
+    formationMethod: 'rfid_tap',
+    status: 'pending',
+    message: token, // Store token here for reuse
+    createdAt: new Date(),
+  });
+
+  const url = `${baseUrl}/bond/tap/${encodeURIComponent(token)}`;
 
   return { token, url, expiresAt };
 }

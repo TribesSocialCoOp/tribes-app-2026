@@ -61,6 +61,13 @@ export async function fetchPendingBondRequests(): Promise<{ incoming: BondReques
   return fn(userId);
 }
 
+export async function hasOutgoingBondRequest(targetUserId: string): Promise<boolean> {
+  const userId = await getCurrentUserId();
+  if (!userId) return false;
+  const { hasOutgoingRequest: fn } = await import('@/lib/services/bond-service');
+  return fn(userId, targetUserId);
+}
+
 export async function blockUser(blockedUserId: string, reason?: string): Promise<void> {
   const userId = await requireAuth();
   const { blockUser: fn } = await import('@/lib/services/bond-service');

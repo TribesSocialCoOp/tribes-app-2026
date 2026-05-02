@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Tribes</string>
+    <string name="title_activity_main">Tribes</string>
+    <string name="package_name">app.tribes.mobile</string>
+    <string name="custom_url_scheme">app.tribes.mobile</string>
+</resources>

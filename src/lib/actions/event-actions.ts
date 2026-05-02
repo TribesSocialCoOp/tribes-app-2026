@@ -1,6 +1,7 @@
 'use server';
 
 import { requireAuth, requireVerifiedEmail, getCurrentUserId, trackContribution } from './shared';
+import { withPublicErrors, PublicError } from './error-utils';
 import type { Event } from '@/lib/types';
 import { rsvpLimiter } from '@/lib/auth/rate-limit';
 
@@ -28,18 +29,18 @@ export async function getEventsForTribe(tribeName: string): Promise<Event[]> {
   return fn(tribeName);
 }
 
-export async function createEvent(payload: Parameters<typeof import('@/lib/services/event-service').createEvent>[0]): Promise<Event> {
+export const createEvent = withPublicErrors(async (payload: Parameters<typeof import('@/lib/services/event-service').createEvent>[0]): Promise<Event> => {
   const userId = await requireVerifiedEmail();
   // Subscription guard: hosting events is a paid feature
   const { hasFeature } = await import('@/lib/services/subscription-guard');
   if (!(await hasFeature(userId, 'host_events'))) {
-    throw new Error('Upgrade to a paid membership to host events for your tribes.');
+    throw new PublicError('Upgrade to a paid membership to host events for your tribes.');
   }
   const { createEvent: fn } = await import('@/lib/services/event-service');
   const result = await fn({ ...payload, creatorId: userId });
   trackContribution(userId, 'event_hosted', result.id, `Hosted event: ${result.name}`);
   return result;
-}
+});
 
 // ======== EVENT RSVP ========
 export async function rsvpToEvent(eventId: string, status: 'going' | 'interested' | 'not_going'): Promise<{ status: string; rsvpCount: number; pointsAwarded: number }> {

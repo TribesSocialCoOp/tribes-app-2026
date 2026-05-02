@@ -16,6 +16,7 @@ export interface WallBlockData {
 export interface WallStyleData {
   backgroundColor: string;
   layout: string;
+  nowPlayingUrl?: string;
 }
 
 /**
@@ -88,6 +89,7 @@ export async function getWallStyle(userId: string): Promise<WallStyleData> {
     return {
       backgroundColor: rows[0].backgroundColor ?? 'bg-background',
       layout: rows[0].layout ?? 'single-column',
+      nowPlayingUrl: rows[0].nowPlayingUrl ?? undefined,
     };
   }
   return { backgroundColor: 'bg-background', layout: 'single-column' };
@@ -100,13 +102,18 @@ export async function saveWallStyle(userId: string, style: WallStyleData): Promi
   const existing = await db.select().from(wallStyles).where(eq(wallStyles.userId, userId)).limit(1);
   if (existing.length > 0) {
     await db.update(wallStyles)
-      .set({ backgroundColor: style.backgroundColor, layout: style.layout })
+      .set({ 
+        backgroundColor: style.backgroundColor, 
+        layout: style.layout,
+        nowPlayingUrl: style.nowPlayingUrl,
+      })
       .where(eq(wallStyles.userId, userId));
   } else {
     await db.insert(wallStyles).values({
       userId,
       backgroundColor: style.backgroundColor,
       layout: style.layout,
+      nowPlayingUrl: style.nowPlayingUrl,
     });
   }
 }

@@ -86,7 +86,7 @@ export function SharePostDialog({
   
   const identityOptions = [
     { value: "main_profile", label: userProfile?.name || "Main Profile", icon: UserCircle },
-    ...(userProfile?.aliases?.map(alias => ({ value: alias, label: alias, icon: AtSign })) || [])
+    ...(userProfile?.aliases?.map(a => ({ value: a.name, label: a.name, icon: AtSign })) || [])
   ];
 
   return (

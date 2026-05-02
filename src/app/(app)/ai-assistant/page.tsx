@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { Bot, Send, User, HelpCircle, Zap, PlusCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { askAssistant } from '@/ai/flows/assistant-flow';
@@ -108,10 +108,12 @@ function AssistantContent() {
       <Card className="w-full max-w-3xl h-full flex flex-col shadow-2xl">
         <CardHeader className="border-b p-4 flex flex-row items-center justify-between">
           <div className="flex items-center space-x-3">
-            <Avatar className="h-10 w-10">
-              <AvatarImage src="/seed/avatar-default.svg" alt="T-Codex Prime" data-ai-hint="robot hologram" />
-              <AvatarFallback><Bot className="h-5 w-5" /></AvatarFallback>
-            </Avatar>
+            <UserAvatar 
+              user={{ name: "T-Codex Prime", avatar: "/seed/avatar-default.svg" }} 
+              className="h-10 w-10" 
+              fallback="AI"
+              dataAiHint="robot hologram"
+            />
             <div>
               <CardTitle className="text-xl font-mono text-foreground">T-Codex Prime</CardTitle>
               <p className="text-sm text-muted-foreground">Your guide to all things Tribes</p>
@@ -139,10 +141,12 @@ function AssistantContent() {
                 )}
               >
                 {message.role === "model" && (
-                  <Avatar className="h-8 w-8 self-start">
-                    <AvatarImage src="/seed/avatar-default.svg" alt="AI" data-ai-hint="robot bot" />
-                    <AvatarFallback><Bot className="h-4 w-4" /></AvatarFallback>
-                  </Avatar>
+                  <UserAvatar 
+                    user={{ name: "AI", avatar: "/seed/avatar-default.svg" }} 
+                    className="h-8 w-8 self-start" 
+                    fallback="AI"
+                    dataAiHint="robot bot"
+                  />
                 )}
                 <div
                   className={cn(
@@ -155,19 +159,23 @@ function AssistantContent() {
                   <p className="whitespace-pre-wrap">{message.text}</p>
                 </div>
                 {message.role === "user" && (
-                  <Avatar className="h-8 w-8 self-start">
-                    <AvatarImage src="/seed/avatar-default.svg" alt="User" data-ai-hint="person user" />
-                    <AvatarFallback><User className="h-4 w-4" /></AvatarFallback>
-                  </Avatar>
+                  <UserAvatar 
+                    user={{ name: "User", avatar: "/seed/avatar-default.svg" }} 
+                    className="h-8 w-8 self-start" 
+                    fallback="US"
+                    dataAiHint="person user"
+                  />
                 )}
               </div>
             ))}
             {isLoading && (
                 <div className="flex items-end space-x-2 mr-auto justify-start max-w-[85%]">
-                    <Avatar className="h-8 w-8 self-start">
-                        <AvatarImage src="/seed/avatar-default.svg" alt="AI" data-ai-hint="robot bot" />
-                        <AvatarFallback><Bot className="h-4 w-4" /></AvatarFallback>
-                    </Avatar>
+                        <UserAvatar 
+                            user={{ name: "AI", avatar: "/seed/avatar-default.svg" }} 
+                            className="h-8 w-8 self-start" 
+                            fallback="AI"
+                            dataAiHint="robot bot"
+                        />
                     <div className="rounded-xl p-3 shadow-md text-sm bg-card text-card-foreground border rounded-bl-none">
                         <div className="flex items-center space-x-1.5">
                             <span className="h-1.5 w-1.5 bg-muted-foreground rounded-full animate-pulse delay-0"></span>

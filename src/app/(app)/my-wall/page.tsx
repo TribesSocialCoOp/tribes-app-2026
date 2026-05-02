@@ -12,7 +12,9 @@ import {
 } from "lucide-react";
 
 import { AddBlockDialog } from '@/components/dialogs/add-block-dialog';
+import { EditBlockDialog } from '@/components/dialogs/edit-block-dialog';
 import { CustomizeWallSheet } from '@/components/sheets/customize-wall-sheet';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 import type { TribePost } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
@@ -30,6 +32,7 @@ import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { moodsData } from '@/lib/moods-data';
 import { AuthGuard } from '@/components/providers/auth-guard';
+import { getEmbedUrl } from '@/lib/media-embeds';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -85,6 +88,7 @@ function WallContent() {
   // Dialogs
   const [isAddBlockDialogOpen, setIsAddBlockDialogOpen] = useState(false);
   const [isCustomizeSheetOpen, setIsCustomizeSheetOpen] = useState(false);
+  const [editingBlock, setEditingBlock] = useState<WallBlock | null>(null);
   const [showBlocks, setShowBlocks] = useState(true);
 
   // ─── Data Loading ────────────────────────────────────────────────────────
@@ -144,19 +148,6 @@ function WallContent() {
     } catch { /* ignore */ }
   };
 
-  const getEmbedUrl = (url: string): string | null => {
-    if (!url) return null;
-    // Spotify
-    const spotifyMatch = url.match(/open\.spotify\.com\/(track|album|playlist)\/([a-zA-Z0-9]+)/);
-    if (spotifyMatch) return `https://open.spotify.com/embed/${spotifyMatch[1]}/${spotifyMatch[2]}?theme=0`;
-    // YouTube
-    const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]+)/);
-    if (ytMatch) return `https://www.youtube.com/embed/${ytMatch[1]}?rel=0`;
-    // SoundCloud — just use the URL
-    if (url.includes('soundcloud.com')) return `https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&auto_play=false&visual=true`;
-    return null;
-  };
-
   // ─── Block Management ────────────────────────────────────────────────────
 
   const handleAddBlock = async (blockType: 'html' | 'music' | 'video') => {
@@ -180,6 +171,16 @@ function WallContent() {
     } catch { /* ignore */ }
   };
 
+  const handleEditBlockSave = async (blockId: string, newContent: any) => {
+    setBlocks(prev => prev.map(b => b.id === blockId ? { ...b, content: newContent } : b));
+    try {
+      const block = blocks.find(b => b.id === blockId);
+      if (block) {
+        await saveWallBlock({ id: blockId, type: block.type, content: JSON.stringify(newContent), sortOrder: blocks.indexOf(block) });
+      }
+    } catch { /* ignore */ }
+  };
+
   const handleSaveStyles = async (newStyles: WallStyles) => {
     setStyles(newStyles);
     setIsCustomizeSheetOpen(false);
@@ -195,6 +196,16 @@ function WallContent() {
       toast({ title: 'Unpinned', description: 'Post removed from your wall.' });
     } catch {
       toast({ title: 'Error', description: 'Could not unpin post.', variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteBlock = async (blockId: string) => {
+    setBlocks(prev => prev.filter(b => b.id !== blockId));
+    try {
+      await deleteWallBlockAction(blockId);
+      toast({ title: 'Block deleted' });
+    } catch {
+      toast({ title: 'Error deleting block', variant: 'destructive' });
     }
   };
 
@@ -219,7 +230,9 @@ function WallContent() {
         <div className="flex flex-col items-center text-center gap-4 py-6">
           <Avatar className="h-24 w-24 ring-4 ring-background shadow-lg">
             {avatar && <AvatarImage src={avatar} alt={name || 'You'} />}
-            <AvatarFallback className="text-2xl font-bold">{initials}</AvatarFallback>
+            <AvatarFallback className="text-2xl font-bold">
+              <span className="mt-1">{initials}</span>
+            </AvatarFallback>
           </Avatar>
 
           <div className="flex flex-col md:flex-row md:items-baseline md:gap-3">
@@ -229,9 +242,18 @@ function WallContent() {
 
           {/* Current Mood (Task 4.3) */}
           {currentMood && (
-            <Badge variant="secondary" className="text-sm px-3 py-1">
-              <span className="mr-1.5">{currentMood.emoji}</span> Feeling {currentMood.name}
-            </Badge>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="text-sm px-3 py-1 cursor-help">
+                    <span className="mr-1.5">{currentMood.emoji}</span> {currentMood.name}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Your current mood, generated automatically from your most recent post.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
 
           {/* Now Playing (Task 4.4) */}
@@ -266,14 +288,28 @@ function WallContent() {
                   >
                     <Pencil className="h-3 w-3" />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 text-destructive hover:text-destructive"
+                    onClick={() => {
+                      if (window.confirm("Remove Now Playing?")) {
+                        setNowPlayingInput('');
+                        setNowPlayingUrl('');
+                        saveWallStyle({ ...styles, nowPlayingUrl: '' } as any).catch(() => {});
+                      }
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
                 </div>
                 <div className="rounded-lg overflow-hidden shadow-sm border">
                   <iframe
                     src={embedUrl}
                     width="100%"
-                    height={embedUrl.includes('youtube') ? '200' : '80'}
-                    allow="autoplay; encrypted-media"
-                    className="border-0"
+                    height={embedUrl.includes('youtube') || embedUrl.includes('vimeo') ? '200' : '152'}
+                    allow="autoplay; encrypted-media; fullscreen"
+                    className="border-0 block"
                     loading="lazy"
                   />
                 </div>
@@ -392,9 +428,9 @@ function WallContent() {
               )}>
                 {blocks.map(block => {
                   switch (block.type) {
-                    case 'html': return <HtmlBlock key={block.id} content={block.content} />;
-                    case 'music': return <MusicBlock key={block.id} content={block.content} />;
-                    case 'video': return <VideoBlock key={block.id} content={block.content} />;
+                    case 'html': return <HtmlBlock key={block.id} content={block.content} onEdit={() => setEditingBlock(block)} />;
+                    case 'music': return <MusicBlock key={block.id} content={block.content} onEdit={() => setEditingBlock(block)} />;
+                    case 'video': return <VideoBlock key={block.id} content={block.content} onEdit={() => setEditingBlock(block)} />;
                     default: return null;
                   }
                 })}
@@ -415,6 +451,13 @@ function WallContent() {
         onOpenChange={setIsCustomizeSheetOpen}
         currentStyles={styles}
         onSave={handleSaveStyles}
+      />
+      <EditBlockDialog
+        isOpen={!!editingBlock}
+        onOpenChange={(open) => !open && setEditingBlock(null)}
+        block={editingBlock}
+        onSave={handleEditBlockSave}
+        onDelete={handleDeleteBlock}
       />
     </div>
   );

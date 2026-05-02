@@ -138,7 +138,7 @@ interface TribeDetailContextValue {
   // Actions
   syncAllData: (isBackground?: boolean | Event) => Promise<void>;
   handleInitiateJoinTribe: () => void;
-  handleConfirmJoinTribe: (tribe: Tribe, selectedAlias?: string) => Promise<void>;
+  handleConfirmJoinTribe: (tribe: Tribe, selectedAlias?: string, aliasAvatar?: string) => Promise<void>;
   handleOpenPromoteDialog: (post: TribePost) => void;
   handleConfirmPromotion: (postId: string, selectedMoodSlugs: string[]) => Promise<void>;
   handleOpenReportPostDialog: (post: TribePost) => void;
@@ -277,11 +277,11 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     dispatch({ type: 'OPEN_JOIN_TRIBE' });
   }, [isLoggedIn, router]);
 
-  const handleConfirmJoinTribe = useCallback(async (tribe: Tribe, selectedAlias?: string) => {
+  const handleConfirmJoinTribe = useCallback(async (tribe: Tribe, selectedAlias?: string, aliasAvatar?: string) => {
     if (!state.tribe) return;
     dispatch({ type: 'SET_JOINING', payload: true });
     try {
-      const result = await requestToJoinTribe(state.tribe.id, selectedAlias);
+      const result = await requestToJoinTribe(state.tribe.id, selectedAlias, aliasAvatar);
       dispatch({ type: 'CLOSE_JOIN_TRIBE' });
       if (result === 'pending') {
         toast({ title: 'Request Sent', description: `Your request to join ${state.tribe.name} is pending approval.` });
@@ -377,7 +377,10 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
   const handleConfirmComment = useCallback(async (content: string) => {
     if (!state.commentDialog.target) return;
     try {
-      await createComment(state.commentDialog.target.postId, content, state.commentDialog.target.parentCommentId);
+      const result = await createComment(state.commentDialog.target.postId, content, state.commentDialog.target.parentCommentId);
+      if (result && typeof result === 'object' && 'serverError' in result) {
+        throw new Error(result.serverError as string);
+      }
       toast({ title: 'Comment Posted!', description: 'Your comment has been added.' });
       await syncAllData();
     } catch (e: unknown) {

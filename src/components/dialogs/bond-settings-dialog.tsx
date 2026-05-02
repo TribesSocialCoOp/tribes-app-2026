@@ -10,7 +10,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import type { Bond } from '@/lib/types';
-import { AtSign, UserCheck, UserCog, Info as InfoIcon, Flag, Heart, Smile, Meh, ShieldCheck } from 'lucide-react';
+import type { UserProfile } from '@/lib/types';
+import { AtSign, UserCheck, UserCog, Info as InfoIcon, Flag, Heart, Smile, Meh, ShieldCheck, Users, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
@@ -18,6 +19,12 @@ import {
   ResponsiveDialogDescription, ResponsiveDialogFooter
 } from "@/components/ui/responsive-dialog";
 import { getBondTypeDisplay } from '@/lib/bond-utils';
+import { UserAvatar } from "@/components/ui/user-avatar";
+import { avatarSvg } from "@/lib/placeholder-svg";
+import { getUserProfile } from '@/lib/actions/profile-actions';
+import { updateTribeMemberIdentity } from '@/lib/actions/tribe-actions';
+import { useUser } from '@/hooks/use-user';
+import { useToast } from '@/hooks/use-toast';
 
 
 interface BondSettingsDialogProps {
@@ -30,6 +37,8 @@ interface BondSettingsDialogProps {
 
 
 export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondSettingsDialogProps) {
+  const { user: sessionUser } = useUser();
+  const { toast } = useToast();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [yourPseudonym, setYourPseudonym] = useState("");
   const [theirPseudonymForYou, setTheirPseudonymForYou] = useState("");
@@ -37,6 +46,11 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
   const [currentNicknameVibe, setCurrentNicknameVibe] = useState<Bond['tribeNicknameVibe'] | undefined>(undefined);
   const [innerCircle, setInnerCircle] = useState(false);
 
+  // ── Tribe identity switching state ──
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [selectedTribeIdentity, setSelectedTribeIdentity] = useState<string>("main_profile");
+  const [isSavingIdentity, setIsSavingIdentity] = useState(false);
 
   useEffect(() => {
     if (isOpen && bond) {
@@ -48,6 +62,34 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
       setDisplayPreference(bond.displayPreferenceForTribeNickname || (bond.pseudonym ? 'my_alias' : 'tribe_assigned_nickname'));
       setCurrentNicknameVibe(bond.tribeNicknameVibe);
       setInnerCircle(bond.innerCircle ?? false);
+
+      // Load user profile for tribe identity picker
+      if (bond.targetType === 'tribe' && sessionUser) {
+        setIsLoadingProfile(true);
+        getUserProfile(sessionUser.id).then(profile => {
+          setUserProfile(profile);
+          // Pre-select current identity
+          if (bond.pseudonym) {
+            // Try to match pseudonym to an alias
+            if (bond.tribeAssignedNickname && bond.pseudonym === bond.tribeAssignedNickname) {
+              setSelectedTribeIdentity(`nickname:${bond.tribeAssignedNickname}`);
+            } else {
+              const matchesReserved = profile?.reservedAlias?.replace(/^@/, '') === bond.pseudonym;
+              const matchesAlias = profile?.aliases.find(a => a.name === bond.pseudonym);
+              if (matchesReserved && profile?.reservedAlias) {
+                setSelectedTribeIdentity(profile.reservedAlias);
+              } else if (matchesAlias) {
+                setSelectedTribeIdentity(matchesAlias.name);
+              } else {
+                setSelectedTribeIdentity(bond.pseudonym);
+              }
+            }
+          } else {
+            setSelectedTribeIdentity("main_profile");
+          }
+          setIsLoadingProfile(false);
+        });
+      }
     } else if (!isOpen) {
       setNotificationsEnabled(true);
       setYourPseudonym("");
@@ -55,14 +97,52 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
       setDisplayPreference('my_alias');
       setCurrentNicknameVibe(undefined);
       setInnerCircle(false);
+      setSelectedTribeIdentity("main_profile");
+      setUserProfile(null);
     }
-  }, [isOpen, bond]);
+  }, [isOpen, bond, sessionUser]);
 
 
   if (!bond) return null;
 
-  const handleSaveSettings = () => {
+  const resolveAvatarForIdentity = (value: string): string | undefined => {
+    if (value === "main_profile") return userProfile?.avatar || undefined;
+    if (userProfile?.reservedAlias === value) return userProfile?.reservedAliasAvatar || avatarSvg(value);
+    const matchedAlias = userProfile?.aliases.find(a => a.name === value);
+    return matchedAlias?.avatar || avatarSvg(value);
+  };
+
+  const tribeIdentityOptions = [
+    { value: "main_profile", label: userProfile?.name || "Main Profile", isAlias: false },
+    ...(bond?.tribeAssignedNickname
+      ? [{ value: `nickname:${bond.tribeAssignedNickname}`, label: `${bond.tribeAssignedNickname} (tribe nickname)`, isAlias: true }]
+      : []),
+    ...(userProfile?.reservedAlias
+      ? [{ value: userProfile.reservedAlias, label: userProfile.reservedAlias, isAlias: true }]
+      : []),
+    ...(userProfile?.aliases.map(a => ({ value: a.name, label: a.name, isAlias: true })) || [])
+  ];
+
+  const handleSaveSettings = async () => {
     if (bond) {
+        // ── Save tribe identity if changed ──
+        if (bond.targetType === 'tribe' && bond.targetId) {
+          const isAlias = selectedTribeIdentity !== "main_profile";
+          const isNickname = selectedTribeIdentity.startsWith('nickname:');
+          const aliasName = isAlias
+            ? (isNickname ? selectedTribeIdentity.replace('nickname:', '') : selectedTribeIdentity.replace(/^@/, ''))
+            : undefined;
+          const aliasAvatarUrl = isAlias ? resolveAvatarForIdentity(selectedTribeIdentity) : undefined;
+          try {
+            setIsSavingIdentity(true);
+            await updateTribeMemberIdentity(bond.targetId, aliasName, aliasAvatarUrl);
+          } catch (err: unknown) {
+            toast({ variant: 'destructive', title: 'Identity Update Failed', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+          } finally {
+            setIsSavingIdentity(false);
+          }
+        }
+
         const updatedBond: Bond = {
             ...bond,
             showInIntercom: notificationsEnabled,
@@ -149,9 +229,85 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
 
         <Separator />
 
+        {/* ── Tribe Identity Picker (tribe bonds only) ── */}
+        {bond.targetType === 'tribe' && (
+          <>
+            <fieldset className="space-y-4">
+              <legend className="text-base font-semibold text-foreground mb-3 flex items-center">
+                <Users className="h-4 w-4 mr-2 text-primary" />
+                Tribe Identity
+              </legend>
+              <p className="text-xs text-muted-foreground -mt-2">
+                Choose how you appear in this tribe. This changes your visible name and avatar for all tribe activity.
+              </p>
+              {isLoadingProfile ? (
+                <div className="flex items-center justify-center h-16">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <RadioGroup value={selectedTribeIdentity} onValueChange={setSelectedTribeIdentity}>
+                  <ScrollArea className="h-auto max-h-[30vh]">
+                    <div className="space-y-2">
+                      {tribeIdentityOptions.map((option) => (
+                        <Label
+                          key={option.value}
+                          htmlFor={`tribe-id-${option.value}`}
+                          className="flex items-center space-x-3 p-3 rounded-md border hover:bg-muted/50 cursor-pointer has-[:checked]:bg-accent has-[:checked]:border-primary has-[:checked]:text-accent-foreground transition-colors"
+                        >
+                          <RadioGroupItem value={option.value} id={`tribe-id-${option.value}`} className="border-primary" />
+                          <UserAvatar
+                            user={{ name: option.label, avatar: resolveAvatarForIdentity(option.value) }}
+                            className="h-8 w-8 rounded-md shrink-0"
+                            fallback={option.isAlias ? option.label.replace(/^@/, '').substring(0, 2).toUpperCase() : (userProfile?.name?.substring(0, 2).toUpperCase() || '??')}
+                          />
+                          <span className="font-medium text-sm">{option.label}</span>
+                        </Label>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </RadioGroup>
+              )}
+
+              {/* ── Inline nickname controls (when a nickname is assigned) ── */}
+              {bond.tribeAssignedNickname && (
+                <div className="mt-3 space-y-3 p-3 rounded-lg border bg-muted/30">
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <UserCog className="h-4 w-4 mr-2 text-orange-500 shrink-0" />
+                    <span>
+                      Nickname <span className="italic font-semibold text-foreground">{bond.tribeAssignedNickname}</span> was assigned by tribe leadership.
+                    </span>
+                  </div>
+
+                  <div>
+                    <Label className="block mb-1.5 text-xs text-muted-foreground">How do you feel about this nickname?</Label>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant={currentNicknameVibe === 'love_it' ? "default" : "outline"} size="sm" onClick={() => handleNicknameVibe('love_it')} className="text-xs px-2 py-1 h-auto">
+                        <Heart className={cn("mr-1.5 h-3.5 w-3.5", currentNicknameVibe === 'love_it' && "fill-current")}/> Love it!
+                      </Button>
+                      <Button variant={currentNicknameVibe === 'okay' ? "default" : "outline"} size="sm" onClick={() => handleNicknameVibe('okay')} className="text-xs px-2 py-1 h-auto">
+                        <Smile className={cn("mr-1.5 h-3.5 w-3.5", currentNicknameVibe === 'okay' && "fill-current")}/> It&apos;s Okay
+                      </Button>
+                      <Button variant={currentNicknameVibe === 'not_for_me' ? "default" : "outline"} size="sm" onClick={() => handleNicknameVibe('not_for_me')} className="text-xs px-2 py-1 h-auto">
+                        <Meh className={cn("mr-1.5 h-3.5 w-3.5", currentNicknameVibe === 'not_for_me' && "fill-current")}/> Not For Me
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground/80 mt-1">Your feedback may be shared with tribe leadership.</p>
+                  </div>
+
+                  <Button variant="link" size="sm" onClick={handleReportNickname} className="text-xs text-destructive hover:text-destructive/80 p-0 h-auto">
+                    <Flag className="mr-1.5 h-3.5 w-3.5"/> Report Abusive Nickname
+                  </Button>
+                </div>
+              )}
+            </fieldset>
+          </>
+        )}
+
+        {/* ── Alias & Nickname Settings (user bonds only) ── */}
+        {bond.targetType === 'user' && (
         <fieldset className="space-y-4">
             <legend className="text-base font-semibold text-foreground mb-3">Alias & Nickname Settings</legend>
-            
+
             <div>
                 <Label htmlFor={`your-pseudonym-${bond.id}`} className="flex items-center mb-1.5">
                     <AtSign className="h-4 w-4 mr-2 text-primary"/>
@@ -169,96 +325,31 @@ export function BondSettingsDialog({ isOpen, onOpenChange, bond, onSave }: BondS
                 </p>
             </div>
 
-              {bond.targetType === 'user' && (
-                <div>
-                    <Label htmlFor={`their-pseudonym-${bond.id}`} className="flex items-center mb-1.5">
-                        <UserCheck className="h-4 w-4 mr-2 text-sky-600"/>
-                        Their Alias for You (if known)
-                    </Label>
-                    <Input
-                        id={`their-pseudonym-${bond.id}`}
-                        value={theirPseudonymForYou}
-                        onChange={(e) => setTheirPseudonymForYou(e.target.value)}
-                        placeholder="e.g., CollaboratorX (optional)"
-                        className="text-sm"
-                    />
-                    <p className="text-xs text-muted-foreground mt-1 px-1">
-                        If <span className="italic font-semibold">{bond.targetName}</span> uses an alias for you, note it here.
-                    </p>
-                </div>
-            )}
-
-            {bond.targetType === 'tribe' && bond.tribeAssignedNickname && (
-              <Accordion type="single" collapsible className="w-full">
-                <AccordionItem value="tribe-nickname-controls" className="border rounded-lg overflow-hidden bg-muted/50">
-                  <AccordionTrigger className="p-3 hover:no-underline w-full text-left data-[state=open]:border-b data-[state=open]:border-border">
-                    <div className="flex items-center">
-                      <UserCog className="h-4 w-4 mr-2 text-orange-500 flex-shrink-0"/>
-                      <div className="flex-grow">
-                        <span className="text-sm font-medium text-foreground">Your Nickname in this Tribe: <span className="italic font-semibold">{bond.tribeAssignedNickname}</span></span>
-                        <p className="text-xs text-muted-foreground mt-0.5">This nickname is assigned by the tribe leadership.</p>
-                      </div>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="px-3 pb-3 pt-2">
-                    <div className="space-y-3">
-                      <div>
-                          <Label className="block mb-1.5 text-xs text-muted-foreground">Control how this name is displayed publicly within this tribe:</Label>
-                          <RadioGroup value={displayPreference} onValueChange={(value) => setDisplayPreference(value as 'my_alias' | 'tribe_assigned_nickname')} className="space-y-1">
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="my_alias" id={`pref-alias-${bond.id}`} />
-                              <Label htmlFor={`pref-alias-${bond.id}`} className="text-xs font-normal">Show My Alias ({yourPseudonym || "Profile Name"})</Label>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <RadioGroupItem value="tribe_assigned_nickname" id={`pref-tribe-${bond.id}`} />
-                              <Label htmlFor={`pref-tribe-${bond.id}`} className="text-xs font-normal">Show Tribe-Assigned Nickname ({bond.tribeAssignedNickname})</Label>
-                            </div>
-                          </RadioGroup>
-                        </div>
-                        
-                        <div className="pt-2">
-                          <Label className="block mb-1.5 text-xs text-muted-foreground">How do you feel about this nickname?</Label>
-                          <div className="flex flex-wrap gap-2">
-                              <Button variant={currentNicknameVibe === 'love_it' ? "default" : "outline"} size="sm" onClick={() => handleNicknameVibe('love_it')} className="text-xs px-2 py-1 h-auto">
-                                  <Heart className={cn("mr-1.5 h-3.5 w-3.5", currentNicknameVibe === 'love_it' && "fill-current")}/> Love it!
-                              </Button>
-                              <Button variant={currentNicknameVibe === 'okay' ? "default" : "outline"} size="sm" onClick={() => handleNicknameVibe('okay')} className="text-xs px-2 py-1 h-auto">
-                                  <Smile className={cn("mr-1.5 h-3.5 w-3.5", currentNicknameVibe === 'okay' && "fill-current")}/> It's Okay
-                              </Button>
-                              <Button variant={currentNicknameVibe === 'not_for_me' ? "default" : "outline"} size="sm" onClick={() => handleNicknameVibe('not_for_me')} className="text-xs px-2 py-1 h-auto">
-                                  <Meh className={cn("mr-1.5 h-3.5 w-3.5", currentNicknameVibe === 'not_for_me' && "fill-current")}/> Not For Me
-                              </Button>
-                          </div>
-                           <p className="text-xs text-muted-foreground/80 mt-1">Your feedback is valuable and may be shared with tribe leadership.</p>
-                        </div>
-
-                        <div className="pt-2">
-                          <Button variant="link" size="sm" onClick={handleReportNickname} className="text-xs text-destructive hover:text-destructive/80 p-0 h-auto">
-                              <Flag className="mr-1.5 h-3.5 w-3.5"/> Report Abusive Nickname
-                          </Button>
-                        </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            )}
-             {bond.targetType === 'tribe' && !bond.tribeAssignedNickname && (
-                 <div className="p-3 rounded-lg border border-dashed">
-                    <Label className="flex items-center mb-1">
-                        <InfoIcon className="h-4 w-4 mr-2 text-muted-foreground"/>
-                        Tribe-Assigned Nickname
-                    </Label>
-                    <p className="text-xs text-muted-foreground pl-6">
-                        This tribe has not assigned you a specific nickname.
-                    </p>
-                </div>
-            )}
+            <div>
+                <Label htmlFor={`their-pseudonym-${bond.id}`} className="flex items-center mb-1.5">
+                    <UserCheck className="h-4 w-4 mr-2 text-sky-600"/>
+                    Their Alias for You (if known)
+                </Label>
+                <Input
+                    id={`their-pseudonym-${bond.id}`}
+                    value={theirPseudonymForYou}
+                    onChange={(e) => setTheirPseudonymForYou(e.target.value)}
+                    placeholder="e.g., CollaboratorX (optional)"
+                    className="text-sm"
+                />
+                <p className="text-xs text-muted-foreground mt-1 px-1">
+                    If <span className="italic font-semibold">{bond.targetName}</span> uses an alias for you, note it here.
+                </p>
+            </div>
         </fieldset>
+        )}
       </div>
 
       <ResponsiveDialogFooter className="pt-2">
         <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-        <Button onClick={handleSaveSettings} className="bg-primary hover:bg-primary/90 text-primary-foreground">Save Changes</Button>
+        <Button onClick={handleSaveSettings} disabled={isSavingIdentity} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+          {isSavingIdentity ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving...</> : 'Save Changes'}
+        </Button>
       </ResponsiveDialogFooter>
     </ResponsiveDialog>
   );

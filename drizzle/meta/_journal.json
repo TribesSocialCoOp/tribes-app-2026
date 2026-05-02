@@ -134,6 +134,13 @@
       "when": 1777340382594,
       "tag": "0018_freezing_skin",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1777420733829,
+      "tag": "0019_chilly_psylocke",
+      "breakpoints": true
     }
   ]
 }

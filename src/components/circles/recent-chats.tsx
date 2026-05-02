@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { MessageSquareText, Lock } from 'lucide-react';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { cn } from '@/lib/utils';
 import { useTimeSince } from '@/hooks/use-time-since';
 
@@ -34,11 +34,11 @@ function ChatCard({ convo }: { convo: Conversation }) {
         "hover:shadow-md hover:-translate-y-0.5",
       )}
     >
-      <Avatar className="h-10 w-10 ring-2 ring-primary/20">
-        <AvatarFallback className="bg-primary/10 text-primary text-sm font-semibold">
-          {convo.targetInitials}
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar 
+        user={{ name: convo.targetName }} 
+        className="h-10 w-10 ring-2 ring-primary/20" 
+        fallback={convo.targetInitials}
+      />
       <span className="text-xs font-medium text-foreground truncate w-full text-center">
         {convo.targetName.split(' ')[0]}
       </span>

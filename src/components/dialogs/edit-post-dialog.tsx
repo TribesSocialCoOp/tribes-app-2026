@@ -1,26 +1,34 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { Pencil, Loader2, Lock } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Pencil, Loader2, Lock, ImagePlus, X, Type } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/hooks/use-user';
+import { MoodTagSelector } from '@/components/compose/mood-tag-selector';
 import type { TribePost } from '@/lib/types';
 import { editPost, editEncryptedPost, getPostKeyGrants } from '@/lib/actions/content-actions';
+import type { EditPostPayload } from '@/lib/actions/content-actions';
 import { decryptPost, reEncryptPost, unwrapPostKey } from '@/lib/crypto/post-encryption';
 import { getOrCreateJournalKey } from '@/lib/crypto/journal-encryption';
 import { fromBase64 } from '@/lib/crypto/encoding';
+import { uploadFile } from '@/lib/upload';
+import { cn } from '@/lib/utils';
 
-const postSchema = z.object({
-  content: z.string().min(1, 'Post content cannot be empty.').max(5000, 'Post is too long.'),
-});
-
-type PostFormValues = z.infer<typeof postSchema>;
+const IMAGE_LIMITS: Record<string, number> = {
+  'Human_Free': 1,
+  'Human_Paid': 4,
+  'Human_Member': 4,
+  'Creator': 10,
+  'Admin': 10,
+  'Org_Base': 10,
+  'Org_Pro': 20,
+  'Org_Enterprise': 50,
+};
 
 interface EditPostDialogProps {
   open: boolean;
@@ -31,36 +39,58 @@ interface EditPostDialogProps {
 
 export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPostDialogProps) {
   const { toast } = useToast();
+  const { user } = useUser();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [postKey, setPostKey] = useState<CryptoKey | null>(null);
   const [decryptionError, setDecryptionError] = useState<string | null>(null);
 
-  const form = useForm<PostFormValues>({
-    resolver: zodResolver(postSchema),
-    defaultValues: {
-      content: '',
-    },
-  });
+  // Form state
+  const [content, setContent] = useState('');
+  const [title, setTitle] = useState('');
+  const [showTitle, setShowTitle] = useState(false);
+  const [moodTag, setMoodTag] = useState<string | null>(null);
 
-  // Handle decryption when dialog opens for an encrypted post
+  // Image state
+  const [existingImageUrls, setExistingImageUrls] = useState<string[]>([]);
+  const [newImageFiles, setNewImageFiles] = useState<File[]>([]);
+  const [newPreviewUrls, setNewPreviewUrls] = useState<string[]>([]);
+
+  // Reset form when dialog opens with a post
   useEffect(() => {
     if (open && post) {
       if (post.isEncrypted) {
         handleDecryptPost(post);
       } else {
-        form.reset({ content: post.content });
+        setContent(post.content || '');
         setDecryptionError(null);
         setPostKey(null);
       }
+
+      // Populate metadata from existing post
+      setTitle(post.title || '');
+      setShowTitle(!!post.title);
+      setMoodTag(post.moodTag || null);
+
+      // Populate existing images
+      const imgs: string[] = [];
+      if (post.imageUrls && post.imageUrls.length > 0) {
+        imgs.push(...post.imageUrls);
+      } else if (post.imageUrl) {
+        imgs.push(post.imageUrl);
+      }
+      setExistingImageUrls(imgs);
+      setNewImageFiles([]);
+      setNewPreviewUrls([]);
     }
-  }, [open, post, form]);
+  }, [open, post]);
 
   const handleDecryptPost = async (encryptedPost: TribePost) => {
     setIsDecrypting(true);
     setDecryptionError(null);
     try {
-      // 1. Fetch self-grant
       const grants = await getPostKeyGrants([encryptedPost.id]);
       const selfGrant = grants[encryptedPost.id];
       
@@ -68,10 +98,7 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
         throw new Error('Encryption key not found for this post.');
       }
 
-      // 2. Get author's journal key (used to wrap self-grants)
       const journalKey = await getOrCreateJournalKey();
-
-      // 3. Unwrap post key
       const unwrappedKey = await unwrapPostKey(
         selfGrant.wrappedKey,
         selfGrant.wrapIv,
@@ -79,7 +106,6 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
       );
       setPostKey(unwrappedKey);
 
-      // 4. Decrypt content
       const ciphertext = fromBase64(encryptedPost.ciphertextBase64!);
       const plaintext = await decryptPost(
         ciphertext,
@@ -89,7 +115,7 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
         journalKey
       );
 
-      form.reset({ content: plaintext });
+      setContent(plaintext);
     } catch (err: any) {
       console.error('[EditPostDialog] Decryption failed:', err);
       setDecryptionError(err.message || 'Failed to decrypt post content.');
@@ -98,23 +124,93 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
     }
   };
 
-  const onSubmit = async (values: PostFormValues) => {
-    if (!post) return;
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const role = user?.role || 'Human_Free';
+    const limit = IMAGE_LIMITS[role] || 1;
+    const totalImages = existingImageUrls.length + newImageFiles.length + files.length;
+
+    if (totalImages > limit) {
+      toast({
+        variant: 'destructive',
+        title: 'Limit reached',
+        description: `Your membership allows up to ${limit} images per post.`,
+      });
+      return;
+    }
+
+    const previews = files.map(f => URL.createObjectURL(f));
+    setNewImageFiles(prev => [...prev, ...files]);
+    setNewPreviewUrls(prev => [...prev, ...previews]);
+
+    // Reset the input so the same file can be re-selected
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeExistingImage = (index: number) => {
+    setExistingImageUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeNewImage = (index: number) => {
+    URL.revokeObjectURL(newPreviewUrls[index]);
+    setNewImageFiles(prev => prev.filter((_, i) => i !== index));
+    setNewPreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const onSubmit = async () => {
+    if (!post || !content.trim()) return;
     setIsSubmitting(true);
     try {
+      // Upload new images first
+      const uploadedUrls: string[] = [];
+      for (const file of newImageFiles) {
+        if (post.isEncrypted && postKey) {
+          // Encrypted upload
+          const result = await uploadFile(file, 'posts', {
+            context: 'encrypted-post-image',
+            encryptionKey: postKey,
+          });
+          uploadedUrls.push(result.fileId);
+        } else {
+          // Unencrypted upload
+          const url = await uploadFile(file, 'posts', 'public-tribe-post');
+          uploadedUrls.push(url as string);
+        }
+      }
+
+      // Combine existing + newly uploaded
+      const allImageUrls = [...existingImageUrls, ...uploadedUrls];
+
+      // Build metadata
+      const metadata = {
+        title: showTitle && title.trim() ? title.trim() : null,
+        imageUrl: allImageUrls.length > 0 ? allImageUrls[0] : null,
+        imageUrls: allImageUrls.length > 0 ? allImageUrls : null,
+        moodTag: moodTag,
+      };
+
       if (post.isEncrypted) {
         if (!postKey) throw new Error('Encryption key missing.');
         
-        // Re-encrypt locally
-        const { ciphertextBase64, iv } = await reEncryptPost(values.content, postKey);
+        // Re-encrypt content locally
+        const { ciphertextBase64, iv } = await reEncryptPost(content, postKey);
         
-        // Submit opaque blob to server
-        await editEncryptedPost(post.id, ciphertextBase64, iv);
+        // Submit encrypted content + unencrypted metadata
+        await editEncryptedPost(post.id, ciphertextBase64, iv, metadata);
       } else {
-        // Plaintext edit
-        await editPost(post.id, values.content);
+        // Plaintext edit with full payload
+        const payload: EditPostPayload = {
+          content,
+          ...metadata,
+        };
+        await editPost(post.id, payload);
       }
       
+      // Cleanup object URLs
+      newPreviewUrls.forEach(url => URL.revokeObjectURL(url));
+
       toast({ title: 'Post Updated', description: 'Your changes have been saved.' });
       onOpenChange(false);
       onSuccess();
@@ -129,9 +225,13 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
     }
   };
 
+  const totalImageCount = existingImageUrls.length + newImageFiles.length;
+  const role = user?.role || 'Human_Free';
+  const imageLimit = IMAGE_LIMITS[role] || 1;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[550px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center space-x-2">
             <Pencil className="h-5 w-5 text-primary" />
@@ -140,8 +240,8 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
           </DialogTitle>
           <DialogDescription>
             {post?.isEncrypted 
-              ? "This post is end-to-end encrypted. Your edits will be re-encrypted before leaving your device."
-              : "Update your post content below."}
+              ? "Encrypted post — your edits will be re-encrypted locally. Metadata (title, mood, images) remains unencrypted."
+              : "Update your post content, images, and mood below."}
           </DialogDescription>
         </DialogHeader>
 
@@ -155,44 +255,135 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
             <Lock className="h-8 w-8 text-destructive mx-auto" />
             <p className="text-sm font-medium text-destructive">{decryptionError}</p>
             <p className="text-xs text-muted-foreground">
-              You may need to sync your keys in Settings if you've recently cleared your browser data.
+              You may need to sync your keys in Settings if you&apos;ve recently cleared your browser data.
             </p>
             <Button variant="outline" size="sm" onClick={() => post && handleDecryptPost(post)}>
               Try Again
             </Button>
           </div>
         ) : (
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pt-4">
-              <FormField
-                control={form.control}
-                name="content"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Content</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="What's on your mind?"
-                        className="min-h-[200px] resize-none focus-visible:ring-primary/30"
-                        {...field}
-                        disabled={isSubmitting}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+          <div className="space-y-4 pt-2">
+            {/* Title field (collapsible) */}
+            {!showTitle ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-xs text-muted-foreground h-8"
+                onClick={() => setShowTitle(true)}
+              >
+                <Type className="h-3.5 w-3.5" />
+                Add Title
+              </Button>
+            ) : (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="edit-title" className="text-xs font-medium text-muted-foreground">Title</Label>
+                  <button
+                    type="button"
+                    onClick={() => { setShowTitle(false); setTitle(''); }}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Remove
+                  </button>
+                </div>
+                <Input
+                  id="edit-title"
+                  placeholder="Post title (optional)"
+                  value={title}
+                  onChange={e => setTitle(e.target.value)}
+                  disabled={isSubmitting}
+                  className="h-9 text-sm"
+                />
+              </div>
+            )}
+
+            {/* Content textarea */}
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-content" className="text-xs font-medium text-muted-foreground">Content</Label>
+              <Textarea
+                id="edit-content"
+                placeholder="What's on your mind?"
+                className="min-h-[160px] resize-none focus-visible:ring-primary/30"
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                disabled={isSubmitting}
               />
-              <DialogFooter className="pt-4">
-                <Button variant="ghost" type="button" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Changes
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+            </div>
+
+            {/* Image previews grid */}
+            {(existingImageUrls.length > 0 || newPreviewUrls.length > 0) && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-muted-foreground">
+                  Images ({totalImageCount}/{imageLimit})
+                </Label>
+                <div className="grid grid-cols-3 gap-2">
+                  {existingImageUrls.map((url, i) => (
+                    <div key={`existing-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border border-border/50">
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeExistingImage(i)}
+                        className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {newPreviewUrls.map((url, i) => (
+                    <div key={`new-${i}`} className="relative group aspect-square rounded-lg overflow-hidden border-2 border-dashed border-primary/30">
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                      <div className="absolute top-1 left-1 bg-primary/80 text-primary-foreground text-[9px] font-bold px-1.5 py-0.5 rounded-full">NEW</div>
+                      <button
+                        type="button"
+                        onClick={() => removeNewImage(i)}
+                        className="absolute top-1 right-1 bg-black/60 hover:bg-black/80 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Toolbar row: mood + add image */}
+            <div className="flex items-center gap-2 border-t border-border/50 pt-3">
+              <MoodTagSelector value={moodTag} onChange={setMoodTag} />
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                className="hidden"
+                id="edit-image-upload"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="gap-1.5 text-xs h-8 text-muted-foreground"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isSubmitting || totalImageCount >= imageLimit}
+              >
+                <ImagePlus className="h-3.5 w-3.5" />
+                {totalImageCount > 0 ? 'More' : 'Image'}
+              </Button>
+            </div>
+
+            {/* Footer */}
+            <DialogFooter className="pt-2">
+              <Button variant="ghost" type="button" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+                Cancel
+              </Button>
+              <Button onClick={onSubmit} disabled={isSubmitting || !content.trim()}>
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </div>
         )}
       </DialogContent>
     </Dialog>

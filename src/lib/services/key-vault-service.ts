@@ -66,21 +66,12 @@ export async function getKeyVault(
 
   if (!row) return null;
 
-  // Handle Buffer/Uint8Array to ArrayBuffer conversion.
-  // SQLite blobs may be returned as Buffer, Uint8Array, or ArrayBuffer depending on driver.
+  // Postgres bytea columns are returned as Node.js Buffer.
+  // Convert to ArrayBuffer for the WebCrypto API consumers.
   const rawBlob = row.encryptedVault;
-  let arrayBuffer: ArrayBuffer;
-  if (!rawBlob) {
-    return null;
-  } else if (rawBlob instanceof ArrayBuffer) {
-    arrayBuffer = rawBlob.slice(0);
-  } else {
-    // Buffer or Uint8Array — copy into a fresh owned ArrayBuffer
-    const u8 = Buffer.isBuffer(rawBlob)
-      ? rawBlob
-      : Buffer.from(rawBlob as Uint8Array);
-    arrayBuffer = u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
-  }
+  if (!rawBlob) return null;
+  const buf = Buffer.isBuffer(rawBlob) ? rawBlob : Buffer.from(rawBlob as Uint8Array);
+  const arrayBuffer = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
 
   return {
     encryptedVault: arrayBuffer,

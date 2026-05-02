@@ -22,6 +22,8 @@ export interface PostEncryptionResult {
   iv: string;
   /** Per-recipient key grants */
   keyGrants: PostKeyGrant[];
+  /** The symmetric post key — used for encrypting images with the same key */
+  postKey: CryptoKey;
 }
 
 export interface PostKeyGrant {
@@ -102,6 +104,7 @@ export async function encryptPostForRecipients(
     ciphertext,
     iv: toBase64(iv.buffer),
     keyGrants,
+    postKey,
   };
 }
 

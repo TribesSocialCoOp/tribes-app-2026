@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Loader2, LayoutGrid, Shield, MessageSquareText, User as UserIcon } from "lucide-react";
+import { ArrowLeft, Loader2, LayoutGrid, Shield, MessageSquareText, User as UserIcon, Handshake, Clock } from "lucide-react";
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { getPublicProfile, getPublicWallBlocks, getPublicWallStyle } from '@/lib/actions/profile-actions';
@@ -14,6 +14,8 @@ import HtmlBlock from '@/components/wall-blocks/html-block';
 import MusicBlock from '@/components/wall-blocks/music-block';
 import VideoBlock from '@/components/wall-blocks/video-block';
 import MyPostsBlock from '@/components/wall-blocks/my-posts-block';
+import { BondRequestDialog } from '@/components/dialogs/bond-request-dialog';
+import { hasOutgoingBondRequest } from '@/lib/actions/bond-actions';
 
 interface WallBlock {
   id: string;
@@ -55,6 +57,8 @@ export default function PublicProfilePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [bondId, setBondId] = useState<string | null>(null);
+  const [hasPending, setHasPending] = useState(false);
+  const [showBondDialog, setShowBondDialog] = useState(false);
 
   // If viewing own profile, redirect to /my-wall
   useEffect(() => {
@@ -105,7 +109,13 @@ export default function PublicProfilePage() {
         const { getBonds } = await import('@/lib/actions/bond-actions');
         const bonds = await getBonds();
         const match = bonds.find(b => b.targetId === userId && b.targetType === 'user' && b.passkeyStatus !== 'expired');
-        if (match) setBondId(match.id);
+        if (match) {
+          setBondId(match.id);
+        } else {
+          // If no active bond, check for pending request
+          const pending = await hasOutgoingBondRequest(userId);
+          setHasPending(pending);
+        }
       } catch {}
     }
     checkBond();
@@ -191,15 +201,38 @@ export default function PublicProfilePage() {
                 {profile.bio}
               </p>
             )}
-            {bondId && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2 border-primary/30 text-primary hover:bg-primary/10"
-                onClick={() => router.push(`/bonds/${bondId}`)}
-              >
-                <MessageSquareText className="mr-2 h-4 w-4" /> Message
-              </Button>
+            {userId !== user?.id && (
+              user?.id && bondId ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 border-primary/30 text-primary hover:bg-primary/10"
+                  onClick={() => router.push(`/bonds/${bondId}`)}
+                >
+                  <MessageSquareText className="mr-2 h-4 w-4" /> Message
+                </Button>
+              ) : user?.id && hasPending ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2"
+                  disabled
+                >
+                  <Clock className="mr-2 h-4 w-4 animate-pulse" /> Bond Request Pending
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 border-primary/50 text-primary hover:bg-primary hover:text-primary-foreground transition-all duration-300"
+                  onClick={() => {
+                    if (!user?.id) router.push('/login');
+                    else setShowBondDialog(true);
+                  }}
+                >
+                  <Handshake className="mr-2 h-4 w-4" /> Request Bond
+                </Button>
+              )
             )}
           </div>
         </header>
@@ -224,6 +257,15 @@ export default function PublicProfilePage() {
           </Card>
         )}
       </div>
+
+      <BondRequestDialog 
+        isOpen={showBondDialog} 
+        onOpenChange={setShowBondDialog}
+        targetUserId={userId}
+        targetUserName={profile.name}
+        targetUserAvatar={profile.avatar}
+        onSuccess={() => setHasPending(true)}
+      />
     </div>
   );
 }

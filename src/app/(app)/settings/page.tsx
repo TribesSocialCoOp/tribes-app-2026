@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserCircle, Loader2, PlusCircle, AtSign, X, Star, CreditCard, Mail, AlertTriangle, Cpu, CheckCircle2 } from "lucide-react";
+import { UserAvatar } from "@/components/ui/user-avatar";
+import { UserCircle, Loader2, PlusCircle, AtSign, X, Star, CreditCard, Mail, AlertTriangle, Cpu, CheckCircle2, ScrollText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { UserProfile } from '@/lib/types';
 import { getUserProfile, updateUserProfile } from '@/lib/actions/profile-actions';
@@ -39,7 +40,7 @@ export default function SettingsPage() {
 
 function SettingsContent() {
   const { toast } = useToast();
-  const { role, user: sessionUser, isLoading: isUserLoading } = useUser();
+  const { role, user: sessionUser, isLoading: isUserLoading, refresh: refreshUser } = useUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -47,12 +48,14 @@ function SettingsContent() {
   // Identity form state
   const [givenName, setGivenName] = useState("");
   const [bio, setBio] = useState("");
-  const [aliases, setAliases] = useState<string[]>([]);
+  const [aliases, setAliases] = useState<import('@/lib/types').UserAlias[]>([]);
   const [newAlias, setNewAlias] = useState("");
   const [reservedAliasInput, setReservedAliasInput] = useState('');
   const [isSavingAlias, setIsSavingAlias] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isUploadingReservedAliasAvatar, setIsUploadingReservedAliasAvatar] = useState(false);
   const avatarInputRef = React.useRef<HTMLInputElement>(null);
+  const reservedAliasAvatarRef = React.useRef<HTMLInputElement>(null);
 
   // Email verification banner state
   const [verifyBannerDismissed, setVerifyBannerDismissed] = useState(false);
@@ -182,39 +185,83 @@ function SettingsContent() {
   }, [sessionUser, isUserLoading]);
   
   const handleAddAlias = () => {
-    if (newAlias.trim() && !aliases.includes(newAlias.trim())) {
-      setAliases([...aliases, newAlias.trim()]);
-      setNewAlias("");
+    const trimmed = newAlias.trim();
+    if (!trimmed) return;
+    if (aliases.find(a => a.name === trimmed)) return;
+
+    // Client-side collision hint: check against own reserved alias
+    const bareReserved = profile?.reservedAlias?.replace(/^@/, '').toLowerCase();
+    if (bareReserved && trimmed.toLowerCase() === bareReserved) {
+      toast({
+        variant: 'destructive',
+        title: 'Redundant Alias',
+        description: `"${trimmed}" matches your reserved handle ${profile?.reservedAlias}. Use your reserved alias instead.`,
+      });
+      return;
     }
+
+    const { avatarSvg } = require('@/lib/placeholder-svg');
+    setAliases([...aliases, { name: trimmed, avatar: avatarSvg(trimmed) }]);
+    setNewAlias("");
   };
 
-  const handleRemoveAlias = (aliasToRemove: string) => {
-    setAliases(aliases.filter(alias => alias !== aliasToRemove));
+  const handleRemoveAlias = (aliasName: string) => {
+    setAliases(aliases.filter(a => a.name !== aliasName));
+  };
+
+  const [isUploadingAliasAvatar, setIsUploadingAliasAvatar] = useState<number | null>(null);
+
+  const handleAliasAvatarUpload = async (index: number, file: File) => {
+    if (!profile) return;
+    setIsUploadingAliasAvatar(index);
+    try {
+      const url = await uploadFile(file, 'avatars', 'avatar');
+      const newAliases = [...aliases];
+      newAliases[index] = { ...newAliases[index]!, avatar: url };
+      setAliases(newAliases);
+      // Auto-save alias avatar to database immediately
+      const result = await updateUserProfile(profile.id, {
+        aliases: newAliases,
+      });
+      if (result.success) {
+        setProfile(result.profile);
+        refreshUser();
+        toast({ title: 'Alias avatar updated', description: 'Your alias picture has been saved.' });
+      } else {
+        toast({ variant: 'destructive', title: 'Save failed', description: result.error });
+      }
+    } catch (err: unknown) {
+      toast({ variant: 'destructive', title: 'Upload failed', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+    } finally {
+      setIsUploadingAliasAvatar(null);
+    }
   };
 
   const handleSaveChanges = async () => {
     if (!profile) return;
     setIsSaving(true);
     
-    try {
-      await updateUserProfile(profile.id, {
-        name: givenName,
-        bio: bio,
-        aliases: aliases,
-      });
+    const result = await updateUserProfile(profile.id, {
+      name: givenName,
+      bio: bio,
+      aliases: aliases,
+    });
+    if (result.success) {
+      setProfile(result.profile);
+      setAliases(result.profile.aliases || []);
+      refreshUser(); // Propagate alias+avatar changes to ComposeBox identity dropdown
       toast({
         title: "Profile Saved",
         description: "Your identity and profile information has been updated.",
       });
-    } catch (error) {
-       toast({
+    } else {
+      toast({
         variant: "destructive",
         title: "Save Failed",
-        description: "There was an error saving your profile. Please try again."
+        description: result.error,
       });
-    } finally {
-      setIsSaving(false);
     }
+    setIsSaving(false);
   };
   
   const handleReserveAlias = async () => {
@@ -239,26 +286,24 @@ function SettingsContent() {
 
     setIsSavingAlias(true);
     
-    try {
-      await updateUserProfile(profile.id, {
-        reservedAlias: reservedAliasInput,
-      });
+    const result = await updateUserProfile(profile.id, {
+      reservedAlias: reservedAliasInput,
+    });
 
+    if (result.success) {
       setProfile(prev => prev ? { ...prev, reservedAlias: reservedAliasInput } : null);
-
       toast({
         title: "Alias Reserved!",
         description: `Your new global alias is now ${reservedAliasInput}.`,
       });
-    } catch (error) {
-       toast({
+    } else {
+      toast({
         variant: "destructive",
         title: "Reservation Failed",
-        description: "There was an error reserving your alias. It might already be taken."
+        description: result.error,
       });
-    } finally {
-      setIsSavingAlias(false);
     }
+    setIsSavingAlias(false);
   };
 
   if (isLoading) {
@@ -370,9 +415,14 @@ function SettingsContent() {
                   setIsUploadingAvatar(true);
                   try {
                     const url = await uploadFile(file, 'avatars', 'avatar');
-                    await updateUserProfile(profile.id, { avatar: url });
-                    setProfile({ ...profile, avatar: url });
-                    toast({ title: 'Avatar updated', description: 'Your profile picture has been changed.' });
+                    const result = await updateUserProfile(profile.id, { avatar: url });
+                    if (result.success) {
+                      setProfile({ ...profile, avatar: url });
+                      refreshUser(); // Propagate avatar change globally
+                      toast({ title: 'Avatar updated', description: 'Your profile picture has been changed.' });
+                    } else {
+                      toast({ variant: 'destructive', title: 'Upload failed', description: result.error });
+                    }
                   } catch (err: unknown) {
                     toast({ variant: 'destructive', title: 'Upload failed', description: ((err instanceof Error) ? err.message : 'An error occurred') });
                   } finally {
@@ -431,22 +481,70 @@ function SettingsContent() {
                     </Link>
                 </div>
             ) : (
-                 <div className="space-y-1.5 pl-0 sm:pl-9">
-                    <Label htmlFor="reservedAlias">Your Global Alias</Label>
-                    <div className="flex flex-col sm:flex-row gap-2">
-                    <Input
-                        id="reservedAlias"
-                        value={reservedAliasInput}
-                        onChange={(e) => setReservedAliasInput(e.target.value)}
-                        placeholder="@your-unique-name"
-                        className="flex-1"
-                    />
-                     <Button onClick={handleReserveAlias} disabled={isSavingAlias || reservedAliasInput === (profile?.reservedAlias || '')} className="shrink-0">
-                        {isSavingAlias ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                        Save
-                    </Button>
+                 <div className="space-y-4 pl-0 sm:pl-9">
+                    {/* Reserved alias avatar */}
+                    {profile.reservedAlias && (
+                      <div className="flex items-center gap-4">
+                        <Avatar className="h-16 w-16 shrink-0 border-2 border-primary/20">
+                          <AvatarImage src={profile.reservedAliasAvatar} alt={profile.reservedAlias} />
+                          <AvatarFallback className="text-sm font-bold">{(profile.reservedAlias.replace('@', '')).substring(0, 2).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col gap-1">
+                          <p className="text-sm font-medium">{profile.reservedAlias}</p>
+                          <input
+                            ref={reservedAliasAvatarRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file || !profile) return;
+                              setIsUploadingReservedAliasAvatar(true);
+                              try {
+                                const url = await uploadFile(file, 'avatars', 'avatar');
+                                const result = await updateUserProfile(profile.id, { reservedAliasAvatar: url });
+                                if (result.success) {
+                                  setProfile(result.profile);
+                                  refreshUser();
+                                  toast({ title: 'Alias avatar updated', description: `Avatar for ${profile.reservedAlias} has been saved.` });
+                                } else {
+                                  toast({ variant: 'destructive', title: 'Save failed', description: result.error });
+                                }
+                              } catch (err: unknown) {
+                                toast({ variant: 'destructive', title: 'Upload failed', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+                              } finally {
+                                setIsUploadingReservedAliasAvatar(false);
+                              }
+                            }}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isUploadingReservedAliasAvatar}
+                            onClick={() => reservedAliasAvatarRef.current?.click()}
+                          >
+                            {isUploadingReservedAliasAvatar ? <><Loader2 className="mr-1.5 h-3 w-3 animate-spin" />Uploading...</> : 'Change Picture'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="reservedAlias">Your Global Alias</Label>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                          id="reservedAlias"
+                          value={reservedAliasInput}
+                          onChange={(e) => setReservedAliasInput(e.target.value)}
+                          placeholder="@your-unique-name"
+                          className="flex-1"
+                      />
+                       <Button onClick={handleReserveAlias} disabled={isSavingAlias || reservedAliasInput === (profile?.reservedAlias || '')} className="shrink-0">
+                          {isSavingAlias ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                          Save
+                      </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Must be unique and start with &apos;@&apos;.</p>
                     </div>
-                    <p className="text-xs text-muted-foreground">Must be unique and start with &apos;@&apos;.</p>
                 </div>
             )}
           </div>
@@ -456,16 +554,43 @@ function SettingsContent() {
             <div className="space-y-4">
                 <div>
                     <h3 className="text-base font-semibold">Your Aliases</h3>
-                    <p className="text-sm text-muted-foreground">Manage alternate names you can use within specific tribes.</p>
+                    <p className="text-sm text-muted-foreground">Manage alternate names and pictures you can use within specific tribes.</p>
                 </div>
                 {aliases.length > 0 && (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                         {aliases.map((alias, index) => (
-                            <div key={index} className="flex items-center justify-between p-2 border rounded-md bg-muted/50">
-                                <p className="text-sm font-medium flex items-center">
-                                  <AtSign className="mr-2 h-4 w-4 text-muted-foreground"/> {alias}
-                                </p>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleRemoveAlias(alias)}>
+                            <div key={index} className="flex items-center gap-3 p-3 border rounded-md bg-muted/30">
+                                <UserAvatar 
+                                  user={{ name: alias.name, avatar: alias.avatar }} 
+                                  className="h-10 w-10 rounded-md shrink-0 border"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate flex items-center">
+                                    <AtSign className="mr-1.5 h-3.5 w-3.5 text-muted-foreground"/> {alias.name}
+                                  </p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <input
+                                      id={`alias-avatar-${index}`}
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0];
+                                        if (file) handleAliasAvatarUpload(index, file);
+                                      }}
+                                    />
+                                    <Button 
+                                      variant="link" 
+                                      size="sm" 
+                                      className="h-auto p-0 text-xs text-primary"
+                                      disabled={isUploadingAliasAvatar !== null}
+                                      onClick={() => document.getElementById(`alias-avatar-${index}`)?.click()}
+                                    >
+                                      {isUploadingAliasAvatar === index ? 'Uploading...' : 'Change Picture'}
+                                    </Button>
+                                  </div>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleRemoveAlias(alias.name)}>
                                     <X className="h-4 w-4" />
                                 </Button>
                             </div>
@@ -555,11 +680,44 @@ function SettingsContent() {
               <p className="text-sm text-muted-foreground">
                 Configure the LLM backend for T-Codex Prime and automated workflows.
               </p>
-              <AiSettingsSection />
+              {/* <AiSettingsSection /> */}
             </div>
           </div>
         </>
       )}
+
+      <Separator />
+
+      {/* ── Legal ── */}
+      <Card className="shadow-lg">
+        <CardHeader>
+          <div className="flex items-center space-x-3">
+            <ScrollText className="h-7 w-7 text-primary" />
+            <CardTitle className="text-xl">Legal</CardTitle>
+          </div>
+          <CardDescription>
+            Review the agreements and policies governing your use of Tribes.app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Link href="/terms" className="group flex items-center gap-2 p-3 rounded-md border hover:border-primary/40 hover:bg-primary/5 transition-colors">
+            <ScrollText className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            <span className="text-sm font-medium">Terms of Service</span>
+          </Link>
+          <Link href="/privacy" className="group flex items-center gap-2 p-3 rounded-md border hover:border-primary/40 hover:bg-primary/5 transition-colors">
+            <ScrollText className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            <span className="text-sm font-medium">Privacy Policy</span>
+          </Link>
+          <Link href="/community-guidelines" className="group flex items-center gap-2 p-3 rounded-md border hover:border-primary/40 hover:bg-primary/5 transition-colors">
+            <ScrollText className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            <span className="text-sm font-medium">Community Guidelines</span>
+          </Link>
+          <Link href="/cookies" className="group flex items-center gap-2 p-3 rounded-md border hover:border-primary/40 hover:bg-primary/5 transition-colors">
+            <ScrollText className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            <span className="text-sm font-medium">Cookie Policy</span>
+          </Link>
+        </CardContent>
+      </Card>
 
       <Separator />
       <AccountActionsSection />

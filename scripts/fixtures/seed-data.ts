@@ -25,7 +25,11 @@ export const mockUserProfile: UserProfile = {
   role: MOCK_USER_ROLE,
   bio: "Lover of tech, hiking, and indie games.",
   avatar: "/seed/avatar-default.svg",
-  aliases: ["WonderlandCoder", "HikerGal", "PixelPioneer"],
+  aliases: [
+    { name: "WonderlandCoder", avatar: "/seed/avatar-default.svg" },
+    { name: "HikerGal", avatar: "/seed/avatar-default.svg" },
+    { name: "PixelPioneer", avatar: "/seed/avatar-default.svg" }
+  ],
   reservedAlias: "@alice_example",
   reputationScore: 50,
   reputationStatus: 'Onboarding',
@@ -122,12 +126,12 @@ export const mockReportedContentData: ReportedPost[] = [
 ];
 
 export const bondsData: Bond[] = [
-  { id: "b1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "tribe", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 30), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 60), reconnectsCount: 2, connectionScore: 10, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "b2", targetName: "Bob Builder", targetType: "user", bondType: "person", formationMethod: "virtual_request", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 10), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 170), reconnectsCount: 0, connectionScore: 25, showInIntercom: true, allowChatInitiation: true, keyType: "standard", innerCircle: true },
-  { id: "b3", targetName: "Carol Cosmos", targetType: "user", bondType: "person", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 60), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 120), reconnectsCount: 1, connectionScore: 5, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
-  { id: "b4", targetName: "Dave Dormant", targetType: "user", bondType: "person", formationMethod: "virtual_request", passkeyStatus: "dormant", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 200), expiresAt: new Date(MOCK_POST_DATE_MS - 86400000 * 20), reconnectsCount: 3, connectionScore: 40, showInIntercom: false, allowChatInitiation: false, keyType: "standard" },
-  { id: "b5", targetName: "Summer Music Festival", targetType: "user", bondType: "event", formationMethod: "virtual_request", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 365), reconnectsCount: 0, connectionScore: 0, showInIntercom: false, allowChatInitiation: false, keyType: "event_attendee" },
-  { id: "b6", targetName: "Weekend Hikers Club", targetType: "tribe", bondType: "tribe", formationMethod: "virtual_request", passkeyStatus: "fading", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 85), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 5), reconnectsCount: 0, connectionScore: 12, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "b1", targetId: "1", targetName: "AI Innovators Tribe", targetType: "tribe", bondType: "tribe", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 30), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 60), reconnectsCount: 2, connectionScore: 10, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "b2", targetId: "user2", targetName: "Bob Builder", targetType: "user", bondType: "person", formationMethod: "virtual_request", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 10), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 170), reconnectsCount: 0, connectionScore: 25, showInIntercom: true, allowChatInitiation: true, keyType: "standard", innerCircle: true },
+  { id: "b3", targetId: "user3", targetName: "Carol Cosmos", targetType: "user", bondType: "person", formationMethod: "rfid_tap", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 60), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 120), reconnectsCount: 1, connectionScore: 5, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
+  { id: "b4", targetId: "user4", targetName: "Dave Dormant", targetType: "user", bondType: "person", formationMethod: "virtual_request", passkeyStatus: "dormant", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 200), expiresAt: new Date(MOCK_POST_DATE_MS - 86400000 * 20), reconnectsCount: 3, connectionScore: 40, showInIntercom: false, allowChatInitiation: false, keyType: "standard" },
+  { id: "b5", targetId: "user123", targetName: "Summer Music Festival", targetType: "user", bondType: "event", eventId: "event1", formationMethod: "virtual_request", passkeyStatus: "active", lastRefreshedAt: new Date(MOCK_POST_DATE_MS), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 365), reconnectsCount: 0, connectionScore: 0, showInIntercom: false, allowChatInitiation: false, keyType: "event_attendee" },
+  { id: "b6", targetId: "2", targetName: "Weekend Hikers Club", targetType: "tribe", bondType: "tribe", formationMethod: "virtual_request", passkeyStatus: "fading", lastRefreshedAt: new Date(MOCK_POST_DATE_MS - 86400000 * 85), expiresAt: new Date(MOCK_POST_DATE_MS + 86400000 * 5), reconnectsCount: 0, connectionScore: 12, showInIntercom: true, allowChatInitiation: false, keyType: "standard" },
 ];
 
 export const mockMembers: TribeMember[] = [

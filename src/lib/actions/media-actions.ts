@@ -15,12 +15,23 @@ import { requireAuth, getCurrentUserId } from './shared';
  * - Public files: returns the CDN URL
  * - Private files: generates a time-limited presigned URL (15 min)
  */
-export async function resolveMediaUrl(fileId: string): Promise<string | null> {
+export async function resolveMediaUrl(fileId: string): Promise<{ url: string; encryptionMeta?: object } | null> {
   const userId = await getCurrentUserId();
   if (!userId) return null;
 
   const { getMediaUrl } = await import('@/lib/services/s3-service');
-  return getMediaUrl(fileId, userId);
+  const url = await getMediaUrl(fileId, userId);
+  if (!url) return null;
+
+  const { db } = await import('@/db');
+  const { mediaFiles } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [file] = await db.select({ encryptionMeta: mediaFiles.encryptionMeta }).from(mediaFiles).where(eq(mediaFiles.id, fileId)).limit(1);
+
+  return {
+    url,
+    encryptionMeta: file?.encryptionMeta ? JSON.parse(file.encryptionMeta) : undefined,
+  };
 }
 
 // ======== STORAGE USAGE ========

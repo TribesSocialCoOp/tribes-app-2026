@@ -6,27 +6,16 @@ import { NextRequest, NextResponse } from 'next/server';
 // SESSION SECRET — fail-fast in production if not set
 // ============================================================
 
-const DEV_FALLBACK = 'dev-only-fallback-secret-32-chars!';
-
-/**
- * Returns the session signing key. Throws in production if SESSION_SECRET is missing.
- * Exported so captcha.ts and auth-actions.ts can share the same secret derivation.
- */
 export function getSessionSecret(): string {
   const secret = process.env.SESSION_SECRET;
 
-  // Accept a real secret that isn't the dev placeholder
-  if (secret && secret !== DEV_FALLBACK) return secret;
+  if (secret && secret.length >= 32) return secret;
 
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      'FATAL: SESSION_SECRET environment variable is not set or is using the dev fallback. ' +
-      'Refusing to start with a weak secret in production. ' +
-      'Generate one with: openssl rand -hex 32'
-    );
-  }
-
-  return DEV_FALLBACK;
+  throw new Error(
+    'FATAL: SESSION_SECRET environment variable is not set or is too short (min 32 chars). ' +
+    'Set it in your .env.local for development. ' +
+    'Generate one with: openssl rand -hex 32'
+  );
 }
 
 const key = new TextEncoder().encode(getSessionSecret());

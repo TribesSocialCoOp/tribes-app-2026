@@ -9,6 +9,18 @@ import { getBlockedAuthorIds, getUserTribeIds, resolveDisplayIdentity } from './
 import type { TribePost, MoodStreamPost, DiscussionComment } from '@/lib/types';
 import { rowToTribePost } from '@/lib/mappers/post-mapper';
 
+/**
+ * Helper: Batch-fetch live avatars for a set of user IDs.
+ */
+async function batchFetchLiveAvatars(userIds: string[]): Promise<Map<string, string | null>> {
+  const uniqueIds = [...new Set(userIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return new Map();
+  const rows = await db.select({ id: users.id, avatar: users.avatar })
+    .from(users)
+    .where(inArray(users.id, uniqueIds));
+  return new Map(rows.map(r => [r.id, r.avatar]));
+}
+
 function buildCommentTree(allComments: (typeof comments.$inferSelect)[], parentId: string | null): DiscussionComment[] {
   return allComments
     .filter(c => c.parentCommentId === parentId)
@@ -58,6 +70,21 @@ export async function getPostsForTribe(tribeId: string, viewerUserId?: string): 
     commentsByPost.get(c.postId)!.push(c);
   }
 
+  const allVibes = postIds.length > 0
+    ? await db.select().from(vibes).where(and(inArray(vibes.targetId, postIds), eq(vibes.targetType, 'post')))
+    : [];
+
+  const vibesByPost = new Map<string, (typeof vibes.$inferSelect)[]>();
+  for (const v of allVibes) {
+    if (!vibesByPost.has(v.targetId)) vibesByPost.set(v.targetId, []);
+    vibesByPost.get(v.targetId)!.push(v);
+  }
+
+  // Fetch live avatars
+  const authorIds = rows.map(r => r.authorId);
+  const liveAvatars = await batchFetchLiveAvatars(authorIds);
+
+
   const results = rows.map((row) => {
     const commentRows = commentsByPost.get(row.id) ?? [];
     // Also filter out comments from blocked users
@@ -65,7 +92,25 @@ export async function getPostsForTribe(tribeId: string, viewerUserId?: string): 
       ? commentRows.filter(c => !blockedIds.includes(c.authorId))
       : commentRows;
     const commentsData = buildCommentTree(filteredComments, null);
-    return rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined);
+    
+    const postVibes = vibesByPost.get(row.id) ?? [];
+    const hasVibed = viewerUserId ? postVibes.some(v => v.userId === viewerUserId) : false;
+    
+    // Group and sort emojis
+    const emojiCounts = new Map<string, number>();
+    for (const v of postVibes) {
+      emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
+    }
+    const recentVibes = Array.from(emojiCounts.entries())
+      .map(([emoji, count]) => ({ emoji, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
+    const liveAvatar = liveAvatars.get(row.authorId);
+    const post = rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined, liveAvatar);
+    post.recentVibes = recentVibes;
+    post.hasVibed = hasVibed;
+    return post;
   });
 
   return results;
@@ -102,6 +147,20 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
     : [];
   const promoterMap = new Map(allPromoters.map(u => [u.id, u.name]));
 
+  const allVibes = postIds.length > 0
+    ? await db.select().from(vibes).where(and(inArray(vibes.targetId, postIds), eq(vibes.targetType, 'post')))
+    : [];
+
+  const vibesByPost = new Map<string, (typeof vibes.$inferSelect)[]>();
+  for (const v of allVibes) {
+    if (!vibesByPost.has(v.targetId)) vibesByPost.set(v.targetId, []);
+    vibesByPost.get(v.targetId)!.push(v);
+  }
+
+  // Fetch live avatars
+  const authorIds = allPosts.map(p => p.authorId);
+  const liveAvatars = await batchFetchLiveAvatars(authorIds);
+
   const results: MoodStreamPost[] = [];
   const viewerTribeIds = await getUserTribeIds(viewerUserId);
 
@@ -123,10 +182,26 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
     const promoterTag = taggedPosts.find(t => t.postId === postRow.id && t.promotedBy);
     const promotedByName = promoterTag?.promotedBy ? promoterMap.get(promoterTag.promotedBy) : undefined;
 
+    const liveAvatar = liveAvatars.get(postRow.authorId);
+    const postAvatar = liveAvatar || (postRow.authorAvatar ?? undefined);
+
+    const postVibes = vibesByPost.get(postRow.id) ?? [];
+    const hasVibed = viewerUserId ? postVibes.some(v => v.userId === viewerUserId) : false;
+    
+    // Group and sort emojis
+    const emojiCounts = new Map<string, number>();
+    for (const v of postVibes) {
+      emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
+    }
+    const recentVibes = Array.from(emojiCounts.entries())
+      .map(([emoji, count]) => ({ emoji, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
     results.push({
       id: postRow.id,
       author: postRow.authorName,
-      authorAvatarSrc: postRow.authorAvatar ?? undefined,
+      authorAvatarSrc: postAvatar,
       authorAvatarFallback: postRow.authorAvatarFallback,
       dataAiHintAvatar: postRow.dataAiHintAvatar ?? undefined,
       tribeName,
@@ -139,6 +214,8 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
       imageAlt: postRow.imageAlt ?? undefined,
       dataAiHintImage: postRow.dataAiHintImage ?? undefined,
       vibes: postRow.vibeCount ?? 0,
+      recentVibes,
+      hasVibed,
       comments: postRow.commentCount ?? 0,
       moodTags: tags,
       promotedByName,
@@ -152,7 +229,12 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
  * Creates a new post in a tribe.
  * Image URL should already be uploaded client-side via /api/upload.
  */
-export async function createTribePost(tribeId: string, payload: { title?: string; content: string; imageUrl?: string; imageUrls?: string[] }, authorId: string): Promise<TribePost> {
+export async function createTribePost(
+  tribeId: string, 
+  payload: { title?: string; content: string; imageUrl?: string; imageUrls?: string[] }, 
+  authorId: string,
+  overrides?: { name?: string; avatar?: string }
+): Promise<TribePost> {
   const id = crypto.randomUUID();
 
   // Access control: verify the author is a member of the tribe
@@ -169,12 +251,17 @@ export async function createTribePost(tribeId: string, payload: { title?: string
   const author = authorRows[0];
 
   // Resolve identity based on bond preferences
-  const { name: resolvedName, avatar: resolvedAvatar } = await resolveDisplayIdentity(
+  let { name: resolvedName, avatar: resolvedAvatar } = await resolveDisplayIdentity(
     authorId, 
     tribeId, 
     author?.name ?? 'Unknown User', 
     author?.avatar
   );
+
+  // Apply manual overrides if provided
+  if (overrides?.name) resolvedName = overrides.name;
+  if (overrides?.avatar) resolvedAvatar = overrides.avatar;
+
   const resolvedAvatarFallback = resolvedName.substring(0, 2).toUpperCase() || '??';
 
   const finalImageUrl = payload.imageUrl || null;
@@ -351,7 +438,7 @@ export async function toggleVibe(
   targetId: string,
   targetType: 'post' | 'comment',
   emoji: string,
-): Promise<{ vibed: boolean; newCount: number }> {
+): Promise<{ vibed: boolean; newCount: number; recentVibes: { emoji: string; count: number }[] }> {
   // Check if vibe already exists
   const existing = await db.select().from(vibes).where(
     and(
@@ -376,12 +463,22 @@ export async function toggleVibe(
       }).where(eq(comments.id, targetId));
     }
 
-    // Get new count
+    // Get new count and recent vibes
     const newCount = targetType === 'post'
       ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
       : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
 
-    return { vibed: false, newCount };
+    const postVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
+    const emojiCounts = new Map<string, number>();
+    for (const v of postVibes) {
+      emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
+    }
+    const recentVibes = Array.from(emojiCounts.entries())
+      .map(([emoji, count]) => ({ emoji, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
+    return { vibed: false, newCount, recentVibes };
   } else {
     // Add vibe
     const id = crypto.randomUUID();
@@ -409,6 +506,16 @@ export async function toggleVibe(
       ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
       : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
 
+    const postVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
+    const emojiCounts = new Map<string, number>();
+    for (const v of postVibes) {
+      emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
+    }
+    const recentVibes = Array.from(emojiCounts.entries())
+      .map(([emoji, count]) => ({ emoji, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
     // Auto-refresh: vibing keeps your tribe bond alive (fire-and-forget)
     if (targetType === 'post') {
       const [vibePost] = await db.select({ tribeId: posts.tribeId }).from(posts)
@@ -421,7 +528,7 @@ export async function toggleVibe(
       }
     }
 
-    return { vibed: true, newCount };
+    return { vibed: true, newCount, recentVibes };
   }
 }
 

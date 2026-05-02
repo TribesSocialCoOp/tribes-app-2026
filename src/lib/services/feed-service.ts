@@ -4,13 +4,64 @@
  * pinned wall updates) into a single unified feed, with ring and mood filtering.
  */
 import { db } from '@/db';
-import { posts, bonds, postMoodTags, blockedUsers, tribeMembers, tribes, users } from '@/db/schema';
+import { posts, bonds, postMoodTags, blockedUsers, tribeMembers, tribes, users, vibes } from '@/db/schema';
 import { eq, desc, and, or, inArray } from 'drizzle-orm';
 import { getBlockedAuthorIds, getUserTribeIds, getUserTribeRoles } from './query-helpers';
 import type { CommunicationItem, Ring } from '@/lib/types';
 import { rowToTribePost } from '@/lib/mappers/post-mapper';
 import { moodsData } from '@/lib/moods-data';
 import { computePasskeyStatus } from '@/lib/crypto/passkey-lifecycle';
+
+/**
+ * Helper: Batch-fetch live avatars for a set of user IDs.
+ */
+async function batchFetchLiveAvatars(userIds: string[]): Promise<Map<string, string | null>> {
+  const uniqueIds = [...new Set(userIds.filter(Boolean))];
+  if (uniqueIds.length === 0) return new Map();
+  const rows = await db.select({ id: users.id, avatar: users.avatar })
+    .from(users)
+    .where(inArray(users.id, uniqueIds));
+  return new Map(rows.map(r => [r.id, r.avatar]));
+}
+
+/**
+ * Helper: Batch-fetch vibes data (top 3 + hasVibed) for post IDs.
+ */
+async function batchFetchVibesData(postIds: string[], viewerUserId: string): Promise<{
+  vibesByPost: Map<string, { emoji: string; count: number }[]>;
+  hasVibedByPost: Map<string, boolean>;
+}> {
+  if (postIds.length === 0) return { vibesByPost: new Map(), hasVibedByPost: new Map() };
+  
+  const allVibes = await db.select().from(vibes)
+    .where(and(inArray(vibes.targetId, postIds), eq(vibes.targetType, 'post')));
+    
+  const vibesByPost = new Map<string, { emoji: string; count: number }[]>();
+  const hasVibedByPost = new Map<string, boolean>();
+  
+  const rawVibesByPost = new Map<string, (typeof vibes.$inferSelect)[]>();
+  for (const v of allVibes) {
+    if (!rawVibesByPost.has(v.targetId)) rawVibesByPost.set(v.targetId, []);
+    rawVibesByPost.get(v.targetId)!.push(v);
+  }
+  
+  for (const postId of postIds) {
+    const postVibes = rawVibesByPost.get(postId) ?? [];
+    hasVibedByPost.set(postId, postVibes.some(v => v.userId === viewerUserId));
+    
+    const emojiCounts = new Map<string, number>();
+    for (const v of postVibes) {
+      emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
+    }
+    const recentVibes = Array.from(emojiCounts.entries())
+      .map(([emoji, count]) => ({ emoji, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+    vibesByPost.set(postId, recentVibes);
+  }
+  
+  return { vibesByPost, hasVibedByPost };
+}
 
 interface UnifiedFeedParams {
   userId: string;
@@ -81,6 +132,30 @@ export async function getUnifiedFeed(params: UnifiedFeedParams): Promise<Communi
     seen.add(item.id);
     return true;
   });
+
+  // ── Enrichment (Task 2.1 + Emote View Fix) ────────────────────────────────
+  const postItems = deduped.filter(i => i.type === 'ring-post' || i.type === 'mood-stream');
+  const postIds = postItems.map(i => i.id);
+  const authorIds = deduped.map(i => i.authorId || i.bondTargetId).filter(Boolean) as string[];
+
+  const [liveAvatars, vibesData] = await Promise.all([
+    batchFetchLiveAvatars(authorIds),
+    batchFetchVibesData(postIds, userId),
+  ]);
+
+  for (const item of deduped) {
+    // 1. Live Avatar
+    const userIdForAvatar = item.authorId || item.bondTargetId;
+    if (userIdForAvatar) {
+      const liveAvatar = liveAvatars.get(userIdForAvatar);
+      if (liveAvatar) item.avatarSrc = liveAvatar;
+    }
+    // 2. Vibes Enrichment
+    if (vibesData.vibesByPost.has(item.id)) {
+      item.recentVibes = vibesData.vibesByPost.get(item.id);
+      item.hasVibed = vibesData.hasVibedByPost.get(item.id);
+    }
+  }
 
   // Sort by timestamp descending and apply pagination
   deduped.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
@@ -199,7 +274,7 @@ async function fetchRingPosts(
       .limit(20);
 
     for (const row of journalRows) {
-      if (moodSlugs.length > 0 && row.moodTag && !moodSlugs.includes(row.moodTag)) continue;
+      if (moodSlugs.length > 0 && (!row.moodTag || !moodSlugs.includes(row.moodTag))) continue;
       const tribeName = row.tribeId ? tribeNameMap.get(row.tribeId) : undefined;
       const role = row.tribeId ? userTribeRoles[row.tribeId] : undefined;
       items.push(postRowToFeedItem(row, 'journal', false, tribeName, role));
@@ -221,7 +296,7 @@ async function fetchRingPosts(
         .limit(20);
 
       for (const row of icRows) {
-        if (moodSlugs.length > 0 && row.moodTag && !moodSlugs.includes(row.moodTag)) continue;
+        if (moodSlugs.length > 0 && (!row.moodTag || !moodSlugs.includes(row.moodTag))) continue;
         const tribeName = row.tribeId ? tribeNameMap.get(row.tribeId) : undefined;
         const role = row.tribeId ? userTribeRoles[row.tribeId] : undefined;
         items.push(postRowToFeedItem(row, 'inner_circle', false, tribeName, role));
@@ -234,7 +309,7 @@ async function fetchRingPosts(
       .orderBy(desc(posts.createdAt))
       .limit(10);
     for (const row of ownIcRows) {
-      if (moodSlugs.length > 0 && row.moodTag && !moodSlugs.includes(row.moodTag)) continue;
+      if (moodSlugs.length > 0 && (!row.moodTag || !moodSlugs.includes(row.moodTag))) continue;
       const tribeName = row.tribeId ? tribeNameMap.get(row.tribeId) : undefined;
       const role = row.tribeId ? userTribeRoles[row.tribeId] : undefined;
       items.push(postRowToFeedItem(row, 'inner_circle', false, tribeName, role));
@@ -256,7 +331,7 @@ async function fetchRingPosts(
         .limit(20);
 
       for (const row of mpRows) {
-        if (moodSlugs.length > 0 && row.moodTag && !moodSlugs.includes(row.moodTag)) continue;
+        if (moodSlugs.length > 0 && (!row.moodTag || !moodSlugs.includes(row.moodTag))) continue;
         const tribeName = row.tribeId ? tribeNameMap.get(row.tribeId) : undefined;
         const role = row.tribeId ? userTribeRoles[row.tribeId] : undefined;
         items.push(postRowToFeedItem(row, 'my_people', false, tribeName, role));
@@ -269,7 +344,7 @@ async function fetchRingPosts(
       .orderBy(desc(posts.createdAt))
       .limit(10);
     for (const row of ownMpRows) {
-      if (moodSlugs.length > 0 && row.moodTag && !moodSlugs.includes(row.moodTag)) continue;
+      if (moodSlugs.length > 0 && (!row.moodTag || !moodSlugs.includes(row.moodTag))) continue;
       const tribeName = row.tribeId ? tribeNameMap.get(row.tribeId) : undefined;
       const role = row.tribeId ? userTribeRoles[row.tribeId] : undefined;
       items.push(postRowToFeedItem(row, 'my_people', false, tribeName, role));
@@ -289,7 +364,7 @@ async function fetchRingPosts(
 
       for (const row of tribeRows) {
         if (blockedIds.includes(row.authorId)) continue;
-        if (moodSlugs.length > 0 && row.moodTag && !moodSlugs.includes(row.moodTag)) continue;
+        if (moodSlugs.length > 0 && (!row.moodTag || !moodSlugs.includes(row.moodTag))) continue;
         const tribeName = row.tribeId ? tribeNameMap.get(row.tribeId) : undefined;
         const role = row.tribeId ? userTribeRoles[row.tribeId] : undefined;
         items.push(postRowToFeedItem(row, 'tribes', false, tribeName, role));
@@ -309,42 +384,53 @@ async function fetchMoodStreamPosts(
   moodSlugs: string[],
   userTribeRoles: Record<string, string>,
 ): Promise<CommunicationItem[]> {
-  const tagRows = await db.select().from(postMoodTags);
-  const postIds = [...new Set(tagRows.map(t => t.postId))];
-  if (postIds.length === 0) return [];
+  // Push filtering to the database with a proper join (Phase 7: replaces full table scan)
+  const conditions = [eq(posts.isRemoved, false)];
+  if (moodSlugs.length > 0) {
+    conditions.push(inArray(postMoodTags.moodSlug, moodSlugs));
+  }
 
-  // 2. Batch-fetch all posts
-  const allPosts = await db.select().from(posts)
-    .where(inArray(posts.id, postIds));
+  const streamRows = await db
+    .select({
+      post: posts,
+      moodSlug: postMoodTags.moodSlug,
+      promotedAt: postMoodTags.promotedAt,
+      promotedBy: postMoodTags.promotedBy,
+    })
+    .from(postMoodTags)
+    .innerJoin(posts, eq(posts.id, postMoodTags.postId))
+    .where(and(...conditions))
+    .orderBy(desc(posts.createdAt))
+    .limit(100);
 
-  // 3. Batch-fetch all tribes referenced
-  const tribeIds = [...new Set(allPosts.map(p => p.tribeId).filter(Boolean) as string[])];
-  const allTribes = tribeIds.length > 0
-    ? await db.select({ id: tribes.id, name: tribes.name }).from(tribes).where(inArray(tribes.id, tribeIds))
-    : [];
+  if (streamRows.length === 0) return [];
+
+  // Batch-fetch tribes + promoters
+  const tribeIds = [...new Set(streamRows.map(r => r.post.tribeId).filter(Boolean) as string[])];
+  const promoterIds = [...new Set(streamRows.map(r => r.promotedBy).filter(Boolean) as string[])];
+
+  const [allTribes, allPromoters] = await Promise.all([
+    tribeIds.length > 0
+      ? db.select({ id: tribes.id, name: tribes.name }).from(tribes).where(inArray(tribes.id, tribeIds))
+      : [],
+    promoterIds.length > 0
+      ? db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, promoterIds))
+      : [],
+  ]);
   const tribeMap = new Map(allTribes.map(t => [t.id, t.name]));
-
-  // 4. Batch-fetch all promoters
-  const promoterIds = [...new Set(tagRows.map(t => t.promotedBy).filter(Boolean) as string[])];
-  const allPromoters = promoterIds.length > 0
-    ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, promoterIds))
-    : [];
   const promoterMap = new Map(allPromoters.map(u => [u.id, u.name]));
 
   const items: CommunicationItem[] = [];
 
-  for (const postRow of allPosts) {
-    if (postRow.isRemoved) continue;
+  for (const row of streamRows) {
+    const postRow = row.post;
     if (blockedIds.includes(postRow.authorId)) continue;
 
-    const tags = tagRows.filter(t => t.postId === postRow.id);
-    const moodSlug = tags[0]?.moodSlug;
-    if (moodSlugs.length > 0 && moodSlug && !moodSlugs.includes(moodSlug)) continue;
-
+    const moodSlug = row.moodSlug;
     const moodDetails = moodsData.find(m => m.slug === moodSlug);
     const tribeName = postRow.tribeId ? tribeMap.get(postRow.tribeId) : undefined;
     const role = postRow.tribeId ? userTribeRoles[postRow.tribeId] : undefined;
-    const promotedByName = tags[0]?.promotedBy ? promoterMap.get(tags[0].promotedBy) : undefined;
+    const promotedByName = row.promotedBy ? promoterMap.get(row.promotedBy) : undefined;
 
     items.push({
       id: postRow.id,
@@ -361,6 +447,7 @@ async function fetchMoodStreamPosts(
       timestamp: postRow.createdAt ?? new Date(),
       editedAt: postRow.editedAt ?? undefined,
       vibes: postRow.vibeCount ?? 0,
+      comments: postRow.commentCount ?? 0,
       dataAiHint: postRow.dataAiHintAvatar ?? undefined,
       imageUrl: postRow.imageUrl ?? undefined,
       imageUrls: postRow.imageUrls ?? undefined,
@@ -436,6 +523,7 @@ function postRowToFeedItem(
     tribeName,
     currentUserTribeRole,
     pinnedToWall: isPinnedWallUpdate || (row.pinnedToWall ?? false),
+    comments: row.commentCount ?? 0,
     // E2E encryption data (Phase 3)
     isEncrypted: row.isEncrypted ?? false,
     ciphertextBase64: row.ciphertext ? Buffer.from(row.ciphertext as Buffer).toString('base64') : undefined,

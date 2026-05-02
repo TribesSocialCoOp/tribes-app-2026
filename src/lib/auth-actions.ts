@@ -101,6 +101,14 @@ export async function finishRegistrationAction(
     }
   }
 
+  // Auto-join the welcome tribe ("The Trials", id: 0)
+  try {
+    const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
+    await joinTribeDirectly(userId, '0');
+  } catch (e) {
+    console.warn('[auth] Auto-join welcome tribe failed:', e);
+  }
+
   // Fire-and-forget: Send welcome + verification emails
   firePostRegistrationEmails(userId).catch(() => {});
 

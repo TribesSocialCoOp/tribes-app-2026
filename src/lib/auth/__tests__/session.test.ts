@@ -5,6 +5,9 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// Must be set before any import of session.ts — getSessionSecret() runs at module load
+process.env.SESSION_SECRET = 'test-session-secret-at-least-32-characters-long';
+
 // We need to mock next/headers since it requires a request context
 vi.mock('next/headers', () => ({
   cookies: vi.fn(() => ({
@@ -19,6 +22,9 @@ describe('Session Crypto', () => {
   let decrypt: typeof import('@/lib/auth/session').decrypt;
 
   beforeEach(async () => {
+    // Set a test secret before importing the module (getSessionSecret is called at module load)
+    process.env.SESSION_SECRET = 'test-session-secret-at-least-32-characters-long';
+
     // Dynamic import to get fresh module with mocks applied
     const mod = await import('@/lib/auth/session');
     encrypt = mod.encrypt;

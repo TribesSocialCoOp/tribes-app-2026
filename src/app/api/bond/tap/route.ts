@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getCurrentUserId } from '@/lib/auth/session';
 import { createTapToken } from '@/lib/services/bond-tap-service';
 import type { BondType } from '@/lib/types';
+import { validateCsrfToken } from '@/lib/auth/csrf';
 
 const VALID_BOND_TYPES: BondType[] = ['person', 'tribe', 'event'];
 
@@ -16,6 +17,9 @@ export async function POST(request: NextRequest) {
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+
+    const csrfToken = request.headers.get('X-CSRF-Token') ?? undefined;
+    await validateCsrfToken(csrfToken);
 
     const body = await request.json();
     const { bondType } = body;

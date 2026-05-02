@@ -30,50 +30,50 @@ import {
 async function seed() {
   console.log('🌱 Seeding database...');
 
-  // Disable FK constraints for clean wipe
-  await db.run(sql`PRAGMA foreign_keys = OFF`);
+  // Disable FK constraints for clean wipe (PostgreSQL)
+  await db.execute(sql`SET session_replication_role = 'replica'`);
 
   // Clear all tables (reverse dependency order)
-  await db.delete(schema.messages).run();
-  await db.delete(schema.eventStreamPosts).run();
-  await db.delete(schema.storyComments).run();
-  await db.delete(schema.storyArticles).run();
-  await db.delete(schema.stories).run();
-  await db.delete(schema.userPreferences).run();
-  await db.delete(schema.wallStyles).run();
-  await db.delete(schema.wallBlocks).run();
-  await db.delete(schema.reports).run();
-  await db.delete(schema.vibes).run();
-  await db.delete(schema.comments).run();
-  await db.delete(schema.postMoodTags).run();
-  await db.delete(schema.posts).run();
-  await db.delete(schema.pendingMembers).run();
-  await db.delete(schema.tribeMembers).run();
-  await db.delete(schema.tribeMoodTags).run();
-  await db.delete(schema.tribes).run();
-  await db.delete(schema.contributions).run();
-  await db.delete(schema.inviteRedemptions).run();
-  await db.delete(schema.inviteCodes).run();
-  await db.delete(schema.subscriptions).run();
-  await db.delete(schema.plans).run();
-  await db.delete(schema.blockedUsers).run();
-  await db.delete(schema.bonds).run();
-  await db.delete(schema.bondRequests).run();
-  await db.delete(schema.sessions).run();
-  await db.delete(schema.credentials).run();
-  await db.delete(schema.userAliases).run();
-  await db.delete(schema.events).run();
-  await db.delete(schema.pushSubscriptions).run();
-  await db.delete(schema.emailVerificationTokens).run();
-  await db.delete(schema.users).run();
+  await db.delete(schema.messages);
+  await db.delete(schema.eventStreamPosts);
+  await db.delete(schema.storyComments);
+  await db.delete(schema.storyArticles);
+  await db.delete(schema.stories);
+  await db.delete(schema.vibes);
+  await db.delete(schema.comments);
+  await db.delete(schema.postMoodTags);
+  await db.delete(schema.reports);
+  await db.delete(schema.posts);
+  await db.delete(schema.pendingMembers);
+  await db.delete(schema.tribeMembers);
+  await db.delete(schema.tribeMoodTags);
+  await db.delete(schema.events);
+  await db.delete(schema.tribes);
+  await db.delete(schema.wallBlocks);
+  await db.delete(schema.wallStyles);
+  await db.delete(schema.userPreferences);
+  await db.delete(schema.contributions);
+  await db.delete(schema.inviteRedemptions);
+  await db.delete(schema.inviteCodes);
+  await db.delete(schema.subscriptions);
+  await db.delete(schema.plans);
+  await db.delete(schema.sessions);
+  await db.delete(schema.credentials);
+  await db.delete(schema.userAliases);
+  await db.delete(schema.bonds);
+  await db.delete(schema.bondRequests);
+  await db.delete(schema.blockedUsers);
+  await db.delete(schema.pushSubscriptions);
+  await db.delete(schema.emailVerificationTokens);
+  await db.delete(schema.users);
 
   // Re-enable FK constraints
-  await db.run(sql`PRAGMA foreign_keys = ON`);
+  await db.execute(sql`SET session_replication_role = 'origin'`);
 
   // ---- 1. Users ----
   console.log('  👤 Users...');
   // Create the mock user
-  db.insert(schema.users).values({
+  await db.insert(schema.users).values({
     id: mockUserProfile.id,
     name: mockUserProfile.name,
     email: mockUserProfile.email,
@@ -84,17 +84,17 @@ async function seed() {
     reputationScore: mockUserProfile.reputationScore,
     reputationStatus: mockUserProfile.reputationStatus,
     createdAt: mockUserProfile.accountCreatedAt,
-  }).run();
+  });
   // @ts-ignore -- awaited by async wrapper
 
   // Create aliases for mock user
-  for (const alias of mockUserProfile.aliases) {
-    db.insert(schema.userAliases).values({
-      id: `alias-${alias}`,
+  for (const aliasObj of mockUserProfile.aliases) {
+    await db.insert(schema.userAliases).values({
+      id: `alias-${aliasObj.name}`,
       userId: mockUserProfile.id,
-      alias,
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+      alias: aliasObj.name,
+      avatar: aliasObj.avatar,
+    });
   }
 
   // Create users referenced in mock data
@@ -119,9 +119,9 @@ async function seed() {
     { id: 'dustin', name: 'Dustin Moore', role: 'Admin' },
     // Members
     { id: 'user1', name: 'Alice Wonderland', role: 'Human_Member' },
-    { id: 'user2', name: 'Bob The Builder', role: 'Human_Member' },
-    { id: 'user3', name: 'Charlie Chaplin', role: 'Human_Member' },
-    { id: 'user4', name: 'Diana Prince', role: 'Human_Member' },
+    { id: 'user2', name: 'Bob Builder', role: 'Human_Member' },
+    { id: 'user3', name: 'Carol Cosmos', role: 'Human_Member' },
+    { id: 'user4', name: 'Dave Dormant', role: 'Human_Member' },
     { id: 'user5', name: 'Edward Elric', role: 'Human_Member' },
     { id: 'user6', name: 'Fiona Glenanne', role: 'Human_Member' },
     { id: 'pending1', name: 'Frank Frankenstein', role: 'Human_Free' },
@@ -129,27 +129,26 @@ async function seed() {
   ];
 
   for (const u of syntheticUsers) {
-    db.insert(schema.users).values({
+    await db.insert(schema.users).values({
       id: u.id,
       name: u.name,
       role: u.role,
       reputationStatus: 'Active',
       createdAt: new Date(),
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+    });
   }
 
   // ---- 1b. Plans (Phase 3) ----
   console.log('  💳 Plans...');
   const planRows = [
-    { id: 'free', name: 'Always Free', description: 'Basic access for community participation and secure communication.', priceMonthly: null, priceYearly: null, maxBonds: 10, maxTribesOwned: 0, targetRole: 'Human_Free', sortOrder: 0, stripePriceIdMonthly: null, stripePriceIdYearly: null, features: JSON.stringify(['basic_profile', 'tribe_join', 'mood_stream', 'e2e_encryption']) },
-    { id: 'individual_coop', name: 'Individual Co-Op Member', description: 'For active creators and leaders who want to support and govern the community.', priceMonthly: 700, priceYearly: 7000, maxBonds: null, maxTribesOwned: 5, targetRole: 'Human_Paid', sortOrder: 1, stripePriceIdMonthly: 'price_1TH7EdEXBN16ztITClMg6JTF', stripePriceIdYearly: 'price_1TH7EmEXBN16ztITwyZqXk0v', features: JSON.stringify(['basic_profile', 'tribe_join', 'mood_stream', 'e2e_encryption', 'reserve_alias', 'family_bonds', 'vault_backup', 'coop_voting', 'create_tribes', 'host_events', 'early_access']) },
-    { id: 'org_base', name: 'Organization Base', description: 'For small creators, vendors, and organizations ready to build.', priceMonthly: 2900, priceYearly: 29000, maxBonds: 500, maxTribesOwned: 10, targetRole: 'Org_Base', sortOrder: 2, stripePriceIdMonthly: 'price_1TH7F6EXBN16ztIT6PU12axd', stripePriceIdYearly: 'price_1TH7F6EXBN16ztIT7sAdFm3B', features: JSON.stringify(['basic_profile', 'tribe_join', 'mood_stream', 'e2e_encryption', 'reserve_alias', 'family_bonds', 'vault_backup', 'coop_voting', 'create_tribes', 'host_events', 'early_access', 'org_branding', 'verified_profile', 'commerce_5pct']) },
-    { id: 'org_pro', name: 'Organization Pro', description: 'For growing organizations that need more scale and insight.', priceMonthly: 7900, priceYearly: 79000, maxBonds: 2000, maxTribesOwned: 50, targetRole: 'Org_Pro', sortOrder: 3, stripePriceIdMonthly: 'price_1TH7FREXBN16ztIT9aW331np', stripePriceIdYearly: 'price_1TH7FREXBN16ztIT0maLVoYV', features: JSON.stringify(['basic_profile', 'tribe_join', 'mood_stream', 'e2e_encryption', 'reserve_alias', 'family_bonds', 'vault_backup', 'coop_voting', 'create_tribes', 'host_events', 'early_access', 'org_branding', 'verified_profile', 'commerce_5pct', 'analytics', 'priority_support']) },
-    { id: 'org_enterprise', name: 'Enterprise', description: 'For large-scale operations with custom needs.', priceMonthly: null, priceYearly: null, maxBonds: null, maxTribesOwned: null, targetRole: 'Org_Enterprise', sortOrder: 4, stripePriceIdMonthly: null, stripePriceIdYearly: null, features: JSON.stringify(['basic_profile', 'tribe_join', 'mood_stream', 'e2e_encryption', 'reserve_alias', 'family_bonds', 'vault_backup', 'coop_voting', 'create_tribes', 'host_events', 'early_access', 'org_branding', 'verified_profile', 'commerce_negotiable', 'analytics', 'priority_support', 'sla', 'dedicated_support', 'api_access']) },
+    { id: 'free', name: 'Always Free', description: 'Basic access for community participation and secure communication.', priceMonthly: null, priceYearly: null, maxBonds: 10, maxTribesOwned: 0, maxMembers: null, targetRole: 'Human_Free', sortOrder: 0, stripePriceIdMonthly: null, stripePriceIdYearly: null, features: JSON.stringify(['basic_profile', 'tribe_join', 'mood_stream', 'e2e_encryption']) },
+    { id: 'individual_coop', name: 'Individual Co-Op Member', description: 'For active creators and leaders who want to support and govern the community.', priceMonthly: 700, priceYearly: 7000, maxBonds: null, maxTribesOwned: 5, maxMembers: null, targetRole: 'Human_Paid', sortOrder: 1, stripePriceIdMonthly: 'price_1TH7EdEXBN16ztITClMg6JTF', stripePriceIdYearly: 'price_1TH7EmEXBN16ztITwyZqXk0v', features: JSON.stringify(['basic_profile', 'tribe_join', 'mood_stream', 'e2e_encryption', 'reserve_alias', 'family_bonds', 'vault_backup', 'coop_voting', 'create_tribes', 'host_events', 'early_access']) },
+    { id: 'org_base', name: 'Organization Base', description: 'For small creators, vendors, and organizations ready to build.', priceMonthly: 2900, priceYearly: 29000, maxBonds: null, maxTribesOwned: 10, maxMembers: 500, targetRole: 'Org_Base', sortOrder: 2, stripePriceIdMonthly: 'price_1TH7F6EXBN16ztIT6PU12axd', stripePriceIdYearly: 'price_1TH7F6EXBN16ztIT7sAdFm3B', features: JSON.stringify(['basic_profile', 'tribe_join', 'mood_stream', 'e2e_encryption', 'reserve_alias', 'family_bonds', 'vault_backup', 'coop_voting', 'create_tribes', 'host_events', 'early_access', 'org_branding', 'verified_profile', 'commerce_5pct']) },
+    { id: 'org_pro', name: 'Organization Pro', description: 'For growing organizations that need more scale and insight.', priceMonthly: 7900, priceYearly: 79000, maxBonds: null, maxTribesOwned: 50, maxMembers: 2000, targetRole: 'Org_Pro', sortOrder: 3, stripePriceIdMonthly: 'price_1TH7FREXBN16ztIT9aW331np', stripePriceIdYearly: 'price_1TH7FREXBN16ztIT0maLVoYV', features: JSON.stringify(['basic_profile', 'tribe_join', 'mood_stream', 'e2e_encryption', 'reserve_alias', 'family_bonds', 'vault_backup', 'coop_voting', 'create_tribes', 'host_events', 'early_access', 'org_branding', 'verified_profile', 'commerce_5pct', 'analytics', 'priority_support']) },
+    { id: 'org_enterprise', name: 'Enterprise', description: 'For large-scale operations with custom needs.', priceMonthly: null, priceYearly: null, maxBonds: null, maxTribesOwned: null, maxMembers: null, targetRole: 'Org_Enterprise', sortOrder: 4, stripePriceIdMonthly: null, stripePriceIdYearly: null, features: JSON.stringify(['basic_profile', 'tribe_join', 'mood_stream', 'e2e_encryption', 'reserve_alias', 'family_bonds', 'vault_backup', 'coop_voting', 'create_tribes', 'host_events', 'early_access', 'org_branding', 'verified_profile', 'commerce_negotiable', 'analytics', 'priority_support', 'sla', 'dedicated_support', 'api_access']) },
   ];
   for (const plan of planRows) {
-    db.insert(schema.plans).values(plan).run();
+    await db.insert(schema.plans).values(plan);
   }
 
   // ---- 1c. Founding Invite Codes ----
@@ -159,12 +158,12 @@ async function seed() {
     { id: 'FOUNDING-BETA-001', grantsPlanId: 'individual_coop', maxUses: 100, usedCount: 0 },
   ];
   for (const code of foundingCodes) {
-    db.insert(schema.inviteCodes).values(code).run();
+    await db.insert(schema.inviteCodes).values(code);
   }
 
   // ---- 1d. Sample Subscription (Founding Member) ----
   console.log('  🎖️  Founding Subscription...');
-  db.insert(schema.subscriptions).values({
+  await db.insert(schema.subscriptions).values({
     id: 'sub-tsm-founding',
     userId: 'test-service-member',
     planId: 'individual_coop',
@@ -172,21 +171,21 @@ async function seed() {
     source: 'founding',
     createdAt: new Date(),
     updatedAt: new Date(),
-  }).run();
+  });
   // Mark TSM as Human_Paid (founding upgrade)
-  db.update(schema.users).set({ role: 'Human_Paid' }).where(
+  await db.update(schema.users).set({ role: 'Human_Paid' }).where(
     sql`${schema.users.id} = 'test-service-member'`
-  ).run();
+  );
   // Record the TSM redemption
-  db.insert(schema.inviteRedemptions).values({
+  await db.insert(schema.inviteRedemptions).values({
     id: 'redemption-tsm-founding',
     inviteCodeId: 'FOUNDING-ALPHA-001',
     userId: 'test-service-member',
-  }).run();
+  });
   // Increment the used count
-  db.update(schema.inviteCodes).set({ usedCount: 1 }).where(
+  await db.update(schema.inviteCodes).set({ usedCount: 1 }).where(
     sql`${schema.inviteCodes.id} = 'FOUNDING-ALPHA-001'`
-  ).run();
+  );
 
   // ---- 1e. Sample Contributions (Earn-Path Progress) ----
   console.log('  📈 Contributions...');
@@ -217,24 +216,25 @@ async function seed() {
     { id: 'contrib-free-003', userId: 'test-free-user', type: 'moderation', points: 10, description: 'Reported spam account' },
   ];
   for (const contrib of sampleContribs) {
-    db.insert(schema.contributions).values(contrib).run();
+    await db.insert(schema.contributions).values(contrib);
   }
 
   // ---- 1f. User-Generated Invite Code (Referral Test) ----
   console.log('  🔗 User invite code...');
-  db.insert(schema.inviteCodes).values({
+  await db.insert(schema.inviteCodes).values({
     id: 'INVITE-TSM-TEST',
     createdBy: 'test-service-member',
     grantsPlanId: 'individual_coop',
     maxUses: 5,
     usedCount: 0,
-  }).run();
+  });
 
   // ---- 2. Tribes ----
   console.log('  🏛️  Tribes...');
   for (const tribe of tribesData) {
-    db.insert(schema.tribes).values({
+    await db.insert(schema.tribes).values({
       id: tribe.id,
+      slug: tribe.slug,
       name: tribe.name,
       description: tribe.description,
       memberCount: tribe.members,
@@ -246,17 +246,15 @@ async function seed() {
       minimumReputation: tribe.minimumReputation,
       minimumAccountAgeDays: tribe.minimumAccountAgeDays,
       createdAt: new Date(),
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+    });
 
     // Tribe mood tags
     if (tribe.moods) {
       for (const mood of tribe.moods) {
-        db.insert(schema.tribeMoodTags).values({
+        await db.insert(schema.tribeMoodTags).values({
           tribeId: tribe.id,
           moodSlug: mood,
-        }).run();
-  // @ts-ignore -- awaited by async wrapper
+        });
       }
     }
   }
@@ -264,7 +262,7 @@ async function seed() {
   // ---- 3. Tribe Members ----
   console.log('  👥 Tribe Members...');
   for (const member of mockMembers) {
-    db.insert(schema.tribeMembers).values({
+    await db.insert(schema.tribeMembers).values({
       id: `tm-${member.id}-${member.tribeId}`,
       tribeId: member.tribeId,
       userId: member.id,
@@ -272,29 +270,27 @@ async function seed() {
       tribeAssignedNickname: member.tribeAssignedNickname,
       reputationStatus: member.reputationStatus,
       joinedAt: new Date(),
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+    });
   }
 
   // ---- 4. Pending Members ----
   console.log('  ⏳ Pending Members...');
   for (const pm of mockPendingMembers) {
-    db.insert(schema.pendingMembers).values({
+    await db.insert(schema.pendingMembers).values({
       id: pm.id,
       tribeId: pm.tribeId,
       userId: pm.id, // Using pm.id as both since these are synthetic users
       requestedAt: pm.requestTimestamp,
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+    });
   }
 
   // ---- 5. Bonds ----
   console.log('  🔗 Bonds...');
   for (const bond of bondsData) {
-    db.insert(schema.bonds).values({
+    await db.insert(schema.bonds).values({
       id: bond.id,
       userId: MOCK_CURRENT_USER_ID,
-      targetId: `target-${bond.id}`,
+      targetId: bond.targetId || `target-${bond.id}`,
       targetType: bond.targetType,
       targetName: bond.targetName,
       bondType: bond.bondType,
@@ -314,14 +310,36 @@ async function seed() {
       keyType: bond.keyType,
       eventId: bond.eventId,
       accessTier: bond.accessTier,
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+    });
+  }
+
+  // Cross-user bonds (Realistic social graph)
+  console.log('  🧬 Cross-user Bonds...');
+  const crossBonds = [
+    { id: 'cb1', userId: 'user1', targetId: 'user2', targetName: 'Bob Builder', targetType: 'user', bondType: 'person' },
+    { id: 'cb2', userId: 'user2', targetId: 'user1', targetName: 'Alice Wonderland', targetType: 'user', bondType: 'person' },
+    { id: 'cb3', userId: 'user3', targetId: 'user1', targetName: 'Alice Wonderland', targetType: 'user', bondType: 'person' },
+    { id: 'cb4', userId: 'user1', targetId: '1', targetName: 'AI Innovators', targetType: 'tribe', bondType: 'tribe' },
+  ];
+  for (const cb of crossBonds) {
+    await db.insert(schema.bonds).values({
+      id: cb.id,
+      userId: cb.userId,
+      targetId: cb.targetId,
+      targetName: cb.targetName,
+      targetType: cb.targetType as any,
+      bondType: cb.bondType as any,
+      formationMethod: 'virtual_request',
+      passkeyStatus: 'active',
+      expiresAt: new Date(Date.now() + 86400000 * 90),
+      lastRefreshedAt: new Date(),
+    });
   }
 
   // ---- 6. Posts (Tribe Posts) ----
   console.log('  📝 Posts...');
   for (const post of initialSampleTribePosts) {
-    db.insert(schema.posts).values({
+    await db.insert(schema.posts).values({
       id: post.id,
       tribeId: post.tribeId,
       authorId: post.authorId,
@@ -342,13 +360,12 @@ async function seed() {
       originalPostId: post.originalPostId,
       isPinned: post.isPinned ?? false,
       createdAt: post.timestamp,
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+    });
 
     // Insert comments for this post
     if (post.commentsData) {
-      const insertComment = (comment: typeof post.commentsData[0], parentId: string | null) => {
-        db.insert(schema.comments).values({
+      const insertComment = async (comment: typeof post.commentsData[0], parentId: string | null) => {
+        await db.insert(schema.comments).values({
           id: comment.id,
           postId: post.id,
           parentCommentId: parentId,
@@ -360,16 +377,15 @@ async function seed() {
           content: comment.content,
           vibeCount: comment.vibes ?? 0,
           createdAt: comment.timestamp,
-        }).run();
-  // @ts-ignore -- awaited by async wrapper
+        });
         if (comment.replies) {
           for (const reply of comment.replies) {
-            insertComment(reply, comment.id);
+            await insertComment(reply, comment.id);
           }
         }
       };
       for (const comment of post.commentsData) {
-        insertComment(comment, null);
+        await insertComment(comment, null);
       }
     }
   }
@@ -386,7 +402,7 @@ async function seed() {
       const tribeId = tribe?.id || '0'; // Default to "The Trials"
 
       // Create a post for mood-only items
-      db.insert(schema.posts).values({
+      await db.insert(schema.posts).values({
         id: msp.id,
         tribeId,
         authorId: MOCK_CURRENT_USER_ID, // Default author
@@ -402,20 +418,18 @@ async function seed() {
         vibeCount: msp.vibes ?? 0,
         commentCount: msp.comments ?? 0,
         createdAt: msp.timestamp,
-      }).run();
-  // @ts-ignore -- awaited by async wrapper
+      });
     }
 
     // Create mood tags
     for (const tag of msp.moodTags) {
       try {
-        db.insert(schema.postMoodTags).values({
+        await db.insert(schema.postMoodTags).values({
           postId: msp.id,
           moodSlug: tag,
           promotedAt: msp.timestamp,
           promotedBy: MOCK_CURRENT_USER_ID,
-        }).run();
-  // @ts-ignore -- awaited by async wrapper
+        });
       } catch {
         // Duplicate tag, skip
       }
@@ -425,21 +439,20 @@ async function seed() {
   // ---- 8. Reports ----
   console.log('  🚩 Reports...');
   for (const report of mockReportedContentData) {
-    db.insert(schema.reports).values({
+    await db.insert(schema.reports).values({
       id: `report-${report.postId}`,
       postId: report.postId,
       reporterName: report.reporterName,
       reason: report.reason,
       reportedAt: report.reportedAt,
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+    });
   }
 
   // ---- 9. Events ----
   console.log('  📅 Events...');
   for (const event of sampleEventsData) {
     const tribe = tribesData.find(t => t.name === event.associatedTribe);
-    db.insert(schema.events).values({
+    await db.insert(schema.events).values({
       id: event.id,
       name: event.name,
       keywords: event.keywords,
@@ -455,14 +468,13 @@ async function seed() {
       locationCityRegion: event.locationCityRegion,
       latitude: event.latitude,
       longitude: event.longitude,
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+    });
   }
 
   // ---- 9b. Event Stream Posts ----
   console.log('  💬 Event Stream Posts...');
   for (const esp of mockEventStreamPosts) {
-    db.insert(schema.eventStreamPosts).values({
+    await db.insert(schema.eventStreamPosts).values({
       id: esp.id,
       eventId: esp.eventId,
       authorId: esp.authorId,
@@ -472,14 +484,13 @@ async function seed() {
       imageUrl: esp.imageUrl,
       imageAlt: esp.imageAlt,
       createdAt: esp.timestamp,
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+    });
   }
 
   // ---- 10. Stories ----
   console.log('  📰 Stories...');
   for (const story of mockStoryTopics) {
-    db.insert(schema.stories).values({
+    await db.insert(schema.stories).values({
       id: story.id,
       title: story.title,
       summary: story.summary,
@@ -492,14 +503,13 @@ async function seed() {
       dataAiHintCover: story.dataAiHintCover,
       discussionCount: story.discussionCount,
       lastUpdatedAt: story.lastUpdatedAt,
-    }).run();
-  // @ts-ignore -- awaited by async wrapper
+    });
 
     // Articles
     const articles = mockArticlesForStory[story.id];
     if (articles) {
       for (const art of articles) {
-        db.insert(schema.storyArticles).values({
+        await db.insert(schema.storyArticles).values({
           id: art.id,
           storyId: story.id,
           title: art.title,
@@ -508,16 +518,15 @@ async function seed() {
           publishedAt: art.publishedDate,
           summarySnippet: art.summarySnippet,
           dataAiHint: art.dataAiHint,
-        }).run();
-  // @ts-ignore -- awaited by async wrapper
+        });
       }
     }
 
     // Story comments
     const storyComments = mockCommentsForStory[story.id];
     if (storyComments) {
-      const insertStoryComment = (comment: typeof storyComments[0], parentId: string | null) => {
-        db.insert(schema.storyComments).values({
+      const insertStoryComment = async (comment: typeof storyComments[0], parentId: string | null) => {
+        await db.insert(schema.storyComments).values({
           id: comment.id,
           storyId: story.id,
           parentCommentId: parentId,
@@ -528,16 +537,15 @@ async function seed() {
           content: comment.content,
           vibeCount: comment.vibes ?? 0,
           createdAt: comment.timestamp,
-        }).run();
-  // @ts-ignore -- awaited by async wrapper
+        });
         if (comment.replies) {
           for (const reply of comment.replies) {
-            insertStoryComment(reply, comment.id);
+            await insertStoryComment(reply, comment.id);
           }
         }
       };
       for (const comment of storyComments) {
-        insertStoryComment(comment, null);
+        await insertStoryComment(comment, null);
       }
     }
   }

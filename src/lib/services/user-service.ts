@@ -7,7 +7,7 @@ import { users, userAliases } from '@/db/schema';
 import { eq, and, ne } from 'drizzle-orm';
 import type { UserProfile } from '@/lib/types';
 
-function rowToProfile(row: typeof users.$inferSelect, aliases: string[]): UserProfile {
+function rowToProfile(row: typeof users.$inferSelect, aliases: UserProfile['aliases']): UserProfile {
   return {
     id: row.id,
     name: row.name,
@@ -16,6 +16,7 @@ function rowToProfile(row: typeof users.$inferSelect, aliases: string[]): UserPr
     bio: row.bio ?? '',
     avatar: row.avatar ?? '',
     reservedAlias: row.reservedAlias ?? undefined,
+    reservedAliasAvatar: row.reservedAliasAvatar ?? undefined,
     aliases,
     reputationScore: row.reputationScore ?? 0,
     reputationStatus: (row.reputationStatus ?? 'Onboarding') as UserProfile['reputationStatus'],
@@ -23,6 +24,7 @@ function rowToProfile(row: typeof users.$inferSelect, aliases: string[]): UserPr
     totpEnabled: row.totpEnabled ?? false,
     aiDataSharingEnabled: row.aiDataSharingEnabled ?? true,
     isVerified: row.isVerified ?? false,
+    tosAcceptedVersion: row.tosAcceptedVersion ?? null,
     accountCreatedAt: row.createdAt ?? new Date(),
   };
 }
@@ -36,7 +38,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   if (!row) return null;
 
   const aliasRows = await db.select().from(userAliases).where(eq(userAliases.userId, userId));
-  const aliases = aliasRows.map(a => a.alias);
+  const aliases = aliasRows.map(a => ({ name: a.alias, avatar: a.avatar ?? undefined }));
 
   return rowToProfile(row, aliases);
 }
@@ -77,12 +79,28 @@ export async function updateUserProfile(userId: string, updates: Partial<Omit<Us
     bio: updates.bio ?? existing.bio,
     avatar: updates.avatar ?? existing.avatar,
     reservedAlias: updates.reservedAlias !== undefined ? (updates.reservedAlias || null) : existing.reservedAlias,
+    reservedAliasAvatar: updates.reservedAliasAvatar !== undefined ? (updates.reservedAliasAvatar || null) : existing.reservedAliasAvatar,
     reputationScore: updates.reputationScore ?? existing.reputationScore,
     reputationStatus: updates.reputationStatus ?? existing.reputationStatus,
   }).where(eq(users.id, userId));
 
   // ── Sync aliases table ───────────────────────────────────────
   if (updates.aliases !== undefined) {
+    // ── Collision check: reject aliases matching any user's reserved handle ──
+    if (updates.aliases.length > 0) {
+      for (const alias of updates.aliases) {
+        const aliasName = (typeof alias === 'string' ? alias : alias.name).toLowerCase().replace(/^@/, '');
+        // Check against all reserved aliases (stored with '@' prefix)
+        const [collision] = await db.select({ id: users.id, reservedAlias: users.reservedAlias })
+          .from(users)
+          .where(eq(users.reservedAlias, `@${aliasName}`))
+          .limit(1);
+        if (collision && collision.id !== userId) {
+          throw new Error(`The alias '${aliasName}' conflicts with a reserved handle. Choose a different name.`);
+        }
+      }
+    }
+
     // Delete all existing aliases for this user
     await db.delete(userAliases).where(eq(userAliases.userId, userId));
     // Insert new aliases
@@ -92,8 +110,8 @@ export async function updateUserProfile(userId: string, updates: Partial<Omit<Us
         updates.aliases.map(alias => ({
           id: `alias-${userId}-${crypto.randomUUID().substring(0, 8)}`,
           userId,
-          alias,
-          avatar: avatarSvg(alias),
+          alias: typeof alias === 'string' ? alias : alias.name,
+          avatar: typeof alias === 'string' ? avatarSvg(alias) : (alias.avatar || avatarSvg(alias.name)),
         }))
       );
     }

@@ -25,6 +25,9 @@ import {
   PlusCircle,
   CalendarPlus,
   ShieldAlert,
+  Tent,
+  Link2,
+  SquarePen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -34,13 +37,14 @@ import { useUser } from "@/hooks/use-user";
 
 const navItems: { href: string; icon: React.ElementType; label: string; tooltip: string; roles?: UserRole[] }[] = [
   { href: "/your-comms", icon: Rss, label: "Feed", tooltip: "Your Feed" },
-  { href: "/circles", icon: Users, label: "Circles", tooltip: "Bonds & Tribes" },
+  { href: "/tribes", icon: Tent, label: "Tribes", tooltip: "Your Tribes" },
+  { href: "/bonds", icon: Link2, label: "Bonds", tooltip: "Your Bonds" },
   { href: "/discover", icon: Compass, label: "Discover", tooltip: "Explore" },
-  { href: "/my-space", icon: User, label: "My Space", tooltip: "Your Wall & Profile" },
+  { href: "/my-wall", icon: User, label: "My Wall", tooltip: "Your Wall & Profile" },
 ];
 
 const bottomNavItems: { href: string; icon: React.ElementType; label: string; tooltip: string; roles?: UserRole[] }[] = [
-  { href: "/admin/mod-queue", icon: ShieldAlert, label: "Mod Queue", tooltip: "Moderation Queue", roles: ['Admin'] },
+  { href: "/admin/mod-queue", icon: ShieldAlert, label: "Mod Queue", tooltip: "Moderation Queue", roles: ['Admin', 'System'] },
   { href: "/settings", icon: Settings, label: "Settings", tooltip: "Settings" },
 ];
 
@@ -48,12 +52,20 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { role: userRole } = useUser();
   const { isMobile, setOpenMobile } = useSidebar();
-  
+
   const isGuest = !userRole;
   const canCreate = !isGuest && userRole !== 'Human_Free';
 
   const visibleNavItems = navItems.filter(item => !item.roles || (userRole && item.roles.includes(userRole)));
-  
+
+  let composeHref = '/your-comms?compose=true';
+  if (pathname.startsWith('/t/')) {
+    const slug = pathname.split('/')[2];
+    composeHref = `/t/${slug}?compose=true`;
+  } else if (pathname.startsWith('/tribes/') && pathname !== '/tribes') {
+    const id = pathname.split('/')[2];
+    composeHref = `/tribes/${id}?compose=true`;
+  }
   const handleLinkClick = () => {
     if (isMobile) {
       setOpenMobile(false);
@@ -69,7 +81,7 @@ export function AppSidebar() {
         const { getUnreadActivityCount } = await import('@/lib/actions/content-actions');
         const count = await getUnreadActivityCount();
         setUnreadCount(count);
-      } catch {} // silent fail
+      } catch { } // silent fail
     }
     fetchUnread();
     const interval = setInterval(fetchUnread, 30000);
@@ -128,65 +140,93 @@ export function AppSidebar() {
               </Link>
             </>
           ) : (
-            <>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link href={canCreate ? "/tribes/create" : "/billing"} passHref>
-                  <Button
-                    onClick={handleLinkClick}
-                    variant={canCreate ? "default" : "outline"}
-                    className={cn(
-                      "w-full justify-start group-data-[collapsible=icon]:justify-center my-1",
-                       canCreate && "bg-accent text-accent-foreground hover:bg-[hsl(165,50%,85%)]"
-                    )}
-                  >
-                    {canCreate ? (
-                      <PlusCircle className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
-                    ) : (
-                      <HeartHandshake className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
-                    )}
-                    <span className="group-data-[collapsible=icon]:hidden">{canCreate ? 'New Tribe' : 'Upgrade to Create'}</span>
-                  </Button>
-                </Link>
-              </TooltipTrigger>
-              {!canCreate && (
-                <TooltipContent side="right" align="center">
-                  <p>Upgrade to create a new tribe.</p>
-                </TooltipContent>
+            <div className="px-2 mb-2 space-y-2">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link href={composeHref} passHref>
+                      <Button
+                        onClick={handleLinkClick}
+                        className="w-full justify-start group-data-[collapsible=icon]:justify-center bg-primary text-primary-foreground hover:bg-primary/90"
+                      >
+                        <SquarePen className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
+                        <span className="group-data-[collapsible=icon]:hidden font-medium">New Post</span>
+                      </Button>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" align="center">
+                    <p>Create a new post</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              {canCreate ? (
+                <div className="flex gap-2 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:gap-2">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link href="/tribes/create" passHref className="flex-1 group-data-[collapsible=icon]:w-full">
+                          <Button
+                            onClick={handleLinkClick}
+                            variant="outline"
+                            size="sm"
+                            className="w-full h-8 px-2 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center"
+                          >
+                            <Tent className="mr-1.5 h-3.5 w-3.5 group-data-[collapsible=icon]:mr-0" />
+                            <span className="group-data-[collapsible=icon]:hidden text-xs font-medium">Tribe</span>
+                          </Button>
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" align="center">
+                        <p>Create a new tribe</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link href="/events/create" passHref className="flex-1 group-data-[collapsible=icon]:w-full">
+                          <Button
+                            onClick={handleLinkClick}
+                            variant="outline"
+                            size="sm"
+                            className="w-full h-8 px-2 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:justify-center"
+                          >
+                            <CalendarPlus className="mr-1.5 h-3.5 w-3.5 group-data-[collapsible=icon]:mr-0" />
+                            <span className="group-data-[collapsible=icon]:hidden text-xs font-medium">Event</span>
+                          </Button>
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" align="center">
+                        <p>Create a new event</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+              ) : (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Link href="/billing" passHref>
+                        <Button
+                          onClick={handleLinkClick}
+                          variant="outline"
+                          size="sm"
+                          className="w-full h-8 px-2 justify-start group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+                        >
+                          <HeartHandshake className="mr-1.5 h-3.5 w-3.5 group-data-[collapsible=icon]:mr-0" />
+                          <span className="group-data-[collapsible=icon]:hidden text-xs font-medium">Upgrade to Create</span>
+                        </Button>
+                      </Link>
+                    </TooltipTrigger>
+                    <TooltipContent side="right" align="center">
+                      <p>Upgrade to create tribes and events.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
-            </Tooltip>
-          </TooltipProvider>
-          
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Link href={canCreate ? "/events/create" : "/billing"} passHref>
-                  <Button
-                    onClick={handleLinkClick}
-                    variant={canCreate ? "default" : "outline"}
-                    className={cn(
-                      "w-full justify-start group-data-[collapsible=icon]:justify-center my-1",
-                       canCreate && "bg-accent text-accent-foreground hover:bg-[hsl(165,50%,85%)]"
-                    )}
-                  >
-                    {canCreate ? (
-                      <CalendarPlus className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
-                    ) : (
-                      <HeartHandshake className="mr-2 h-5 w-5 group-data-[collapsible=icon]:mr-0" />
-                    )}
-                    <span className="group-data-[collapsible=icon]:hidden">{canCreate ? 'New Event' : 'Upgrade to Create'}</span>
-                  </Button>
-                </Link>
-              </TooltipTrigger>
-              {!canCreate && (
-                <TooltipContent side="right" align="center">
-                  <p>Upgrade to create a new event.</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-            </>
+            </div>
           )}
 
           {visibleNavItems.map((item) => (
@@ -194,7 +234,7 @@ export function AppSidebar() {
               <SidebarMenuButton
                 asChild
                 onClick={handleLinkClick}
-                isActive={pathname.startsWith(item.href) && (item.href === "/" ? pathname === "/" : true) } 
+                isActive={pathname.startsWith(item.href) && (item.href === "/" ? pathname === "/" : true)}
                 tooltip={item.tooltip}
                 className={cn(
                   "justify-start",
@@ -216,19 +256,19 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarContent>
       <SidebarFooter className="p-2 border-t">
-         <SidebarMenu>
-            {bottomNavItems
-              .filter(item => !item.roles || (userRole && item.roles.includes(userRole)))
-              .map((item) => (
-                <SidebarMenuItem key={item.href}>
+        <SidebarMenu>
+          {bottomNavItems
+            .filter(item => !item.roles || (userRole && item.roles.includes(userRole)))
+            .map((item) => (
+              <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
                   onClick={handleLinkClick}
                   isActive={pathname.startsWith(item.href)}
                   tooltip={item.tooltip}
                   className={cn(
-                      "justify-start",
-                      "group-data-[collapsible=icon]:justify-center"
+                    "justify-start",
+                    "group-data-[collapsible=icon]:justify-center"
                   )}
                 >
                   <Link href={item.href}>
@@ -236,7 +276,7 @@ export function AppSidebar() {
                     <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
                   </Link>
                 </SidebarMenuButton>
-                </SidebarMenuItem>
+              </SidebarMenuItem>
             ))}
         </SidebarMenu>
       </SidebarFooter>
