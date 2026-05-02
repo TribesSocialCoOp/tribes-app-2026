@@ -85,3 +85,8 @@ tools/
 scratch.*
 query_*.ts
 *.admin.ts
+
+# iOS Build Artifacts
+build/
+*.xcarchive
+*.ipa
