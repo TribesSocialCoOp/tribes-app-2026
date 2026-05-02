@@ -35,7 +35,7 @@ export function BondQRDialog({
 
   useEffect(() => {
     if (isNative) {
-      NFCService.isAvailable().then(setNfcSupported);
+      NFCService.isEnabled().then(setNfcSupported);
     }
   }, []);
 
@@ -48,8 +48,8 @@ export function BondQRDialog({
       const seconds = Math.max(0, Math.floor((new Date(data.expiresAt).getTime() - new Date().getTime()) / 1000));
       setTimeLeft(seconds);
 
-      // Auto-initiate NFC if on native
-      if (isNative) {
+      // Auto-initiate NFC if on native with NFC enabled
+      if (nfcSupported) {
         handleNfcWrite(data.url);
       }
     } catch (error: any) {
