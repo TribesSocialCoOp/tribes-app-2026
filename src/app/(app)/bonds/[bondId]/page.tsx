@@ -258,32 +258,20 @@ function BondChatContent() {
       let attachmentData: { fileId: string; fileName: string; fileType: string; fileSize: number; encryptionMeta: string } | undefined;
       if (pendingFile) {
         setIsUploading(true);
-        const { encryptFileWithKey } = await import('@/lib/crypto/file-encryption');
-        const { encryptedFile, meta } = await encryptFileWithKey(pendingFile, sharedSecret);
 
-        // Upload the encrypted file
-        const formData = new FormData();
-        formData.append('file', encryptedFile);
-        formData.append('folder', 'bond-attachments');
-        formData.append('context', 'bond-attachment');
-        formData.append('encryptionMeta', JSON.stringify(meta));
-
-        const csrfToken = document.cookie.match(/(?:^|;\s*)__tribes_csrf=([^;]*)/)?.[1] ?? '';
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-          headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+        // Use the shared upload helper — handles compression + encryption
+        const { uploadFile } = await import('@/lib/upload');
+        const result = await uploadFile(pendingFile, 'bond-attachments', {
+          context: 'bond-attachment',
+          encryptionKey: sharedSecret as CryptoKey,
         });
 
-        if (!response.ok) throw new Error('Upload failed');
-        const data = await response.json();
-
         attachmentData = {
-          fileId: data.fileId || data.url,
+          fileId: result.fileId,
           fileName: pendingFile.name,
           fileType: pendingFile.type,
           fileSize: pendingFile.size,
-          encryptionMeta: JSON.stringify(meta),
+          encryptionMeta: result.encryptionMeta ? JSON.stringify(result.encryptionMeta) : '{}',
         };
         setIsUploading(false);
       }
@@ -354,7 +342,7 @@ function BondChatContent() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] max-w-2xl mx-auto">
+    <div className="flex flex-col flex-1 max-w-2xl mx-auto -mb-24 md:-mb-8 min-h-0">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b bg-background/95 backdrop-blur-sm">
         <Button variant="ghost" size="icon" onClick={() => router.push('/bonds')}>
@@ -499,7 +487,7 @@ function BondChatContent() {
               <Lock className="h-8 w-8 mx-auto text-amber-500" />
               <p className="text-sm text-amber-700 dark:text-amber-300">
                 Encrypted chat will be available once both parties have exchanged keys.
-                Your partner needs to visit this bond to complete the key exchange.
+                Your partner needs to open the app to complete the key exchange.
               </p>
               <Button variant="outline" size="sm" className="gap-1">
                 <RefreshCw className="h-3.5 w-3.5" /> Check Again
