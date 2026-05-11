@@ -32,7 +32,7 @@ type SidebarContextValue = {
   open: boolean // Effective desktop open state (true for expanded)
   setOpen: (open: boolean | ((currentOpen: boolean) => boolean)) => void // Controls desktop sidebar state
   openMobile: boolean
-  setOpenMobile: (open: boolean) => void
+  setOpenMobile: (open: boolean | ((prev: boolean) => boolean)) => void
   isMobile: boolean // No longer undefined in context
   toggleSidebar: () => void
 }
@@ -72,7 +72,41 @@ const SidebarProvider = React.forwardRef<
     const [openDesktopState, setOpenDesktopState] = React.useState(defaultOpen); // Internal state if not controlled
 
     // Mobile-specific state
-    const [openMobile, setOpenMobile] = React.useState(false)
+    const [openMobile, _setOpenMobile] = React.useState(false)
+
+    // Wrap setOpenMobile to integrate with browser history stack.
+    // When the sidebar opens, push a history entry so the hardware/gesture
+    // back button closes the drawer instead of navigating away.
+    const setOpenMobile = React.useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+      const newOpen = typeof value === 'function' ? value(openMobile) : value;
+      const isOpening = newOpen && !openMobile;
+      const isClosing = !newOpen && openMobile;
+
+      _setOpenMobile(newOpen);
+
+      if (isOpening) {
+        // Push a sentinel so back-button closes the drawer
+        window.history.pushState({ sidebar: true }, '');
+      } else if (isClosing) {
+        // If we're closing programmatically (tap backdrop, swipe, link click),
+        // pop the sentinel we pushed — but only if it's ours.
+        if (window.history.state?.sidebar) {
+          window.history.back();
+        }
+      }
+    }, [openMobile]);
+
+    // Listen for popstate (back button) to close the sidebar
+    React.useEffect(() => {
+      const handlePopState = (e: PopStateEvent) => {
+        // If sidebar is open and user pressed back, close it
+        if (openMobile) {
+          _setOpenMobile(false);
+        }
+      };
+      window.addEventListener('popstate', handlePopState);
+      return () => window.removeEventListener('popstate', handlePopState);
+    }, [openMobile]);
 
     // Determine effective desktop open state (controlled or internal)
     const effectiveDesktopOpen = openProp !== undefined ? openProp : openDesktopState;
@@ -200,9 +234,65 @@ const Sidebar = React.forwardRef<
   ) => {
     const { isMobile, state, openMobile, setOpenMobile, open: desktopOpen } = useSidebar()
 
+    // Swipe-to-open gesture tracking for the edge zone (when sidebar is closed)
+    const edgeTouchStartRef = React.useRef<{ x: number; y: number } | null>(null)
+
+    const handleEdgeTouchStart = React.useCallback((e: React.TouchEvent) => {
+      edgeTouchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    }, [])
+
+    const handleEdgeTouchEnd = React.useCallback((e: React.TouchEvent) => {
+      if (!edgeTouchStartRef.current) return
+      const deltaX = e.changedTouches[0].clientX - edgeTouchStartRef.current.x
+      const deltaY = Math.abs(e.changedTouches[0].clientY - edgeTouchStartRef.current.y)
+      const SWIPE_THRESHOLD = 50
+
+      if (Math.abs(deltaX) > SWIPE_THRESHOLD && Math.abs(deltaX) > deltaY) {
+        // Left sidebar: swipe right to open. Right sidebar: swipe left to open.
+        if ((side === "left" && deltaX > 0) || (side === "right" && deltaX < 0)) {
+          setOpenMobile(true)
+        }
+      }
+      edgeTouchStartRef.current = null
+    }, [side, setOpenMobile])
+
+    // Swipe-to-close gesture tracking for the sidebar panel and backdrop
+    const touchStartRef = React.useRef<{ x: number; y: number } | null>(null)
+
+    const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    }, [])
+
+    const handleTouchEnd = React.useCallback((e: React.TouchEvent) => {
+      if (!touchStartRef.current) return
+      const deltaX = e.changedTouches[0].clientX - touchStartRef.current.x
+      const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartRef.current.y)
+      const SWIPE_THRESHOLD = 50
+
+      if (Math.abs(deltaX) > SWIPE_THRESHOLD && Math.abs(deltaX) > deltaY) {
+        // Left sidebar: swipe left to close. Right sidebar: swipe right to close.
+        if ((side === "left" && deltaX < 0) || (side === "right" && deltaX > 0)) {
+          setOpenMobile(false)
+        }
+      }
+      touchStartRef.current = null
+    }, [side, setOpenMobile])
+
     if (isMobile) {
       return (
         <>
+          {/* Invisible edge zone for swipe-to-open when sidebar is closed */}
+          {!openMobile && (
+            <div
+              onTouchStart={handleEdgeTouchStart}
+              onTouchEnd={handleEdgeTouchEnd}
+              className={cn(
+                "fixed inset-y-0 z-30 w-5",
+                side === "left" ? "left-0" : "right-0"
+              )}
+              aria-hidden="true"
+            />
+          )}
           <div
             data-sidebar="sidebar"
             data-mobile="true"
@@ -213,12 +303,16 @@ const Sidebar = React.forwardRef<
               side === "left" ? (openMobile ? "translate-x-0" : "-translate-x-full") : (openMobile ? "translate-x-0" : "translate-x-full"),
               className
             )}
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
           >
             <div className="flex h-full w-full flex-col">{children}</div>
           </div>
           {openMobile && (
             <div
               onClick={() => setOpenMobile(false)}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
               className="fixed inset-0 z-20 bg-black/50 md:hidden"
             />
           )}

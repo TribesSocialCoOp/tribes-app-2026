@@ -1,55 +1,47 @@
 'use client';
 
 /**
- * @fileoverview React hook for managing bond cryptographic keys.
- * Phase 2C: Wires the crypto module (2B) into React components.
+ * @fileoverview React hook for reading bond cryptographic state.
+ *
+ * IMPORTANT: This hook is a PASSIVE READER. It never generates keys or
+ * submits to the server. All key generation and shared-secret derivation
+ * is done by KeySyncProvider — the single source of truth.
+ *
+ * This hook:
+ * 1. Reads the local bond key from IndexedDB
+ * 2. Reads the cached shared secret from IndexedDB
+ * 3. Listens for `tribes:key-sync-complete` events from KeySyncProvider
+ * 4. Exposes the shared secret to the chat page for encrypt/decrypt
  *
  * Usage:
  * ```tsx
- * const { hasKey, isReady, sharedSecret, regenerateKeys } = useBondCrypto(bondId);
+ * const { hasKey, isReady, sharedSecret, isExchangeComplete } = useBondCrypto(bondId);
  * ```
- *
- * On mount:
- * 1. Checks if a local private key exists in IndexedDB
- * 2. If not, generates a new ECDH key pair
- * 3. Stores private key in IndexedDB (non-extractable)
- * 4. Submits public key to server
- * 5. Fetches the peer's public key from the server
- * 6. If both keys available, derives the shared ECDH secret
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  generateExportableBondKeyPair,
-  exportPublicKey,
-  importPublicKey,
-  deriveSharedSecret,
   isCryptoAvailable,
   isKeyStoreAvailable,
 } from '@/lib/crypto';
 import {
-  storeBondKey,
   getBondKey,
-  deleteBondKey,
 } from '@/lib/crypto/key-store';
-import { submitBondPublicKey as submitPublicKeyAction, getPeerPublicKey as getPeerKeyAction } from '@/lib/actions/bond-actions';
 
 export interface UseBondCryptoResult {
   /** Whether we have a local private key for this bond */
   hasKey: boolean;
   /** Whether the crypto module is initialized and ready */
   isReady: boolean;
-  /** Whether we're currently generating or exchanging keys */
+  /** Whether we're currently waiting for KeySyncProvider */
   isLoading: boolean;
-  /** The derived shared secret (null if peer key not yet available) */
+  /** The derived shared secret (null if not yet available) */
   sharedSecret: CryptoKey | null;
-  /** Whether the key exchange is complete (both sides have keys) */
+  /** Whether the key exchange is complete (both sides have keys + secret derived) */
   isExchangeComplete: boolean;
   /** Error message if something went wrong */
   error: string | null;
-  /** Regenerate keys — new key pair, submit to server, re-derive shared secret */
-  regenerateKeys: () => Promise<void>;
-  /** Retry fetching the peer's public key */
+  /** Re-check IndexedDB for updated keys (e.g., after vault restore) */
   retryPeerKey: () => Promise<void>;
 }
 
@@ -65,11 +57,64 @@ export function useBondCrypto(bondId: string | undefined): UseBondCryptoResult {
   const initRef = useRef(false);
 
   /**
-   * Core initialization flow — now checks cached shared secrets first.
-   * Falls back to full key generation if cache is empty (first visit).
+   * Read-only check of IndexedDB for bond key and shared secret.
+   * Returns true if we found a usable shared secret.
    */
-  const initialize = useCallback(async () => {
+  const checkIndexedDB = useCallback(async (): Promise<boolean> => {
+    if (!bondId) return false;
+
+    try {
+      const { getSharedSecret } = await import('@/lib/crypto/key-store');
+
+      // Step 1: Do we have a local key?
+      const storedKey = await getBondKey(bondId);
+      if (!storedKey) {
+        // KeySyncProvider hasn't generated our key yet (or we're orphaned)
+        setHasKey(false);
+        return false;
+      }
+
+      setHasKey(true);
+
+      // Step 2: Do we have a cached shared secret?
+      const cached = await getSharedSecret(bondId);
+      if (!cached) {
+        // Key exists but peer hasn't submitted theirs yet,
+        // or KeySyncProvider hasn't derived the secret yet.
+        return false;
+      }
+
+      // Step 3: We have everything — expose the shared secret
+      setSharedSecret(cached.sharedSecret);
+      setIsExchangeComplete(true);
+      setIsReady(true);
+      setIsLoading(false);
+      return true;
+    } catch (err) {
+      console.error('[useBondCrypto] Error reading IndexedDB:', err);
+      return false;
+    }
+  }, [bondId]);
+
+  /**
+   * Re-check IndexedDB for updated keys.
+   * Called after vault restore or when the user wants to manually retry.
+   */
+  const retryPeerKey = useCallback(async () => {
     if (!bondId) return;
+    setIsLoading(true);
+    const ready = await checkIndexedDB();
+    if (!ready) {
+      // Still not ready — show the "awaiting key exchange" state
+      setIsReady(true);
+      setIsLoading(false);
+    }
+  }, [bondId, checkIndexedDB]);
+
+  // Initialize on mount + listen for KeySyncProvider completion events
+  useEffect(() => {
+    if (initRef.current) return;
+    initRef.current = true;
 
     // Feature detection
     if (!isCryptoAvailable()) {
@@ -83,154 +128,32 @@ export function useBondCrypto(bondId: string | undefined): UseBondCryptoResult {
       return;
     }
 
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Fast path: check if the KeySyncProvider has already cached everything
-      const { getSharedSecret, hashPublicKeyJwk } = await import('@/lib/crypto/key-store');
-      const cached = await getSharedSecret(bondId);
-
-      // Step 1: Check for existing local key
-      let storedKey = await getBondKey(bondId);
-
-      if (!storedKey) {
-        // Step 2: Generate new key pair (extractable for vault backup support)
-        const keyPair = await generateExportableBondKeyPair();
-        const publicKeyJwk = await exportPublicKey(keyPair.publicKey);
-
-        // Step 3: Store private key in IndexedDB
-        await storeBondKey(bondId, keyPair.privateKey, publicKeyJwk);
-
-        // Step 4: Submit public key to server
-        await submitPublicKeyAction(bondId, JSON.stringify(publicKeyJwk));
-
-        storedKey = await getBondKey(bondId);
+    // Initial check — might already be ready from a previous KeySyncProvider run
+    checkIndexedDB().then((ready) => {
+      if (!ready) {
+        // Not ready yet — that's OK. We'll try again when KeySyncProvider finishes.
+        // Mark as ready (not loading) so the UI can show "Awaiting key exchange"
+        // instead of an infinite spinner.
+        setIsReady(true);
+        setIsLoading(false);
       }
+    });
 
-      setHasKey(true);
-
-      // Fast path: use cached shared secret if available and peer key hasn't rotated
-      if (cached && storedKey) {
-        // Verify the peer key hasn't changed since we cached
-        const peerKeyStr = await getPeerKeyAction(bondId);
-        if (peerKeyStr) {
-          const peerJwk: JsonWebKey = JSON.parse(peerKeyStr);
-          const currentHash = await hashPublicKeyJwk(peerJwk);
-          if (currentHash === cached.peerKeyHash) {
-            setSharedSecret(cached.sharedSecret);
-            setIsExchangeComplete(true);
-            setIsReady(true);
-            return;
-          }
-          // Peer key rotated — fall through to re-derive
+    // Listen for KeySyncProvider sync completion
+    const handleSyncComplete = () => {
+      checkIndexedDB().then((ready) => {
+        if (ready) {
+          console.debug('[useBondCrypto] Keys ready after sync event');
         }
-      }
-
-      // Slow path: Fetch peer's public key and derive shared secret
-      const peerKeyStr = await getPeerKeyAction(bondId);
-
-      if (peerKeyStr && storedKey) {
-        const peerJwk: JsonWebKey = JSON.parse(peerKeyStr);
-        const peerPublicKey = await importPublicKey(peerJwk);
-        const secret = await deriveSharedSecret(storedKey.privateKey, peerPublicKey);
-
-        // Cache for future use
-        const { storeSharedSecret } = await import('@/lib/crypto/key-store');
-        const peerHash = await hashPublicKeyJwk(peerJwk);
-        await storeSharedSecret(bondId, secret, peerHash);
-
-        setSharedSecret(secret);
-        setIsExchangeComplete(true);
-      }
-
-      setIsReady(true);
-    } catch (err: unknown) {
-      console.error('[useBondCrypto] Error:', err);
-      setError(((err instanceof Error) ? err.message : 'An error occurred') ?? 'Failed to initialize bond crypto');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [bondId]);
-
-  /**
-   * Regenerate keys — creates a new key pair, replaces the old one
-   */
-  const regenerateKeys = useCallback(async () => {
-    if (!bondId) return;
-
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Delete old key
-      await deleteBondKey(bondId);
-
-      // Generate new pair (extractable for vault backup support)
-      const keyPair = await generateExportableBondKeyPair();
-      const publicKeyJwk = await exportPublicKey(keyPair.publicKey);
-
-      // Store and submit
-      await storeBondKey(bondId, keyPair.privateKey, publicKeyJwk);
-      await submitPublicKeyAction(bondId, JSON.stringify(publicKeyJwk));
-
-      setHasKey(true);
-
-      // Try to re-derive shared secret with peer
-      const peerKeyStr = await getPeerKeyAction(bondId);
-      if (peerKeyStr) {
-        const peerJwk: JsonWebKey = JSON.parse(peerKeyStr);
-        const peerPublicKey = await importPublicKey(peerJwk);
-        const storedKey = await getBondKey(bondId);
-        if (storedKey) {
-          const secret = await deriveSharedSecret(storedKey.privateKey, peerPublicKey);
-          setSharedSecret(secret);
-          setIsExchangeComplete(true);
-        }
-      } else {
-        setSharedSecret(null);
-        setIsExchangeComplete(false);
-      }
-    } catch (err: unknown) {
-      setError(((err instanceof Error) ? err.message : 'An error occurred') ?? 'Failed to regenerate keys');
-    } finally {
-      setIsLoading(false);
-    }
-  }, [bondId]);
-
-  /**
-   * Retry fetching the peer's public key (for polling/manual refresh)
-   */
-  const retryPeerKey = useCallback(async () => {
-    if (!bondId) return;
-
-    try {
-      const peerKeyStr = await getPeerKeyAction(bondId);
-      if (peerKeyStr) {
-        const peerJwk: JsonWebKey = JSON.parse(peerKeyStr);
-        const peerPublicKey = await importPublicKey(peerJwk);
-        const storedKey = await getBondKey(bondId);
-        if (storedKey) {
-          const secret = await deriveSharedSecret(storedKey.privateKey, peerPublicKey);
-          setSharedSecret(secret);
-          setIsExchangeComplete(true);
-        }
-      }
-    } catch (err: unknown) {
-      setError(((err instanceof Error) ? err.message : 'An error occurred') ?? 'Failed to fetch peer key');
-    }
-  }, [bondId]);
-
-  // Initialize on mount
-  useEffect(() => {
-    if (initRef.current) return;
-    initRef.current = true;
-    initialize();
+      });
+    };
+    window.addEventListener('tribes:key-sync-complete', handleSyncComplete);
 
     return () => {
       initRef.current = false;
+      window.removeEventListener('tribes:key-sync-complete', handleSyncComplete);
     };
-  }, [initialize]);
+  }, [checkIndexedDB]);
 
   return {
     hasKey,
@@ -239,7 +162,6 @@ export function useBondCrypto(bondId: string | undefined): UseBondCryptoResult {
     sharedSecret,
     isExchangeComplete,
     error,
-    regenerateKeys,
     retryPeerKey,
   };
 }

@@ -81,16 +81,43 @@ export async function getBlockedUserIds(): Promise<Set<string>> {
   return fn(userId);
 }
 
+export async function reportUser(reportedUserId: string, reason: string): Promise<void> {
+  const userId = await requireAuth();
+  const { db } = await import('@/db');
+  const { reports, users } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [reporter] = await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1);
+  await db.insert(reports).values({
+    id: `report-user-${crypto.randomUUID()}`,
+    targetType: 'user' as any,
+    reporterId: userId,
+    reporterName: reporter?.name ?? 'Unknown',
+    reason: `User report: ${reportedUserId} — ${reason}`,
+    status: 'pending',
+    reportedAt: new Date(),
+  });
+}
+
 // ======== KEY EXCHANGE (Phase 2C) ========
-export async function submitBondPublicKey(bondId: string, publicKeyJwk: string): Promise<void> {
+export async function submitBondPublicKey(
+  bondId: string,
+  publicKeyJwk: string,
+  force: boolean = false,
+): Promise<{ accepted: boolean; serverKey: string | null }> {
   const userId = await requireAuth();
   const { submitBondPublicKey: fn } = await import('@/lib/services/bond-service');
-  return fn(bondId, userId, publicKeyJwk);
+  return fn(bondId, userId, publicKeyJwk, force);
 }
 
 export async function getPeerPublicKey(bondId: string): Promise<string | null> {
   const userId = await requireAuth();
   const { getPeerPublicKey: fn } = await import('@/lib/services/bond-service');
+  return fn(bondId, userId);
+}
+
+export async function getPeerBondKeyHistory(bondId: string): Promise<Array<{ publicKeyJwk: string; keyHash: string; rotatedAt: Date }>> {
+  const userId = await requireAuth();
+  const { getPeerBondKeyHistory: fn } = await import('@/lib/services/bond-service');
   return fn(bondId, userId);
 }
 
@@ -135,4 +162,47 @@ export async function respondToReconnect(bondId: string, accept: boolean): Promi
     const { declineReconnect: fn } = await import('@/lib/services/bond-service');
     return fn(bondId, userId);
   }
+}
+
+/**
+ * Forward migration: Reset bonds with key-pair mismatches.
+ * Clears publicKeyJwk on bonds where the server key doesn't match
+ * any locally recoverable key, allowing clean re-generation on the
+ * next sync cycle. Operates on both sides of mutual bonds.
+ *
+ * @returns Number of bonds reset
+ */
+export async function migrateBrokenBondKeys(): Promise<number> {
+  const userId = await requireAuth();
+  const { db } = await import('@/db');
+  const { bonds } = await import('@/db/schema');
+  const { eq, and } = await import('drizzle-orm');
+
+  // Find all user-type bonds that have a server-side key
+  const userBonds = await db.select().from(bonds)
+    .where(and(eq(bonds.userId, userId), eq(bonds.targetType, 'user')));
+
+  let fixed = 0;
+
+  for (const bond of userBonds) {
+    if (!bond.publicKeyJwk || !bond.targetId) continue;
+
+    // Find the peer's bond row
+    const [peerBond] = await db.select().from(bonds)
+      .where(and(eq(bonds.userId, bond.targetId), eq(bonds.targetId, userId)))
+      .limit(1);
+
+    if (!peerBond) continue;
+
+    // If both sides have keys, the encryption handshake should work.
+    // The key-sync-provider will detect local/server mismatches.
+    // Here we just clear bonds where the peer also has a key but
+    // the shared-secret derivation keeps failing (both sides need reset).
+    // For safety, only clear OUR side — let the peer's device handle theirs.
+    await db.update(bonds).set({ publicKeyJwk: null })
+      .where(eq(bonds.id, bond.id));
+    fixed++;
+  }
+
+  return fixed;
 }

@@ -5,8 +5,9 @@
  */
 
 import { db } from '@/db';
-import { bonds, bondRequests, blockedUsers, users, tribes, tribeMembers } from '@/db/schema';
+import { bonds, bondRequests, blockedUsers, users, tribes, tribeMembers, bondKeyHistory } from '@/db/schema';
 import { eq, and, or, count, sql, ne } from 'drizzle-orm';
+import * as nodeCrypto from 'node:crypto';
 import type { Bond, BondRequest, BondType, FormationMethod } from '@/lib/types';
 import {
   computePasskeyStatus, computeNewExpiry, isBondDegraded, getStatusDescription,
@@ -25,6 +26,48 @@ async function requireBondActive(bondId: string): Promise<Bond['passkeyStatus']>
     throw new Error(`Bond passkey has expired. Please refresh your bond to continue. (${getStatusDescription(status)})`);
   }
   return status;
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+
+/**
+ * Archives a public key to the history table before it's rotated or cleared.
+ *
+ * Hash algorithm: parse JWK → sort keys alphabetically → JSON.stringify → SHA-256 hex.
+ * This MUST match the client-side hashPublicKeyJwk() in key-store.ts.
+ */
+async function archiveBondKey(tx: any, bondId: string, oldPublicKeyJwk: string | null) {
+  if (!oldPublicKeyJwk) return;
+  // Parse → sort keys → re-serialize to match client-side hash algorithm
+  try {
+    const jwk = JSON.parse(oldPublicKeyJwk);
+    const sorted = Object.keys(jwk).sort().reduce((acc: Record<string, unknown>, key: string) => {
+      acc[key] = jwk[key];
+      return acc;
+    }, {} as Record<string, unknown>);
+    const canonical = JSON.stringify(sorted);
+    const keyHash = nodeCrypto.createHash('sha256').update(canonical).digest('hex');
+
+    await tx.insert(bondKeyHistory).values({
+      id: `bkh-${bondId}-${Date.now()}`,
+      bondId,
+      publicKeyJwk: oldPublicKeyJwk,
+      keyHash,
+      rotatedAt: new Date(),
+    }).onConflictDoNothing();
+  } catch (err) {
+    // If the JWK can't be parsed (corrupt data), still archive with raw hash
+    const keyHash = nodeCrypto.createHash('sha256').update(oldPublicKeyJwk).digest('hex');
+    await tx.insert(bondKeyHistory).values({
+      id: `bkh-${bondId}-${Date.now()}`,
+      bondId,
+      publicKeyJwk: oldPublicKeyJwk,
+      keyHash,
+      rotatedAt: new Date(),
+    }).onConflictDoNothing();
+  }
 }
 
 // ============================================================
@@ -399,12 +442,20 @@ export async function rejectBondRequest(requestId: string, rejectorUserId: strin
  * Stores the user's public key on their bond row.
  * Called by the client after key generation.
  * The peer can then read this via getBonds() → peerPublicKeyJwk.
+ *
+ * Uses compare-and-swap (CAS) semantics to prevent multi-device race
+ * conditions: only succeeds if no key exists yet on the server, unless
+ * `force` is true (used by the explicit "Reset Keys" escape hatch).
+ *
+ * @param force - If true, overwrites the existing key (destructive; used by rekeyOrphanedBonds)
+ * @returns Whether the key was accepted, plus the current server key
  */
 export async function submitBondPublicKey(
   bondId: string,
   userId: string,
   publicKeyJwk: string,
-): Promise<void> {
+  force: boolean = false,
+): Promise<{ accepted: boolean; serverKey: string | null }> {
   // Verify the bond belongs to this user
   const [bond] = await db.select().from(bonds)
     .where(and(eq(bonds.id, bondId), eq(bonds.userId, userId)))
@@ -415,9 +466,24 @@ export async function submitBondPublicKey(
   // Passkey expiration guard
   await requireBondActive(bondId);
 
-  await db.update(bonds).set({
-    publicKeyJwk,
-  }).where(eq(bonds.id, bondId));
+  // CAS GUARD: If the server already has a key and this isn't a forced
+  // overwrite, reject — another device got there first.
+  if (bond.publicKeyJwk && !force) {
+    return { accepted: false, serverKey: bond.publicKeyJwk };
+  }
+
+  await db.transaction(async (tx) => {
+    // Archive the old key if it's different
+    if (bond.publicKeyJwk && bond.publicKeyJwk !== publicKeyJwk) {
+      await archiveBondKey(tx, bondId, bond.publicKeyJwk);
+    }
+
+    await tx.update(bonds).set({
+      publicKeyJwk,
+    }).where(eq(bonds.id, bondId));
+  });
+
+  return { accepted: true, serverKey: publicKeyJwk };
 }
 
 /**
@@ -442,6 +508,42 @@ export async function getPeerPublicKey(
     .limit(1);
 
   return peerBond?.publicKeyJwk ?? null;
+}
+
+/**
+ * Gets the historical public keys for the peer's side of this bond.
+ * Used for re-deriving historical shared secrets after the peer rotates.
+ */
+export async function getPeerBondKeyHistory(
+  bondId: string,
+  userId: string,
+): Promise<Array<{ publicKeyJwk: string; keyHash: string; rotatedAt: Date }>> {
+  // 1. Get our bond to find the target
+  const [ourBond] = await db.select().from(bonds)
+    .where(and(eq(bonds.id, bondId), eq(bonds.userId, userId)))
+    .limit(1);
+
+  if (!ourBond || !ourBond.targetId) return [];
+
+  // 2. Find the peer's bond row that targets us
+  const [peerBond] = await db.select({ id: bonds.id })
+    .from(bonds)
+    .where(and(eq(bonds.userId, ourBond.targetId), eq(bonds.targetId, userId)))
+    .limit(1);
+
+  if (!peerBond) return [];
+
+  // 3. Fetch history for the peer's bond row
+  const history = await db.select({
+    publicKeyJwk: bondKeyHistory.publicKeyJwk,
+    keyHash: bondKeyHistory.keyHash,
+    rotatedAt: bondKeyHistory.rotatedAt,
+  })
+  .from(bondKeyHistory)
+  .where(eq(bondKeyHistory.bondId, peerBond.id))
+  .orderBy(bondKeyHistory.rotatedAt);
+
+  return history;
 }
 
 /**
@@ -592,9 +694,14 @@ export async function createReferralBond(
 // ============================================================
 
 /**
- * Refreshes a bond's passkey — resets expiration and triggers key regeneration.
+ * Refreshes a bond's passkey — resets expiration timer.
  * Phase 2D: Uses computeNewExpiry for consistent duration calculation.
- * Clears publicKeyJwk to force client-side key regeneration.
+ *
+ * NOTE: Bond refresh extends the bond's expiry but does NOT rotate
+ * encryption keys. ECDH keys persist for the bond's lifetime.
+ * Key rotation only happens at the reconnect boundary (dormant → approve).
+ * This prevents multi-device race conditions where clearing publicKeyJwk
+ * caused two devices to simultaneously regenerate keys.
  */
 export async function refreshBond(bondId: string, userId: string): Promise<void> {
   const [existing] = await db.select().from(bonds)
@@ -618,7 +725,7 @@ export async function refreshBond(bondId: string, userId: string): Promise<void>
       tribeDurationDays,
     }),
     reconnectsCount: (existing.reconnectsCount ?? 0) + 1,
-    publicKeyJwk: null, // Clear public key — client must regenerate
+    // publicKeyJwk: preserved — crypto keys are decoupled from bond lifecycle
     dormantAt: null,    // Clear dormant state
     reconnectRequestedAt: null,
     reconnectRequestedBy: null,
@@ -651,6 +758,8 @@ export async function toggleInnerCircle(bondId: string, userId: string): Promise
   const newValue = !(existing.innerCircle ?? false);
 
   // When promoting to Inner Circle, extend to 365-day duration
+  // NOTE: Inner Circle is a trust tier, not a key boundary.
+  // ECDH keys are preserved — no crypto rotation needed.
   const updateData: Record<string, unknown> = {
     innerCircle: newValue,
   };
@@ -659,7 +768,7 @@ export async function toggleInnerCircle(bondId: string, userId: string): Promise
     updateData.passkeyStatus = 'active';
     updateData.lastRefreshedAt = new Date();
     updateData.reconnectsCount = (existing.reconnectsCount ?? 0) + 1;
-    updateData.publicKeyJwk = null; // Force key regen
+    // publicKeyJwk: preserved — crypto keys are decoupled from bond lifecycle
   }
 
   await db.update(bonds).set(updateData).where(eq(bonds.id, bondId));
