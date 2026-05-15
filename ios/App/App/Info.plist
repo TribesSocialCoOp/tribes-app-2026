@@ -21,15 +21,23 @@
 	<key>CFBundleShortVersionString</key>
 	<string>0.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>378</string>
+	<string>390</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NFCReaderUsageDescription</key>
 	<string>Tribes uses NFC to create secure cryptographic bonds by tapping phones together.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Tribes uses Bluetooth to find nearby people for in-person bonding.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_tribes-bond._tcp</string>
+	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>Tribes uses the camera to scan bond QR codes and capture profile media.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Tribes uses local networking to discover nearby people for in-person bonding.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Tribes needs permission to save images to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>

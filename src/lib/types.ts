@@ -57,6 +57,15 @@ export type AccessTier = "spectator" | "attendee" | "vip";
 // Concentric Rings
 export type Ring = "journal" | "inner_circle" | "my_people" | "tribes";
 
+// Link preview metadata (unfurled at compose time)
+export interface LinkPreviewData {
+  url: string;
+  title?: string;
+  description?: string;
+  imageUrl?: string;
+  siteName?: string;
+}
+
 export interface Bond {
   id: string;
   targetId?: string; // The raw user/tribe ID of the bond target (for blocking, etc.)
@@ -138,6 +147,7 @@ export interface Event {
 
 export interface TribePost {
   id: string;
+  slug?: string;
   tribeId?: string; // Nullable for journal/bond-ring posts
   authorId: string;
   authorName: string;
@@ -171,7 +181,16 @@ export interface TribePost {
   isEncrypted?: boolean;
   ciphertextBase64?: string;  // Base64 encoded ciphertext for client-side decryption
   encryptionIv?: string;      // Base64 IV for decryption
+
+  // Link preview (unfurled at compose time)
+  linkUrl?: string;
+  linkTitle?: string;
+  linkDescription?: string;
+  linkImage?: string;
+  linkSiteName?: string;
+
   editedAt?: Date;
+  authorIsAlias?: boolean;  // True when post was authored under an alias identity
 }
 
 export interface ReportedPost {
@@ -193,6 +212,11 @@ export interface DiscussionComment {
   vibes?: number;
   replies?: DiscussionComment[];
   dataAiHintAvatar?: string;
+  authorIsAlias?: boolean;
+  // E2E encryption
+  isEncrypted?: boolean;
+  ciphertextBase64?: string;
+  encryptionIv?: string;
 }
 
 export interface TribeMember {
@@ -236,6 +260,14 @@ export interface MoodStreamPost {
   promotedByName?: string;
   dataAiHintAvatar?: string;
   dataAiHintImage?: string;
+
+  // Link preview
+  linkUrl?: string;
+  linkTitle?: string;
+  linkDescription?: string;
+  linkImage?: string;
+  linkSiteName?: string;
+
   editedAt?: Date;
 }
 
@@ -292,11 +324,14 @@ export interface SourceArticle {
 // For YourCommsPage
 export interface CommunicationItem {
   id: string;
-  type: "inner-circle-bond" | "person-bond" | "mood-stream" | "ring-post";
+  slug?: string;
+  tribeSlug?: string;
+  type: "mood-stream" | "ring-post";
   ring?: Ring;
   authorId?: string;
   sender?: string;
   currentUserTribeRole?: string;
+  authorTribeRole?: 'founder' | 'speaker' | 'member';
   bondName?: string;
   bondId?: string;
   bondTargetId?: string;
@@ -326,5 +361,30 @@ export interface CommunicationItem {
   isEncrypted?: boolean;
   ciphertextBase64?: string;  // Base64-encoded ciphertext for client-side decryption
   encryptionIv?: string;       // Base64-encoded IV
+
+  // Link preview
+  linkUrl?: string;
+  linkTitle?: string;
+  linkDescription?: string;
+  linkImage?: string;
+  linkSiteName?: string;
+
   editedAt?: Date;
+  authorIsAlias?: boolean;  // True when post was authored under an alias identity
 }
+
+// ============================================================
+// PAGINATION
+// ============================================================
+
+/**
+ * Standard paginated response wrapper.
+ * - Cursor-based: use `nextCursor` (ISO timestamp string, null = last page)
+ * - Offset-based: use `totalCount` for computing page numbers
+ */
+export interface PaginatedResult<T> {
+  items: T[];
+  nextCursor: string | null;
+  totalCount?: number;
+}
+

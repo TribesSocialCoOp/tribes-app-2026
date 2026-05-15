@@ -18,7 +18,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  ResponsiveMenu,
+  ResponsiveMenuContent,
+  ResponsiveMenuItem,
+  ResponsiveMenuTrigger,
+} from "@/components/ui/responsive-menu";
 
 // Lucide Icons
 import { ArrowLeft, BookOpen, Globe, Map, Building, History, Link2, MessageSquare, PlusCircle, Rss, Share2, Smile, Send, MessageSquarePlus, MoreVertical, Flag, Loader2 } from "lucide-react";
@@ -102,28 +107,43 @@ const StoryCommentCard: React.FC<CommentCardProps> = ({ comment, storyId, level 
     <Card className={`shadow-sm ${level > 0 ? 'ml-4 sm:ml-6' : ''} bg-background`}>
       <CardHeader className="p-3 pb-2">
         <div className="flex items-start space-x-2">
-          <Avatar className="h-8 w-8">
-            {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} data-ai-hint={comment.dataAiHintAvatar || "avatar"} />}
-            <AvatarFallback className="text-xs">{comment.authorAvatarFallback}</AvatarFallback>
-          </Avatar>
+          {!comment.authorIsAlias ? (
+            <Link href={`/profile/${comment.authorId}`}>
+              <Avatar className="h-8 w-8 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all">
+                {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} data-ai-hint={comment.dataAiHintAvatar || "avatar"} />}
+                <AvatarFallback className="text-xs">{comment.authorAvatarFallback}</AvatarFallback>
+              </Avatar>
+            </Link>
+          ) : (
+            <Avatar className="h-8 w-8">
+              {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} data-ai-hint={comment.dataAiHintAvatar || "avatar"} />}
+              <AvatarFallback className="text-xs">{comment.authorAvatarFallback}</AvatarFallback>
+            </Avatar>
+          )}
           <div className="flex-1">
-            <p className="text-xs font-semibold">{comment.authorName}</p>
+            {!comment.authorIsAlias ? (
+              <Link href={`/profile/${comment.authorId}`} className="hover:underline decoration-primary/30 underline-offset-2">
+                <p className="text-xs font-semibold">{comment.authorName}</p>
+              </Link>
+            ) : (
+              <p className="text-xs font-semibold">{comment.authorName}</p>
+            )}
             <p className="text-xs text-muted-foreground">{format(comment.timestamp, "MMM d, yyyy 'at' h:mm a")}</p>
           </div>
           {isUserLoggedIn && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <ResponsiveMenu>
+              <ResponsiveMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
                   <MoreVertical className="h-4 w-4" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => onReportComment(comment)}>
+              </ResponsiveMenuTrigger>
+              <ResponsiveMenuContent align="end">
+                <ResponsiveMenuItem onClick={() => onReportComment(comment)}>
                   <Flag className="mr-2 h-4 w-4" /> Report Comment
-                </DropdownMenuItem>
+                </ResponsiveMenuItem>
                 {/* Future actions like Edit/Delete for comment author can be added here */}
-              </DropdownMenuContent>
-            </DropdownMenu>
+              </ResponsiveMenuContent>
+            </ResponsiveMenu>
           )}
         </div>
       </CardHeader>

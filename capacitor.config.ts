@@ -1,4 +1,5 @@
 import type { CapacitorConfig } from '@capacitor/cli';
+import { KeyboardResize } from '@capacitor/keyboard';
 
 const config: CapacitorConfig = {
   appId: 'app.tribes.TribesApp',
@@ -7,6 +8,7 @@ const config: CapacitorConfig = {
   server: {
     url: 'https://tribes.app',
     cleartext: false,
+    errorPath: 'error.html',
   },
   ios: {
     contentInset: 'always',
@@ -21,7 +23,7 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     Keyboard: {
-      resize: 'body',
+      resize: KeyboardResize.None,
       resizeOnFullScreen: true,
     },
   },

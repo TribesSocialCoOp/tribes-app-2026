@@ -57,12 +57,17 @@ export function CreatePostDialog({
     }
   }, [isOpen, form]);
 
-  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files && files.length > 0) {
       const newFiles = Array.from(files);
+      
+      // Normalize images: convert HEIC/HEIF→JPEG, compress large files
+      const { normalizeImage } = await import('@/lib/image-utils');
+      const normalizedNewFiles = await Promise.all(newFiles.map(f => normalizeImage(f)));
+
       const currentFiles = form.getValues("images") || [];
-      const updatedFiles = [...currentFiles, ...newFiles].slice(0, 4); // Limit to 4 images
+      const updatedFiles = [...currentFiles, ...normalizedNewFiles].slice(0, 4); // Limit to 4 images
       
       form.setValue("images", updatedFiles, { shouldValidate: true });
       

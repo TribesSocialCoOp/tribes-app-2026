@@ -4,21 +4,24 @@
  */
 import { db } from '@/db';
 import { posts, postMoodTags, comments, blockedUsers, vibes, tribeMembers, users, tribes } from '@/db/schema';
-import { eq, desc, and, sql, inArray } from 'drizzle-orm';
+import { eq, desc, and, sql, inArray, lt } from 'drizzle-orm';
 import { getBlockedAuthorIds, getUserTribeIds, resolveDisplayIdentity } from './query-helpers';
-import type { TribePost, MoodStreamPost, DiscussionComment } from '@/lib/types';
+import type { TribePost, MoodStreamPost, DiscussionComment, PaginatedResult } from '@/lib/types';
 import { rowToTribePost } from '@/lib/mappers/post-mapper';
+import { slugify } from '@/lib/utils/slugify';
 
 /**
- * Helper: Batch-fetch live avatars for a set of user IDs.
+ * Helper: Batch-fetch live avatars and names for a set of user IDs.
+ * Returns { avatar, name } so callers can skip the live avatar override
+ * when a post was authored under an alias (authorName ≠ user.name).
  */
-async function batchFetchLiveAvatars(userIds: string[]): Promise<Map<string, string | null>> {
+async function batchFetchLiveAvatarInfo(userIds: string[]): Promise<Map<string, { avatar: string | null; name: string }>> {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   if (uniqueIds.length === 0) return new Map();
-  const rows = await db.select({ id: users.id, avatar: users.avatar })
+  const rows = await db.select({ id: users.id, avatar: users.avatar, name: users.name })
     .from(users)
     .where(inArray(users.id, uniqueIds));
-  return new Map(rows.map(r => [r.id, r.avatar]));
+  return new Map(rows.map(r => [r.id, { avatar: r.avatar, name: r.name }]));
 }
 
 function buildCommentTree(allComments: (typeof comments.$inferSelect)[], parentId: string | null): DiscussionComment[] {
@@ -35,33 +38,57 @@ function buildCommentTree(allComments: (typeof comments.$inferSelect)[], parentI
       vibes: c.vibeCount ?? 0,
       timestamp: c.createdAt ?? new Date(),
       replies: buildCommentTree(allComments, c.id),
+      // E2E encryption fields
+      isEncrypted: c.isEncrypted ?? false,
+      ciphertextBase64: c.ciphertext
+        ? Buffer.from(c.ciphertext as Buffer).toString('base64')
+        : undefined,
+      encryptionIv: c.encryptionIv ?? undefined,
     }));
 }
 
 
 /**
- * Fetches all posts for a specific tribe.
+ * Fetches posts for a specific tribe with cursor-based pagination.
  * Filters out posts from users blocked by the current viewer.
  */
-export async function getPostsForTribe(tribeId: string, viewerUserId?: string): Promise<TribePost[]> {
+export async function getPostsForTribe(
+  tribeId: string,
+  viewerUserId?: string,
+  options?: { cursor?: string; limit?: number },
+): Promise<PaginatedResult<TribePost>> {
+  const limit = options?.limit ?? 20;
+  const cursor = options?.cursor ? new Date(options.cursor) : null;
   const blockedIds = await getBlockedAuthorIds(viewerUserId);
 
+  // Build the query with cursor + limit
+  const fetchLimit = limit + 1; // Fetch one extra to detect hasMore
+
   let rows;
-  if (blockedIds.length > 0) {
+  if (cursor) {
     rows = await db.select().from(posts)
-      .where(eq(posts.tribeId, tribeId))
-      .orderBy(desc(posts.createdAt));
-    // Filter in JS since notInArray with empty arrays can cause issues in some drivers
-    rows = rows.filter(r => !blockedIds.includes(r.authorId));
+      .where(and(eq(posts.tribeId, tribeId), lt(posts.createdAt, cursor)))
+      .orderBy(desc(posts.createdAt))
+      .limit(fetchLimit);
   } else {
     rows = await db.select().from(posts)
       .where(eq(posts.tribeId, tribeId))
-      .orderBy(desc(posts.createdAt));
+      .orderBy(desc(posts.createdAt))
+      .limit(fetchLimit);
   }
+
+  // Filter blocked users in JS (notInArray with empty arrays can cause driver issues)
+  if (blockedIds.length > 0) {
+    rows = rows.filter(r => !blockedIds.includes(r.authorId));
+  }
+
+  // Determine if there are more pages
+  const hasMore = rows.length > limit;
+  if (hasMore) rows = rows.slice(0, limit);
 
   const postIds = rows.map(r => r.id);
   const allComments = postIds.length > 0
-    ? await db.select().from(comments).where(inArray(comments.postId, postIds))
+    ? await db.select().from(comments).where(inArray(comments.postId, postIds)).orderBy(comments.createdAt)
     : [];
 
   const commentsByPost = new Map<string, (typeof comments.$inferSelect)[]>();
@@ -80,12 +107,12 @@ export async function getPostsForTribe(tribeId: string, viewerUserId?: string): 
     vibesByPost.get(v.targetId)!.push(v);
   }
 
-  // Fetch live avatars
+  // Fetch live avatars + names so we can skip the override for alias posts
   const authorIds = rows.map(r => r.authorId);
-  const liveAvatars = await batchFetchLiveAvatars(authorIds);
+  const liveAvatarInfo = await batchFetchLiveAvatarInfo(authorIds);
 
 
-  const results = rows.map((row) => {
+  const items = rows.map((row) => {
     const commentRows = commentsByPost.get(row.id) ?? [];
     // Also filter out comments from blocked users
     const filteredComments = blockedIds.length > 0
@@ -106,42 +133,84 @@ export async function getPostsForTribe(tribeId: string, viewerUserId?: string): 
       .sort((a, b) => b.count - a.count)
       .slice(0, 3);
 
-    const liveAvatar = liveAvatars.get(row.authorId);
-    const post = rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined, liveAvatar);
+    // Only apply live avatar when post was authored under the user's real name
+    // (not an alias). Alias posts store the alias avatar at creation time.
+    const info = liveAvatarInfo.get(row.authorId);
+    const isAliasPost = info && row.authorName !== info.name;
+    const liveAvatar = isAliasPost ? undefined : info?.avatar;
+    const post = rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined, liveAvatar, !!isAliasPost);
     post.recentVibes = recentVibes;
     post.hasVibed = hasVibed;
     return post;
   });
 
-  return results;
+  // Compute nextCursor from the last item's timestamp
+  const nextCursor = hasMore && items.length > 0
+    ? items[items.length - 1]!.timestamp.toISOString()
+    : null;
+
+  return { items, nextCursor };
 }
 
 /**
- * Fetches all mood stream posts (posts promoted to mood streams).
+ * Fetches mood stream posts (posts promoted to mood streams) with cursor-based pagination.
  * Filters out posts from users blocked by the current viewer.
  */
-export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStreamPost[]> {
+export async function getMoodStreamPosts(
+  viewerUserId?: string,
+  options?: { cursor?: string; limit?: number },
+): Promise<PaginatedResult<MoodStreamPost>> {
+  const limit = options?.limit ?? 20;
+  const cursor = options?.cursor ? new Date(options.cursor) : null;
   const blockedIds = await getBlockedAuthorIds(viewerUserId);
 
   // Get all post IDs that have mood tags
   const taggedPosts = await db.select().from(postMoodTags);
-  const postIds = [...new Set(taggedPosts.map(t => t.postId))];
+  const moodPostIds = [...new Set(taggedPosts.map(t => t.postId))];
 
-  if (postIds.length === 0) return [];
+  if (moodPostIds.length === 0) return { items: [], nextCursor: null };
 
-  // 2. Batch-fetch all posts
-  const allPosts = await db.select().from(posts)
-    .where(inArray(posts.id, postIds));
+  // Fetch posts with cursor + limit
+  const fetchLimit = limit + 1;
+  let allPosts;
+  if (cursor) {
+    allPosts = await db.select().from(posts)
+      .where(and(inArray(posts.id, moodPostIds), lt(posts.createdAt, cursor)))
+      .orderBy(desc(posts.createdAt))
+      .limit(fetchLimit);
+  } else {
+    allPosts = await db.select().from(posts)
+      .where(inArray(posts.id, moodPostIds))
+      .orderBy(desc(posts.createdAt))
+      .limit(fetchLimit);
+  }
 
-  // 3. Batch-fetch all tribes referenced by those posts
+  // Filter blocked + removed + visibility in JS
+  const viewerTribeIds = await getUserTribeIds(viewerUserId);
+  allPosts = allPosts.filter(p => {
+    if (p.isRemoved) return false;
+    if (blockedIds.includes(p.authorId)) return false;
+    if (p.moodVisibility && p.moodVisibility !== 'public') {
+      if (!p.tribeId || !viewerTribeIds.includes(p.tribeId)) return false;
+    }
+    return true;
+  });
+
+  // Determine hasMore before slicing
+  const hasMore = allPosts.length > limit;
+  if (hasMore) allPosts = allPosts.slice(0, limit);
+
+  const postIds = allPosts.map(p => p.id);
+
+  // Batch-fetch tribes
   const tribeIds = [...new Set(allPosts.map(p => p.tribeId).filter(Boolean) as string[])];
   const allTribes = tribeIds.length > 0
     ? await db.select({ id: tribes.id, name: tribes.name }).from(tribes).where(inArray(tribes.id, tribeIds))
     : [];
   const tribeMap = new Map(allTribes.map(t => [t.id, t.name]));
 
-  // 4. Batch-fetch all promoter names
-  const promoterIds = [...new Set(taggedPosts.map(t => t.promotedBy).filter(Boolean) as string[])];
+  // Batch-fetch promoter names
+  const promoterIds = [...new Set(taggedPosts.filter(t => postIds.includes(t.postId) && t.promotedBy).map(t => t.promotedBy!))];
   const allPromoters = promoterIds.length > 0
     ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, promoterIds))
     : [];
@@ -157,38 +226,24 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
     vibesByPost.get(v.targetId)!.push(v);
   }
 
-  // Fetch live avatars
+  // Fetch live avatars + names so we can skip the override for alias posts
   const authorIds = allPosts.map(p => p.authorId);
-  const liveAvatars = await batchFetchLiveAvatars(authorIds);
+  const liveAvatarInfo = await batchFetchLiveAvatarInfo(authorIds);
 
-  const results: MoodStreamPost[] = [];
-  const viewerTribeIds = await getUserTribeIds(viewerUserId);
-
-  for (const postRow of allPosts) {
-    if (postRow.isRemoved) continue;
-
-    // Skip posts from blocked users
-    if (blockedIds.includes(postRow.authorId)) continue;
-
-    // Enforce moodVisibility: restrict non-public posts to tribe members
-    if (postRow.moodVisibility && postRow.moodVisibility !== 'public') {
-      if (!postRow.tribeId || !viewerTribeIds.includes(postRow.tribeId)) continue;
-    }
-
+  const items: MoodStreamPost[] = allPosts.map(postRow => {
     const tags = taggedPosts.filter(t => t.postId === postRow.id).map(t => t.moodSlug);
     const tribeName = postRow.tribeId ? tribeMap.get(postRow.tribeId) : undefined;
-
-    // Look up promoter name (use first tag's promotedBy)
     const promoterTag = taggedPosts.find(t => t.postId === postRow.id && t.promotedBy);
     const promotedByName = promoterTag?.promotedBy ? promoterMap.get(promoterTag.promotedBy) : undefined;
 
-    const liveAvatar = liveAvatars.get(postRow.authorId);
-    const postAvatar = liveAvatar || (postRow.authorAvatar ?? undefined);
+    // Only apply live avatar for non-alias posts
+    const info = liveAvatarInfo.get(postRow.authorId);
+    const isAliasPost = info && postRow.authorName !== info.name;
+    const postAvatar = isAliasPost ? (postRow.authorAvatar ?? undefined) : (info?.avatar || (postRow.authorAvatar ?? undefined));
 
     const postVibes = vibesByPost.get(postRow.id) ?? [];
     const hasVibed = viewerUserId ? postVibes.some(v => v.userId === viewerUserId) : false;
     
-    // Group and sort emojis
     const emojiCounts = new Map<string, number>();
     for (const v of postVibes) {
       emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
@@ -198,7 +253,7 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
       .sort((a, b) => b.count - a.count)
       .slice(0, 3);
 
-    results.push({
+    return {
       id: postRow.id,
       author: postRow.authorName,
       authorAvatarSrc: postAvatar,
@@ -219,10 +274,20 @@ export async function getMoodStreamPosts(viewerUserId?: string): Promise<MoodStr
       comments: postRow.commentCount ?? 0,
       moodTags: tags,
       promotedByName,
-    });
-  }
+      // Link preview
+      linkUrl: postRow.linkUrl ?? undefined,
+      linkTitle: postRow.linkTitle ?? undefined,
+      linkDescription: postRow.linkDescription ?? undefined,
+      linkImage: postRow.linkImage ?? undefined,
+      linkSiteName: postRow.linkSiteName ?? undefined,
+    };
+  });
 
-  return results;
+  const nextCursor = hasMore && items.length > 0
+    ? items[items.length - 1]!.timestamp.toISOString()
+    : null;
+
+  return { items, nextCursor };
 }
 
 /**
@@ -273,6 +338,7 @@ export async function createTribePost(
     authorName: resolvedName,
     authorAvatar: resolvedAvatar,
     authorAvatarFallback: resolvedAvatarFallback,
+    slug: slugify(payload.title || payload.content.substring(0, 60)) || null,
     title: payload.title || null,
     content: payload.content,
     imageUrl: payload.imageUrl || null,
@@ -300,6 +366,14 @@ export async function createTribePost(
     processMentions(payload.content, authorId, 'post', id)
   ).catch(() => {});
 
+  // Notify tribe members about the new post (fire-and-forget)
+  import('./realtime-dispatch').then(async ({ notifyTribePost }) => {
+    const [tribe] = await db.select({ name: tribes.name, isPublic: tribes.isPublic })
+      .from(tribes).where(eq(tribes.id, tribeId)).limit(1);
+    const isEncrypted = tribe ? !tribe.isPublic : false;
+    notifyTribePost(tribeId, authorId, resolvedName, tribe?.name ?? 'a tribe', id, isEncrypted);
+  }).catch(() => {});
+
   return created;
 }
 
@@ -320,6 +394,7 @@ export async function repost(postToRepost: TribePost, editedContent: string): Pr
     authorAvatar: postToRepost.authorAvatar ?? null,
     authorAvatarFallback: postToRepost.authorAvatarFallback,
     dataAiHintAvatar: postToRepost.dataAiHintAvatar ?? null,
+    slug: (postToRepost.title ? slugify(`Repost: ${postToRepost.title}`) : slugify(`Repost: ${editedContent.substring(0, 60)}`)) || null,
     title: postToRepost.title ? `Repost: ${postToRepost.title}` : 'Repost: Untitled',
     content: editedContent,
     imageUrl: postToRepost.imageUrl ?? null,
@@ -375,6 +450,7 @@ export async function sharePostToTribe(
     authorName: displayName,
     authorAvatar: author?.avatar ?? null,
     authorAvatarFallback: displayName.substring(0, 2).toUpperCase(),
+    slug: (source.title ? slugify(`Shared: ${source.title}`) : slugify('Shared Post')) || null,
     title: source.title ? `Shared: ${source.title}` : 'Shared Post',
     content: source.content,
     imageUrl: source.imageUrl,
@@ -439,7 +515,15 @@ export async function toggleVibe(
   targetType: 'post' | 'comment',
   emoji: string,
 ): Promise<{ vibed: boolean; newCount: number; recentVibes: { emoji: string; count: number }[] }> {
-  // Check if vibe already exists
+  // ── Input validation ──────────────────────────────────────
+  if (!targetId || typeof targetId !== 'string') {
+    throw new Error('Invalid target ID');
+  }
+  if (!emoji || typeof emoji !== 'string' || emoji.length > 8) {
+    throw new Error('Invalid emoji');
+  }
+
+  // Check if ANY vibe already exists from this user on this target
   const existing = await db.select().from(vibes).where(
     and(
       eq(vibes.userId, userId),
@@ -449,38 +533,66 @@ export async function toggleVibe(
   ).limit(1);
 
   if (existing.length > 0) {
-    // Remove vibe
-    await db.delete(vibes).where(eq(vibes.id, existing[0]!.id));
+    const existingVibe = existing[0]!;
 
-    // Decrement count
-    if (targetType === 'post') {
-      await db.update(posts).set({
-        vibeCount: sql`MAX(0, ${posts.vibeCount} - 1)`,
-      }).where(eq(posts.id, targetId));
+    if (existingVibe.emoji === emoji) {
+      // Same emoji clicked -> Toggle OFF (remove)
+      await db.delete(vibes).where(eq(vibes.id, existingVibe.id));
+
+      // Decrement count
+      if (targetType === 'post') {
+        await db.update(posts).set({
+          vibeCount: sql`MAX(0, ${posts.vibeCount} - 1)`,
+        }).where(eq(posts.id, targetId));
+      } else {
+        await db.update(comments).set({
+          vibeCount: sql`MAX(0, ${comments.vibeCount} - 1)`,
+        }).where(eq(comments.id, targetId));
+      }
+
+      // Get new count and recent vibes
+      const newCount = targetType === 'post'
+        ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
+        : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
+
+      const postVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
+      const emojiCounts = new Map<string, number>();
+      for (const v of postVibes) {
+        emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
+      }
+      const recentVibes = Array.from(emojiCounts.entries())
+        .map(([emoji, count]) => ({ emoji, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+
+      return { vibed: false, newCount, recentVibes };
     } else {
-      await db.update(comments).set({
-        vibeCount: sql`MAX(0, ${comments.vibeCount} - 1)`,
-      }).where(eq(comments.id, targetId));
+      // Different emoji clicked -> REPLACE
+      await db.update(vibes).set({ 
+        emoji, 
+        createdAt: new Date() 
+      }).where(eq(vibes.id, existingVibe.id));
+
+      // Count stays the same, so we don't update posts/comments table.
+      
+      const newCount = targetType === 'post'
+        ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
+        : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
+
+      const postVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
+      const emojiCounts = new Map<string, number>();
+      for (const v of postVibes) {
+        emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
+      }
+      const recentVibes = Array.from(emojiCounts.entries())
+        .map(([emoji, count]) => ({ emoji, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 3);
+
+      return { vibed: true, newCount, recentVibes };
     }
-
-    // Get new count and recent vibes
-    const newCount = targetType === 'post'
-      ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
-      : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
-
-    const postVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
-    const emojiCounts = new Map<string, number>();
-    for (const v of postVibes) {
-      emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
-    }
-    const recentVibes = Array.from(emojiCounts.entries())
-      .map(([emoji, count]) => ({ emoji, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
-
-    return { vibed: false, newCount, recentVibes };
   } else {
-    // Add vibe
+    // No vibe exists -> Add new
     const id = crypto.randomUUID();
     await db.insert(vibes).values({
       id,
@@ -528,6 +640,29 @@ export async function toggleVibe(
       }
     }
 
+    // Notify the content author about the vibe (fire-and-forget)
+    import('./realtime-dispatch').then(async ({ notifyVibe }) => {
+      const [author] = await db.select({ name: users.name }).from(users)
+        .where(eq(users.id, userId)).limit(1);
+      const viberName = author?.name ?? 'Someone';
+
+      if (targetType === 'post') {
+        const [vibeTarget] = await db.select({ authorId: posts.authorId, tribeId: posts.tribeId })
+          .from(posts).where(eq(posts.id, targetId)).limit(1);
+        if (vibeTarget) {
+          notifyVibe(vibeTarget.authorId, userId, viberName, emoji, 'post', vibeTarget.tribeId, targetId);
+        }
+      } else {
+        const [vibeTarget] = await db.select({ authorId: comments.authorId, postId: comments.postId })
+          .from(comments).where(eq(comments.id, targetId)).limit(1);
+        if (vibeTarget) {
+          const [parentPost] = await db.select({ tribeId: posts.tribeId })
+            .from(posts).where(eq(posts.id, vibeTarget.postId)).limit(1);
+          notifyVibe(vibeTarget.authorId, userId, viberName, emoji, 'comment', parentPost?.tribeId ?? null, vibeTarget.postId);
+        }
+      }
+    }).catch(() => {});
+
     return { vibed: true, newCount, recentVibes };
   }
 }
@@ -542,7 +677,7 @@ export async function toggleVibe(
 export async function getCommentsForPost(postId: string): Promise<DiscussionComment[]> {
   const allComments = await db.select().from(comments)
     .where(eq(comments.postId, postId))
-    .orderBy(desc(comments.createdAt));
+    .orderBy(comments.createdAt);
   return buildCommentTree(allComments, null);
 }
 
@@ -555,6 +690,7 @@ export async function createComment(
   userId: string,
   content: string,
   parentCommentId?: string,
+  encryption?: { ciphertext: Buffer; iv: string },
 ): Promise<DiscussionComment> {
   // Fetch author info
   const [author] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
@@ -583,7 +719,11 @@ export async function createComment(
     authorName: resolvedName,
     authorAvatar: resolvedAvatar,
     authorAvatarFallback: initials,
-    content,
+    content: encryption ? '[encrypted]' : content,
+    // E2E encryption fields
+    ciphertext: encryption?.ciphertext ?? null,
+    isEncrypted: !!encryption,
+    encryptionIv: encryption?.iv ?? null,
     vibeCount: 0,
     createdAt: new Date(),
   });
@@ -605,6 +745,23 @@ export async function createComment(
     processMentions(content, userId, 'comment', id)
   ).catch(() => {});
 
+  // Notify post author + parent comment author about the new comment (fire-and-forget)
+  import('./realtime-dispatch').then(async ({ notifyComment, notifyCommentReply }) => {
+    const [post] = await db.select({ authorId: posts.authorId })
+      .from(posts).where(eq(posts.id, postId)).limit(1);
+    if (post) {
+      notifyComment(post.authorId, userId, resolvedName, postId, parentPost?.tribeId ?? null, id);
+    }
+    // For threaded replies, also notify the parent comment author
+    if (parentCommentId) {
+      const [parentCmt] = await db.select({ authorId: comments.authorId })
+        .from(comments).where(eq(comments.id, parentCommentId)).limit(1);
+      if (parentCmt && parentCmt.authorId !== post?.authorId) {
+        notifyCommentReply(parentCmt.authorId, userId, resolvedName, postId, parentPost?.tribeId ?? null, id);
+      }
+    }
+  }).catch(() => {});
+
   return {
     id,
     authorId: userId,
@@ -615,6 +772,10 @@ export async function createComment(
     vibes: 0,
     timestamp: new Date(),
     replies: [],
+    // Pass encryption metadata back to client for immediate display
+    isEncrypted: !!encryption,
+    ciphertextBase64: encryption ? encryption.ciphertext.toString('base64') : undefined,
+    encryptionIv: encryption?.iv,
   };
 }
 

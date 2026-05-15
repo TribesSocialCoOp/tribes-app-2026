@@ -2,25 +2,28 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Link2, Loader2, QrCode, Search, Share2 } from "lucide-react";
+import { Link2, Loader2, Handshake, Search, Share2, QrCode } from "lucide-react";
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { createBondInviteLink } from '@/lib/actions/bond-actions';
-import { getOrCreatePersonalInviteCode } from '@/lib/actions/profile-actions';
+import { getOrCreatePersonalInviteCode, getUserProfile } from '@/lib/actions/profile-actions';
 import { BondSettingsDialog } from '@/components/dialogs/bond-settings-dialog';
 import { IntroductionDialog } from '@/components/dialogs/introduction-dialog';
 import { BondQRDialog } from '@/components/dialogs/bond-qr-dialog';
+import { TapToBondScreen } from '@/components/bond/tap-to-bond-screen';
+import { isNative } from '@/lib/capacitor/platform';
 import { BondsProvider, useBonds } from './bonds-context';
 import { BondPendingRequests } from './bond-pending-requests';
 import { BondFamilyCapacity } from './bond-family-capacity';
 import { BondTable } from './bond-table';
-import { RecentChats } from '@/components/circles/recent-chats';
 import { Button } from '@/components/ui/button';
 import { ShareLinkCard } from '@/components/ui/share-link-card';
 
 function BondsContent() {
   const { state, dispatch, handleSaveBondSettings, handleConfirmIntroduction } = useBonds();
   const [showQRDialog, setShowQRDialog] = useState(false);
+  const [showTapScreen, setShowTapScreen] = useState(false);
+  const [displayName, setDisplayName] = useState('Tribes User');
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const { toast } = useToast();
@@ -65,10 +68,11 @@ function BondsContent() {
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button 
-            onClick={() => setShowQRDialog(true)}
+            onClick={() => isNative ? setShowTapScreen(true) : setShowQRDialog(true)}
             className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 h-11 px-6 rounded-xl"
           >
-            <QrCode className="mr-2 h-4 w-4" /> Bond in Person
+            {isNative ? <Handshake className="mr-2 h-4 w-4" /> : <QrCode className="mr-2 h-4 w-4" />}
+            Bond in Person
           </Button>
           <Button 
             variant="outline" 
@@ -98,7 +102,6 @@ function BondsContent() {
         )}
       </header>
 
-      <RecentChats />
       <BondPendingRequests />
       <BondFamilyCapacity />
       <BondTable />
@@ -123,6 +126,11 @@ function BondsContent() {
       <BondQRDialog 
         isOpen={showQRDialog} 
         onOpenChange={setShowQRDialog} 
+      />
+      <TapToBondScreen
+        isOpen={showTapScreen}
+        onClose={() => setShowTapScreen(false)}
+        displayName={displayName}
       />
     </div>
   );

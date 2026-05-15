@@ -1,0 +1,123 @@
+diff --git a/node_modules/@squareetlabs/capacitor-nearby-multipeer/ios/Sources/NearbyMultipeerPlugin/NearbyMultipeer.swift b/node_modules/@squareetlabs/capacitor-nearby-multipeer/ios/Sources/NearbyMultipeerPlugin/NearbyMultipeer.swift
+index 96aba6d..df7fb56 100644
+--- a/node_modules/@squareetlabs/capacitor-nearby-multipeer/ios/Sources/NearbyMultipeerPlugin/NearbyMultipeer.swift
++++ b/node_modules/@squareetlabs/capacitor-nearby-multipeer/ios/Sources/NearbyMultipeerPlugin/NearbyMultipeer.swift
+@@ -754,8 +754,8 @@ extension NearbyMultipeer: MCNearbyServiceBrowserDelegate {
+ }
+ 
+ // MARK: - CBCentralManagerDelegate
+-extension NearbyMultipeer {
+-  func centralManagerDidUpdateState(_ central: CBCentralManager) {
++extension NearbyMultipeer: CBCentralManagerDelegate {
++  @objc public func centralManagerDidUpdateState(_ central: CBCentralManager) {
+         switch central.state {
+         case .poweredOn:
+             print("Bluetooth central está encendido")
+@@ -778,7 +778,7 @@ extension NearbyMultipeer {
+         }
+     }
+ 
+-  func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
++  @objc public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
+         // Define endpointName, shouldNotifyDevice, and detectionReason locally
+         let endpointName = peripheral.name ?? advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? "UnknownDevice"
+         var shouldNotifyDevice = true // Default behavior for now, make it mutable if logic requires
+@@ -916,7 +916,7 @@ extension NearbyMultipeer {
+         }
+     }
+ 
+-  func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
++  @objc public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+         let endpointId = peripheral.identifier.uuidString
+         print("Conectado a dispositivo Bluetooth: \(peripheral.name ?? endpointId)")
+ 
+@@ -935,7 +935,7 @@ extension NearbyMultipeer {
+         }
+     }
+ 
+-  func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
++  @objc public func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+         let endpointId = peripheral.identifier.uuidString
+         print("Error al conectar con dispositivo Bluetooth: \(peripheral.name ?? endpointId), error: \(error?.localizedDescription ?? "unknown")")
+ 
+@@ -945,7 +945,7 @@ extension NearbyMultipeer {
+         }
+     }
+ 
+-  func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
++  @objc public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+         let endpointId = peripheral.identifier.uuidString
+         print("Desconectado de dispositivo Bluetooth: \(peripheral.name ?? endpointId)")
+ 
+@@ -972,7 +972,7 @@ extension NearbyMultipeer {
+ 
+ // MARK: - CBPeripheralDelegate
+ extension NearbyMultipeer {
+-  func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
++  @objc public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+         if let error = error {
+             print("Error al descubrir servicios: \(error.localizedDescription)")
+             return
+@@ -986,7 +986,7 @@ extension NearbyMultipeer {
+         }
+     }
+ 
+-  func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
++  @objc public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+         if let error = error {
+             print("Error al descubrir características: \(error.localizedDescription)")
+             return
+@@ -1007,7 +1007,7 @@ extension NearbyMultipeer {
+         }
+     }
+ 
+-  func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
++  @objc public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+         if let error = error {
+             print("Error al recibir datos: \(error.localizedDescription)")
+             return
+@@ -1027,7 +1027,7 @@ extension NearbyMultipeer {
+         }
+     }
+ 
+-  func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
++  @objc public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+         if let error = error {
+             print("Error al enviar datos: \(error.localizedDescription)")
+             return
+@@ -1039,7 +1039,7 @@ extension NearbyMultipeer {
+ 
+ // MARK: - CBPeripheralManagerDelegate
+ extension NearbyMultipeer {
+-  func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
++  @objc public func peripheralManagerDidUpdateState(_ peripheral: CBPeripheralManager) {
+         switch peripheral.state {
+         case .poweredOn:
+             print("Bluetooth peripheral está encendido")
+@@ -1062,7 +1062,7 @@ extension NearbyMultipeer {
+         }
+     }
+ 
+-  func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
++  @objc public func peripheralManager(_ peripheral: CBPeripheralManager, didAdd service: CBService, error: Error?) {
+         if let error = error {
+             print("Error al añadir servicio: \(error.localizedDescription)")
+             return
+@@ -1071,7 +1071,7 @@ extension NearbyMultipeer {
+         print("Servicio añadido correctamente")
+     }
+ 
+-  func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
++  @objc public func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
+         // Respond with the device name
+         if request.characteristic.uuid == NearbyMultipeer.CHARACTERISTIC_UUID {
+             if let data = deviceName.data(using: .utf8) {
+@@ -1085,7 +1085,7 @@ extension NearbyMultipeer {
+         }
+     }
+ 
+-  func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
++  @objc public func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
+         for request in requests {
+             if request.characteristic.uuid == NearbyMultipeer.CHARACTERISTIC_UUID,
+                let data = request.value,

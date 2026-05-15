@@ -3,12 +3,13 @@
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { useRouter } from "next/navigation";
+import { useCallback } from "react";
 
 export function useActionError() {
   const { toast } = useToast();
   const router = useRouter();
 
-  const handleError = (error: any, defaultTitle = "Error") => {
+  const handleError = useCallback((error: any, defaultTitle = "Error") => {
     // If the error was returned safely via withPublicErrors, it will have a serverError property
     if (error && typeof error === 'object' && 'serverError' in error) {
       error = new Error(error.serverError);
@@ -88,7 +89,8 @@ export function useActionError() {
       variant: "destructive",
     });
     return false;
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [toast, router]);
 
   return { handleError };
 }

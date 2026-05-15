@@ -41,16 +41,23 @@ export {
   hashPublicKeyJwk,
   storeSharedSecret,
   getSharedSecret,
+  getHistoricalSharedSecrets,
+  getAllSharedSecretsForBond,
   getAllSharedSecrets,
+  markSharedSecretHistorical,
   deleteSharedSecret,
   // Tribe key store (Phase 3)
   storeTribeKey,
   getTribeKey,
   getAllTribeKeys,
   deleteTribeKey,
+  // Identity key store (Phase 4 — Tribe key distribution)
+  storeIdentityKey,
+  getIdentityKey,
   type StoredBondKey,
   type CachedSharedSecret,
   type StoredTribeKey,
+  type StoredIdentityKey,
 } from './key-store';
 
 // Vault backup/restore
@@ -58,6 +65,7 @@ export {
   createVaultBackup,
   restoreVaultBackup,
   validatePassphrase,
+  type VaultRestoreResult,
 } from './vault-backup';
 
 // Passkey lifecycle (Phase 2D)

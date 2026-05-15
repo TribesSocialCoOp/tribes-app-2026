@@ -5,13 +5,20 @@ import { TableCell, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  ResponsiveMenu,
+  ResponsiveMenuContent,
+  ResponsiveMenuItem,
+  ResponsiveMenuSeparator,
+  ResponsiveMenuTrigger,
+} from "@/components/ui/responsive-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { User, Users, Ticket, AtSign, UserCheck, UserCog, Star, MoreVertical, RefreshCw, Share2, ShieldCheck, Settings, Ban, Trash2, Rss, Moon, RotateCcw, MessageSquareText } from "lucide-react";
 import { cn, formatDate } from '@/lib/utils';
 import type { Bond } from '@/lib/types';
 import { getBondTypeDisplay, getBondTypeBadgeStyle, PasskeyStatusIcon, ConnectVibeIcon } from '@/lib/bond-utils';
 import { useBonds } from './bonds-context';
+import { useKeySync } from '@/components/providers/key-sync-provider';
 import { useRouter } from 'next/navigation';
 
 interface BondTableRowProps {
@@ -25,6 +32,8 @@ export const BondTableRow: React.FC<BondTableRowProps> = ({ bond }) => {
     handleToggleShowInIntercom, handleBlockBond, handleRequestReconnect, handleRespondToReconnect, dispatch,
   } = useBonds();
   const router = useRouter();
+  const { orphanedBondNames } = useKeySync();
+  const isEncryptionOrphaned = bond.targetType === 'user' && orphanedBondNames.includes(bond.targetName);
 
   const canChat = bond.targetType === 'user' && bond.passkeyStatus !== 'expired';
 
@@ -43,20 +52,12 @@ export const BondTableRow: React.FC<BondTableRowProps> = ({ bond }) => {
     return <Users className="h-6 w-6 text-muted-foreground" />;
   };
 
-  const handleRowClick = () => {
-    if (canChat) {
-      router.push(`/bonds/${bond.id}`);
-    }
-  };
-
   return (
     <TableRow
       className={cn(
         "hover:bg-muted/50",
         isEventBond && "bg-purple-500/5 hover:bg-purple-500/10",
-        canChat && "cursor-pointer",
       )}
-      onClick={handleRowClick}
     >
       <TableCell className="font-medium">
         <div className="flex items-start space-x-2">
@@ -64,8 +65,15 @@ export const BondTableRow: React.FC<BondTableRowProps> = ({ bond }) => {
             {getTargetIcon()}
           </span>
           <div className="flex-grow min-w-0">
-            <span className="block">{bond.targetName}</span>
-            <div className={cn("sm:hidden mt-1", hasAliasInfo && "mb-2")}>
+            <div className="flex items-center gap-2">
+              <span className="block font-semibold">{bond.targetName}</span>
+              {isEncryptionOrphaned && (
+                <Badge variant="outline" className="border-amber-500 text-amber-600 bg-amber-500/10 h-5 px-1.5 text-[10px] animate-pulse">
+                  Sync needed
+                </Badge>
+              )}
+            </div>
+            <div className={cn("sm:hidden mt-1", (hasAliasInfo || isEncryptionOrphaned) && "mb-2")}>
               <Badge variant="outline" style={getBondTypeBadgeStyle(bond)} className="whitespace-nowrap">
                 {getBondTypeDisplay(bond)}
               </Badge>
@@ -85,12 +93,13 @@ export const BondTableRow: React.FC<BondTableRowProps> = ({ bond }) => {
                 <UserCog className="h-3 w-3 mr-1 text-orange-500" /> Your tribe nickname: {bond.tribeAssignedNickname}
               </div>
             )}
+            {/* Health status shown inline on mobile (hidden on sm+ where it has its own column) */}
+            <div className="sm:hidden mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <PasskeyStatusIcon status={bond.passkeyStatus} encryptionOrphaned={isEncryptionOrphaned} />
+              <span className="capitalize">{isEncryptionOrphaned ? 'Encryption sync needed' : bond.passkeyStatus}</span>
+            </div>
           </div>
-          {canChat && (
-            <span className="hidden sm:inline-flex shrink-0 items-center justify-center w-8 h-8 rounded-full hover:bg-primary/10 transition-colors" title="Open chat">
-              <MessageSquareText className="h-4 w-4 text-primary" />
-            </span>
-          )}
+
         </div>
       </TableCell>
       <TableCell className="hidden md:table-cell">
@@ -110,10 +119,10 @@ export const BondTableRow: React.FC<BondTableRowProps> = ({ bond }) => {
           {getBondTypeDisplay(bond)}
         </Badge>
       </TableCell>
-      <TableCell className="text-center">
-        <PasskeyStatusIcon status={bond.passkeyStatus} />
+      <TableCell className="text-center hidden sm:table-cell">
+        <PasskeyStatusIcon status={bond.passkeyStatus} encryptionOrphaned={isEncryptionOrphaned} />
       </TableCell>
-      <TableCell className="hidden md:table-cell text-center">
+      <TableCell className="text-center">
         <ConnectVibeIcon bond={bond} />
       </TableCell>
       <TableCell className="hidden md:table-cell text-muted-foreground">
@@ -137,76 +146,76 @@ export const BondTableRow: React.FC<BondTableRowProps> = ({ bond }) => {
         </div>
       </TableCell>
       <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <ResponsiveMenu>
+          <ResponsiveMenuTrigger asChild>
             <Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4" /></Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
+          </ResponsiveMenuTrigger>
+          <ResponsiveMenuContent align="end">
             {canChat && (
-              <DropdownMenuItem onClick={() => router.push(`/bonds/${bond.id}`)}>
+              <ResponsiveMenuItem onClick={() => router.push(`/bonds/${bond.id}`)}>
                 <MessageSquareText className="mr-2 h-4 w-4 text-primary" /> Chat
-              </DropdownMenuItem>
+              </ResponsiveMenuItem>
             )}
-            <DropdownMenuItem
+            <ResponsiveMenuItem
               onClick={() => handleRefreshBond(bond.id)}
               disabled={(bond.passkeyStatus === 'active' && timeBasedProgress > 90 && bond.keyType === 'standard') || isDormant}
             >
               <RefreshCw className="mr-2 h-4 w-4" /> Refresh
-            </DropdownMenuItem>
+            </ResponsiveMenuItem>
             {isDormant && !hasReconnectRequest && (
-              <DropdownMenuItem onClick={() => handleRequestReconnect(bond.id)}>
+              <ResponsiveMenuItem onClick={() => handleRequestReconnect(bond.id)}>
                 <RotateCcw className="mr-2 h-4 w-4 text-sky-500" /> Request Reconnect
-              </DropdownMenuItem>
+              </ResponsiveMenuItem>
             )}
             {isDormant && hasReconnectRequest && isReconnectFromOther && (
               <>
-                <DropdownMenuItem onClick={() => handleRespondToReconnect(bond.id, true)}>
+                <ResponsiveMenuItem onClick={() => handleRespondToReconnect(bond.id, true)}>
                   <RotateCcw className="mr-2 h-4 w-4 text-green-500" /> Approve Reconnect
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleRespondToReconnect(bond.id, false)}>
+                </ResponsiveMenuItem>
+                <ResponsiveMenuItem onClick={() => handleRespondToReconnect(bond.id, false)}>
                   <Ban className="mr-2 h-4 w-4 text-red-500" /> Decline Reconnect
-                </DropdownMenuItem>
+                </ResponsiveMenuItem>
               </>
             )}
             {isDormant && hasReconnectRequest && !isReconnectFromOther && (
-              <DropdownMenuItem disabled>
+              <ResponsiveMenuItem disabled>
                 <Moon className="mr-2 h-4 w-4" /> Reconnect Pending...
-              </DropdownMenuItem>
+              </ResponsiveMenuItem>
             )}
             <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
               <div className={cn(!canIntroduce && "cursor-not-allowed")}>
-                <DropdownMenuItem
+                <ResponsiveMenuItem
                   onClick={() => canIntroduce && dispatch({ type: 'OPEN_INTRODUCTION', payload: bond })}
                   disabled={!canIntroduce}
                   className={cn(!canIntroduce && "opacity-50 cursor-not-allowed")}
                 >
                   <Share2 className="mr-2 h-4 w-4" /> Introduce To...
-                </DropdownMenuItem>
+                </ResponsiveMenuItem>
               </div>
             </TooltipTrigger>
             {!canIntroduce && <TooltipContent><p>Introductions are only available for user-to-user bonds, not event passes or tribes.</p></TooltipContent>}
             </Tooltip></TooltipProvider>
             {canToggleInnerCircle && (
-              <DropdownMenuItem onClick={() => handleToggleInnerCircle(bond.id)}>
+              <ResponsiveMenuItem onClick={() => handleToggleInnerCircle(bond.id)}>
                 <ShieldCheck className={cn("mr-2 h-4 w-4", bond.innerCircle ? "text-emerald-500" : "text-muted-foreground")} />
                 {bond.innerCircle ? 'Remove from Inner Circle' : 'Add to Inner Circle'}
-              </DropdownMenuItem>
+              </ResponsiveMenuItem>
             )}
-            <DropdownMenuItem onClick={() => dispatch({ type: 'OPEN_SETTINGS', payload: bond })}>
+            <ResponsiveMenuItem onClick={() => dispatch({ type: 'OPEN_SETTINGS', payload: bond })}>
               <Settings className="mr-2 h-4 w-4" /> Bond Settings
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
+            </ResponsiveMenuItem>
+            <ResponsiveMenuSeparator />
+            <ResponsiveMenuItem
               onClick={() => handleBlockBond(bond.id, bond.targetName)}
               className="text-destructive hover:!bg-destructive/10 hover:!text-destructive"
             >
               <Ban className="mr-2 h-4 w-4" /> Block
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleRevokeBond(bond.id)} className="text-destructive hover:!bg-destructive/10 hover:!text-destructive">
+            </ResponsiveMenuItem>
+            <ResponsiveMenuItem onClick={() => handleRevokeBond(bond.id)} className="text-destructive hover:!bg-destructive/10 hover:!text-destructive">
               <Trash2 className="mr-2 h-4 w-4" /> Revoke Bond
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </ResponsiveMenuItem>
+          </ResponsiveMenuContent>
+        </ResponsiveMenu>
       </TableCell>
     </TableRow>
   );

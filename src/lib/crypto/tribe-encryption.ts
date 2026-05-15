@@ -38,12 +38,14 @@ export async function generateTribeGroupKey(): Promise<CryptoKey> {
 // ============================================================
 
 /**
- * Wraps (encrypts) a tribe's group key using a bond shared secret.
- * The wrapped key can be stored on the server and later unwrapped
- * only by the recipient who has the corresponding shared secret.
+ * Wraps (encrypts) a tribe's group key using a symmetric wrapping key.
+ *
+ * NOTE: For tribe key distribution to members, use `wrapKeyForRecipient`
+ * from identity-keys.ts instead (RSA-OAEP envelope). This function remains
+ * for legacy grants and direct symmetric wrapping use cases.
  *
  * @param tribeKey - The tribe's AES-256-GCM symmetric key to wrap
- * @param wrappingSecret - The bond shared secret (or journal key) to wrap with
+ * @param wrappingSecret - A symmetric AES key to wrap with
  * @returns { wrappedKey: base64, iv: base64 }
  */
 export async function wrapTribeKey(
@@ -68,13 +70,17 @@ export async function wrapTribeKey(
 }
 
 /**
- * Unwraps (decrypts) a tribe's group key using a bond shared secret.
+ * Unwraps (decrypts) a tribe's group key using a symmetric unwrapping key.
  * Reverses the wrapping done by `wrapTribeKey`.
+ *
+ * NOTE: For tribe key reception from grants, use `unwrapKeyFromGrant`
+ * from identity-keys.ts instead (RSA-OAEP envelope). This function remains
+ * for legacy grants.
  *
  * @param wrappedKeyBase64 - Base64-encoded wrapped tribe key
  * @param ivBase64 - Base64-encoded IV used during wrapping
- * @param unwrappingSecret - The bond shared secret (or journal key) to unwrap with
- * @returns The tribe's AES-256-GCM symmetric key (non-extractable for use)
+ * @param unwrappingSecret - A symmetric AES key to unwrap with
+ * @returns The tribe's AES-256-GCM symmetric key
  */
 export async function unwrapTribeKey(
   wrappedKeyBase64: string,

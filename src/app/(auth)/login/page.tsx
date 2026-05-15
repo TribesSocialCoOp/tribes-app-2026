@@ -22,12 +22,13 @@ function LoginForm() {
     if (error) {
       let description = "An unknown error occurred.";
       if (error === 'google_denied') description = "Google authentication was denied.";
-      if (error === 'no_code') description = "No authorization code provided by Google.";
+      if (error === 'apple_denied') description = "Apple authentication was denied.";
+      if (error === 'no_code') description = "No authorization code provided.";
       if (error === 'invalid_state') description = "Security state mismatch. Please try again.";
-      if (error === 'sso_misconfigured') description = "Google SSO is misconfigured on the server.";
+      if (error === 'sso_misconfigured') description = "SSO is misconfigured on the server.";
       if (error === 'token_exchange_failed') description = "Failed to exchange authorization code.";
-      if (error === 'userinfo_failed') description = "Failed to retrieve user information from Google.";
-      if (error === 'sso_failed') description = "Google authentication failed. Please try again.";
+      if (error === 'userinfo_failed') description = "Failed to retrieve user information.";
+      if (error === 'sso_failed') description = "Authentication failed. Please try again.";
       if (error === 'too_many_attempts') description = "Too many attempts. Please try again later.";
 
       toast({
@@ -119,7 +120,7 @@ function LoginForm() {
       });
 
       // Redirect to returnTo (from bond invite, etc.) or default feed
-      const returnTo = searchParams.get('returnTo');
+      const returnTo = searchParams.get('callbackUrl') || searchParams.get('returnTo');
       router.push(returnTo || "/your-comms");
     } catch (error: unknown) {
       console.error("Login failed:", error);
@@ -155,7 +156,8 @@ function LoginForm() {
         title: "Developer Bypass",
         description: `Logged in via local development bypass (${role}).`,
       });
-      router.push("/your-comms");
+      const returnTo = searchParams.get('callbackUrl') || searchParams.get('returnTo');
+      router.push(returnTo || "/your-comms");
     } catch (error: unknown) {
       console.error("Dev login failed:", error);
       toast({
@@ -212,6 +214,69 @@ function LoginForm() {
           >
             <Mail className="h-5 w-5" />
             Continue with Google
+          </Button>
+
+          <Button 
+            variant="outline" 
+            className="w-full h-12 bg-black text-white hover:bg-black/90 border-black flex items-center justify-center gap-2"
+            disabled={isLoading}
+            onClick={async () => {
+              // Detect native iOS → use native Apple Sign-In sheet
+              const cap = (window as any).Capacitor;
+              const isNativeIos = cap?.isNativePlatform?.() && cap?.getPlatform?.() === 'ios';
+
+              if (isNativeIos) {
+                try {
+                  const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
+                  const result = await SignInWithApple.authorize({
+                    clientId: 'app.tribes.web',
+                    redirectURI: 'https://tribes.app/api/auth/apple/callback',
+                    scopes: 'name email',
+                  });
+
+                  // POST the identity token to our native verification endpoint
+                  const res = await fetch('/api/auth/apple/native', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      identityToken: result.response.identityToken,
+                      givenName: result.response.givenName,
+                      familyName: result.response.familyName,
+                      email: result.response.email,
+                      inviteCode: searchParams.get('invite'),
+                    }),
+                  });
+
+                  if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error || 'Apple sign-in failed');
+                  }
+
+                  // Session cookie is set via the response — navigate to the app
+                  const returnTo = searchParams.get('callbackUrl') || searchParams.get('returnTo');
+                  router.push(returnTo || '/your-comms');
+                } catch (err: any) {
+                  if (err?.message?.includes('cancelled') || err?.code === '1001') return;
+                  console.error('[Apple Native] Error:', err);
+                  toast({
+                    variant: 'destructive',
+                    title: 'Sign In Error',
+                    description: err?.message || 'Apple authentication failed. Please try again.',
+                  });
+                }
+              } else {
+                // Web flow — standard OAuth redirect
+                const url = new URL('/api/auth/apple', window.location.origin);
+                const invite = searchParams.get('invite');
+                if (invite) url.searchParams.set('invite', invite);
+                window.location.href = url.toString();
+              }
+            }}
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+            </svg>
+            Continue with Apple
           </Button>
 
           {process.env.NODE_ENV === "development" && (

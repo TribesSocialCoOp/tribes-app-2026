@@ -52,15 +52,27 @@ function buildSecurityHeaders() {
 
   // Build img-src from known PUBLIC image sources only
   const imgSources = ["'self'", 'data:', 'blob:', 'https://api.qrserver.com'];
-  if (s3Public) imgSources.push(s3Public);
+  if (s3Public) {
+    try {
+      const s3Url = new URL(s3Public);
+      imgSources.push(s3Url.origin);
+    } catch {
+      imgSources.push(s3Public);
+    }
+  }
 
   // Build connect-src for API/WS targets (public endpoints only)
   const connectSources = ["'self'"];
   if (wsRelay) connectSources.push(wsRelay);
   if (appUrl) connectSources.push(appUrl);
+  
+  // In development, allow connections to any host to support IP-based testing on mobile devices
+  if (process.env.NODE_ENV !== 'production') {
+    connectSources.push('*');
+  }
 
   const csp = [
-    "default-src 'self'",
+    process.env.NODE_ENV === 'production' ? "default-src 'self'" : "default-src 'self' *",
     `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV !== 'production' ? " 'unsafe-eval'" : ''} blob: https://challenges.cloudflare.com`,
     "worker-src 'self' blob:",
     "style-src 'self' 'unsafe-inline'",
@@ -88,10 +100,18 @@ function buildSecurityHeaders() {
 // Next.js Configuration
 // ============================================================
 
+// Build-time fingerprint: unique per deployment
+const BUILD_ID = process.env.BUILD_ID || `dev-${Date.now()}`;
+
 const nextConfig: NextConfig = {
   output: 'standalone',   // Required for Docker multi-stage build (.next/standalone/)
   // SECURITY: Suppress X-Powered-By: Next.js header to reduce framework fingerprinting.
   poweredByHeader: false,
+  // Expose the build ID to the client bundle for version mismatch detection
+  env: {
+    NEXT_PUBLIC_BUILD_ID: BUILD_ID,
+  },
+  generateBuildId: () => BUILD_ID,
   images: {
     remotePatterns: buildRemotePatterns(),
   },
@@ -100,9 +120,13 @@ const nextConfig: NextConfig = {
       // Safety net: cover images are uploaded via /api/upload (not the action body),
       // so this should never be hit. But if something slips through, fail with a
       // clear 413 rather than a cryptic "Body exceeded 1 MB" trace.
-      bodySizeLimit: '4mb',
+      bodySizeLimit: '20mb',
     },
   },
+  // Next.js 16 defaults to Turbopack; this empty config acknowledges we
+  // intentionally keep the webpack() override below for production builds
+  // (crypto chunk isolation for SRI verification).
+  turbopack: {},
   async headers() {
     return [
       {
@@ -125,6 +149,29 @@ const nextConfig: NextConfig = {
         ],
       },
     ];
+  },
+  // ── Crypto Module Integrity ─────────────────────────────────
+  // Isolate src/lib/crypto/ into a dedicated chunk so its hash
+  // can be independently verified against the published source at
+  // https://github.com/TribesSocialCoOp/tribes-encryption-audit
+  webpack(config, { isServer }) {
+    if (!isServer) {
+      const existing = config.optimization.splitChunks?.cacheGroups || {};
+      config.optimization.splitChunks = {
+        ...config.optimization.splitChunks,
+        cacheGroups: {
+          ...existing,
+          cryptoCore: {
+            test: /src[\\/]lib[\\/]crypto[\\/]/,
+            name: 'crypto-core',
+            chunks: 'all',
+            enforce: true,
+            priority: 50,
+          },
+        },
+      };
+    }
+    return config;
   },
 };
 

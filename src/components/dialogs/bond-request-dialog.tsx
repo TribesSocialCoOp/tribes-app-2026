@@ -13,6 +13,8 @@ import {
 import { sendBondRequest } from '@/lib/actions/bond-actions';
 
 import { BondQRDialog } from './bond-qr-dialog';
+import { TapToBondScreen } from '@/components/bond/tap-to-bond-screen';
+import { isNative } from '@/lib/capacitor/platform';
 
 interface BondRequestDialogProps {
   isOpen: boolean;
@@ -34,6 +36,7 @@ export function BondRequestDialog({
   const [message, setMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
   const [showQRDialog, setShowQRDialog] = useState(false);
+  const [showTapScreen, setShowTapScreen] = useState(false);
   const { toast } = useToast();
 
   const handleSend = async () => {
@@ -99,17 +102,20 @@ export function BondRequestDialog({
             type="button"
             onClick={() => {
               onOpenChange(false);
-              setTimeout(() => setShowQRDialog(true), 300);
+              setTimeout(() => isNative ? setShowTapScreen(true) : setShowQRDialog(true), 300);
             }}
             className="w-full text-left bg-muted/30 hover:bg-muted/50 p-4 rounded-xl border border-border/50 transition-colors group cursor-pointer"
           >
             <div className="flex items-center gap-3">
               <div className="bg-primary/10 p-2 rounded-lg group-hover:bg-primary/20 transition-colors">
-                <QrCode className="h-5 w-5 text-primary" />
+                {isNative ? <Handshake className="h-5 w-5 text-primary" /> : <QrCode className="h-5 w-5 text-primary" />}
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
                 <span className="font-medium text-foreground block mb-0.5">Are you in person right now?</span>
-                For the strongest cryptographic bond, meet in person and scan each other's QR code instead.
+                {isNative
+                  ? 'Open the Bond screen to connect instantly via proximity.'
+                  : "For the strongest cryptographic bond, meet in person and scan each other's QR code instead."
+                }
               </p>
             </div>
           </button>
@@ -133,6 +139,10 @@ export function BondRequestDialog({
       <BondQRDialog 
         isOpen={showQRDialog} 
         onOpenChange={setShowQRDialog} 
+      />
+      <TapToBondScreen
+        isOpen={showTapScreen}
+        onClose={() => setShowTapScreen(false)}
       />
     </>
   );

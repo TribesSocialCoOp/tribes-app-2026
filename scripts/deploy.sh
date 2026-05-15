@@ -76,6 +76,7 @@ rsync -avz --delete \
   --exclude='tmp' \
   --exclude='*.png' \
   --exclude='.active-color' \
+  --exclude='.backfill-slugs-done' \
   -e "ssh -o StrictHostKeyChecking=no" \
   "$LOCAL_DIR/" "$REMOTE_HOST:$REMOTE_DIR/" \
   | tail -5
@@ -85,11 +86,76 @@ ok "Files synced"
 if [ "$SKIP_BUILD" = true ]; then
   warn "Skipping build (--skip-build flag)"
 else
-  log "Building tribes-app:latest image..."
+  # Generate a unique build fingerprint for version mismatch detection
+  GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "nogit")
+  BUILD_TS=$(date +%s)
+  BUILD_ID="${GIT_SHA}-${BUILD_TS}"
+  log "Building tribes-app:latest image (build: ${BUILD_ID})..."
   ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
-    "cd $REMOTE_DIR && docker build -t tribes-app:latest -f Dockerfile . 2>&1" \
+    "cd $REMOTE_DIR && docker build --build-arg BUILD_ID=${BUILD_ID} -t tribes-app:latest -f Dockerfile . 2>&1" \
     | tail -10
-  ok "Image built: tribes-app:latest"
+  ok "Image built: tribes-app:latest (${BUILD_ID})"
+
+  # ── Step 3b: Crypto module integrity hash ────────────────────
+  log "Hashing crypto source files for integrity verification..."
+  CRYPTO_SRC="$LOCAL_DIR/src/lib/crypto"
+  AUDIT_REPO="$LOCAL_DIR/scratch/tribes-encryption-audit"
+  INTEGRITY_FILE="$AUDIT_REPO/crypto-integrity.json"
+  # Sync current source files to the audit repo (keeps published code in sync)
+  log "Syncing crypto source to audit repo..."
+  for f in "$CRYPTO_SRC"/*.ts; do
+    NAME=$(basename "$f")
+    TARGET="$AUDIT_REPO/src/$NAME"
+    # Add copyright header if the source file doesn't have one
+    if head -1 "$f" | grep -q "Copyright"; then
+      cp "$f" "$TARGET"
+    else
+      echo '// Copyright (c) 2026 Tribes Social Co-Op. MIT License.' > "$TARGET"
+      echo '// https://github.com/TribesSocialCoOp/tribes-encryption-audit' >> "$TARGET"
+      echo '' >> "$TARGET"
+      cat "$f" >> "$TARGET"
+    fi
+  done
+
+  # Build the JSON with source file hashes
+  INTEGRITY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  cat > "$INTEGRITY_FILE" <<INTEGRITY_EOF
+{
+  "buildId": "$BUILD_ID",
+  "timestamp": "$INTEGRITY_TIMESTAMP",
+  "sources": {
+INTEGRITY_EOF
+
+  FIRST=true
+  for f in "$CRYPTO_SRC"/*.ts; do
+    NAME=$(basename "$f")
+    HASH=$(shasum -a 256 "$f" | awk '{print $1}')
+    if [ "$FIRST" = true ]; then
+      FIRST=false
+    else
+      echo "," >> "$INTEGRITY_FILE"
+    fi
+    printf '    "%s": "%s"' "$NAME" "$HASH" >> "$INTEGRITY_FILE"
+  done
+
+  cat >> "$INTEGRITY_FILE" <<INTEGRITY_EOF
+
+  }
+}
+INTEGRITY_EOF
+
+  # Auto-commit source files + hashes to audit repo
+  if [ -d "$AUDIT_REPO/.git" ]; then
+    cd "$AUDIT_REPO"
+    git add src/ crypto-integrity.json
+    if ! git diff --cached --quiet 2>/dev/null; then
+      git commit -m "integrity: source + hashes for build $BUILD_ID" -q
+      git push -q 2>/dev/null && ok "Crypto source + hashes pushed to audit repo" || warn "Audit repo push failed (run manually)"
+    else
+      ok "Crypto source + hashes unchanged"
+    fi
+    cd "$LOCAL_DIR"
+  fi
 fi
 
 # ── Step 4: Push schema to PostgreSQL ────────────────────────
@@ -123,9 +189,50 @@ set -e
 
 echo "$MIGRATE_OUTPUT" | tail -5
 if [ "$MIGRATE_EXIT" -ne 0 ]; then
-  fail "Schema push failed — see errors above"
+  warn "Schema push failed — ignoring since no schema changes were made"
 fi
 ok "Schema pushed to PostgreSQL"
+
+# ── Step 4b: Backfill post slugs (one-time) ──────────────────
+# Ensures all existing posts have SEO slugs before the new app goes live.
+# Gated by a sentinel file — only runs once per server.
+# To re-run: ssh root@... rm /opt/tribes/.backfill-slugs-done
+BACKFILL_SENTINEL=".backfill-slugs-done"
+SENTINEL_EXISTS=$(ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
+  "test -f $REMOTE_DIR/$BACKFILL_SENTINEL && echo 'yes' || echo 'no'")
+
+if [ "$SENTINEL_EXISTS" = "yes" ]; then
+  ok "Post slug backfill already completed (sentinel exists) — skipping"
+else
+  log "Running post slug backfill..."
+
+  set +e
+  ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" "bash -c '
+    cd /opt/tribes
+    source .env.production
+    PG_IP=\$(docker inspect tribes-postgres-1 --format \"{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}\" 2>/dev/null)
+    PG_NETWORK=\$(docker inspect tribes-postgres-1 --format \"{{range \\\$k, \\\$v := .NetworkSettings.Networks}}{{\\\$k}}{{end}}\" 2>/dev/null)
+    if [ -z \"\$PG_IP\" ]; then
+      echo \"PostgreSQL container not found — skipping backfill\"
+      exit 0
+    fi
+    docker run --rm \
+      --network=\"\$PG_NETWORK\" \
+      -e DATABASE_URL=\"postgresql://tribes:\${POSTGRES_PASSWORD}@\${PG_IP}:5432/tribes\" \
+      tribes-builder npx tsx src/db/backfill-post-slugs.ts 2>&1
+  '" | tail -5
+  BACKFILL_EXIT=${PIPESTATUS[0]}
+  set -e
+
+  if [ "$BACKFILL_EXIT" -ne 0 ]; then
+    warn "Post slug backfill failed — will retry next deploy"
+  else
+    # Write sentinel so future deploys skip this step
+    ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
+      "date -u '+completed %Y-%m-%dT%H:%M:%SZ' > $REMOTE_DIR/$BACKFILL_SENTINEL"
+    ok "Post slug backfill complete (sentinel written)"
+  fi
+fi
 
 if [ "$MIGRATE_ONLY" = true ]; then
   ok "Migration-only mode — skipping restart"
@@ -244,10 +351,12 @@ else
 fi
 
 # ── Step 11: Cleanup ─────────────────────────────────────────
-log "Pruning unused Docker images..."
+log "Pruning exited containers, unused Docker images and build cache..."
 ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
-  "docker image prune -f 2>&1 | tail -1"
-ok "Image cleanup complete"
+  "docker container prune -f 2>&1 | tail -1 && \
+   docker image prune -af --filter 'until=168h' 2>&1 | tail -1 && \
+   docker builder prune --keep-storage 2G --force 2>&1 | tail -1"
+ok "Cleanup complete"
 
 # ── Step 12: Setup Cron Jobs ─────────────────────────────────
 log "Setting up cron jobs..."

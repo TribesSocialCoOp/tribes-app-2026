@@ -161,14 +161,25 @@ export async function reEncryptPost(
 }
 
 /**
+ * Decrypts content using a previously unwrapped post key.
+ */
+export async function decryptWithPostKey(
+  ciphertext: ArrayBuffer,
+  iv: string,
+  postKey: CryptoKey,
+): Promise<string> {
+  const { fromBase64 } = await import('./encoding');
+  const ivBytes = new Uint8Array(fromBase64(iv));
+  const plaintext = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: ivBytes, tagLength: 128 },
+    postKey,
+    ciphertext,
+  );
+  return new TextDecoder().decode(plaintext);
+}
+
+/**
  * Decrypts a post using a wrapped key grant and the recipient's shared secret.
- *
- * @param ciphertext      The encrypted post body
- * @param iv              Base64-encoded IV
- * @param wrappedKey      Base64-encoded wrapped post key
- * @param wrapIv          Base64-encoded IV used for key wrapping
- * @param sharedSecret    The recipient's shared secret (CryptoKey)
- * @returns               Decrypted plaintext string
  */
 export async function decryptPost(
   ciphertext: ArrayBuffer,
@@ -179,14 +190,7 @@ export async function decryptPost(
 ): Promise<string> {
   // Step 1 & 2: Unwrap and import the post key
   const postKey = await unwrapPostKey(wrappedKey, wrapIv, sharedSecret);
-
-  // Step 3: Decrypt the post content
-  const ivBytes = new Uint8Array(fromBase64(iv));
-  const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: ivBytes, tagLength: 128 },
-    postKey,
-    ciphertext,
-  );
-
-  return new TextDecoder().decode(plaintext);
+  
+  // Step 3: Decrypt the content
+  return decryptWithPostKey(ciphertext, iv, postKey);
 }

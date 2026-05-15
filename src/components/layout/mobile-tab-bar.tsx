@@ -29,7 +29,7 @@ export function MobileTabBar() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/95 backdrop-blur-md border-t border-border pb-[env(safe-area-inset-bottom)]">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-background/95 backdrop-blur-md border-t border-border">
       <div className="flex items-center justify-around h-14 px-1">
         {tabs.map(tab => {
           const isActive =
@@ -41,7 +41,7 @@ export function MobileTabBar() {
               key={tab.href}
               href={tab.href}
               className={cn(
-                "flex flex-col items-center justify-center gap-0.5 flex-1 py-1 rounded-lg transition-colors relative",
+                "flex flex-col items-center justify-center gap-0.5 flex-1 py-1 rounded-lg transition-colors relative min-h-[44px]",
                 tab.isCompose ? "mt-[-20px]" : (isActive ? "text-primary" : "text-muted-foreground hover:text-foreground")
               )}
             >

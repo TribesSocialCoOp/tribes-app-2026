@@ -4,7 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { 
+  Popover, 
+  PopoverContent, 
+  PopoverTrigger 
+} from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import type { Ring } from '@/lib/types';
 import { BookLock, Heart, Users, Tent, ChevronDown, Loader2 } from 'lucide-react';

@@ -10,13 +10,13 @@ export function PlatformFooter() {
   const isAdmin = role === 'Admin' || role === 'System';
 
   return (
-    <footer className="w-full pt-10 pb-28 md:pb-10 px-4 md:px-8 border-t bg-muted/20 mt-auto">
+    <footer className="w-full pt-10 pb-32 md:pb-10 px-4 md:px-8 border-t bg-muted/20 mt-auto">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-6 gap-y-3 text-sm text-muted-foreground">
-          <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
-          <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
-          <Link href="/community-guidelines" className="hover:text-foreground transition-colors">Guidelines</Link>
-          <Link href="/cookies" className="hover:text-foreground transition-colors">Cookies</Link>
+          <Link href="/terms" className="touch-target-44 hover:text-foreground transition-colors">Terms</Link>
+          <Link href="/privacy" className="touch-target-44 hover:text-foreground transition-colors">Privacy</Link>
+          <Link href="/community-guidelines" className="touch-target-44 hover:text-foreground transition-colors">Guidelines</Link>
+          <Link href="/cookies" className="touch-target-44 hover:text-foreground transition-colors">Cookies</Link>
           
           {isAdmin && (
             <Link 

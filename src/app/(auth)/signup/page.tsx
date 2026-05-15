@@ -33,6 +33,7 @@ function SignupForm() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const [tosAgreed, setTosAgreed] = useState(false);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
 
   useEffect(() => {
     const error = searchParams.get('error');
@@ -317,6 +318,22 @@ function SignupForm() {
               className="mt-1"
             />
             
+            {/* Age Confirmation Checkbox (App Store compliance — COPPA / Guideline 1.3) */}
+            <div className="flex items-start gap-3 pt-2">
+              <Checkbox
+                id="age-confirm"
+                checked={ageConfirmed}
+                onCheckedChange={(checked) => setAgeConfirmed(checked === true)}
+                disabled={isLoading || !isInviteValidated}
+              />
+              <label
+                htmlFor="age-confirm"
+                className="text-sm leading-relaxed cursor-pointer text-muted-foreground"
+              >
+                I confirm that I am at least 13 years old.
+              </label>
+            </div>
+
             {/* TOS Agreement Checkbox */}
             <div className="flex items-start gap-3 pt-2">
               <Checkbox
@@ -339,7 +356,7 @@ function SignupForm() {
             <div className="pt-4 space-y-3">
               <Button 
                 type="submit" 
-                disabled={isLoading || !name || !email || !tosAgreed || (INVITE_ONLY && !isInviteValidated)}
+                disabled={isLoading || !name || !email || !tosAgreed || !ageConfirmed || (INVITE_ONLY && !isInviteValidated)}
                 className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg"
               >
                 {isLoading ? (
@@ -361,7 +378,7 @@ function SignupForm() {
                 type="button" 
                 variant="outline" 
                 className="w-full h-11 border-primary/20 hover:bg-primary/5"
-                disabled={isLoading || !tosAgreed || (INVITE_ONLY && !isInviteValidated)}
+                disabled={isLoading || !tosAgreed || !ageConfirmed || (INVITE_ONLY && !isInviteValidated)}
                 onClick={() => {
                   const url = new URL('/api/auth/google', window.location.origin);
                   if (inviteCode) url.searchParams.set('invite', inviteCode);
@@ -370,6 +387,65 @@ function SignupForm() {
               >
                 <Mail className="mr-2 h-4 w-4" />
                 Continue with Google
+              </Button>
+
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="w-full h-11 bg-black text-white hover:bg-black/90 border-black"
+                disabled={isLoading || !tosAgreed || !ageConfirmed || (INVITE_ONLY && !isInviteValidated)}
+                onClick={async () => {
+                  const cap = (window as any).Capacitor;
+                  const isNativeIos = cap?.isNativePlatform?.() && cap?.getPlatform?.() === 'ios';
+
+                  if (isNativeIos) {
+                    try {
+                      const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
+                      const result = await SignInWithApple.authorize({
+                        clientId: 'app.tribes.web',
+                        redirectURI: 'https://tribes.app/api/auth/apple/callback',
+                        scopes: 'name email',
+                      });
+
+                      const res = await fetch('/api/auth/apple/native', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          identityToken: result.response.identityToken,
+                          givenName: result.response.givenName,
+                          familyName: result.response.familyName,
+                          email: result.response.email,
+                          inviteCode: inviteCode || undefined,
+                        }),
+                      });
+
+                      if (!res.ok) {
+                        const data = await res.json();
+                        throw new Error(data.error || 'Apple sign-in failed');
+                      }
+
+                      const returnTo = searchParams.get('returnTo');
+                      router.push(returnTo || '/your-comms');
+                    } catch (err: any) {
+                      if (err?.message?.includes('cancelled') || err?.code === '1001') return;
+                      console.error('[Apple Native] Error:', err);
+                      toast({
+                        variant: 'destructive',
+                        title: 'Sign Up Error',
+                        description: err?.message || 'Apple authentication failed. Please try again.',
+                      });
+                    }
+                  } else {
+                    const url = new URL('/api/auth/apple', window.location.origin);
+                    if (inviteCode) url.searchParams.set('invite', inviteCode);
+                    window.location.href = url.toString();
+                  }
+                }}
+              >
+                <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                </svg>
+                Continue with Apple
               </Button>
             </div>
           </CardContent>

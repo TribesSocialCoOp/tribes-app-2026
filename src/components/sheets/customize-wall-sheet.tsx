@@ -20,12 +20,26 @@ interface CustomizeWallSheetProps {
 }
 
 const colorOptions = [
-  { label: 'Default', value: 'bg-background' },
-  { label: 'Muted', value: 'bg-muted/50' },
-  { label: 'Gray', value: 'bg-slate-200' },
-  { label: 'Blue', value: 'bg-blue-100' },
-  { label: 'Green', value: 'bg-green-100' },
-  { label: 'Pink', value: 'bg-pink-100' },
+  // ── Neutrals ──
+  { label: 'Default',   value: 'bg-background',                          swatch: 'bg-background border border-border' },
+  { label: 'Muted',     value: 'bg-muted/50',                            swatch: 'bg-muted/50' },
+  { label: 'Slate',     value: 'bg-slate-200 dark:bg-slate-800',         swatch: 'bg-slate-200 dark:bg-slate-800' },
+  { label: 'Stone',     value: 'bg-stone-200 dark:bg-stone-800',         swatch: 'bg-stone-200 dark:bg-stone-800' },
+  // ── Cool ──
+  { label: 'Sky',       value: 'bg-sky-100 dark:bg-sky-950',             swatch: 'bg-sky-100 dark:bg-sky-950' },
+  { label: 'Blue',      value: 'bg-blue-100 dark:bg-blue-950',           swatch: 'bg-blue-100 dark:bg-blue-950' },
+  { label: 'Indigo',    value: 'bg-indigo-100 dark:bg-indigo-950',       swatch: 'bg-indigo-100 dark:bg-indigo-950' },
+  { label: 'Teal',      value: 'bg-teal-100 dark:bg-teal-950',           swatch: 'bg-teal-100 dark:bg-teal-950' },
+  // ── Earthy / Warm ──
+  { label: 'Green',     value: 'bg-green-100 dark:bg-green-950',         swatch: 'bg-green-100 dark:bg-green-950' },
+  { label: 'Emerald',   value: 'bg-emerald-100 dark:bg-emerald-950',     swatch: 'bg-emerald-100 dark:bg-emerald-950' },
+  { label: 'Amber',     value: 'bg-amber-100 dark:bg-amber-950',         swatch: 'bg-amber-100 dark:bg-amber-950' },
+  { label: 'Orange',    value: 'bg-orange-100 dark:bg-orange-950',       swatch: 'bg-orange-100 dark:bg-orange-950' },
+  // ── Expressive ──
+  { label: 'Rose',      value: 'bg-rose-100 dark:bg-rose-950',           swatch: 'bg-rose-100 dark:bg-rose-950' },
+  { label: 'Pink',      value: 'bg-pink-100 dark:bg-pink-950',           swatch: 'bg-pink-100 dark:bg-pink-950' },
+  { label: 'Fuchsia',   value: 'bg-fuchsia-100 dark:bg-fuchsia-950',     swatch: 'bg-fuchsia-100 dark:bg-fuchsia-950' },
+  { label: 'Violet',    value: 'bg-violet-100 dark:bg-violet-950',       swatch: 'bg-violet-100 dark:bg-violet-950' },
 ];
 
 const layoutOptions = [
@@ -67,18 +81,24 @@ export function CustomizeWallSheet({
                     <RadioGroup
                         value={styles.backgroundColor}
                         onValueChange={(value) => setStyles(s => ({ ...s, backgroundColor: value }))}
-                        className="grid grid-cols-3 gap-2"
+                        className="grid grid-cols-4 gap-2"
                     >
                         {colorOptions.map(option => (
                         <Label key={option.value} className="cursor-pointer">
                             <RadioGroupItem value={option.value} className="sr-only" />
                             <div className={cn(
-                                "h-16 w-full rounded-md border-2 flex items-center justify-center",
-                                styles.backgroundColor === option.value ? 'border-primary' : 'border-muted'
+                                "h-14 w-full rounded-md border-2 flex items-center justify-center transition-colors",
+                                styles.backgroundColor === option.value ? 'border-primary ring-2 ring-primary/30' : 'border-muted hover:border-muted-foreground/40'
                             )}>
-                                <div className={cn("h-8 w-8 rounded-full", option.value)} />
+                                <div className={cn("h-7 w-7 rounded-full relative", option.swatch)}>
+                                  {styles.backgroundColor === option.value && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <svg className="h-3.5 w-3.5 text-primary drop-shadow-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                                    </div>
+                                  )}
+                                </div>
                             </div>
-                            <span className="block text-center text-xs mt-1">{option.label}</span>
+                            <span className="block text-center text-[10px] mt-1 text-muted-foreground leading-tight">{option.label}</span>
                         </Label>
                         ))}
                     </RadioGroup>

@@ -6,8 +6,12 @@
         "appID": "ABXVW6PWCW.app.tribes.TribesApp",
         "paths": [
           "/bond/tap/*",
+          "/bonds/*",
           "/tribe/*",
           "/post/*",
+          "/profile/*",
+          "/my-wall",
+          "/events/*",
           "/signup"
         ]
       }

@@ -26,6 +26,8 @@ export const users = pgTable('users', {
   tosAcceptedVersion: text('tos_accepted_version'), // null = never accepted; triggers acceptance gate
   deletionRequestedAt: timestamp('deletion_requested_at', { withTimezone: true }), // null = active, set = pending deletion
   hasPiiAccess: boolean('has_pii_access').default(false), // Restricted dev/system flag for viewing full emails
+  encryptionPublicKey: text('encryption_public_key'), // RSA-OAEP JWK (JSON string)
+  ageConfirmedAt: timestamp('age_confirmed_at', { withTimezone: true }), // App Store compliance — records 13+ age confirmation
   createdAt: timestamp('created_at', { withTimezone: true }),
 });
 
@@ -211,6 +213,17 @@ export const bonds = pgTable('bonds', {
   index('idx_bonds_target_user').on(table.targetId, table.userId)
 ]);
 
+export const bondKeyHistory = pgTable('bond_key_history', {
+  id: text('id').primaryKey(),
+  bondId: text('bond_id').notNull().references(() => bonds.id, { onDelete: 'cascade' }),
+  publicKeyJwk: text('public_key_jwk').notNull(),
+  keyHash: text('key_hash').notNull(),
+  rotatedAt: timestamp('rotated_at', { withTimezone: true }).default(sql`NOW()`).notNull(),
+}, (table) => [
+  index('idx_bond_key_history_bond_id').on(table.bondId),
+  index('idx_bond_key_history_key_hash').on(table.keyHash),
+]);
+
 export const bondRequests = pgTable('bond_requests', {
   id: text('id').primaryKey(),
   fromUserId: text('from_user_id').notNull().references(() => users.id),
@@ -260,6 +273,18 @@ export const tribes = pgTable('tribes', {
   createdAt: timestamp('created_at', { withTimezone: true }),
 });
 
+// Temporary redirects from old tribe slugs after a solo-founder rename.
+// Expire after a configurable TTL (default 90 days), releasing the slug for reuse.
+export const tribeSlugRedirects = pgTable('tribe_slug_redirects', {
+  id: text('id').primaryKey(),
+  oldSlug: text('old_slug').notNull().unique(),  // The slug that was replaced
+  tribeId: text('tribe_id').notNull().references(() => tribes.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+}, (table) => [
+  index('idx_slug_redirects_slug').on(table.oldSlug),
+]);
+
 export const tribeMoodTags = pgTable('tribe_mood_tags', {
   tribeId: text('tribe_id').notNull().references(() => tribes.id, { onDelete: 'cascade' }),
   moodSlug: text('mood_slug').notNull(),
@@ -297,6 +322,7 @@ export const pendingMembers = pgTable('pending_members', {
 
 export const posts = pgTable('posts', {
   id: text('id').primaryKey(),
+  slug: text('slug'),
   tribeId: text('tribe_id').references(() => tribes.id, { onDelete: 'cascade' }), // Nullable: journal/bond-ring posts have no tribe
   authorId: text('author_id').notNull().references(() => users.id),
   authorName: text('author_name').notNull(),
@@ -328,6 +354,13 @@ export const posts = pgTable('posts', {
   isEncrypted: boolean('is_encrypted').default(false), // True if content is encrypted
   encryptionIv: text('encryption_iv'),                                     // Base64-encoded IV
 
+  // Link preview metadata (unfurled at compose time)
+  linkUrl: text('link_url'),                 // The canonical URL being previewed
+  linkTitle: text('link_title'),             // OG title
+  linkDescription: text('link_description'), // OG description (truncated)
+  linkImage: text('link_image'),             // OG image URL (proxied through S3)
+  linkSiteName: text('link_site_name'),      // Site name (e.g., "YouTube", "GitHub")
+
   editedAt: timestamp('edited_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }),
 }, (table) => [
@@ -358,6 +391,10 @@ export const comments = pgTable('comments', {
   authorAvatarFallback: text('author_avatar_fallback').notNull().default('??'),
   dataAiHintAvatar: text('data_ai_hint_avatar'),
   content: text('content').notNull(),
+  // E2E encryption (matches posts table pattern)
+  ciphertext: bytea('ciphertext'),                     // Encrypted comment body (AES-256-GCM)
+  isEncrypted: boolean('is_encrypted').default(false),  // True if content is encrypted
+  encryptionIv: text('encryption_iv'),                  // Base64-encoded IV
   vibeCount: integer('vibe_count').default(0),
   createdAt: timestamp('created_at', { withTimezone: true }),
 }, (table) => [
@@ -397,8 +434,9 @@ export const tribeKeys = pgTable('tribe_keys', {
 
 /**
  * Per-member wrapped copies of a tribe's group key.
- * The tribe key is encrypted (wrapped) using the bond shared secret between
- * the granting user and the recipient, so only the recipient can unwrap it.
+ * The tribe key is encrypted (wrapped) using the recipient's RSA-OAEP
+ * identity public key, so only the recipient can unwrap it with their
+ * corresponding private key.
  *
  * When a key admin comes online, they issue grants for any new members
  * who don't yet have one.
@@ -407,9 +445,8 @@ export const tribeKeyGrants = pgTable('tribe_key_grants', {
   id: text('id').primaryKey(),
   tribeKeyId: text('tribe_key_id').notNull().references(() => tribeKeys.id, { onDelete: 'cascade' }),
   recipientId: text('recipient_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  wrappedKey: text('wrapped_key').notNull(),    // Base64: tribe key encrypted with bond shared secret
+  wrappedKey: text('wrapped_key').notNull(),    // Base64: tribe key encrypted with recipient's RSA public key
   wrapIv: text('wrap_iv').notNull(),            // Base64: IV for the wrapping
-  bondId: text('bond_id'),                      // Bond used for wrapping (null for self-grant using journal key)
   grantedBy: text('granted_by').notNull().references(() => users.id),
   grantedAt: timestamp('granted_at', { withTimezone: true }).default(sql`NOW()`),
 }, (table) => [
@@ -583,6 +620,8 @@ export const notificationPreferences = pgTable('notification_preferences', {
   bondMessagesEnabled: boolean('bond_messages_enabled').default(true),
   tribeActivityEnabled: boolean('tribe_activity_enabled').default(true),
   eventRemindersEnabled: boolean('event_reminders_enabled').default(true),
+  lastActivityViewedAt: timestamp('last_activity_viewed_at', { withTimezone: true }),
+  readActivityIds: jsonb('read_activity_ids').$type<string[]>().default([]),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
 });
 

@@ -1,10 +1,10 @@
 
-
 "use client";
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTribeIdFromParams } from '@/hooks/use-tribe-id';
 import { Button } from '@/components/ui/button';
+import { RoleBadge } from '@/components/ui/role-badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,22 +13,24 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
-import { ArrowLeft, UsersRound, Pencil, UserCheck, UserX, Hammer, MoreVertical, ShieldAlert, Check, X, Loader2 } from 'lucide-react';
+import { ArrowLeft, UsersRound, Pencil, UserCheck, UserX, Hammer, MoreVertical, ShieldAlert, Check, X, Loader2, ChevronLeft, ChevronRight, CheckCheck, XCircle } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  ResponsiveMenu,
+  ResponsiveMenuContent,
+  ResponsiveMenuItem,
+  ResponsiveMenuSeparator,
+  ResponsiveMenuTrigger,
+} from "@/components/ui/responsive-menu";
 import React, { useEffect, useState, useCallback } from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
+import { useActionError } from '@/hooks/use-action-error';
+import { Checkbox } from '@/components/ui/checkbox';
 
 import type { TribeMember, PendingMember } from '@/lib/types';
 import type { Tribe } from '@/lib/types';
-import { getTribeById, getTribeMembers, getPendingMembers, updateMemberNickname, updateMemberRole, approveJoinRequest, denyJoinRequest, checkTribeAccess } from '@/lib/actions/tribe-actions';
+import { getTribeById, getTribeMembers, getTribeMemberCount, getPendingMembers, updateMemberNickname, updateMemberRole, approveJoinRequest, denyJoinRequest, bulkApproveJoinRequests, bulkDenyJoinRequests, checkTribeAccess } from '@/lib/actions/tribe-actions';
 import { banMemberFromTribe } from '@/lib/actions/content-actions';
 
 
@@ -44,14 +46,27 @@ export default function ManageMembersPage() {
 
 function ManageMembersContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const from = searchParams.get('from');
   const { tribeId } = useTribeIdFromParams();
   const { toast } = useToast();
   const { role } = useUser();
+  const { handleError } = useActionError();
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
   const [currentTribeMembers, setCurrentTribeMembers] = useState<TribeMember[]>([]);
   const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
+
+  // Bulk selection state
+  const [selectedPending, setSelectedPending] = useState<Set<string>>(new Set());
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  const [showDeclineAllConfirm, setShowDeclineAllConfirm] = useState(false);
+
+  // Pagination state
+  const [membersPage, setMembersPage] = useState(1);
+  const [membersTotalCount, setMembersTotalCount] = useState(0);
+  const membersLimit = 30;
 
   const [isNicknameDialogOpen, setIsNicknameDialogOpen] = useState(false);
   const [memberToEditNickname, setMemberToEditNickname] = useState<TribeMember | null>(null);
@@ -67,29 +82,56 @@ function ManageMembersContent() {
   const reloadData = useCallback(async () => {
     if (!tribeId) return;
     setIsDataLoading(true);
-    const [tribeData, membersData, pendingData] = await Promise.all([
+    const [tribeData, membersData, memberCount, pendingData] = await Promise.all([
       getTribeById(tribeId),
-      getTribeMembers(tribeId),
+      getTribeMembers(tribeId, { page: membersPage, limit: membersLimit }),
+      getTribeMemberCount(tribeId),
       getPendingMembers(tribeId)
     ]);
     setTribe(tribeData);
     setCurrentTribeMembers(membersData);
+    setMembersTotalCount(memberCount);
     setPendingMembers(pendingData);
     setIsDataLoading(false);
-  }, [tribeId]);
+  }, [tribeId, membersPage]);
 
   useEffect(() => {
-    const resolveAccess = async () => {
-      const accessLevel = await checkTribeAccess(tribeId);
-      // Speakers and above can access member management
-      const canAccess = accessLevel === 'platform_admin' || accessLevel === 'founder' || accessLevel === 'speaker';
-      setHasAccess(canAccess);
-      if (canAccess) {
-        reloadData();
+    if (!tribeId) return;
+    let cancelled = false;
+
+    const resolveAccess = async (attempt = 0) => {
+      try {
+        const accessLevel = await checkTribeAccess(tribeId);
+
+        // If the server returned 'guest' but we KNOW the user is logged in
+        // (AuthGuard already verified), the session hasn't hydrated yet.
+        // Retry a few times with backoff before giving up.
+        if (accessLevel === 'guest' && attempt < 3) {
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          if (!cancelled) return resolveAccess(attempt + 1);
+          return;
+        }
+
+        if (cancelled) return;
+        // Speakers and above can access member management
+        const canAccess = accessLevel === 'platform_admin' || accessLevel === 'founder' || accessLevel === 'speaker';
+        setHasAccess(canAccess);
+        if (canAccess) {
+          // Load data separately — a data fetch failure must NOT revoke access
+          reloadData().catch((dataErr) => {
+            handleError(dataErr, 'Failed to load member data');
+          });
+        }
+      } catch (err) {
+        if (cancelled) return;
+        // Only set hasAccess(false) when the ACCESS CHECK itself fails
+        handleError(err, 'Failed to verify permissions');
+        setHasAccess(false);
       }
     };
     resolveAccess();
-  }, [tribeId, reloadData]);
+    return () => { cancelled = true; };
+  }, [tribeId, reloadData, handleError]);
 
   const handleOpenNicknameDialog = (member: TribeMember) => {
     setMemberToEditNickname(member);
@@ -158,22 +200,95 @@ function ManageMembersContent() {
   };
 
   const handleApproveRequest = async (pendingMember: PendingMember) => {
-    await approveJoinRequest(tribeId, pendingMember.id);
-    toast({
-      title: "Member Approved",
-      description: `${pendingMember.name} has been added to the tribe.`,
-    });
-    reloadData();
+    try {
+      await approveJoinRequest(tribeId, pendingMember.id);
+      toast({
+        title: "Member Approved",
+        description: `${pendingMember.name} has been added to the tribe.`,
+      });
+      reloadData();
+    } catch (err) {
+      handleError(err, 'Failed to approve member');
+    }
   };
 
   const handleDenyRequest = async (pendingMemberId: string, memberName: string) => {
-    await denyJoinRequest(tribeId, pendingMemberId);
-    toast({
-      title: "Request Denied",
-      description: `The request from ${memberName} has been denied.`,
-      variant: 'destructive'
+    try {
+      await denyJoinRequest(tribeId, pendingMemberId);
+      toast({
+        title: "Request Denied",
+        description: `The request from ${memberName} has been denied.`,
+        variant: 'destructive'
+      });
+      reloadData();
+    } catch (err) {
+      handleError(err, 'Failed to deny request');
+    }
+  };
+
+  // ======== BULK ACTIONS ========
+
+  const togglePendingSelection = (id: string) => {
+    setSelectedPending(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
-    reloadData();
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedPending.size === pendingMembers.length) {
+      setSelectedPending(new Set());
+    } else {
+      setSelectedPending(new Set(pendingMembers.map(m => m.id)));
+    }
+  };
+
+  const handleBulkApprove = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    setIsBulkProcessing(true);
+    try {
+      const result = await bulkApproveJoinRequests(tribeId, ids);
+      if (result.failed.length > 0) {
+        toast({
+          title: `Approved ${result.approved} of ${ids.length}`,
+          description: `${result.failed.length} failed: ${result.failed[0]?.reason ?? 'Unknown'}`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: `${result.approved} Member${result.approved !== 1 ? 's' : ''} Approved`,
+          description: `Successfully added to ${tribe?.name ?? 'the tribe'}.`,
+        });
+      }
+      setSelectedPending(new Set());
+      reloadData();
+    } catch (err) {
+      handleError(err, 'Bulk approve failed');
+    } finally {
+      setIsBulkProcessing(false);
+    }
+  };
+
+  const handleBulkDeny = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    setIsBulkProcessing(true);
+    try {
+      const result = await bulkDenyJoinRequests(tribeId, ids);
+      toast({
+        title: `${result.denied} Request${result.denied !== 1 ? 's' : ''} Declined`,
+        description: 'The pending requests have been removed.',
+        variant: 'destructive',
+      });
+      setSelectedPending(new Set());
+      setShowDeclineAllConfirm(false);
+      reloadData();
+    } catch (err) {
+      handleError(err, 'Bulk decline failed');
+    } finally {
+      setIsBulkProcessing(false);
+    }
   };
 
 
@@ -220,9 +335,20 @@ function ManageMembersContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center">
-        <Button variant="outline" size="sm" onClick={() => router.push(`/t/${tribe?.slug || tribeId}`)}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
+      <div className="flex items-center gap-2">
+        {from === 'activity' && (
+          <Button variant="outline" size="sm" onClick={() => router.push('/your-comms')}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Activity
+          </Button>
+        )}
+        <Button 
+          variant={from === 'activity' ? "ghost" : "outline"} 
+          size="sm" 
+          onClick={() => router.push(`/t/${tribe?.slug || tribeId}`)}
+          className={cn(from === 'activity' && "text-muted-foreground hover:text-foreground")}
+        >
+          {from !== 'activity' && <ArrowLeft className="mr-2 h-4 w-4" />}
           Back to {tribe.name}
         </Button>
       </div>
@@ -233,11 +359,93 @@ function ManageMembersContent() {
                   <CardTitle className="text-xl tracking-normal">Pending Join Requests ({pendingMembers.length})</CardTitle>
                   <CardDescription>Approve or deny requests to join {tribe.name}.</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                  {/* Bulk action toolbar */}
+                  <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-lg bg-muted/50 border">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="select-all-pending"
+                        checked={selectedPending.size === pendingMembers.length && pendingMembers.length > 0}
+                        onCheckedChange={toggleSelectAll}
+                        disabled={isBulkProcessing}
+                      />
+                      <label htmlFor="select-all-pending" className="text-sm font-medium cursor-pointer select-none">
+                        {selectedPending.size === pendingMembers.length ? 'Deselect All' : 'Select All'}
+                      </label>
+                    </div>
+
+                    {selectedPending.size > 0 && (
+                      <Badge variant="secondary" className="text-xs">
+                        {selectedPending.size} of {pendingMembers.length} selected
+                      </Badge>
+                    )}
+
+                    <div className="flex-1" />
+
+                    {selectedPending.size > 0 ? (
+                      /* When items are selected: act on selection */
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-green-600 border-green-300 hover:bg-green-500/10 hover:text-green-600"
+                          disabled={isBulkProcessing}
+                          onClick={() => handleBulkApprove(Array.from(selectedPending))}
+                        >
+                          {isBulkProcessing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="mr-1.5 h-3.5 w-3.5" />}
+                          Accept Selected
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                          disabled={isBulkProcessing}
+                          onClick={() => handleBulkDeny(Array.from(selectedPending))}
+                        >
+                          {isBulkProcessing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <XCircle className="mr-1.5 h-3.5 w-3.5" />}
+                          Decline Selected
+                        </Button>
+                      </>
+                    ) : (
+                      /* When nothing selected: act on all */
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-green-600 border-green-300 hover:bg-green-500/10 hover:text-green-600"
+                          disabled={isBulkProcessing}
+                          onClick={() => handleBulkApprove(pendingMembers.map(m => m.id))}
+                        >
+                          {isBulkProcessing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="mr-1.5 h-3.5 w-3.5" />}
+                          Accept All
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                          disabled={isBulkProcessing}
+                          onClick={() => setShowDeclineAllConfirm(true)}
+                        >
+                          <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                          Decline All
+                        </Button>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Pending member rows */}
                   <div className="space-y-2">
                       {pendingMembers.map(member => (
-                          <div key={member.id} className="flex items-center justify-between p-2 border rounded-md">
+                          <div key={member.id} className={cn(
+                            "flex items-center justify-between p-2 border rounded-md transition-colors",
+                            selectedPending.has(member.id) && "bg-primary/5 border-primary/30",
+                          )}>
                             <div className="flex items-center space-x-3">
+                                  <Checkbox
+                                    checked={selectedPending.has(member.id)}
+                                    onCheckedChange={() => togglePendingSelection(member.id)}
+                                    disabled={isBulkProcessing}
+                                  />
                                   <Avatar className="h-9 w-9">
                                       <AvatarImage src={member.avatar} alt={member.name} data-ai-hint={member.dataAiHint} />
                                       <AvatarFallback>{member.name.substring(0, 2).toUpperCase()}</AvatarFallback>
@@ -248,10 +456,10 @@ function ManageMembersContent() {
                                   </div>
                               </div>
                               <div className="flex items-center space-x-2">
-                                  <Button size="icon" variant="outline" className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDenyRequest(member.id, member.name)}>
+                                  <Button size="icon" variant="outline" className="h-8 w-8 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => handleDenyRequest(member.id, member.name)} disabled={isBulkProcessing}>
                                       <X className="h-4 w-4" />
                                   </Button>
-                                  <Button size="icon" variant="outline" className="h-8 w-8 text-green-600 hover:bg-green-500/10 hover:text-green-600" onClick={() => handleApproveRequest(member)}>
+                                  <Button size="icon" variant="outline" className="h-8 w-8 text-green-600 hover:bg-green-500/10 hover:text-green-600" onClick={() => handleApproveRequest(member)} disabled={isBulkProcessing}>
                                       <Check className="h-4 w-4" />
                                   </Button>
                               </div>
@@ -271,6 +479,9 @@ function ManageMembersContent() {
               <CardDescription>View, assign nicknames, and manage roles for members of {tribe.name}.</CardDescription>
             </div>
           </div>
+          {membersTotalCount > 0 && (
+            <p className="text-sm text-muted-foreground">{membersTotalCount} total members</p>
+          )}
         </CardHeader>
         <CardContent>
           {currentTribeMembers.length > 0 ? (
@@ -290,9 +501,7 @@ function ManageMembersContent() {
                         <p className="text-xs text-muted-foreground mt-0.5">No tribe-specific nickname.</p>
                       )}
                       <div className="flex items-center space-x-2 mt-1.5">
-                          <Badge variant={member.role === 'founder' ? 'default' : member.role === 'speaker' ? "default" : "outline"} className={cn("text-xs", member.role === 'founder' ? "bg-amber-600 text-white" : member.role === 'speaker' ? "bg-primary text-primary-foreground" : "border-muted-foreground text-muted-foreground")}>
-                              {member.role === 'founder' ? 'Founder' : member.role === 'speaker' ? 'Speaker' : 'Member'}
-                          </Badge>
+                          <RoleBadge role={member.role || 'member'} />
                           {member.reputationStatus && (
                               <Badge className={cn("text-xs border-transparent", {
                                   'bg-accent text-accent-foreground': member.reputationStatus === 'Elder' || member.reputationStatus === 'Veteran',
@@ -305,32 +514,32 @@ function ManageMembersContent() {
                       </div>
                     </div>
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                  <ResponsiveMenu>
+                    <ResponsiveMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground shrink-0">
                         <MoreVertical className="h-4 w-4" />
                         <span className="sr-only">Member Actions</span>
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleOpenNicknameDialog(member)}>
+                    </ResponsiveMenuTrigger>
+                    <ResponsiveMenuContent align="end">
+                      <ResponsiveMenuItem onClick={() => handleOpenNicknameDialog(member)}>
                         <Pencil className="mr-2 h-4 w-4" />
                         {member.tribeAssignedNickname ? "Edit" : "Assign"} Nickname
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleToggleSpeakerRole(member)}>
+                      </ResponsiveMenuItem>
+                      <ResponsiveMenuItem onClick={() => handleToggleSpeakerRole(member)}>
                         {member.role === 'speaker' ? <UserX className="mr-2 h-4 w-4" /> : <UserCheck className="mr-2 h-4 w-4" />}
                         {member.role === 'speaker' ? 'Demote to Member' : 'Make Speaker'}
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem 
+                      </ResponsiveMenuItem>
+                      <ResponsiveMenuSeparator />
+                      <ResponsiveMenuItem 
                         onClick={() => handleOpenBanDialog(member)} 
                         className="text-destructive hover:!bg-destructive/10 hover:!text-destructive focus:!bg-destructive/10 focus:!text-destructive"
                       >
                         <Hammer className="mr-2 h-4 w-4" />
                         Ban Member
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                      </ResponsiveMenuItem>
+                    </ResponsiveMenuContent>
+                  </ResponsiveMenu>
                 </Card>
               ))}
             </div>
@@ -341,6 +550,36 @@ function ManageMembersContent() {
             </div>
           )}
         </CardContent>
+
+        {/* Pagination */}
+        {(() => {
+          const totalPages = Math.ceil(membersTotalCount / membersLimit);
+          return totalPages > 1 ? (
+            <div className="flex items-center justify-end space-x-2 px-6 py-4 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMembersPage(p => Math.max(1, p - 1))}
+                disabled={membersPage === 1 || isDataLoading}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Previous
+              </Button>
+              <div className="text-sm text-muted-foreground px-2">
+                Page {membersPage} of {totalPages}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setMembersPage(p => Math.min(totalPages, p + 1))}
+                disabled={membersPage === totalPages || isDataLoading}
+              >
+                Next
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          ) : null;
+        })()}
       </Card>
 
       {memberToEditNickname && (
@@ -423,6 +662,34 @@ function ManageMembersContent() {
             </DialogContent>
         </Dialog>
       )}
+
+      {/* Decline All Confirmation Dialog */}
+      <Dialog open={showDeclineAllConfirm} onOpenChange={setShowDeclineAllConfirm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Decline All Requests?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to decline all {pendingMembers.length} pending request{pendingMembers.length !== 1 ? 's' : ''}? This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button type="button" variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={isBulkProcessing}
+              onClick={() => handleBulkDeny(pendingMembers.map(m => m.id))}
+            >
+              {isBulkProcessing
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Declining...</>
+                : <>Decline All {pendingMembers.length} Requests</>
+              }
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

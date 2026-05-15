@@ -24,6 +24,7 @@ function isPublicRoute(pathname: string): boolean {
   
   // Public browsing routes (read-only discovery)
   if (pathname.startsWith('/moods')) return true;
+  if (pathname.startsWith('/post/')) return true;
   if (pathname.startsWith('/t/')) return true;  // New slug-based tribe routes
   if (pathname.startsWith('/tribes/') && pathname !== '/tribes/create') return true;
   

@@ -1,12 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { Suspense } from "react";
 import { useUser } from "@/hooks/use-user";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Lock, Loader2, UserPlus, LogIn, ShieldAlert } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -16,6 +16,31 @@ interface AuthGuardProps {
   title?: string;
   /** Optional role requirement */
   requiredRole?: 'Admin' | 'Creator' | 'Individual_Coop';
+}
+
+/**
+ * Inner component that uses useSearchParams (requires Suspense boundary).
+ * Builds the full path including query params for the login callback URL.
+ */
+function LoginRedirectLink({ fullPath }: { fullPath: string }) {
+  return (
+    <Link href={`/login?callbackUrl=${encodeURIComponent(fullPath)}`} passHref className="w-full">
+      <Button className="w-full text-lg py-6 bg-primary hover:bg-primary/90" size="lg">
+        <LogIn className="mr-2 h-5 w-5" /> Log In
+      </Button>
+    </Link>
+  );
+}
+
+function LoginLinkWithParams() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  
+  const fullPath = searchParams.toString() 
+    ? `${pathname}?${searchParams.toString()}`
+    : pathname;
+
+  return <LoginRedirectLink fullPath={fullPath} />;
 }
 
 /**
@@ -31,7 +56,6 @@ export function AuthGuard({
   requiredRole
 }: AuthGuardProps) {
   const { user, isLoading, role } = useUser();
-  const pathname = usePathname();
 
   // 1. Loading state (centered spinner)
   if (isLoading) {
@@ -58,11 +82,10 @@ export function AuthGuard({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4 pt-4">
-            <Link href={`/login?callbackUrl=${encodeURIComponent(pathname)}`} passHref className="w-full">
-              <Button className="w-full text-lg py-6 bg-primary hover:bg-primary/90" size="lg">
-                <LogIn className="mr-2 h-5 w-5" /> Log In
-              </Button>
-            </Link>
+            {/* Suspense boundary required because useSearchParams prevents static prerendering */}
+            <Suspense fallback={<LoginRedirectLink fullPath="/" />}>
+              <LoginLinkWithParams />
+            </Suspense>
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
                 <span className="w-full border-t" />

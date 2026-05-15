@@ -3,8 +3,8 @@
  * Searches Tribes, Events, and Users (public profiles) using LIKE queries.
  */
 import { db } from '@/db';
-import { tribes, events, users } from '@/db/schema';
-import { like, or, sql } from 'drizzle-orm';
+import { tribes, events, users, blockedUsers } from '@/db/schema';
+import { like, or, sql, and, notInArray } from 'drizzle-orm';
 
 export interface SearchResults {
   tribes: { id: string; slug: string; name: string; description: string; memberCount: number; isPublic: boolean }[];
@@ -14,14 +14,29 @@ export interface SearchResults {
 
 /**
  * Search across tribes, events, and users.
+ *
+ * @param currentUserId - If provided, filters out users in a bidirectional block relationship:
+ *   - Users that I have blocked (I can't see them)
+ *   - Users that have blocked me (they can't be found by me)
  */
-export async function searchAll(query: string, limit: number = 5): Promise<SearchResults> {
+export async function searchAll(query: string, limit: number = 5, currentUserId?: string): Promise<SearchResults> {
   // SECURITY: Escape LIKE special characters to prevent wildcard abuse.
   // Without this, a query of '%' matches everything and '_' acts as a wildcard.
   // Drizzle parameterizes the value (preventing SQL injection), but LIKE semantics
   // can still be exploited for data enumeration.
   const escaped = query.replace(/[%_\\]/g, '\\$&');
   const pattern = `%${escaped}%`;
+
+  // Build the blocked user ID list (bidirectional)
+  let blockedIdsSql: ReturnType<typeof sql> | undefined;
+  if (currentUserId) {
+    // IDs of users I blocked + IDs of users who blocked me
+    blockedIdsSql = sql`(
+      SELECT ${blockedUsers.blockedUserId} FROM ${blockedUsers} WHERE ${blockedUsers.userId} = ${currentUserId}
+      UNION
+      SELECT ${blockedUsers.userId} FROM ${blockedUsers} WHERE ${blockedUsers.blockedUserId} = ${currentUserId}
+    )`;
+  }
 
   const [tribeResults, eventResults, userResults] = await Promise.all([
     db.select({
@@ -61,7 +76,11 @@ export async function searchAll(query: string, limit: number = 5): Promise<Searc
       avatarUrl: users.avatar,
     })
       .from(users)
-      .where(like(users.name, pattern))
+      .where(
+        blockedIdsSql
+          ? and(like(users.name, pattern), sql`${users.id} NOT IN ${blockedIdsSql}`)
+          : like(users.name, pattern)
+      )
       .limit(limit),
   ]);
 
@@ -89,3 +108,4 @@ export async function searchAll(query: string, limit: number = 5): Promise<Searc
     })),
   };
 }
+

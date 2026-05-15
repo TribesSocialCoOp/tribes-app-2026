@@ -234,49 +234,137 @@ const Sidebar = React.forwardRef<
   ) => {
     const { isMobile, state, openMobile, setOpenMobile, open: desktopOpen } = useSidebar()
 
-    // Swipe-to-open gesture tracking for the edge zone (when sidebar is closed)
-    const edgeTouchStartRef = React.useRef<{ x: number; y: number } | null>(null)
+    // ── Gesture Tracking ──────────────────────────────────────────────────
+    const sidebarRef = React.useRef<HTMLDivElement>(null)
+    const backdropRef = React.useRef<HTMLDivElement>(null)
+    // Use a ref to avoid stale closures during active gestures
+    const openMobileRef = React.useRef(openMobile)
+    openMobileRef.current = openMobile
 
-    const handleEdgeTouchStart = React.useCallback((e: React.TouchEvent) => {
-      edgeTouchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    const gestureRef = React.useRef({
+      startX: 0,
+      currentX: 0,
+      lastX: 0,
+      lastTime: 0,
+      velocity: 0,
+      isDragging: false,
+    })
+
+    const sidebarWidth = 288 // 18rem = 18 * 16px = 288px
+
+    const handleTouchStart = React.useCallback((e: React.TouchEvent | TouchEvent) => {
+      const touch = "touches" in e ? e.touches[0] : (e as any).touches[0]
+      gestureRef.current = {
+        startX: touch.clientX,
+        currentX: touch.clientX,
+        lastX: touch.clientX,
+        lastTime: Date.now(),
+        velocity: 0,
+        isDragging: true,
+      }
+      
+      if (sidebarRef.current) {
+        sidebarRef.current.style.transition = "none"
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.transition = "none"
+      }
     }, [])
 
-    const handleEdgeTouchEnd = React.useCallback((e: React.TouchEvent) => {
-      if (!edgeTouchStartRef.current) return
-      const deltaX = e.changedTouches[0].clientX - edgeTouchStartRef.current.x
-      const deltaY = Math.abs(e.changedTouches[0].clientY - edgeTouchStartRef.current.y)
-      const SWIPE_THRESHOLD = 50
+    const handleTouchMove = React.useCallback((e: React.TouchEvent | TouchEvent) => {
+      if (!gestureRef.current.isDragging) return
+      
+      const touch = "touches" in e ? e.touches[0] : (e as any).touches[0]
+      const now = Date.now()
+      const dt = now - gestureRef.current.lastTime
+      
+      if (dt > 0) {
+        gestureRef.current.velocity = (touch.clientX - gestureRef.current.lastX) / dt
+      }
+      
+      gestureRef.current.lastX = touch.clientX
+      gestureRef.current.lastTime = now
+      gestureRef.current.currentX = touch.clientX
 
-      if (Math.abs(deltaX) > SWIPE_THRESHOLD && Math.abs(deltaX) > deltaY) {
-        // Left sidebar: swipe right to open. Right sidebar: swipe left to open.
-        if ((side === "left" && deltaX > 0) || (side === "right" && deltaX < 0)) {
-          setOpenMobile(true)
+      const deltaX = touch.clientX - gestureRef.current.startX
+      const isOpen = openMobileRef.current
+      
+      if (sidebarRef.current) {
+        let offset = 0
+        if (isOpen) {
+          // Closing: deltaX will be negative for left sidebar
+          offset = side === "left" ? Math.min(0, deltaX) : Math.max(0, deltaX)
+        } else {
+          // Opening: deltaX will be positive for left sidebar
+          const startOffset = side === "left" ? -sidebarWidth : sidebarWidth
+          offset = side === "left" 
+            ? Math.min(0, startOffset + deltaX) 
+            : Math.max(0, startOffset + deltaX)
+        }
+        
+        sidebarRef.current.style.transform = `translateX(${offset}px)`
+        
+        // Update backdrop opacity proportional to sidebar visibility
+        if (backdropRef.current) {
+          const progress = 1 - Math.abs(offset) / sidebarWidth
+          backdropRef.current.style.opacity = String(Math.max(0, progress))
+          backdropRef.current.style.pointerEvents = progress > 0.01 ? "auto" : "none"
         }
       }
-      edgeTouchStartRef.current = null
-    }, [side, setOpenMobile])
+    }, [side]) // Removed openMobile dep — using ref instead
 
-    // Swipe-to-close gesture tracking for the sidebar panel and backdrop
-    const touchStartRef = React.useRef<{ x: number; y: number } | null>(null)
+    const handleTouchEnd = React.useCallback(() => {
+      if (!gestureRef.current.isDragging) return
+      gestureRef.current.isDragging = false
 
-    const handleTouchStart = React.useCallback((e: React.TouchEvent) => {
-      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
-    }, [])
+      const deltaX = gestureRef.current.currentX - gestureRef.current.startX
+      const velocity = gestureRef.current.velocity
+      const isOpen = openMobileRef.current
+      const VELOCITY_THRESHOLD = 0.5
+      const DISTANCE_THRESHOLD = sidebarWidth * 0.4
 
-    const handleTouchEnd = React.useCallback((e: React.TouchEvent) => {
-      if (!touchStartRef.current) return
-      const deltaX = e.changedTouches[0].clientX - touchStartRef.current.x
-      const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartRef.current.y)
-      const SWIPE_THRESHOLD = 50
+      let shouldOpen = isOpen
 
-      if (Math.abs(deltaX) > SWIPE_THRESHOLD && Math.abs(deltaX) > deltaY) {
-        // Left sidebar: swipe left to close. Right sidebar: swipe right to close.
-        if ((side === "left" && deltaX < 0) || (side === "right" && deltaX > 0)) {
-          setOpenMobile(false)
+      if (Math.abs(velocity) > VELOCITY_THRESHOLD) {
+        shouldOpen = side === "left" ? velocity > 0 : velocity < 0
+      } else {
+        if (isOpen) {
+          shouldOpen = side === "left" ? deltaX > -DISTANCE_THRESHOLD : deltaX < DISTANCE_THRESHOLD
+        } else {
+          shouldOpen = side === "left" ? deltaX > DISTANCE_THRESHOLD : deltaX < -DISTANCE_THRESHOLD
         }
       }
-      touchStartRef.current = null
-    }, [side, setOpenMobile])
+
+      // Restore CSS transitions for the spring-back animation
+      const springTransition = "transform 0.4s cubic-bezier(0.32, 0.72, 0, 1)"
+      if (sidebarRef.current) {
+        sidebarRef.current.style.transition = springTransition
+        sidebarRef.current.style.transform = "" // Clear inline → CSS class takes over
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.transition = "opacity 0.4s cubic-bezier(0.32, 0.72, 0, 1)"
+        backdropRef.current.style.opacity = ""
+        backdropRef.current.style.pointerEvents = ""
+      }
+
+      setOpenMobile(shouldOpen)
+    }, [side, setOpenMobile]) // Removed openMobile dep — using ref
+
+    // Clean up inline styles when backdrop is tapped (non-gesture close)
+    const handleBackdropClick = React.useCallback(() => {
+      // Reset any lingering inline styles from a touchStart that
+      // never became a real drag
+      if (sidebarRef.current) {
+        sidebarRef.current.style.transition = ""
+        sidebarRef.current.style.transform = ""
+      }
+      if (backdropRef.current) {
+        backdropRef.current.style.transition = ""
+        backdropRef.current.style.opacity = ""
+        backdropRef.current.style.pointerEvents = ""
+      }
+      setOpenMobile(false)
+    }, [setOpenMobile])
 
     if (isMobile) {
       return (
@@ -284,38 +372,49 @@ const Sidebar = React.forwardRef<
           {/* Invisible edge zone for swipe-to-open when sidebar is closed */}
           {!openMobile && (
             <div
-              onTouchStart={handleEdgeTouchStart}
-              onTouchEnd={handleEdgeTouchEnd}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
               className={cn(
-                "fixed inset-y-0 z-30 w-5",
+                "fixed inset-y-0 z-30 w-8", // Wider zone for easier grab
                 side === "left" ? "left-0" : "right-0"
               )}
               aria-hidden="true"
             />
           )}
           <div
+            ref={sidebarRef}
             data-sidebar="sidebar"
             data-mobile="true"
             data-state={openMobile ? "expanded" : "collapsed"}
             className={cn(
-              "fixed inset-y-0 z-30 h-full bg-sidebar text-sidebar-foreground p-0 transition-transform duration-300 ease-in-out",
+              "fixed inset-y-0 z-30 h-full bg-sidebar text-sidebar-foreground p-0",
               "w-[var(--sidebar-width-mobile)]",
+              "transition-transform duration-300 ease-in-out",
               side === "left" ? (openMobile ? "translate-x-0" : "-translate-x-full") : (openMobile ? "translate-x-0" : "translate-x-full"),
               className
             )}
             onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            <div className="flex h-full w-full flex-col">{children}</div>
+            <div className="flex h-full w-full flex-col">
+              {children}
+            </div>
           </div>
-          {openMobile && (
-            <div
-              onClick={() => setOpenMobile(false)}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-              className="fixed inset-0 z-20 bg-black/50 md:hidden"
-            />
-          )}
+          {/* Backdrop — always rendered so swipe-to-open can fade it in.
+              When closed, it's invisible and non-interactive via CSS. */}
+          <div
+            ref={backdropRef}
+            onClick={handleBackdropClick}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            className={cn(
+              "fixed inset-0 z-20 bg-black/50 md:hidden transition-opacity duration-300",
+              openMobile ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+            )}
+          />
         </>
       )
     }
@@ -455,8 +554,11 @@ const SidebarInset = React.forwardRef<
 
   // Logic to determine class based on client-side state, ensuring server match initially
   const getDynamicClass = () => {
-    if (typeof window === 'undefined') return "translate-x-0 z-0"; // Server render
-    return isMobile && openMobile ? "translate-x-[var(--sidebar-width-mobile)] shadow-xl z-20" : "translate-x-0 z-0";
+    if (typeof window === 'undefined') return "translate-x-0"; // Server render — no z-index to avoid stacking context
+    // When sidebar is open on mobile, push content right and raise z-index above backdrop.
+    // When closed, do NOT set z-index — avoids creating a stacking context that would
+    // trap the header's z-40 below the backdrop's z-20.
+    return isMobile && openMobile ? "translate-x-[var(--sidebar-width-mobile)] shadow-xl z-[25]" : "translate-x-0";
   };
 
   return (

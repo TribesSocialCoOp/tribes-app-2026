@@ -11,8 +11,9 @@ import { Check, Star, User, Briefcase, HeartHandshake, Building, BarChart, Rocke
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/hooks/use-user";
-import { validateInviteCode, redeemInviteCode, createCheckoutSession, getMySubscription, getContributionSummary, getMyInviteCodes, revokeInviteCode, getAllInviteCodes, createFoundingCode } from '@/lib/actions/profile-actions';
+import { redeemInviteCode, createCheckoutSession, getMySubscription, getContributionSummary, getMyInviteCodes, revokeInviteCode, getAllInviteCodes, createFoundingCode } from '@/lib/actions/profile-actions';
 import { useActionError } from '@/hooks/use-action-error';
+import { allowsStripe, requiresStoreKit } from '@/lib/services/storekit-service';
 
 const freeTier = {
     name: "Always Free",
@@ -124,7 +125,6 @@ export default function BillingPage() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState("");
   const [isRedeeming, setIsRedeeming] = useState(false);
-  const [inviteStatus, setInviteStatus] = useState<{ valid: boolean; planName?: string } | null>(null);
   const [subscription, setSubscription] = useState<Awaited<ReturnType<typeof getMySubscription>> | null>(null);
   const [contribSummary, setContribSummary] = useState<Awaited<ReturnType<typeof getContributionSummary>> | null>(null);
   const [inviteCodes, setInviteCodes] = useState<Awaited<ReturnType<typeof getMyInviteCodes>>>([]);
@@ -161,29 +161,18 @@ export default function BillingPage() {
     }
   };
 
-  const handleValidateCode = async () => {
-    if (!inviteCode.trim()) return;
-    try {
-      const result = await validateInviteCode(inviteCode);
-      setInviteStatus({ valid: true, planName: result.planName });
-      toast({ title: "Code Valid!", description: `This code grants ${result.planName} membership.` });
-    } catch (err: unknown) {
-      setInviteStatus({ valid: false });
-      handleError(err, "Invalid Code");
-    }
-  };
-
   const handleRedeemCode = async () => {
     if (!user) {
       toast({ title: "Please log in", description: "You need an account to redeem a code.", variant: "destructive" });
       return;
     }
+    if (!inviteCode.trim()) return;
     setIsRedeeming(true);
     try {
+      // redeemInviteCode validates internally — single action for the user
       const result = await redeemInviteCode(inviteCode);
-      toast({ title: "🎉 Welcome, Founding Member!", description: `You now have ${result.planName} access.` });
+      toast({ title: "🎉 Welcome, Founding Member!", description: `You now have ${result.planName} access. Refreshing...` });
       setInviteCode("");
-      setInviteStatus(null);
       setTimeout(() => window.location.reload(), 1500);
     } catch (err: unknown) {
       handleError(err, "Redemption Failed");
@@ -301,7 +290,7 @@ export default function BillingPage() {
             </div>
           </CardContent>
           <CardFooter className="border-t pt-6">
-            {subSource === 'paid' && (
+            {subSource === 'paid' && allowsStripe() && (
               <Button
                 variant="outline"
                 onClick={async () => {
@@ -317,21 +306,30 @@ export default function BillingPage() {
                 Manage Subscription
               </Button>
             )}
+            {subSource === 'paid' && requiresStoreKit() && (
+              <p className="text-sm text-muted-foreground italic">
+                Subscription management is available via your Apple ID settings.
+              </p>
+            )}
             {subSource === 'founding' && (
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full">
                 <p className="text-sm text-muted-foreground flex-1">
                   ✨ As a Founding Member, your membership is complimentary. No payment required.
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  disabled={loadingPlan === `${individualCoopTier.planId}-monthly`}
-                  onClick={() => handleCheckout(individualCoopTier.planId, 'monthly')}
-                >
-                  {loadingPlan === `${individualCoopTier.planId}-monthly` && <Loader2 className="h-3 w-3 animate-spin mr-2" />}
-                  Support the Co-Op — $7/mo
-                </Button>
+                {allowsStripe() ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={loadingPlan === `${individualCoopTier.planId}-monthly`}
+                    onClick={() => handleCheckout(individualCoopTier.planId, 'monthly')}
+                  >
+                    {loadingPlan === `${individualCoopTier.planId}-monthly` && <Loader2 className="h-3 w-3 animate-spin mr-2" />}
+                    Support the Co-Op — $7/mo
+                  </Button>
+                ) : (
+                  <Badge variant="outline" className="shrink-0">Coming to iOS Soon</Badge>
+                )}
               </div>
             )}
             {subSource === 'earned' && (
@@ -344,16 +342,20 @@ export default function BillingPage() {
                     Upgrade to a paid plan for voting rights and permanent membership.
                   </p>
                 </div>
-                <Button
-                  variant="default"
-                  size="sm"
-                  className="shrink-0"
-                  disabled={loadingPlan === `${individualCoopTier.planId}-monthly`}
-                  onClick={() => handleCheckout(individualCoopTier.planId, 'monthly')}
-                >
-                  {loadingPlan === `${individualCoopTier.planId}-monthly` && <Loader2 className="h-3 w-3 animate-spin mr-2" />}
-                  <Vote className="h-4 w-4 mr-1" /> Unlock Voting — $7/mo
-                </Button>
+                {allowsStripe() ? (
+                  <Button
+                    variant="default"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={loadingPlan === `${individualCoopTier.planId}-monthly`}
+                    onClick={() => handleCheckout(individualCoopTier.planId, 'monthly')}
+                  >
+                    {loadingPlan === `${individualCoopTier.planId}-monthly` && <Loader2 className="h-3 w-3 animate-spin mr-2" />}
+                    <Vote className="h-4 w-4 mr-1" /> Unlock Voting — $7/mo
+                  </Button>
+                ) : (
+                  <Badge variant="outline" className="shrink-0">Coming to iOS Soon</Badge>
+                )}
               </div>
             )}
           </CardFooter>
@@ -736,25 +738,18 @@ export default function BillingPage() {
               <Input
                 placeholder="Enter invite code (e.g. FOUNDING-ALPHA-001)"
                 value={inviteCode}
-                onChange={(e) => { setInviteCode(e.target.value); setInviteStatus(null); }}
+                onChange={(e) => { setInviteCode(e.target.value); }}
                 className="font-mono uppercase"
               />
-              {inviteStatus?.valid ? (
-                <Button onClick={handleRedeemCode} disabled={isRedeeming} className="bg-amber-500 hover:bg-amber-600 text-white shrink-0">
-                  {isRedeeming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Gift className="h-4 w-4 mr-2" />}
-                  Redeem
-                </Button>
-              ) : (
-                <Button onClick={handleValidateCode} variant="outline" disabled={!inviteCode.trim()} className="shrink-0">
-                  Validate
-                </Button>
-              )}
+              <Button
+                onClick={handleRedeemCode}
+                disabled={isRedeeming || !inviteCode.trim()}
+                className="bg-amber-500 hover:bg-amber-600 text-white shrink-0"
+              >
+                {isRedeeming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Gift className="h-4 w-4 mr-2" />}
+                Redeem Code
+              </Button>
             </div>
-            {inviteStatus?.valid && (
-              <p className="text-center text-sm text-amber-600 dark:text-amber-400 mt-3 font-medium">
-                ✅ Valid! This code grants <strong>{inviteStatus.planName}</strong> membership.
-              </p>
-            )}
           </CardContent>
         </Card>
       </section>
@@ -815,14 +810,22 @@ export default function BillingPage() {
                   </ul>
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                  <Button className="w-full" variant="default" disabled={loadingPlan === `${individualCoopTier.planId}-monthly`} onClick={() => handleCheckout(individualCoopTier.planId, 'monthly')}>
-                    {loadingPlan === `${individualCoopTier.planId}-monthly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    {individualCoopTier.cta} — $7/mo
-                  </Button>
-                  <Button className="w-full" variant="outline" disabled={loadingPlan === `${individualCoopTier.planId}-yearly`} onClick={() => handleCheckout(individualCoopTier.planId, 'yearly')}>
-                    {loadingPlan === `${individualCoopTier.planId}-yearly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    Annual — $70/yr (save 17%)
-                  </Button>
+                  {allowsStripe() ? (
+                    <>
+                      <Button className="w-full" variant="default" disabled={loadingPlan === `${individualCoopTier.planId}-monthly`} onClick={() => handleCheckout(individualCoopTier.planId, 'monthly')}>
+                        {loadingPlan === `${individualCoopTier.planId}-monthly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                        {individualCoopTier.cta} — $7/mo
+                      </Button>
+                      <Button className="w-full" variant="outline" disabled={loadingPlan === `${individualCoopTier.planId}-yearly`} onClick={() => handleCheckout(individualCoopTier.planId, 'yearly')}>
+                        {loadingPlan === `${individualCoopTier.planId}-yearly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                        Annual — $70/yr (save 17%)
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="w-full py-4 text-center">
+                      <Badge variant="outline">Subscription via App Store Coming Soon</Badge>
+                    </div>
+                  )}
                 </CardFooter>
             </Card>
 
@@ -852,14 +855,22 @@ export default function BillingPage() {
                   </ul>
                 </CardContent>
                 <CardFooter className="flex-col gap-2">
-                  <Button className="w-full" variant="default" disabled={loadingPlan === `${creatorTier.planId}-monthly`} onClick={() => handleCheckout(creatorTier.planId, 'monthly')}>
-                    {loadingPlan === `${creatorTier.planId}-monthly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    {creatorTier.cta} — $14/mo
-                  </Button>
-                  <Button className="w-full" variant="outline" disabled={loadingPlan === `${creatorTier.planId}-yearly`} onClick={() => handleCheckout(creatorTier.planId, 'yearly')}>
-                    {loadingPlan === `${creatorTier.planId}-yearly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    Annual — $140/yr (save 17%)
-                  </Button>
+                  {allowsStripe() ? (
+                    <>
+                      <Button className="w-full" variant="default" disabled={loadingPlan === `${creatorTier.planId}-monthly`} onClick={() => handleCheckout(creatorTier.planId, 'monthly')}>
+                        {loadingPlan === `${creatorTier.planId}-monthly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                        {creatorTier.cta} — $14/mo
+                      </Button>
+                      <Button className="w-full" variant="outline" disabled={loadingPlan === `${creatorTier.planId}-yearly`} onClick={() => handleCheckout(creatorTier.planId, 'yearly')}>
+                        {loadingPlan === `${creatorTier.planId}-yearly` && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                        Annual — $140/yr (save 17%)
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="w-full py-4 text-center">
+                      <Badge variant="outline">Subscription via App Store Coming Soon</Badge>
+                    </div>
+                  )}
                 </CardFooter>
             </Card>
         </div>

@@ -37,10 +37,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     async function fetchUser() {
-      setIsLoading(true);
+      // Only show loading spinner on initial mount, not on refresh re-fetches
+      if (refreshKey === 0) setIsLoading(true);
       try {
-        const userId = await getCurrentUserId();
+        let userId: string | null = null;
+        let attempts = 0;
+        
+        // Retry logic for session hydration lag
+        while (attempts < 3) {
+          userId = await getCurrentUserId();
+          if (userId || cancelled) break;
+          
+          // If no user found, wait and retry a couple of times
+          // This handles transient lag during client-side navigation/hydration
+          await new Promise(r => setTimeout(r, 500 * (attempts + 1)));
+          attempts++;
+        }
+
         if (cancelled) return;
+        
         if (userId) {
           const profile = await getUserProfile(userId);
           if (cancelled) return;

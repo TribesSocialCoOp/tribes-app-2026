@@ -61,7 +61,12 @@ class TribesWebSocket {
 
       this.ws.onopen = () => {
         console.log('[ws-client] Connected to relay');
-        this.reconnectAttempts = 0;
+        // Only reset attempts after connection is stable to ensure auth passed
+        setTimeout(() => {
+          if (this.ws?.readyState === WebSocket.OPEN) {
+            this.reconnectAttempts = 0;
+          }
+        }, 5000);
       };
 
       this.ws.onmessage = (event) => {
@@ -78,6 +83,12 @@ class TribesWebSocket {
 
       this.ws.onclose = (event) => {
         if (this.isIntentionallyClosed) return;
+        
+        if (event.code === 4003) {
+          console.error(`[ws-client] Auth rejected by relay (4003). JWT_SECRET mismatch?`);
+          return; // Stop retrying on auth failure
+        }
+
         console.log(`[ws-client] Disconnected (code: ${event.code}), reconnecting...`);
         this.scheduleReconnect();
       };

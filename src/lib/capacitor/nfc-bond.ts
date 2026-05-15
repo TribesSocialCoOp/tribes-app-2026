@@ -1,7 +1,7 @@
 import { CapacitorNfc, type NdefRecord, type NfcEvent } from '@capgo/capacitor-nfc';
 import { isNative, platform } from './platform';
-import { triggerNotificationHaptic } from './haptics';
-import { NotificationType } from '@capacitor/haptics';
+import { triggerNotificationHaptic, triggerHaptic } from './haptics';
+import { NotificationType, ImpactStyle } from '@capacitor/haptics';
 
 /**
  * Helper: build a well-known URI NDEF record from a URL string.
@@ -33,9 +33,17 @@ function buildUriRecord(url: string): NdefRecord {
 /**
  * NFC Service for Bond Tap-to-Bond.
  *
- * Two modes:
- * - Phone A writes a bond URL to a physical NFC tag (or shares via P2P on Android).
- * - Phone B scans and reads the URL, then navigates to the bond acceptance page.
+ * ⚠️ iOS Limitations (as of iOS 26):
+ * - iPhones CANNOT exchange NFC data phone-to-phone (no HCE, no P2P)
+ * - CoreNFC only reads/writes PASSIVE physical NFC tags (NTAGs)
+ * - For phone-to-phone bonding, use NearbyBondService instead
+ *
+ * This service is used for:
+ * - Writing bond URLs to physical NFC tags (events, meetups)
+ * - Background Tag Reading: iPhone XS+ auto-reads NDEF tags when unlocked
+ *
+ * Android supports P2P NFC share() as a best-effort fallback,
+ * but the primary P2P path is NearbyBondService.
  */
 export const NFCService = {
   /**
@@ -97,18 +105,19 @@ export const NFCService = {
   },
 
   /**
-   * Write a bond URL to a physical NFC tag.
+   * Write a bond URL to a PHYSICAL NFC tag.
    *
-   * Starts a scan session — the user taps a writable NFC tag, and we write the
-   * NDEF URI record to it. On Android, this can also be used with P2P share()
-   * to push the URL directly to the other phone.
+   * ⚠️ This writes to a passive NFC tag (NTAG, etc.), NOT to another phone.
+   * iPhones cannot act as NFC tags. For phone-to-phone, use NearbyBondService.
+   *
+   * On Android, also attempts P2P share() as a best-effort fallback.
    */
-  async writeBondUrl(url: string): Promise<boolean> {
+  async writeToNfcTag(url: string): Promise<boolean> {
     if (!isNative) return false;
 
     const record = buildUriRecord(url);
 
-    // On Android, prefer P2P share (beam-like behavior) for phone-to-phone
+    // On Android, attempt P2P share as best-effort (may work on some devices)
     if (platform === 'android') {
       try {
         await CapacitorNfc.share({ records: [record] });
@@ -121,12 +130,18 @@ export const NFCService = {
 
     // iOS / fallback: start scanning, then write to the first tag discovered
     try {
+      // Start a subtle haptic pulse to indicate NFC is actively scanning
+      const pulseInterval = setInterval(() => {
+        triggerHaptic(ImpactStyle.Light);
+      }, 2000);
+
       await CapacitorNfc.startScanning({
-        alertMessage: 'Hold near the other device to bond',
+        alertMessage: 'Hold near the NFC tag to write your bond link',
       });
 
       return new Promise((resolve) => {
         const listener = CapacitorNfc.addListener('nfcEvent', async () => {
+          clearInterval(pulseInterval);
           try {
             await CapacitorNfc.write({ records: [record] });
             triggerNotificationHaptic(NotificationType.Success);

@@ -33,7 +33,7 @@ const createTribeFormSchema = z.object({
     .min(1, { message: "Please select at least one mood." })
     .max(3, { message: "You can select a maximum of 3 moods." }),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
-  isPublic: z.boolean().default(false),
+  isPublic: z.boolean().default(true),
   coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`),
 });
 
@@ -64,7 +64,7 @@ function CreateTribeContent() {
       homepageUrl: "",
       moods: [],
       description: "",
-      isPublic: false,
+      isPublic: true,
     },
   });
 

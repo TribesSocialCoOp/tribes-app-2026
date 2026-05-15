@@ -85,73 +85,93 @@ export function usePostDecryption(items: CommunicationItem[]) {
         }
       }
 
-      // ── Ring decryption: key grants + bond shared secret ─────
+      // ── Ring decryption: tribe group key OR key grants ───────
       if (ringItems.length > 0) {
-        const { getPostKeyGrants } = await import('@/lib/actions/content-actions');
-        const ringPostIds = ringItems.map(item => item.id);
-        const grants = await getPostKeyGrants(ringPostIds);
+        // Separate tribe-key items from grant-based items
+        const tribeItems = ringItems.filter(item => item.ring === 'tribes' && item.tribeId);
+        const grantItems = ringItems.filter(item => !(item.ring === 'tribes' && item.tribeId));
 
-        const { decryptPost } = await import('@/lib/crypto/post-encryption');
-        const { getBondKey } = await import('@/lib/crypto');
-        const { deriveSharedSecret, importPublicKey } = await import('@/lib/crypto');
+        // ── Tribe group key decryption (O(1) — no per-recipient grants) ──
+        if (tribeItems.length > 0) {
+          const { getTribeKey } = await import('@/lib/crypto/key-store');
+          const { decryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
 
-        for (const item of ringItems) {
-          const grant = grants[item.id];
-          if (!grant) {
-            newDecrypted[item.id] = '🔒 You don\'t have access to this encrypted post';
-            continue;
+          for (const item of tribeItems) {
+            try {
+              const cachedTribeKey = await getTribeKey(item.tribeId!);
+              if (cachedTribeKey) {
+                const { fromBase64 } = await import('@/lib/crypto/encoding');
+              const ciphertextBuffer = fromBase64(item.ciphertextBase64!);
+
+                const plaintext = await decryptWithTribeKey(
+                  ciphertextBuffer,
+                  item.encryptionIv!,
+                  cachedTribeKey.key,
+                );
+                newDecrypted[item.id] = plaintext;
+              } else {
+                // No tribe key — fall through to grant-based decryption
+                grantItems.push(item);
+              }
+            } catch (err) {
+              console.error(`[usePostDecryption] Tribe key decrypt failed for ${item.id}:`, err);
+              // Tribe key failed — try grant-based fallback
+              grantItems.push(item);
+            }
           }
+        }
 
-          try {
-            let unwrapSecret: CryptoKey;
+        // ── Grant-based decryption (pairwise sender key model) ──
+        if (grantItems.length > 0) {
+          const { getPostKeyGrants } = await import('@/lib/actions/content-actions');
+          const grantPostIds = grantItems.map(item => item.id);
+          const grants = await getPostKeyGrants(grantPostIds);
 
-            if (!grant.bondId) {
-              // Self-grant: wrapped with the author's personal journal key
-              try {
+          for (const item of grantItems) {
+            const grant = grants[item.id];
+            if (!grant) {
+              newDecrypted[item.id] = '🔒 You don\'t have access to this encrypted post';
+              continue;
+            }
+
+            try {
+              const { fromBase64 } = await import('@/lib/crypto/encoding');
+              const ciphertextBuffer = fromBase64(item.ciphertextBase64!);
+              let plaintext: string;
+
+              if (!grant.bondId) {
+                // Self-grant: wrapped with the author's personal journal key
                 const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
-                unwrapSecret = await getOrCreateJournalKey();
-              } catch {
-                newDecrypted[item.id] = '🔒 Personal key missing (Sync keys in settings)';
-                continue;
-              }
-            } else {
-              // Bond grant: derive shared secret from bond keys
-              const bondKey = await getBondKey(grant.bondId);
-              if (!bondKey) {
-                newDecrypted[item.id] = '🔒 Bond key missing (Sync keys in settings)';
-                continue;
+                const { decryptPost } = await import('@/lib/crypto/post-encryption');
+                const journalKey = await getOrCreateJournalKey();
+                plaintext = await decryptPost(
+                  ciphertextBuffer,
+                  item.encryptionIv!,
+                  grant.wrappedKey,
+                  grant.wrapIv,
+                  journalKey,
+                );
+              } else {
+                // Bond grant: use rotation-aware resolver
+                const { resolvePostKeyForGrant } = await import('@/lib/crypto/key-rotation');
+                const { decryptWithPostKey } = await import('@/lib/crypto/post-encryption');
+                
+                const postKey = await resolvePostKeyForGrant(grant.bondId, grant.wrappedKey, grant.wrapIv);
+                if (!postKey) {
+                   throw new Error('Key mismatch or access denied');
+                }
+                plaintext = await decryptWithPostKey(ciphertextBuffer, item.encryptionIv!, postKey);
               }
 
-              const { getBonds } = await import('@/lib/actions/bond-actions');
-              const bonds = await getBonds();
-              const bond = bonds.find(b => b.id === grant.bondId);
-              if (!bond?.peerPublicKeyJwk) {
-                newDecrypted[item.id] = '🔒 Partner key not available';
-                continue;
+              newDecrypted[item.id] = plaintext;
+            } catch (err) {
+              console.error(`[usePostDecryption] Failed to decrypt post ${item.id}:`, err);
+              if (err instanceof DOMException && err.name === 'OperationError') {
+                newDecrypted[item.id] = '🔒 Key mismatch -- this post was encrypted with a previous key';
+              } else {
+                newDecrypted[item.id] = '🔒 Decryption failed';
               }
-
-              const partnerPubKey = await importPublicKey(JSON.parse(bond.peerPublicKeyJwk));
-              unwrapSecret = await deriveSharedSecret(bondKey.privateKey, partnerPubKey);
             }
-
-            const ciphertextBin = atob(item.ciphertextBase64!);
-            const ciphertextBytes = new Uint8Array(ciphertextBin.length);
-            for (let i = 0; i < ciphertextBin.length; i++) {
-              ciphertextBytes[i] = ciphertextBin.charCodeAt(i);
-            }
-
-            const plaintext = await decryptPost(
-              ciphertextBytes.buffer,
-              item.encryptionIv!,
-              grant.wrappedKey,
-              grant.wrapIv,
-              unwrapSecret,
-            );
-
-            newDecrypted[item.id] = plaintext;
-          } catch (err) {
-            console.error(`[usePostDecryption] Failed to decrypt post ${item.id}:`, err);
-            newDecrypted[item.id] = '🔒 Decryption failed';
           }
         }
       }

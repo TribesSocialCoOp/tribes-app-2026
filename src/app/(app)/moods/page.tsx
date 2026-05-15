@@ -1,11 +1,16 @@
-
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Metadata } from "next";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, ArrowRight, Smile, Megaphone } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { moodsData } from '@/lib/moods-data';
+
+export const metadata: Metadata = {
+  title: 'Mood Streams',
+  description: 'Discover and subscribe to content streams tailored to your current mood and interests.',
+};
 
 export default function MoodsPage() {
   return (

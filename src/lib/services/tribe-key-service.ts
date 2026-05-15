@@ -87,7 +87,6 @@ export async function createTribeKeyGrant(
   wrappedKey: string,
   wrapIv: string,
   grantedBy: string,
-  bondId?: string,
 ): Promise<void> {
   const id = `tkg-${recipientId.substring(0, 8)}-${Date.now()}`;
 
@@ -97,7 +96,6 @@ export async function createTribeKeyGrant(
     recipientId,
     wrappedKey,
     wrapIv,
-    bondId: bondId ?? null,
     grantedBy,
     grantedAt: new Date(),
   });
@@ -131,7 +129,6 @@ export async function getUserTribeKeyGrants(userId: string) {
     tribeKeyId: tribeKeyGrants.tribeKeyId,
     wrappedKey: tribeKeyGrants.wrappedKey,
     wrapIv: tribeKeyGrants.wrapIv,
-    bondId: tribeKeyGrants.bondId,
     tribeId: tribeKeys.tribeId,
     keyVersion: tribeKeys.keyVersion,
   })

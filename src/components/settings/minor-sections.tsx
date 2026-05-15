@@ -58,6 +58,12 @@ export function BillingSection({ roleName, hasActiveSubscription }: BillingSecti
   const router = useRouter();
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
 
+  // Lazy-check platform to avoid SSR issues
+  const [canUseStripe, setCanUseStripe] = useState(true);
+  React.useEffect(() => {
+    import('@/lib/services/storekit-service').then(m => setCanUseStripe(m.allowsStripe()));
+  }, []);
+
   async function handleManageSubscription() {
     setIsLoadingPortal(true);
     try {
@@ -93,7 +99,7 @@ export function BillingSection({ roleName, hasActiveSubscription }: BillingSecti
           >
             <CreditCard className="mr-2 h-4 w-4" /> View Plans & Upgrade
           </Button>
-          {hasActiveSubscription && (
+          {hasActiveSubscription && canUseStripe && (
             <Button
               variant="outline"
               className="w-full sm:w-auto"
@@ -103,6 +109,11 @@ export function BillingSection({ roleName, hasActiveSubscription }: BillingSecti
               {isLoadingPortal ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Manage Subscription
             </Button>
+          )}
+          {hasActiveSubscription && !canUseStripe && (
+            <p className="text-sm text-muted-foreground italic self-center">
+              Manage via Apple ID Settings
+            </p>
           )}
         </div>
       </CardContent>

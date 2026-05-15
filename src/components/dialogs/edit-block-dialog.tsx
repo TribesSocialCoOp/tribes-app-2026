@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
 
 interface EditBlockDialogProps {
   isOpen: boolean;
@@ -30,6 +31,7 @@ export function EditBlockDialog({
 }: EditBlockDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const [content, setContent] = useState<any>({});
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     if (block) {
@@ -45,7 +47,11 @@ export function EditBlockDialog({
   };
 
   const handleDelete = () => {
-    if (onDelete && window.confirm("Are you sure you want to delete this block?")) {
+    setIsDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = () => {
+    if (onDelete) {
       onDelete(block.id);
       onOpenChange(false);
     }
@@ -110,53 +116,75 @@ export function EditBlockDialog({
 
   if (isDesktop) {
     return (
-      <Dialog open={isOpen} onOpenChange={onOpenChange}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Block</DialogTitle>
-            <DialogDescription>
-              Update the content for this block.
-            </DialogDescription>
-          </DialogHeader>
-          {formContent}
-          <DialogFooter className="flex justify-between items-center w-full">
-            <div className="flex-1">
-              {onDelete && (
-                <Button variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleDelete}>
-                  Delete Block
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button onClick={handleSave}>Save</Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <>
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Block</DialogTitle>
+              <DialogDescription>
+                Update the content for this block.
+              </DialogDescription>
+            </DialogHeader>
+            {formContent}
+            <DialogFooter className="flex justify-between items-center w-full">
+              <div className="flex-1">
+                {onDelete && (
+                  <Button variant="ghost" className="text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleDelete}>
+                    Delete Block
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                <Button onClick={handleSave}>Save</Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <ConfirmActionDialog
+          open={isDeleteDialogOpen}
+          onOpenChange={setIsDeleteDialogOpen}
+          title="Delete Block"
+          description="Are you sure you want to delete this block? This action cannot be undone."
+          confirmText="Delete"
+          destructive={true}
+          onConfirm={confirmDelete}
+        />
+      </>
     );
   }
 
   return (
-    <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-[10px] sm:max-w-md">
-        <SheetHeader className="text-left">
-          <SheetTitle>Edit Block</SheetTitle>
-          <SheetDescription>
-            Update the content for this block.
-          </SheetDescription>
-        </SheetHeader>
-        {formContent}
-        <SheetFooter className="mt-4 flex flex-col gap-2">
-          <Button onClick={handleSave}>Save Changes</Button>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          {onDelete && (
-            <Button variant="ghost" className="text-destructive mt-2 hover:bg-destructive/10 hover:text-destructive" onClick={handleDelete}>
-              Delete Block
-            </Button>
-          )}
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+    <>
+      <Sheet open={isOpen} onOpenChange={onOpenChange}>
+        <SheetContent side="bottom" className="rounded-t-[10px] sm:max-w-md">
+          <SheetHeader className="text-left">
+            <SheetTitle>Edit Block</SheetTitle>
+            <SheetDescription>
+              Update the content for this block.
+            </SheetDescription>
+          </SheetHeader>
+          {formContent}
+          <SheetFooter className="mt-4 flex flex-col gap-2">
+            <Button onClick={handleSave}>Save Changes</Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            {onDelete && (
+              <Button variant="ghost" className="text-destructive mt-2 hover:bg-destructive/10 hover:text-destructive" onClick={handleDelete}>
+                Delete Block
+              </Button>
+            )}
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+      <ConfirmActionDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Block"
+        description="Are you sure you want to delete this block? This action cannot be undone."
+        confirmText="Delete"
+        destructive={true}
+        onConfirm={confirmDelete}
+      />
+    </>
   );
 }

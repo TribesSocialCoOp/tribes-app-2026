@@ -7,11 +7,14 @@ import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit3, MessageSquareText, CalendarDays, MapPin } from "lucide-react";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Edit3, MessageSquareText, CalendarDays, MapPin, LockKeyhole } from "lucide-react";
+import { LoadMoreButton } from "@/components/ui/load-more-button";
 import type { Event, TribePost } from '@/lib/types';
 import { TribePostCard } from './tribe-post-card';
 import { useTribeDetail } from './tribe-detail-context';
 import { ComposeBox } from '@/components/compose/compose-box';
+import { useScrollToPost } from '@/hooks/use-scroll-to-post';
 
 // ─── EventHighlightCard ──────────────────────────────────────────────────────
 
@@ -54,7 +57,7 @@ type FeedItem =
 // ─── TribeFeedSection ────────────────────────────────────────────────────────
 
 export function TribeFeedSection() {
-  const { state, dispatch, isLoggedIn, currentUserId, syncAllData } = useTribeDetail();
+  const { state, dispatch, isLoggedIn, currentUserId, syncAllData, hasTribeKey, isTribeAdmin, hasMorePosts, isLoadingMorePosts, loadMorePosts } = useTribeDetail();
   const { tribe, posts, events, isMember, promotedPostIds, reportedPostIds } = state;
 
   const combinedFeedItems = useMemo(() => {
@@ -89,6 +92,9 @@ export function TribeFeedSection() {
     return allItems;
   }, [tribe, events, posts, isMember, promotedPostIds, reportedPostIds, currentUserId]);
 
+  // Deep-link: scroll to a specific post when ?postId=<id> or ?post=<id> is present
+  useScrollToPost([combinedFeedItems.length]);
+
   if (!tribe) return null;
 
   return (
@@ -98,6 +104,16 @@ export function TribeFeedSection() {
           {(isMember || tribe?.isPublic) ? "Feed" : "Featured Posts in Mood Streams"}
         </h2>
       </div>
+
+      {isMember && !tribe.isPublic && hasTribeKey === false && !isTribeAdmin && (
+        <Alert variant="default" className="bg-amber-500/10 border-amber-500/50 text-amber-600 dark:text-amber-400 mb-6">
+          <LockKeyhole className="h-5 w-5 !text-amber-500" />
+          <AlertTitle className="font-semibold text-amber-700 dark:text-amber-500">Cryptographic Sync Pending</AlertTitle>
+          <AlertDescription className="text-sm mt-1 leading-relaxed">
+            You have joined this tribe, but your device is waiting to receive the encryption keys. Posts will remain locked until a tribe admin comes online to securely distribute the keys.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {isMember && isLoggedIn && (
         <div className="mb-6">
@@ -138,6 +154,16 @@ export function TribeFeedSection() {
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {/* Pagination: Load More */}
+      {combinedFeedItems.length > 0 && (
+        <LoadMoreButton
+          onClick={loadMorePosts}
+          isLoading={isLoadingMorePosts}
+          hasMore={hasMorePosts}
+          loadedCount={state.posts.length}
+        />
       )}
     </section>
   );

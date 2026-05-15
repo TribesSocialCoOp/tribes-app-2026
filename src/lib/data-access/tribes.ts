@@ -144,7 +144,14 @@ export async function findTribeByName(name: string, viewerUserId?: string | null
 export async function getTribeBySlug(slug: string, viewerUserId?: string | null): Promise<Tribe | null> {
   const rows = await db.select().from(tribes).where(eq(tribes.slug, slug)).limit(1);
   const row = rows[0];
-  if (!row) return null;
+  if (!row) {
+    // Check for a redirect from an old slug (e.g. after a solo-founder rename)
+    const { resolveSlugRedirect } = await import('@/lib/slugify');
+    const currentSlug = await resolveSlugRedirect(slug);
+    if (!currentSlug) return null;
+    // Recursive call with the resolved current slug
+    return getTribeBySlug(currentSlug, viewerUserId);
+  }
 
   // Access control: private tribes are invisible to non-members
   if (!row.isPublic) {

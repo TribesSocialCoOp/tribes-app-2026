@@ -72,6 +72,59 @@ if [ ! -f "out/index.html" ]; then
     echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=https://tribes.app"></head><body>Loading Tribes...</body></html>' > out/index.html
 fi
 
+# Generate the offline error screen
+cat > out/error.html << 'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>No Connection</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0a0a0a;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+        }
+        .container { padding: 2rem; }
+        h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        p { font-size: 1rem; color: #a1a1aa; margin-bottom: 2rem; line-height: 1.5; }
+        button {
+            background-color: #007aff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+        }
+        button:active { background-color: #0056b3; }
+        svg { width: 64px; height: 64px; margin-bottom: 1.5rem; color: #007aff; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0119 12.55M5 12.55a10.94 10.94 0 015.17-2.39M10.71 5.05A16 16 0 0122.58 9M1.42 9a15.91 15.91 0 014.7-2.88M8.53 16.11a6 6 0 016.95 0M12 20h.01"/>
+        </svg>
+        <h1>You are offline</h1>
+        <p>Tribes requires an internet connection to securely load your encrypted communications.</p>
+        <button onclick="window.location.href = 'https://tribes.app'">Try Again</button>
+    </div>
+</body>
+</html>
+EOF
+
 npx cap sync ios
 echo -e "   ${GREEN}✅ Capacitor synced${NC}"
 
@@ -79,8 +132,17 @@ echo -e "   ${GREEN}✅ Capacitor synced${NC}"
 echo ""
 echo "=== Step 2: Version Patch ==="
 VERSION=$(node -e "console.log(require('./package.json').version)")
-# Auto-increment build number based on git commit count (like Hobbes does with Cargo.toml)
-BUILD_NUMBER=$(git rev-list --count HEAD 2>/dev/null || echo "1")
+# Build number = max(git commit count, stored floor + 1)
+# The floor file prevents regressions when git history is squashed/rebased.
+GIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "1")
+FLOOR_FILE=".ios-build-floor"
+FLOOR=$(cat "$FLOOR_FILE" 2>/dev/null || echo "0")
+if [ "$GIT_COUNT" -gt "$FLOOR" ]; then
+    BUILD_NUMBER="$GIT_COUNT"
+else
+    BUILD_NUMBER=$((FLOOR + 1))
+fi
+echo "$BUILD_NUMBER" > "$FLOOR_FILE"
 
 echo "   Version: $VERSION (build $BUILD_NUMBER)"
 
@@ -188,16 +250,22 @@ xcodebuild -exportArchive \
     -exportPath "$IPA_DIR" \
     -exportOptionsPlist "$EXPORT_PLIST" \
     -allowProvisioningUpdates \
-    2>&1 | tail -5
+    2>&1 | tail -10
+
+EXPORT_EXIT=${PIPESTATUS[0]}
 
 IPA_FILE=$(find "$IPA_DIR" -name "*.ipa" -type f | head -1)
-if [ -z "$IPA_FILE" ]; then
+if [ -n "$IPA_FILE" ]; then
+    echo -e "   ${GREEN}✅ IPA exported: $IPA_FILE${NC}"
+elif [ $EXPORT_EXIT -eq 0 ]; then
+    # destination=upload mode: no local IPA, but upload succeeded
+    echo -e "   ${GREEN}✅ Build uploaded directly to App Store Connect${NC}"
+    IPA_FILE="(uploaded directly)"
+else
     echo -e "${RED}❌ IPA export failed${NC}"
     echo "   Check the archive in Xcode: open $ARCHIVE_PATH"
     exit 1
 fi
-
-echo -e "   ${GREEN}✅ IPA exported: $IPA_FILE${NC}"
 
 # ── Step 5: Verification ────────────────────────────────────────────────────
 echo ""

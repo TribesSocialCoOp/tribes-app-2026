@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -9,11 +9,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageSquareText, Smile, Filter as FilterIcon, Settings2, Loader2, Send, Megaphone } from 'lucide-react';
+import { LoadMoreButton } from '@/components/ui/load-more-button';
 import { moodsData } from '@/lib/moods-data'; 
 import { cn } from '@/lib/utils';
 import { useTimeSince } from '@/hooks/use-time-since';
@@ -22,18 +22,33 @@ import { getMoodStreamPosts, toggleVibe, createComment, getCommentsForPost } fro
 import { useUser } from '@/hooks/use-user';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { VIBE_EMOTICONS } from '@/lib/constants';
+import { VibePicker } from '@/components/ui/vibe-picker';
 
 const CommentInline: React.FC<{ comment: DiscussionComment; level?: number }> = ({ comment, level = 0 }) => (
   <div className={level > 0 ? 'ml-6 border-l-2 pl-3' : ''}>
     <div className="flex items-start gap-2">
-      <Avatar className="h-6 w-6 mt-0.5">
-        {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />}
-        <AvatarFallback className="text-[10px]">{comment.authorAvatarFallback}</AvatarFallback>
-      </Avatar>
+      {!comment.authorIsAlias ? (
+        <Link href={`/profile/${comment.authorId}`}>
+          <Avatar className="h-6 w-6 mt-0.5 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all">
+            {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />}
+            <AvatarFallback className="text-[10px]">{comment.authorAvatarFallback}</AvatarFallback>
+          </Avatar>
+        </Link>
+      ) : (
+        <Avatar className="h-6 w-6 mt-0.5">
+          {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />}
+          <AvatarFallback className="text-[10px]">{comment.authorAvatarFallback}</AvatarFallback>
+        </Avatar>
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
-          <span className="text-xs font-semibold">{comment.authorName}</span>
+          {!comment.authorIsAlias ? (
+            <Link href={`/profile/${comment.authorId}`} className="hover:underline decoration-primary/30 underline-offset-2">
+              <span className="text-xs font-semibold">{comment.authorName}</span>
+            </Link>
+          ) : (
+            <span className="text-xs font-semibold">{comment.authorName}</span>
+          )}
           <span className="text-[10px] text-muted-foreground">{format(comment.timestamp, 'MMM d, h:mm a')}</span>
         </div>
         <p className="text-sm text-foreground whitespace-pre-line">{comment.content}</p>
@@ -66,7 +81,8 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
   const [loadedComments, setLoadedComments] = useState<DiscussionComment[]>([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [commentCount, setCommentCount] = useState(post.comments ?? 0);
-  const emoticons = VIBE_EMOTICONS;
+
+  const replyRef = useRef<HTMLDivElement>(null);
 
   const currentVibesCount = localVibesCount !== null ? localVibesCount : (post.vibes || 0);
   const currentRecentVibes = localRecentVibes !== null ? localRecentVibes : (post.recentVibes || []);
@@ -182,37 +198,12 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
         <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start space-x-4 border-t">
           {post.vibes !== undefined && (
             isLoggedIn ? (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" className={cn("text-muted-foreground hover:text-primary transition-all", currentUserHasVibed && "bg-primary/10 text-primary")}>
-                    {currentRecentVibes.length > 0 ? (
-                      <div className="flex -space-x-1.5 mr-2">
-                        {currentRecentVibes.map((rv, i) => (
-                          <span key={i} className="text-base z-10 bg-background rounded-full leading-none p-[1px] shadow-sm relative">{rv.emoji}</span>
-                        ))}
-                      </div>
-                    ) : (
-                      <Smile className="mr-1.5 h-4 w-4" />
-                    )}
-                    {currentVibesCount}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-2">
-                  <div className="flex space-x-1">
-                    {emoticons.map((emo) => (
-                      <Button 
-                        key={emo} 
-                        variant="ghost" 
-                        size="icon" 
-                        className="text-xl p-1.5 h-auto w-auto rounded-md hover:bg-accent"
-                        onClick={() => handleVibeSelection(emo)}
-                      >
-                        {emo}
-                      </Button>
-                    ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
+              <VibePicker
+                vibeCount={currentVibesCount}
+                recentVibes={currentRecentVibes}
+                hasVibed={currentUserHasVibed}
+                onVibeSelect={handleVibeSelection}
+              />
             ) : (
                 <Button 
                   variant="ghost" 
@@ -273,7 +264,7 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
         </div>
       )}
       {showReply && (
-        <div className="px-3 sm:px-4 pb-3 sm:pb-4 flex gap-2">
+        <div ref={replyRef} className="px-3 sm:px-4 pb-3 sm:pb-4 flex gap-2">
           <Input
             placeholder="Write a reply..."
             value={replyText}
@@ -281,6 +272,11 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendReply()}
             className="text-sm"
             autoFocus
+            onFocus={() => {
+              setTimeout(() => {
+                replyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 350);
+            }}
           />
           <Button
             size="icon"
@@ -305,17 +301,35 @@ export default function MoodStreamPage() {
 
   const [allPosts, setAllPosts] = useState<MoodStreamPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
+  const [postsCursor, setPostsCursor] = useState<string | null>(null);
   const [selectedMoodSlugs, setSelectedMoodSlugs] = useState<string[]>(moodSlugFromUrl ? [moodSlugFromUrl] : []);
 
   useEffect(() => {
     const fetchData = async () => {
         setIsLoading(true);
-        const posts = await getMoodStreamPosts();
-        setAllPosts(posts);
+        const result = await getMoodStreamPosts();
+        setAllPosts(result.items);
+        setHasMorePosts(result.nextCursor !== null);
+        setPostsCursor(result.nextCursor);
         setIsLoading(false);
     };
     fetchData();
   }, []);
+
+  const loadMorePosts = useCallback(async () => {
+    if (!hasMorePosts || isLoadingMore || !postsCursor) return;
+    setIsLoadingMore(true);
+    try {
+      const result = await getMoodStreamPosts({ cursor: postsCursor });
+      setAllPosts(prev => [...prev, ...result.items]);
+      setHasMorePosts(result.nextCursor !== null);
+      setPostsCursor(result.nextCursor);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [hasMorePosts, isLoadingMore, postsCursor]);
 
   useEffect(() => {
     if (moodSlugFromUrl && (selectedMoodSlugs.length !== 1 || selectedMoodSlugs[0] !== moodSlugFromUrl)) {
@@ -379,6 +393,12 @@ export default function MoodStreamPage() {
           {filteredPosts.map(post => (
             <MoodStreamPostCard key={post.id} post={post} />
           ))}
+          <LoadMoreButton
+            onClick={loadMorePosts}
+            isLoading={isLoadingMore}
+            hasMore={hasMorePosts}
+            loadedCount={allPosts.length}
+          />
         </div>
       ) : (
         <Card className="text-center py-12 shadow-none sm:shadow-lg">

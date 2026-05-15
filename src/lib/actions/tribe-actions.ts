@@ -119,7 +119,10 @@ export async function updateTribeSettings(tribeId: string, payload: Parameters<t
   return fn(tribeId, payload);
 }
 
-export async function getTribeMembers(tribeId: string): Promise<TribeMember[]> {
+export async function getTribeMembers(
+  tribeId: string,
+  options?: { page?: number; limit?: number },
+): Promise<TribeMember[]> {
   // Gate private tribe member lists: non-members can't see who's in a private tribe
   const { getTribeById: fetchTribe } = await import('@/lib/data-access/tribes');
   const tribe = await fetchTribe(tribeId);
@@ -131,6 +134,11 @@ export async function getTribeMembers(tribeId: string): Promise<TribeMember[]> {
     if (access === 'guest') return []; // Non-members can't see private tribe members
   }
   const { getTribeMembers: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId, options);
+}
+
+export async function getTribeMemberCount(tribeId: string): Promise<number> {
+  const { getTribeMemberCount: fn } = await import('@/lib/services/tribe-service');
   return fn(tribeId);
 }
 
@@ -175,6 +183,28 @@ export async function denyJoinRequest(tribeId: string, pendingMemberId: string):
   return fn(tribeId, pendingMemberId);
 }
 
+export async function bulkApproveJoinRequests(
+  tribeId: string,
+  pendingMemberIds: string[],
+): Promise<{ approved: number; failed: Array<{ id: string; reason: string }> }> {
+  const userId = await requireAuth();
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
+  const { bulkApproveJoinRequests: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId, pendingMemberIds);
+}
+
+export async function bulkDenyJoinRequests(
+  tribeId: string,
+  pendingMemberIds: string[],
+): Promise<{ denied: number }> {
+  const userId = await requireAuth();
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
+  const { bulkDenyJoinRequests: fn } = await import('@/lib/services/tribe-service');
+  return fn(tribeId, pendingMemberIds);
+}
+
 export async function leaveTribe(tribeId: string): Promise<void> {
   const userId = await requireAuth();
   const { leaveTribe: fn } = await import('@/lib/services/tribe-service');
@@ -189,10 +219,17 @@ export async function deleteTribe(tribeId: string): Promise<void> {
   return fn(userId, tribeId);
 }
 
-export async function requestToJoinTribe(tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected'> {
+export async function requestToJoinTribe(tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending'> {
   const userId = await requireAuth();
   const { requestToJoinTribe: fn } = await import('@/lib/services/tribe-service');
   return fn(userId, tribeId, aliasName, aliasAvatar);
+}
+
+export async function checkPendingMembership(tribeId: string): Promise<boolean> {
+  const userId = await getCurrentUserId();
+  if (!userId) return false;
+  const { checkPendingMembership: fn } = await import('@/lib/services/tribe-service');
+  return fn(userId, tribeId);
 }
 
 export async function updateTribeMemberIdentity(tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<void> {
@@ -275,11 +312,10 @@ export async function issueTribeKeyGrant(
   recipientId: string,
   wrappedKey: string,
   wrapIv: string,
-  bondId?: string,
 ): Promise<void> {
   const userId = await requireAuth();
   const { createTribeKeyGrant } = await import('@/lib/services/tribe-key-service');
-  return createTribeKeyGrant(tribeKeyId, recipientId, wrappedKey, wrapIv, userId, bondId);
+  return createTribeKeyGrant(tribeKeyId, recipientId, wrappedKey, wrapIv, userId);
 }
 
 /**
@@ -317,4 +353,26 @@ export async function rotateTribeGroupKey(tribeId: string): Promise<string> {
   await requireTribeFounder(userId, tribeId);
   const { rotateTribeKey } = await import('@/lib/services/tribe-key-service');
   return rotateTribeKey(tribeId, userId);
+}
+
+/**
+ * Deletes a stale tribe key grant belonging to the current user.
+ * Called by the KeySyncProvider when RSA unwrapping fails (OperationError),
+ * indicating the grant was wrapped with a previous identity key.
+ * This allows Phase C to re-issue a fresh grant with the user's current key.
+ *
+ * SECURITY: Only deletes grants where recipientId === current user.
+ */
+export async function deleteTribeKeyGrantForSelf(grantId: string): Promise<void> {
+  const userId = await requireAuth();
+  const { db } = await import('@/db');
+  const { tribeKeyGrants } = await import('@/db/schema');
+  const { eq, and } = await import('drizzle-orm');
+
+  // Only allow deletion of the user's own grants
+  await db.delete(tribeKeyGrants)
+    .where(and(
+      eq(tribeKeyGrants.id, grantId),
+      eq(tribeKeyGrants.recipientId, userId),
+    ));
 }

@@ -9,6 +9,7 @@ import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { CreatePostDialog } from '@/components/dialogs/create-post-dialog';
 import { JoinTribeDialog } from '@/components/dialogs/join-tribe-dialog';
 import { EditPostDialog } from '@/components/dialogs/edit-post-dialog';
+import { ModRemovalDialog } from '@/components/dialogs/mod-removal-dialog';
 import { useTribeDetail } from './tribe-detail-context';
 
 export function TribeDialogOrchestrator() {
@@ -17,10 +18,11 @@ export function TribeDialogOrchestrator() {
     handleConfirmPromotion, handleConfirmReportPost,
     handleConfirmReportComment, handleConfirmRepost,
     handleConfirmComment, handleCreatePost, handleConfirmJoinTribe,
+    handleConfirmModRemove,
     syncAllData,
   } = useTribeDetail();
 
-  const { tribe, promoteDialog, reportPostDialog, reportCommentDialog, repostDialog, editPostDialog, commentDialog, createPostDialog, joinTribeDialog, reportReason, isJoining } = state;
+  const { tribe, promoteDialog, reportPostDialog, reportCommentDialog, repostDialog, editPostDialog, modRemoveDialog, commentDialog, createPostDialog, joinTribeDialog, reportReason, isJoining } = state;
 
   return (
     <>
@@ -86,6 +88,14 @@ export function TribeDialogOrchestrator() {
         post={editPostDialog.target}
         onSuccess={syncAllData}
       />
+      {modRemoveDialog.target && (
+        <ModRemovalDialog
+          open={modRemoveDialog.open}
+          onOpenChange={(open) => !open && dispatch({ type: 'CLOSE_MOD_REMOVE' })}
+          onConfirm={handleConfirmModRemove}
+          postTitle={modRemoveDialog.target.title || undefined}
+        />
+      )}
     </>
   );
 }

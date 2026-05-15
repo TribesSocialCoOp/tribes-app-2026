@@ -7,10 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ArrowLeft, Users, Link2, UserPlus, Settings, MoreVertical, LogOut, Share2, Loader2 } from "lucide-react";
+  ResponsiveMenu,
+  ResponsiveMenuContent,
+  ResponsiveMenuItem,
+  ResponsiveMenuSeparator,
+  ResponsiveMenuTrigger,
+} from "@/components/ui/responsive-menu";
+import { ArrowLeft, Users, Link2, UserPlus, Settings, MoreVertical, LogOut, Share2, Loader2, Clock } from "lucide-react";
 import { moodsData } from '@/lib/moods-data';
 import { useTribeDetail } from './tribe-detail-context';
 import { VerifiedBadge } from '@/components/ui/verified-badge';
@@ -92,34 +95,34 @@ export function TribeHeroBanner() {
         </div>
         {isMember && (
           <div className="absolute top-4 right-4 z-10">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <ResponsiveMenu>
+              <ResponsiveMenuTrigger asChild>
                 <Button variant="outline" size="icon" className="bg-background/70 hover:bg-background/90 backdrop-blur-sm">
                   <MoreVertical className="h-5 w-5" />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={handleShareTribe} disabled={isGeneratingShare}>
+              </ResponsiveMenuTrigger>
+              <ResponsiveMenuContent align="end">
+                <ResponsiveMenuItem onClick={handleShareTribe} disabled={isGeneratingShare}>
                   {isGeneratingShare ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
                   Share Tribe
-                </DropdownMenuItem>
+                </ResponsiveMenuItem>
                 {isTribeAdmin && (
                   <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => router.push(`/t/${state.tribe?.slug || tribeId}/settings`)}>
+                    <ResponsiveMenuSeparator />
+                    <ResponsiveMenuItem onClick={() => router.push(`/t/${state.tribe?.slug || tribeId}/settings`)}>
                       <Settings className="mr-2 h-4 w-4" /> Tribe Settings
-                    </DropdownMenuItem>
+                    </ResponsiveMenuItem>
                   </>
                 )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
+                <ResponsiveMenuSeparator />
+                <ResponsiveMenuItem
                   className="text-destructive focus:text-destructive"
                   onClick={handleLeaveTribe}
                 >
                   <LogOut className="mr-2 h-4 w-4" /> Leave Tribe
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </ResponsiveMenuItem>
+              </ResponsiveMenuContent>
+            </ResponsiveMenu>
           </div>
         )}
         <div className="relative h-48 md:h-64 w-full">
@@ -180,13 +183,27 @@ export function TribeHeroBanner() {
           )}
           {!isMember && tribe.isPublic && (
             <div className="mt-4 pt-4 border-t">
-              <Button onClick={handleInitiateJoinTribe} disabled={isJoining}>
-                <UserPlus className="mr-2 h-4 w-4" />
-                {isJoining ? 'Joining...' : 'Join Tribe'}
-              </Button>
-              <p className="text-xs text-muted-foreground mt-2">
-                {tribe.joinMechanism === 'approval' ? 'Your request will be sent to the tribe admins for approval.' : 'You can join this tribe immediately.'}
-              </p>
+              {state.isPending ? (
+                <>
+                  <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                    <Clock className="h-5 w-5" />
+                    <span className="font-semibold">Join Request Pending</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Your request to join {tribe.name} is being reviewed by the tribe admins. You'll be notified when they respond.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <Button onClick={handleInitiateJoinTribe} disabled={isJoining}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    {isJoining ? 'Joining...' : 'Join Tribe'}
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {tribe.joinMechanism === 'approval' ? 'Your request will be sent to the tribe admins for approval.' : 'You can join this tribe immediately.'}
+                  </p>
+                </>
+              )}
             </div>
           )}
         </CardContent>

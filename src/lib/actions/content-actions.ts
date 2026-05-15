@@ -2,9 +2,10 @@
 
 import { requireAuth, requireVerifiedEmail, getCurrentUserId, trackContribution } from './shared';
 import { withPublicErrors } from './error-utils';
-import type { TribePost, MoodStreamPost, ReportedPost, Tribe, StoryTopic, SourceArticle, DiscussionComment, Ring, CommunicationItem } from '@/lib/types';
+import type { TribePost, MoodStreamPost, ReportedPost, Tribe, StoryTopic, SourceArticle, DiscussionComment, Ring, CommunicationItem, PaginatedResult } from '@/lib/types';
 import type { PostFormValues } from '@/components/dialogs/create-post-dialog';
 import { postLimiter, commentLimiter, rsvpLimiter } from '@/lib/auth/rate-limit';
+import { slugify } from '@/lib/utils/slugify';
 
 /**
  * Server action: Fetch the unified feed with ring + mood filtering.
@@ -30,14 +31,257 @@ export async function togglePinToWall(postId: string): Promise<{ pinned: boolean
   const { posts } = await import('@/db/schema');
   const { eq, and } = await import('drizzle-orm');
 
-  const [post] = await db.select({ pinnedToWall: posts.pinnedToWall, authorId: posts.authorId })
+  const [post] = await db.select({ 
+    pinnedToWall: posts.pinnedToWall, 
+    authorId: posts.authorId,
+    isEncrypted: posts.isEncrypted
+  })
     .from(posts).where(eq(posts.id, postId)).limit(1);
   if (!post) throw new Error('Post not found');
   if (post.authorId !== userId) throw new Error('Not authorized');
 
+  // Guard: Encrypted posts cannot be directly pinned to the public wall.
+  // They must go through the clone-to-wall workflow.
+  if (post.isEncrypted) {
+    throw new Error('Encrypted posts cannot be directly pinned. Please use the clone-to-wall workflow.');
+  }
+
   const newPinned = !post.pinnedToWall;
   await db.update(posts).set({ pinnedToWall: newPinned }).where(eq(posts.id, postId));
   return { pinned: newPinned };
+}
+
+/**
+ * Server action: Create a plaintext clone of an encrypted post for the public wall.
+ */
+export async function pinEncryptedPostToWall(
+  postId: string, 
+  plaintextContent: string, 
+  plaintextTitle?: string
+): Promise<TribePost> {
+  const userId = await requireAuth();
+  const { db } = await import('@/db');
+  const { posts } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const { rowToTribePost } = await import('@/lib/mappers/post-mapper');
+
+  // 1. Fetch source post to verify authorship and encryption status
+  const [sourcePost] = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
+  if (!sourcePost) throw new Error('Source post not found');
+  if (sourcePost.authorId !== userId) throw new Error('Not authorized');
+  if (!sourcePost.isEncrypted) throw new Error('Post is not encrypted');
+
+  // 2. Guard against duplicate clones
+  const { and } = await import('drizzle-orm');
+  const [existingClone] = await db.select({ id: posts.id })
+    .from(posts)
+    .where(and(eq(posts.originalPostId, postId), eq(posts.authorId, userId), eq(posts.pinnedToWall, true)))
+    .limit(1);
+  if (existingClone) throw new Error('This post has already been cloned to your wall');
+
+  // 3. Create the standalone plaintext clone
+  const cloneId = crypto.randomUUID();
+  await db.insert(posts).values({
+    id: cloneId,
+    authorId: userId,
+    authorName: sourcePost.authorName,
+    authorAvatar: sourcePost.authorAvatar,
+    authorAvatarFallback: sourcePost.authorAvatarFallback,
+    content: plaintextContent,
+    title: plaintextTitle || sourcePost.title || null,
+    ring: 'journal', // Wall clones live in the journal ring
+    pinnedToWall: true,
+    isEncrypted: false, // CLONE IS PLAINTEXT
+    originalPostId: postId, // Link back to source
+    moodTag: sourcePost.moodTag,
+    imageUrl: sourcePost.imageUrl,
+    imageUrls: sourcePost.imageUrls,
+    createdAt: new Date(),
+  });
+
+  const [created] = await db.select().from(posts).where(eq(posts.id, cloneId)).limit(1);
+  return rowToTribePost(created!);
+}
+
+/**
+ * Server action: Delete a wall clone (effectively unpinning it).
+ */
+export async function unpinWallClone(wallPostId: string): Promise<{ success: boolean }> {
+  const userId = await requireAuth();
+  const { db } = await import('@/db');
+  const { posts } = await import('@/db/schema');
+  const { eq, and } = await import('drizzle-orm');
+
+  const [post] = await db.select({ authorId: posts.authorId, originalPostId: posts.originalPostId })
+    .from(posts).where(eq(posts.id, wallPostId)).limit(1);
+  
+  if (!post) throw new Error('Clone not found');
+  if (post.authorId !== userId) throw new Error('Not authorized');
+  if (!post.originalPostId) throw new Error('This is not a wall clone');
+
+  await db.delete(posts).where(eq(posts.id, wallPostId));
+  return { success: true };
+}
+
+
+/**
+ * Server action: Get routing context for a post (for deep linking redirects).
+ * Returns tribe metadata if it's a tribe post, or ring context if it's a personal post.
+ */
+export async function getPostContext(postId: string): Promise<{
+  tribeId: string | null;
+  tribeSlug: string | null;
+  ring: string;
+  authorId: string;
+} | null> {
+  const { db } = await import('@/db');
+  const { posts, tribes } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+
+  const [row] = await db.select({
+    tribeId: posts.tribeId,
+    tribeSlug: tribes.slug,
+    ring: posts.ring,
+    authorId: posts.authorId,
+  })
+    .from(posts)
+    .leftJoin(tribes, eq(posts.tribeId, tribes.id))
+    .where(eq(posts.id, postId))
+    .limit(1);
+
+  if (!row) return null;
+
+  return {
+    tribeId: row.tribeId,
+    tribeSlug: row.tribeSlug,
+    ring: row.ring ?? 'tribes',
+    authorId: row.authorId,
+  };
+}
+
+/**
+ * Server action: Fetch a single post by ID with full context for the standalone post page.
+ * Returns the post, its tribe context, viewer membership, and author's role.
+ */
+export async function getPostById(postId: string): Promise<{
+  post: TribePost;
+  tribeName: string | null;
+  tribeSlug: string | null;
+  tribeId: string | null;
+  isPublic: boolean;
+  authorRole: 'founder' | 'speaker' | 'member';
+  viewerIsMember: boolean;
+} | null> {
+  const userId = await getCurrentUserId();
+  const { db } = await import('@/db');
+  const { posts, tribes, tribeMembers, vibes, comments } = await import('@/db/schema');
+  const { eq, and, inArray } = await import('drizzle-orm');
+  const { rowToTribePost } = await import('@/lib/mappers/post-mapper');
+
+  console.log(`[getPostById] Fetching post ${postId} for user ${userId}`);
+  const [row] = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
+  if (!row) {
+    console.warn(`[getPostById] Post ${postId} not found in database.`);
+    return null;
+  }
+  if (row.isRemoved) {
+    console.warn(`[getPostById] Post ${postId} is marked as removed.`);
+    return null;
+  }
+
+  // Fetch tribe context
+  let tribeName: string | null = null;
+  let tribeSlug: string | null = null;
+  let isPublic = true;
+  let viewerIsMember = false;
+  let authorRole: 'founder' | 'speaker' | 'member' = 'member';
+
+  if (row.tribeId) {
+    const [tribe] = await db.select({ name: tribes.name, slug: tribes.slug, isPublic: tribes.isPublic })
+      .from(tribes).where(eq(tribes.id, row.tribeId)).limit(1);
+    if (tribe) {
+      tribeName = tribe.name;
+      tribeSlug = tribe.slug;
+      isPublic = tribe.isPublic ?? true;
+    }
+
+    // Check viewer membership
+    if (userId) {
+      const [membership] = await db.select({ role: tribeMembers.role })
+        .from(tribeMembers)
+        .where(and(eq(tribeMembers.tribeId, row.tribeId), eq(tribeMembers.userId, userId)))
+        .limit(1);
+      viewerIsMember = !!membership;
+    }
+
+    // Security: private tribe posts are only visible to members
+    if (!isPublic && !viewerIsMember) {
+      console.warn(`[getPostById] Access denied to private post ${postId} in tribe ${row.tribeId} for user ${userId}`);
+      return null;
+    }
+
+    // Fetch author role
+    const [authorMember] = await db.select({ role: tribeMembers.role })
+      .from(tribeMembers)
+      .where(and(eq(tribeMembers.tribeId, row.tribeId), eq(tribeMembers.userId, row.authorId)))
+      .limit(1);
+    if (authorMember) authorRole = authorMember.role as 'founder' | 'speaker' | 'member';
+  }
+
+  // Fetch comments
+  const allComments = await db.select().from(comments)
+    .where(eq(comments.postId, postId))
+    .orderBy(comments.createdAt);
+
+  function buildTree(parentId: string | null): import('@/lib/types').DiscussionComment[] {
+    return allComments
+      .filter(c => c.parentCommentId === parentId)
+      .map(c => ({
+        id: c.id,
+        authorId: c.authorId,
+        authorName: c.authorName,
+        authorAvatar: c.authorAvatar ?? undefined,
+        authorAvatarFallback: c.authorAvatarFallback,
+        content: c.content,
+        vibes: c.vibeCount ?? 0,
+        timestamp: c.createdAt ?? new Date(),
+        replies: buildTree(c.id),
+        // E2E encryption fields
+        isEncrypted: c.isEncrypted ?? false,
+        ciphertextBase64: c.ciphertext
+          ? Buffer.from(c.ciphertext as Buffer).toString('base64')
+          : undefined,
+        encryptionIv: c.encryptionIv ?? undefined,
+      }));
+  }
+  const commentsData = buildTree(null);
+
+  // Fetch vibes
+  const allVibes = await db.select().from(vibes)
+    .where(and(eq(vibes.targetId, postId), eq(vibes.targetType, 'post')));
+  const hasVibed = userId ? allVibes.some(v => v.userId === userId) : false;
+  const emojiCounts = new Map<string, number>();
+  for (const v of allVibes) {
+    emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
+  }
+  const recentVibes = Array.from(emojiCounts.entries())
+    .map(([emoji, count]) => ({ emoji, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+
+  const post = rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined);
+  post.recentVibes = recentVibes;
+  post.hasVibed = hasVibed;
+
+  return {
+    post,
+    tribeName,
+    tribeSlug,
+    tribeId: row.tribeId,
+    isPublic,
+    authorRole,
+    viewerIsMember,
+  };
 }
 
 /** Structured payload for editing a post. */
@@ -71,6 +315,7 @@ export async function editPost(postId: string, payload: string | EditPostPayload
   const [post] = await db.select({
     authorId: posts.authorId,
     isEncrypted: posts.isEncrypted,
+    title: posts.title,
   }).from(posts).where(eq(posts.id, postId)).limit(1);
 
   if (!post) throw new Error('Post not found.');
@@ -87,6 +332,11 @@ export async function editPost(postId: string, payload: string | EditPostPayload
   if (data.imageUrl !== undefined) updateSet.imageUrl = data.imageUrl;
   if (data.imageUrls !== undefined) updateSet.imageUrls = data.imageUrls;
   if (data.moodTag !== undefined) updateSet.moodTag = data.moodTag;
+
+  // Regenerate slug when title or content changes
+  // Use the effective title (new if provided, otherwise existing)
+  const effectiveTitle = data.title !== undefined ? data.title : post.title;
+  updateSet.slug = slugify(effectiveTitle || data.content.substring(0, 60)) || null;
 
   // Update image alt text based on whether images are present
   if (data.imageUrl !== undefined || data.imageUrls !== undefined) {
@@ -143,7 +393,10 @@ export async function editEncryptedPost(
 
   // Apply unencrypted metadata updates if provided
   if (metadata) {
-    if (metadata.title !== undefined) updateSet.title = metadata.title;
+    if (metadata.title !== undefined) {
+      updateSet.title = metadata.title;
+      updateSet.slug = slugify(metadata.title || 'Encrypted post');
+    }
     if (metadata.imageUrl !== undefined) updateSet.imageUrl = metadata.imageUrl;
     if (metadata.imageUrls !== undefined) updateSet.imageUrls = metadata.imageUrls;
     if (metadata.moodTag !== undefined) updateSet.moodTag = metadata.moodTag;
@@ -183,10 +436,10 @@ export async function getPinnedWallPosts(targetUserId?: string): Promise<TribePo
 }
 
 /**
- * Server action: Get user's most recent mood tag (from their latest post with a mood).
+ * Server action: Get a user's most recent mood tag (from their latest post with a mood).
  */
-export async function getCurrentMood(): Promise<{ moodTag: string; postId: string } | null> {
-  const userId = await getCurrentUserId();
+export async function getCurrentMood(targetUserId?: string): Promise<{ moodTag: string; postId: string } | null> {
+  const userId = targetUserId ?? await getCurrentUserId();
   if (!userId) return null;
 
   const { db } = await import('@/db');
@@ -203,6 +456,7 @@ export async function getCurrentMood(): Promise<{ moodTag: string; postId: strin
   return { moodTag: row.moodTag, postId: row.id };
 }
 
+
 // ── Private helpers (DRY) ────────────────────────────────────
 
 /** Insert post key grants for encrypted posts. */
@@ -214,14 +468,18 @@ async function insertKeyGrants(
   const { db } = await import('@/db');
   const { postKeyGrants } = await import('@/db/schema');
   await db.insert(postKeyGrants).values(
-    keyGrants.map(kg => ({
-      id: `pkg-${postId}-${kg.recipientId}`,
-      postId,
-      recipientId: kg.recipientId,
-      bondId: kg.bondId ?? null,
-      wrappedKey: kg.wrappedKey,
-      wrapIv: kg.wrapIv,
-    }))
+    keyGrants.map(kg => {
+      const bId = (kg.bondId && kg.bondId.trim() !== '') ? kg.bondId : null;
+      return {
+        // Include bondId in the PK to ensure uniqueness if a recipient has multiple grants (e.g. self-grant + bond grant)
+        id: `pkg-${postId}-${kg.recipientId}-${bId || 'self'}`,
+        postId,
+        recipientId: kg.recipientId,
+        bondId: bId,
+        wrappedKey: kg.wrappedKey,
+        wrapIv: kg.wrapIv,
+      };
+    })
   );
 }
 
@@ -266,6 +524,15 @@ export interface CreateRingPostPayload {
       wrapIv: string;
     }>;
   };
+
+  // Link preview metadata (unfurled at compose time)
+  linkPreview?: {
+    url: string;
+    title?: string;
+    description?: string;
+    imageUrl?: string;
+    siteName?: string;
+  };
 }
 
 /**
@@ -302,11 +569,27 @@ export const createRingPost = withPublicErrors(async (payload: CreateRingPostPay
       throw new Error(`You can post to at most ${MAX_CROSS_POST_TRIBES} tribes at once.`);
     }
 
+    // SECURITY: Reject unencrypted posts to private tribes (defense-in-depth).
+    // The client-side ComposeBox should always encrypt for private tribes, but
+    // this guard blocks any API-level bypass (modified client, stale code, etc.).
+    const { tribes: tribesTable } = await import('@/db/schema');
+    const [targetTribe] = await db.select({ isPublic: tribesTable.isPublic })
+      .from(tribesTable).where(eq(tribesTable.id, payload.tribeIds[0]!)).limit(1);
+
+    if (targetTribe && !targetTribe.isPublic && !payload.encryption) {
+      throw new Error('Private tribe posts must be encrypted. Please reload and try again.');
+    }
+
     // Create the primary post in the first tribe
+    // SECURITY: Never pass plaintext title to the post creator for encrypted posts —
+    // it would leak into the slug (URL-visible metadata). Title is encrypted client-side.
     const { createTribePost: fn } = await import('@/lib/services/post-service');
     const primaryPost = await fn(payload.tribeIds[0]!, {
-      title: payload.title,
+      title: payload.encryption ? undefined : payload.title,
       content: payload.encryption ? '🔒 Encrypted post' : payload.content.trim(),
+      // Encrypted images are uploaded as encrypted blobs — the fileIds stored here
+      // are opaque identifiers that cannot be resolved without the decryption key.
+      // They MUST be persisted so the client can fetch and decrypt them.
       imageUrl: payload.imageUrl,
       imageUrls: payload.imageUrls,
     }, userId, {
@@ -323,6 +606,18 @@ export const createRingPost = withPublicErrors(async (payload: CreateRingPostPay
       updateData.ciphertext = Buffer.from(payload.encryption.ciphertextBase64, 'base64');
       updateData.isEncrypted = true;
       updateData.encryptionIv = payload.encryption.iv;
+      // SECURITY: Null out any slug that may have been generated from masked content.
+      // Encrypted posts must never have URL-visible metadata derived from plaintext.
+      updateData.slug = null;
+      updateData.title = null;
+    }
+    // Link preview metadata
+    if (payload.linkPreview) {
+      updateData.linkUrl = payload.linkPreview.url;
+      updateData.linkTitle = payload.linkPreview.title ?? null;
+      updateData.linkDescription = payload.linkPreview.description ?? null;
+      updateData.linkImage = payload.linkPreview.imageUrl ?? null;
+      updateData.linkSiteName = payload.linkPreview.siteName ?? null;
     }
     await db.update(posts).set(updateData).where(eq(posts.id, primaryPost.id));
 
@@ -353,7 +648,9 @@ export const createRingPost = withPublicErrors(async (payload: CreateRingPostPay
     authorName: payload.overrideName || authorName,
     authorAvatar: payload.overrideAvatar || author?.avatar || null,
     authorAvatarFallback: (payload.overrideName || authorName).substring(0, 2).toUpperCase() || '??',
-    title: payload.title || null,
+    // SECURITY: Encrypted posts must never have slugs — they would leak plaintext in the URL.
+    slug: isEncrypted ? null : (slugify(payload.title || payload.content.substring(0, 60)) || null),
+    title: isEncrypted ? null : (payload.title || null),
     content: isEncrypted ? '🔒 Encrypted post' : payload.content.trim(),
     imageUrl: payload.imageUrl || null,
     imageUrls: payload.imageUrls || null,
@@ -370,6 +667,12 @@ export const createRingPost = withPublicErrors(async (payload: CreateRingPostPay
     ciphertext: isEncrypted ? Buffer.from(payload.encryption!.ciphertextBase64, 'base64') : null,
     isEncrypted,
     encryptionIv: isEncrypted ? payload.encryption!.iv : null,
+    // Link preview metadata
+    linkUrl: payload.linkPreview?.url ?? null,
+    linkTitle: payload.linkPreview?.title ?? null,
+    linkDescription: payload.linkPreview?.description ?? null,
+    linkImage: payload.linkPreview?.imageUrl ?? null,
+    linkSiteName: payload.linkPreview?.siteName ?? null,
     createdAt: new Date(),
   });
 
@@ -498,6 +801,12 @@ export async function getPostKeyGrants(postIds: string[]): Promise<Record<string
  * Returns the list of encryption recipients for a given ring or tribe.
  * Each recipient includes their userId and bondId (for shared secret lookup).
  * Used by the compose box to encrypt posts for the correct audience.
+ *
+ * NOTE: The tribe branch of this function is no longer used by ComposeBox for
+ * the encrypt/skip decision. ComposeBox now checks `tribe.isPublic` directly
+ * to avoid the bug where a solo founder (no other members) would get an empty
+ * recipients list and skip encryption. The tribe branch is retained for
+ * potential future use (e.g. analytics, audit).
  */
 export async function getEncryptionRecipients(
   ring: 'inner_circle' | 'my_people' | 'tribes',
@@ -508,58 +817,11 @@ export async function getEncryptionRecipients(
   const { bonds, tribeMembers } = await import('@/db/schema');
   const { eq, and, ne, inArray } = await import('drizzle-orm');
 
-  if (ring === 'tribes' && tribeIds && tribeIds.length > 0) {
-    // Check if any selected tribes are private — only private tribes need encryption
-    const { tribes } = await import('@/db/schema');
-    const tribeRows = await db.select({ id: tribes.id, isPublic: tribes.isPublic })
-      .from(tribes).where(inArray(tribes.id, tribeIds));
-
-    const privateTribeIds = tribeRows.filter(t => !t.isPublic).map(t => t.id);
-    if (privateTribeIds.length === 0) {
-      // All selected tribes are public — no encryption needed
-      return [];
-    }
-
-    // For private tribe posts: all members of the private tribes (except the author)
-    const members = await db.select({
-      userId: tribeMembers.userId,
-    }).from(tribeMembers)
-      .where(and(
-        inArray(tribeMembers.tribeId, privateTribeIds),
-        ne(tribeMembers.userId, userId),
-      ));
-
-    const uniqueUserIds = [...new Set(members.map(m => m.userId))];
-
-    // Find the author's bonds with each member
-    const userBonds = await db.select({
-      id: bonds.id,
-      targetId: bonds.targetId,
-      bondType: bonds.bondType,
-      expiresAt: bonds.expiresAt,
-    }).from(bonds)
-      .where(and(
-        eq(bonds.userId, userId),
-        eq(bonds.targetType, 'user'),
-        inArray(bonds.targetId, uniqueUserIds),
-      ));
-
-    // Filter to active/fading bonds only
-    const { computePasskeyStatus } = await import('@/lib/crypto/passkey-lifecycle');
-    const activeBonds = userBonds.filter(b => {
-      if (!b.expiresAt) return true;
-      const status = computePasskeyStatus({ expiresAt: b.expiresAt }, b.bondType ?? 'person', 'user');
-      return status === 'active' || status === 'fading';
-    });
-
-    const bondMap = new Map(activeBonds.map(b => [b.targetId, b.id]));
-
-    return uniqueUserIds
-      .filter(uid => bondMap.has(uid))
-      .map(uid => ({
-        userId: uid,
-        bondId: bondMap.get(uid)!,
-      }));
+  if (ring === 'tribes') {
+    // The ComposeBox handles tribe encryption using getActiveTribeKey directly.
+    // This branch is no longer used for encryption distribution, but kept
+    // returning empty array to satisfy the type signature if mistakenly called.
+    return [];
   }
 
   // For inner_circle and my_people: use the user's bonds
@@ -684,7 +946,10 @@ export async function getCommentsForStory(storyId: string): Promise<DiscussionCo
 }
 
 // ======== POST SERVICE ========
-export async function getPostsForTribe(tribeId: string): Promise<TribePost[]> {
+export async function getPostsForTribe(
+  tribeId: string,
+  options?: { cursor?: string; limit?: number },
+): Promise<PaginatedResult<TribePost>> {
   const userId = await getCurrentUserId();
 
   // SECURITY: Gate private tribe content to members only
@@ -696,13 +961,15 @@ export async function getPostsForTribe(tribeId: string): Promise<TribePost[]> {
   }
 
   const { getPostsForTribe: fn } = await import('@/lib/services/post-service');
-  return fn(tribeId, userId ?? undefined);
+  return fn(tribeId, userId ?? undefined, options);
 }
 
-export async function getMoodStreamPosts(): Promise<MoodStreamPost[]> {
+export async function getMoodStreamPosts(
+  options?: { cursor?: string; limit?: number },
+): Promise<PaginatedResult<MoodStreamPost>> {
   const userId = await getCurrentUserId();
   const { getMoodStreamPosts: fn } = await import('@/lib/services/post-service');
-  return fn(userId ?? undefined);
+  return fn(userId ?? undefined, options);
 }
 
 export async function createTribePost(tribeId: string, payload: CreatePostPayload): Promise<TribePost> {
@@ -741,16 +1008,98 @@ export async function toggleVibe(targetId: string, targetType: 'post' | 'comment
 }
 
 // ======== COMMENTS ========
-export const createComment = withPublicErrors(async (postId: string, content: string, parentCommentId?: string) => {
+export const createComment = withPublicErrors(async (
+  postId: string,
+  content: string,
+  parentCommentId?: string,
+  encryptionPayload?: { ciphertextBase64: string; iv: string },
+) => {
   const userId = await requireVerifiedEmail();
   await commentLimiter.check(userId);
-  if (!content.trim()) throw new Error('Comment cannot be empty');
+  if (!content.trim() && !encryptionPayload) throw new Error('Comment cannot be empty');
+
+  // Server-side guard: reject unencrypted comments in private tribes
+  const { db } = await import('@/db');
+  const { posts: postsTable, tribes: tribesTable } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [postRow] = await db.select({ tribeId: postsTable.tribeId }).from(postsTable)
+    .where(eq(postsTable.id, postId)).limit(1);
+  if (postRow?.tribeId) {
+    const [tribe] = await db.select({ isPublic: tribesTable.isPublic }).from(tribesTable)
+      .where(eq(tribesTable.id, postRow.tribeId)).limit(1);
+    if (tribe && !tribe.isPublic && !encryptionPayload) {
+      throw new Error('Comments in private tribes must be encrypted.');
+    }
+  }
+
+  // Convert base64 ciphertext to Buffer for storage
+  let encryption: { ciphertext: Buffer; iv: string } | undefined;
+  if (encryptionPayload) {
+    encryption = {
+      ciphertext: Buffer.from(encryptionPayload.ciphertextBase64, 'base64'),
+      iv: encryptionPayload.iv,
+    };
+  }
+
   const { createComment: fn } = await import('@/lib/services/post-service');
-  const comment = await fn(postId, userId, content.trim(), parentCommentId);
+  const comment = await fn(postId, userId, content.trim(), parentCommentId, encryption);
   // Fire-and-forget contribution tracking (comment type, not post)
   trackContribution(userId, 'comment', comment.id, `Commented on post ${postId}`);
   return comment;
 });
+
+/**
+ * Server action: Backfill-encrypt a legacy plaintext comment.
+ * Called by the client when it detects an unencrypted comment in a private tribe.
+ * The client encrypts locally and sends the ciphertext to be stored.
+ */
+export async function backfillEncryptComment(
+  commentId: string,
+  ciphertextBase64: string,
+  iv: string,
+): Promise<void> {
+  await requireAuth();
+
+  const { db } = await import('@/db');
+  const { comments } = await import('@/db/schema');
+  const { eq, and } = await import('drizzle-orm');
+
+  // Only backfill comments that are NOT already encrypted
+  const [comment] = await db.select({ id: comments.id, isEncrypted: comments.isEncrypted })
+    .from(comments).where(and(eq(comments.id, commentId), eq(comments.isEncrypted, false))).limit(1);
+
+  if (!comment) return; // Already encrypted or doesn't exist — skip silently
+
+  const ciphertext = Buffer.from(ciphertextBase64, 'base64');
+
+  await db.update(comments).set({
+    ciphertext,
+    encryptionIv: iv,
+    isEncrypted: true,
+    content: '[encrypted]', // Redact plaintext
+  }).where(eq(comments.id, commentId));
+}
+
+/**
+ * Server action: Edit an existing comment (own comments only).
+ */
+export async function editComment(commentId: string, newContent: string): Promise<void> {
+  const userId = await requireAuth();
+  if (!newContent.trim()) throw new Error('Comment cannot be empty');
+
+  const { db } = await import('@/db');
+  const { comments } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+
+  const [comment] = await db.select({ authorId: comments.authorId })
+    .from(comments).where(eq(comments.id, commentId)).limit(1);
+  if (!comment) throw new Error('Comment not found');
+  if (comment.authorId !== userId) throw new Error('You can only edit your own comments');
+
+  await db.update(comments)
+    .set({ content: newContent.trim() })
+    .where(eq(comments.id, commentId));
+}
 
 export async function getCommentsForPost(postId: string) {
   const userId = await getCurrentUserId();
@@ -858,6 +1207,67 @@ export async function deleteOwnPost(postId: string): Promise<void> {
 }
 
 /**
+ * Admin-only: Permanently delete any post and cascade-delete all related data.
+ * Requires global Admin role. Associated media files are soft-deleted so they
+ * enter the 30-day GC pipeline (recoverable for non-encrypted content).
+ */
+export async function adminDeletePost(postId: string): Promise<void> {
+  const { requireAdmin } = await import('./shared');
+  await requireAdmin();
+
+  const { db } = await import('@/db');
+  const { posts, comments, vibes, reports, postKeyGrants, mediaFiles } = await import('@/db/schema');
+  const { eq, inArray } = await import('drizzle-orm');
+
+  // Verify the post exists
+  const [post] = await db.select({ id: posts.id, imageUrls: posts.imageUrls, imageUrl: posts.imageUrl })
+    .from(posts).where(eq(posts.id, postId)).limit(1);
+  if (!post) throw new Error('Post not found.');
+
+  // 1. Soft-delete associated media files (enters 30-day GC pipeline)
+  const allImageRefs = [
+    ...(post.imageUrls || []),
+    ...(post.imageUrl ? [post.imageUrl] : []),
+  ].filter(Boolean);
+
+  if (allImageRefs.length > 0) {
+    // File IDs (encrypted) or URLs (public) — soft-delete by matching fileId
+    for (const ref of allImageRefs) {
+      // Encrypted images use fileId directly; public images use URLs
+      // Try to match as fileId first
+      try {
+        await db.update(mediaFiles)
+          .set({ deletedAt: new Date() })
+          .where(eq(mediaFiles.id, ref));
+      } catch { /* best-effort — ref may be a URL, not a fileId */ }
+    }
+  }
+
+  // 2. Delete comment vibes (vibes targeting comments on this post)
+  const postComments = await db.select({ id: comments.id }).from(comments).where(eq(comments.postId, postId));
+  const commentIds = postComments.map(c => c.id);
+  if (commentIds.length > 0) {
+    await db.delete(vibes).where(inArray(vibes.targetId, commentIds));
+  }
+
+  // 3. Delete comments
+  await db.delete(comments).where(eq(comments.postId, postId));
+
+  // 4. Delete post vibes
+  await db.delete(vibes).where(eq(vibes.targetId, postId));
+
+  // 5. Delete reports
+  await db.delete(reports).where(eq(reports.postId, postId));
+
+  // 6. Delete key grants (encrypted posts)
+  await db.delete(postKeyGrants).where(eq(postKeyGrants.postId, postId));
+
+  // 7. Delete the post itself
+  await db.delete(posts).where(eq(posts.id, postId));
+}
+
+
+/**
  * Toggles the pinned status of a post in a tribe.
  * Requires Tribe Speaker or Founder permission.
  */
@@ -948,8 +1358,15 @@ export async function getActiveGlobalReports(): Promise<{ reports: ReportedPost[
 // ======== SEARCH ========
 export async function searchAll(query: string) {
   if (!query || query.trim().length < 2) return { tribes: [], events: [], users: [] };
+  // Get current user for block filtering (optional — unauthenticated users still get results)
+  let currentUserId: string | undefined;
+  try {
+    currentUserId = await requireAuth();
+  } catch {
+    // Not logged in — no block filtering
+  }
   const { searchAll: fn } = await import('@/lib/services/search-service');
-  return fn(query.trim());
+  return fn(query.trim(), 5, currentUserId);
 }
 
 // ======== MESSAGING ========
@@ -1116,6 +1533,23 @@ export async function getUnreadActivityCount() {
   return fn(userId);
 }
 
+export async function markActivityViewed() {
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+  const { markActivityViewed: fn } = await import('@/lib/services/notification-service');
+  await fn(userId);
+}
+
+/**
+ * Server action: Mark a single activity item as read (cross-device).
+ */
+export async function markSingleActivityRead(activityId: string) {
+  const userId = await getCurrentUserId();
+  if (!userId) return;
+  const { markSingleActivityRead: fn } = await import('@/lib/services/notification-service');
+  await fn(userId, activityId);
+}
+
 export async function getNotificationPreferences() {
   const userId = await getCurrentUserId();
   if (!userId) return null;
@@ -1226,4 +1660,65 @@ export async function hasPushSubscription() {
   if (!userId) return false;
   const { hasActivePushSubscription: fn } = await import('@/lib/services/push-service');
   return fn(userId);
+}
+
+/**
+ * Server action: Get post data for Open Graph previews.
+ * Returns post title, truncated content, and image if and ONLY if:
+ * 1. The post belongs to a public tribe.
+ * 2. The post is not encrypted.
+ */
+export async function getPostForOg(postId: string): Promise<{
+  title: string | null;
+  content: string;
+  imageUrl: string | null;
+  tribeName: string | null;
+  tribeSlug: string | null;
+  postSlug: string | null;
+} | null> {
+  const { db } = await import('@/db');
+  const { posts, tribes } = await import('@/db/schema');
+  const { eq, and } = await import('drizzle-orm');
+
+  const [row] = await db.select({
+    title: posts.title,
+    content: posts.content,
+    imageUrl: posts.imageUrl,
+    imageUrls: posts.imageUrls,
+    isEncrypted: posts.isEncrypted,
+    postSlug: posts.slug,
+    tribeName: tribes.name,
+    tribeSlug: tribes.slug,
+    isPublic: tribes.isPublic,
+  })
+    .from(posts)
+    .leftJoin(tribes, eq(posts.tribeId, tribes.id))
+    .where(eq(posts.id, postId))
+    .limit(1);
+
+  if (!row) return null;
+
+  // Security gate: only unfurl for public, non-encrypted content
+  if (!row.isPublic || row.isEncrypted) {
+    return {
+      title: null,
+      content: "A private post on Tribes.",
+      imageUrl: null,
+      tribeName: row.tribeName || "a private tribe",
+      tribeSlug: row.tribeSlug || null,
+      postSlug: row.postSlug || null,
+    };
+  }
+
+  // Determine the best image to show
+  const displayImage = row.imageUrl || (row.imageUrls && row.imageUrls.length > 0 ? row.imageUrls[0] : null);
+
+  return {
+    title: row.title,
+    content: row.content.substring(0, 200) + (row.content.length > 200 ? '...' : ''),
+    imageUrl: displayImage,
+    tribeName: row.tribeName,
+    tribeSlug: row.tribeSlug,
+    postSlug: row.postSlug,
+  };
 }

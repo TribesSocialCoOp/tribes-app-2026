@@ -5,7 +5,6 @@
 
 import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
-import { db } from './index';
 import * as schema from './schema';
 import { sql } from 'drizzle-orm';
 
@@ -29,6 +28,8 @@ import {
 
 async function seed() {
   console.log('🌱 Seeding database...');
+
+  const { db } = await import('./index');
 
   // Disable FK constraints for clean wipe (PostgreSQL)
   await db.execute(sql`SET session_replication_role = 'replica'`);
@@ -83,6 +84,7 @@ async function seed() {
     reservedAlias: mockUserProfile.reservedAlias,
     reputationScore: mockUserProfile.reputationScore,
     reputationStatus: mockUserProfile.reputationStatus,
+    emailVerified: true,
     createdAt: mockUserProfile.accountCreatedAt,
   });
   // @ts-ignore -- awaited by async wrapper
@@ -132,7 +134,9 @@ async function seed() {
     await db.insert(schema.users).values({
       id: u.id,
       name: u.name,
+      email: `${u.id}@example.com`,
       role: u.role,
+      emailVerified: true,
       reputationStatus: 'Active',
       createdAt: new Date(),
     });
@@ -338,7 +342,20 @@ async function seed() {
 
   // ---- 6. Posts (Tribe Posts) ----
   console.log('  📝 Posts...');
+  const allUsers = (await db.select({ id: schema.users.id }).from(schema.users)).map(u => u.id);
+  const sampleEmojis = ['❤️', '😂', '🔥', '👏', '😮', '😢', '💯', '🙌', '👀'];
+
   for (const post of initialSampleTribePosts) {
+    // Calculate total comment count (nested)
+    let totalComments = 0;
+    const countComments = (comments: any[]) => {
+      totalComments += comments.length;
+      comments.forEach(c => {
+        if (c.replies) countComments(c.replies);
+      });
+    };
+    if (post.commentsData) countComments(post.commentsData);
+
     await db.insert(schema.posts).values({
       id: post.id,
       tribeId: post.tribeId,
@@ -353,7 +370,7 @@ async function seed() {
       dataAiHintAvatar: post.dataAiHintAvatar,
       dataAiHintImage: post.dataAiHintImage,
       vibeCount: post.vibes ?? 0,
-      commentCount: post.comments ?? 0,
+      commentCount: totalComments, // Use calculated count
       isRemoved: post.isRemoved ?? false,
       canBeReposted: post.canBeReposted ?? true,
       removalReason: post.removalReason,
@@ -362,9 +379,25 @@ async function seed() {
       createdAt: post.timestamp,
     });
 
+    // Seed vibes for this post
+    const vibeCount = post.vibes ?? 0;
+    if (vibeCount > 0) {
+      const viberIds = [...allUsers].sort(() => 0.5 - Math.random()).slice(0, vibeCount);
+      for (const viberId of viberIds) {
+        await db.insert(schema.vibes).values({
+          id: `vibe-${post.id}-${viberId}`,
+          userId: viberId,
+          targetId: post.id,
+          targetType: 'post',
+          emoji: sampleEmojis[Math.floor(Math.random() * sampleEmojis.length)],
+          createdAt: post.timestamp,
+        });
+      }
+    }
+
     // Insert comments for this post
     if (post.commentsData) {
-      const insertComment = async (comment: typeof post.commentsData[0], parentId: string | null) => {
+      const insertComment = async (comment: any, parentId: string | null) => {
         await db.insert(schema.comments).values({
           id: comment.id,
           postId: post.id,
@@ -378,6 +411,23 @@ async function seed() {
           vibeCount: comment.vibes ?? 0,
           createdAt: comment.timestamp,
         });
+
+        // Seed vibes for this comment
+        const cVibeCount = comment.vibes ?? 0;
+        if (cVibeCount > 0) {
+          const cViberIds = [...allUsers].sort(() => 0.5 - Math.random()).slice(0, cVibeCount);
+          for (const viberId of cViberIds) {
+            await db.insert(schema.vibes).values({
+              id: `vibe-${comment.id}-${viberId}`,
+              userId: viberId,
+              targetId: comment.id,
+              targetType: 'comment',
+              emoji: sampleEmojis[Math.floor(Math.random() * sampleEmojis.length)],
+              createdAt: comment.timestamp,
+            });
+          }
+        }
+
         if (comment.replies) {
           for (const reply of comment.replies) {
             await insertComment(reply, comment.id);
@@ -419,6 +469,22 @@ async function seed() {
         commentCount: msp.comments ?? 0,
         createdAt: msp.timestamp,
       });
+
+      // Seed vibes for this mood post
+      const mVibeCount = msp.vibes ?? 0;
+      if (mVibeCount > 0) {
+        const viberIds = [...allUsers].sort(() => 0.5 - Math.random()).slice(0, mVibeCount);
+        for (const viberId of viberIds) {
+          await db.insert(schema.vibes).values({
+            id: `vibe-${msp.id}-${viberId}`,
+            userId: viberId,
+            targetId: msp.id,
+            targetType: 'post',
+            emoji: sampleEmojis[Math.floor(Math.random() * sampleEmojis.length)],
+            createdAt: msp.timestamp,
+          });
+        }
+      }
     }
 
     // Create mood tags

@@ -91,13 +91,27 @@ function TribeModQueueContent() {
   };
 
   useEffect(() => {
-    const resolveAccess = async () => {
-      const accessLevel = await checkTribeAccess(tribeId);
-      // Speakers and above can access the mod queue
-      const canAccess = accessLevel === 'platform_admin' || accessLevel === 'founder' || accessLevel === 'speaker';
-      setHasAccess(canAccess);
+    if (!tribeId) return;
+    let cancelled = false;
+
+    const resolveAccess = async (attempt = 0) => {
+      try {
+        const accessLevel = await checkTribeAccess(tribeId);
+        // Retry if session hasn't hydrated yet (AuthGuard confirms login)
+        if (accessLevel === 'guest' && attempt < 3) {
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          if (!cancelled) return resolveAccess(attempt + 1);
+          return;
+        }
+        if (cancelled) return;
+        const canAccess = accessLevel === 'platform_admin' || accessLevel === 'founder' || accessLevel === 'speaker';
+        setHasAccess(canAccess);
+      } catch {
+        if (!cancelled) setHasAccess(false);
+      }
     };
     resolveAccess();
+    return () => { cancelled = true; };
   }, [tribeId]);
 
 

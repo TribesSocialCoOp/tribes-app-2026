@@ -11,6 +11,7 @@
  *   4. bondRequestEmail     — New bond request notification
  *   5. innerCircleIntroEmail — Inner Circle introduction notification
  *   6. eventReminderEmail   — Upcoming event reminder
+ *   7. tribePostEmail       — New tribe post notification
  */
 
 // ============================================================
@@ -92,11 +93,25 @@ function emailLayout({ content, preheader, unsubscribeUrl }: LayoutOptions): str
 </html>`;
 }
 
-function ctaButton(label: string, url: string): string {
+function ctaButton(label: string, url: string, isNotification = false): string {
+  // Ensure relative paths get the full base URL — email clients
+  // interpret bare "/path" as a hostname, not a path.
+  const baseUrl = process.env.APP_URL || 'https://tribes.app';
+
+  // For notification emails, route through the click handler so it
+  // stamps lastActivityViewedAt before redirecting to the destination.
+  let fullUrl: string;
+  if (isNotification) {
+    const target = encodeURIComponent(url.startsWith('http') ? url : url);
+    fullUrl = `${baseUrl}/api/notification/click?to=${target}`;
+  } else {
+    fullUrl = url.startsWith('http') ? url : `${baseUrl}${url}`;
+  }
+
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
     <tr>
       <td align="center" style="background:${BRAND_GRADIENT};border-radius:8px;">
-        <a href="${url}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">${label}</a>
+        <a href="${fullUrl}" target="_blank" style="display:inline-block;padding:14px 32px;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">${label}</a>
       </td>
     </tr>
   </table>`;
@@ -233,7 +248,7 @@ export function bondRequestEmail(
         wants to form a <strong style="color:${BRAND_COLOR};">${safeBondType}</strong> bond with you
       </p>
     </div>
-    ${ctaButton('View Bond Request', '/bonds')}
+    ${ctaButton('View Bond Request', '/bonds', true)}
     <p style="margin:0;font-size:13px;color:#a1a1aa;">
       Log in to accept or decline this request.
     </p>
@@ -276,7 +291,7 @@ export function innerCircleIntroEmail(
         You have a pending bond request from <strong>${safeFromName}</strong>
       </p>
     </div>
-    ${ctaButton('View Bond Request', '/bonds')}
+    ${ctaButton('View Bond Request', '/bonds', true)}
   `,
     preheader: `${introducerName} introduced you to ${fromName} on Tribes.`,
     unsubscribeUrl,
@@ -313,13 +328,72 @@ export function eventReminderEmail(
       <p style="margin:0;font-size:18px;font-weight:600;color:#18181b;">${safeEventName}</p>
       <p style="margin:4px 0 0;font-size:14px;color:#3b82f6;">${safeDateStr}</p>
     </div>
-    ${ctaButton('View Event', '/events')}
+    ${ctaButton('View Event', '/events', true)}
   `,
     preheader: `Reminder: ${eventName} on ${dateStr}`,
     unsubscribeUrl,
   });
 
   const text = `Hi ${name}, reminder: ${eventName} on ${dateStr}.\n\nLog in to view event details.`;
+
+  return { subject, html, text };
+}
+
+// ============================================================
+// 7. TRIBE POST NOTIFICATION (unsubscribable: tribeActivity)
+// ============================================================
+
+export function tribePostEmail(
+  name: string,
+  authorName: string,
+  tribeName: string,
+  unsubscribeUrl?: string,
+  tribeId?: string,
+  postId?: string,
+  postSlug?: string | null,
+  tribeSlug?: string | null,
+): { subject: string; html: string; text: string } {
+  const safeName = escapeHtml(name);
+  const safeAuthorName = escapeHtml(authorName);
+  const safeTribeName = escapeHtml(tribeName);
+  const subject = `New post in ${safeTribeName} — Tribes`;
+
+  // Build canonical post URL: /t/{tribeSlug}/post/{id}/{slug} if available,
+  // otherwise /post/{id} (the app's 308 redirect will normalize).
+  let postUrl = '/your-comms';
+  if (postId) {
+    if (tribeSlug && postSlug) {
+      postUrl = `/t/${tribeSlug}/post/${postId}/${postSlug}`;
+    } else {
+      postUrl = `/post/${postId}`;
+    }
+  } else if (tribeId) {
+    postUrl = `/tribes/${tribeId}`;
+  }
+
+  const html = emailLayout({
+    content: `
+    <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">New Tribe Post</h1>
+    <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
+      Hi <strong>${safeName}</strong>, there's new activity in your tribe!
+    </p>
+    <div style="margin:16px 0;padding:16px;background-color:#eef2ff;border-radius:8px;text-align:center;">
+      <div style="font-size:40px;margin-bottom:8px;">📝</div>
+      <p style="margin:0;font-size:18px;font-weight:600;color:#18181b;">${safeTribeName}</p>
+      <p style="margin:4px 0 0;font-size:14px;color:#6366f1;">
+        <strong>${safeAuthorName}</strong> shared a new post
+      </p>
+    </div>
+    ${ctaButton('View Post', postUrl, true)}
+    <p style="margin:0;font-size:13px;color:#a1a1aa;">
+      Log in to see the full post and join the conversation.
+    </p>
+  `,
+    preheader: `${authorName} posted in ${tribeName}.`,
+    unsubscribeUrl,
+  });
+
+  const text = `Hi ${name}, ${authorName} posted in ${tribeName}.\n\nLog in to view the post.`;
 
   return { subject, html, text };
 }

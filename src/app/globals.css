@@ -109,6 +109,12 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+  /* Prevent iOS Safari double-tap-to-zoom on interactive elements.
+     Apple ignores user-scalable=no since iOS 10 for accessibility.
+     touch-action: manipulation preserves pinch-zoom and normal taps. */
+  a, button, [role="button"], input, select, textarea, label, [tabindex] {
+    touch-action: manipulation;
+  }
 }
 
 /* Capacitor Native Polish */
@@ -116,7 +122,39 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   user-select: none;
+}
+
+.capacitor-native,
+.capacitor-native body {
+  /* Prevent the native webview from rubber-banding/bouncing and pulling away from the notch */
   overscroll-behavior: none;
+  /* Lock the body to the viewport so only the <main> container scrolls */
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/*
+ * Radix UI modal components (Dialog, DropdownMenu, Popover) mutate body styles
+ * at runtime: they set `pointer-events: none` and `overflow: hidden` via
+ * DismissableLayer, and add `data-scroll-locked` + margin-right via
+ * react-remove-scroll-bar.
+ *
+ * In a Capacitor WKWebView, our body is already `position: fixed; overflow: hidden`,
+ * so these mutations are redundant AND harmful:
+ *  - pointer-events:none on body disables ALL touch in the entire webview
+ *  - margin-right/overflow changes cause layout jumps (no scrollbar to compensate for)
+ *
+ * This CSS safety net ensures those runtime mutations are neutralized inside Capacitor.
+ */
+.capacitor-native body {
+  pointer-events: auto !important;
+}
+
+.capacitor-native body[data-scroll-locked] {
+  overflow: hidden !important;
+  margin-right: 0 !important;
 }
 
 .capacitor-native input,
@@ -136,11 +174,27 @@ body {
   padding-top: env(safe-area-inset-top);
 }
 
-/* Ensure the app layout respects safe areas when running in native shell */
-.capacitor-native main {
-  padding-bottom: calc(env(safe-area-inset-bottom) + 5rem); /* Extra room for tab bar */
+.ht-safe {
+  height: env(safe-area-inset-top);
 }
 
-.capacitor-native .mobile-tab-bar {
-  padding-bottom: env(safe-area-inset-bottom);
+/* Extra room above the fixed tab bar so content isn't hidden behind it */
+.capacitor-native main {
+  padding-bottom: 5rem;
+}
+
+/* Touch targets — Apple HIG 44px minimum, mobile only */
+.touch-target-44 {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (min-width: 768px) {
+  .touch-target-44 {
+    min-width: unset;
+    min-height: unset;
+  }
 }

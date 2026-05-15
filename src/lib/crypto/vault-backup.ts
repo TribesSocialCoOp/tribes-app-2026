@@ -19,15 +19,14 @@
  */
 
 import {
-  generateExportableBondKeyPair,
   exportPrivateKey,
-  exportPublicKey,
   importPrivateKey,
 } from './key-manager';
 import {
   getAllBondKeys,
+  getBondKey,
   storeBondKey,
-  type StoredBondKey,
+  deleteSharedSecret,
 } from './key-store';
 
 // ============================================================
@@ -51,8 +50,12 @@ interface VaultEntry {
 }
 
 interface VaultPayload {
-  version: 1;
+  version: number;
   entries: VaultEntry[];
+  identityKey?: {
+    privateKeyJwk: JsonWebKey;
+    publicKeyJwk: JsonWebKey;
+  };
   exportedAt: number;
 }
 
@@ -103,7 +106,7 @@ async function deriveKeyFromPassphrase(
  *
  * This is a two-step process:
  * 1. Collect all keys from IndexedDB and export private keys to JWK
- * 2. Encrypt the entire collection with the passphrase-derived key
+ * 2. Encrypt the entire collection with the password-derived key
  *
  * NOTE: Bond keys must have been generated with `extractable: true` for this
  * to work. For non-extractable keys, a re-generation flow is needed (Phase 2D).
@@ -112,9 +115,10 @@ async function deriveKeyFromPassphrase(
  */
 export async function createVaultBackup(
   passphrase: string,
+  identityKey?: { privateKey: CryptoKey; publicKey: CryptoKey },
 ): Promise<{ encryptedVault: ArrayBuffer; salt: string }> {
-  if (!passphrase || passphrase.length < 8) {
-    throw new Error('Recovery passphrase must be at least 8 characters');
+  if (!passphrase || passphrase.length < 12) {
+    throw new Error('Recovery passphrase must be at least 12 characters');
   }
 
   // Collect all stored bond keys
@@ -125,7 +129,7 @@ export async function createVaultBackup(
   }
 
   // Build vault payload — export private keys to JWK
-  const entries: VaultEntry[] = [];
+  let entries: VaultEntry[] = [];
   for (const stored of storedKeys) {
     try {
       const privateKeyJwk = await exportPrivateKey(stored.privateKey);
@@ -145,11 +149,25 @@ export async function createVaultBackup(
     throw new Error('No exportable bond keys found. Keys may need to be regenerated.');
   }
 
+  // MERGE: Union local keys with any existing server backup so we never
+  // lose keys from other devices. The existing backup is decrypted using
+  // the same password; if that fails (password changed), we fall back
+  // to local-only keys and log a warning.
+  entries = await mergeWithExistingBackup(entries, passphrase);
+
   const payload: VaultPayload = {
-    version: 1,
+    version: 2,
     entries,
     exportedAt: Date.now(),
   };
+
+  // Add identity key if provided
+  if (identityKey) {
+    const { exportIdentityPrivateKey, exportIdentityPublicKey } = await import('./identity-keys');
+    const privateKeyJwk = await exportIdentityPrivateKey(identityKey.privateKey);
+    const publicKeyJwk = await exportIdentityPublicKey(identityKey.publicKey);
+    payload.identityKey = { privateKeyJwk, publicKeyJwk };
+  }
 
   // Serialize and encrypt
   const plaintext = new TextEncoder().encode(JSON.stringify(payload));
@@ -177,29 +195,107 @@ export async function createVaultBackup(
   };
 }
 
+/**
+ * Merges local vault entries with keys from an existing server backup.
+ * This ensures that keys from other devices are preserved when backing up.
+ * Local keys take precedence (they're the freshest on this device).
+ *
+ * Falls back to local-only entries if decryption fails (e.g. password changed).
+ */
+async function mergeWithExistingBackup(
+  localEntries: VaultEntry[],
+  passphrase: string,
+): Promise<VaultEntry[]> {
+  try {
+    const { getVaultBackup } = await import('@/lib/actions/vault-actions');
+    const existing = await getVaultBackup();
+    if (!existing) return localEntries;
+
+    // Decode from base64
+    const binaryStr = atob(existing.encryptedVaultBase64);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+    // Decrypt existing backup
+    const saltBytes = new Uint8Array(
+      existing.salt.match(/.{2}/g)!.map(byte => parseInt(byte, 16)),
+    );
+    const key = await deriveKeyFromPassphrase(passphrase, saltBytes);
+    const packed = new Uint8Array(bytes.buffer);
+    const iv = packed.slice(0, 12);
+    const ciphertext = packed.slice(12);
+
+    const plaintext = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv },
+      key,
+      ciphertext,
+    );
+    const payload: VaultPayload = JSON.parse(new TextDecoder().decode(plaintext));
+
+    // Union: local keys win (newer on this device), add server-only keys
+    const localBondIds = new Set(localEntries.map(e => e.bondId));
+    const serverOnlyEntries = payload.entries.filter(e => !localBondIds.has(e.bondId));
+
+    if (serverOnlyEntries.length > 0) {
+      console.log(`[vault] Merging ${serverOnlyEntries.length} key(s) from previous backup into new backup`);
+    }
+
+    return [...localEntries, ...serverOnlyEntries];
+  } catch (err) {
+    // Decryption failure = password changed or corrupted backup.
+    // Fall back to local-only — don't block the backup.
+    console.warn('[vault] Could not merge with existing backup (passphrase mismatch or no backup):', err);
+    return localEntries;
+  }
+}
+
 // ============================================================
 // VAULT RESTORE
 // ============================================================
 
 /**
- * Restores bond private keys from an encrypted vault backup.
+ * Result of a vault restore operation, including merge statistics.
+ */
+export interface VaultRestoreResult {
+  /** Map of bondId → restored CryptoKey (only newly imported keys) */
+  restoredKeys: Map<string, CryptoKey>;
+  /** Number of keys imported from the backup */
+  imported: number;
+  /** Number of keys skipped because a local key already existed */
+  skipped: number;
+  /** Total keys in the backup */
+  total: number;
+}
+
+/**
+ * Restores bond private keys and identity key from an encrypted vault backup.
+ *
+ * MERGE SEMANTICS:
+ * - New bonds (no local key): imported directly
+ * - Existing bonds with SAME public key: skipped (already in sync)
+ * - Existing bonds with DIFFERENT public key: backup key wins + shared secret
+ *   cache is invalidated so key-sync re-derives from the new key pair.
+ *   This handles the case where another device generated a newer key pair
+ *   that the server and peers are already using.
  *
  * @param encryptedVault The encrypted vault blob
  * @param salt The hex-encoded salt used during backup
  * @param passphrase The user's recovery passphrase
- * @returns Map of bondId → restored CryptoKey (non-extractable)
+ * @param userId The current user's ID (for storing the identity key)
+ * @returns Restore result with merge statistics
  */
 export async function restoreVaultBackup(
   encryptedVault: ArrayBuffer,
   salt: string,
   passphrase: string,
-): Promise<Map<string, CryptoKey>> {
+  userId?: string,
+): Promise<VaultRestoreResult> {
   // Decode salt from hex
   const saltBytes = new Uint8Array(
     salt.match(/.{2}/g)!.map(byte => parseInt(byte, 16)),
   );
 
-  // Derive the same key from passphrase + salt
+  // Derive the same key from password + salt
   const key = await deriveKeyFromPassphrase(passphrase, saltBytes);
 
   // Unpack: [12 bytes IV][ciphertext]
@@ -221,26 +317,94 @@ export async function restoreVaultBackup(
   // Parse the vault payload
   const payload: VaultPayload = JSON.parse(new TextDecoder().decode(plaintext));
 
-  if (payload.version !== 1) {
+  if (payload.version !== 1 && payload.version !== 2) {
     throw new Error(`Unsupported vault version: ${payload.version}`);
   }
 
-  // Import each private key (as non-extractable) and store in IndexedDB
+  const { hashPublicKeyJwk } = await import('./key-store');
+
+  // Import each private key and store in IndexedDB.
+  // Smart merge: compare public key hashes to detect key pair changes.
   const restoredKeys = new Map<string, CryptoKey>();
+  let skipped = 0;
 
   for (const entry of payload.entries) {
     try {
+      const existingKey = await getBondKey(entry.bondId);
+
+      if (existingKey) {
+        // Compare public key hashes to determine if the key pair changed
+        const localPubHash = await hashPublicKeyJwk(existingKey.publicKeyJwk);
+        const backupPubHash = await hashPublicKeyJwk(entry.publicKeyJwk);
+
+        if (localPubHash === backupPubHash && existingKey.privateKey.extractable) {
+          // Same key pair AND it's already extractable — no action needed
+          skipped++;
+          continue;
+        }
+
+        // Different key pair OR local key is non-extractable (locked) — BACKUP WINS.
+        // If the user is explicitly performing a restore, they want the backup 
+        // to be the authority. Overwrite the mismatching or locked local key 
+        // with the one from the backup to bring this device into alignment.
+        console.warn(
+          `[vault] Bond ${entry.bondId.substring(0, 16)}... ${localPubHash === backupPubHash ? 'is locked' : 'mismatch'} — ` +
+          `overwriting with backup`
+        );
+        // Continue to import and store below
+      }
+
       const privateKey = await importPrivateKey(entry.privateKeyJwk);
       restoredKeys.set(entry.bondId, privateKey);
 
-      // Persist to IndexedDB
+      // Persist to IndexedDB (new key or overwrite with backup's key)
       await storeBondKey(entry.bondId, privateKey, entry.publicKeyJwk);
+
+      // If we overwrote a different key, invalidate the cached shared secret.
+      // The next key-sync cycle will re-derive it with the correct key pair.
+      if (existingKey) {
+        try {
+          const { deleteSharedSecret } = await import('./key-store');
+          await deleteSharedSecret(entry.bondId);
+          console.debug(`[vault] Cleared stale shared secret for bond ${entry.bondId.substring(0, 16)}...`);
+        } catch { /* non-fatal */ }
+      }
     } catch (err) {
       console.warn(`[vault] Failed to restore key for bond ${entry.bondId}:`, err);
     }
   }
 
-  return restoredKeys;
+  // Restore identity key if present (Version 2+)
+  // Identity key: skip-if-exists (identity keys are device-specific and
+  // changing them would invalidate all outstanding tribe key grants)
+  if (payload.version >= 2 && payload.identityKey) {
+    try {
+      const { importIdentityPrivateKey } = await import('./identity-keys');
+      const { storeIdentityKey, getIdentityKey } = await import('./key-store');
+
+      const storeId = userId || 'unknown';
+      const existingIdentity = await getIdentityKey(storeId);
+
+      if (!existingIdentity) {
+        const privateKey = await importIdentityPrivateKey(payload.identityKey.privateKeyJwk);
+        await storeIdentityKey(storeId, privateKey, payload.identityKey.publicKeyJwk);
+        console.log(`[vault] Restored identity key for user ${storeId.substring(0, 8)}...`);
+      } else {
+        console.debug(`[vault] Skipping identity key — local key exists for ${storeId.substring(0, 8)}...`);
+      }
+    } catch (err) {
+      console.warn('[vault] Failed to restore identity key:', err);
+    }
+  }
+
+  console.log(`[vault] Restore complete: ${restoredKeys.size} imported/updated, ${skipped} unchanged, ${payload.entries.length} total in backup`);
+
+  return {
+    restoredKeys,
+    imported: restoredKeys.size,
+    skipped,
+    total: payload.entries.length,
+  };
 }
 
 /**
@@ -252,8 +416,8 @@ export function validatePassphrase(passphrase: string): {
 } {
   const errors: string[] = [];
 
-  if (passphrase.length < 8) {
-    errors.push('Passphrase must be at least 8 characters');
+  if (passphrase.length < 12) {
+    errors.push('Passphrase must be at least 12 characters');
   }
   if (passphrase.length > 128) {
     errors.push('Passphrase must be at most 128 characters');
@@ -261,8 +425,8 @@ export function validatePassphrase(passphrase: string): {
   if (!/[A-Z]/.test(passphrase)) {
     errors.push('Passphrase should contain at least one uppercase letter');
   }
-  if (!/[0-9]/.test(passphrase)) {
-    errors.push('Passphrase should contain at least one number');
+  if (!/[0-9]/.test(passphrase) && !/[^A-Za-z0-9]/.test(passphrase)) {
+    errors.push('Passphrase should contain at least one number or symbol');
   }
 
   return {

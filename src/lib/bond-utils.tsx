@@ -9,8 +9,9 @@
  */
 
 import React from 'react';
-import { CheckCircle2, AlertTriangle, XCircle, Moon, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, PartyPopper, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, XCircle, Moon, Heart, Meh, Smile, SmilePlus, Ghost as GhostIcon, PartyPopper, ShieldCheck, KeyRound } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from '@/lib/utils';
 import type { Bond } from '@/lib/types';
 
 /**
@@ -62,36 +63,50 @@ export function getBondTypeBadgeStyle(bond: Bond): React.CSSProperties {
 /**
  * Passkey status indicator with tooltip.
  */
-export const PasskeyStatusIcon: React.FC<{ status: Bond["passkeyStatus"] }> = ({ status }) => {
-  let icon, tooltipText;
+export const PasskeyStatusIcon: React.FC<{ status: Bond["passkeyStatus"]; encryptionOrphaned?: boolean }> = ({ status, encryptionOrphaned }) => {
+  let icon, tooltipText, colorClass;
 
-  switch (status) {
-    case "active":
-      icon = <CheckCircle2 className="h-5 w-5 text-accent" />;
-      tooltipText = "Bond is active and secure.";
-      break;
-    case "fading":
-      icon = <AlertTriangle className="h-5 w-5 text-yellow-500" />;
-      tooltipText = "Bond is fading — interact to keep it alive.";
-      break;
-    case "dormant":
-      icon = <Moon className="h-5 w-5 text-muted-foreground" />;
-      tooltipText = "Bond is dormant — send a reconnect request.";
-      break;
-    case "expired":
-      icon = <XCircle className="h-5 w-5 text-destructive" />;
-      tooltipText = "Bond has expired. Re-join the tribe or get a new pass.";
-      break;
-    default:
-      icon = <Moon className="h-5 w-5 text-muted-foreground" />;
-      tooltipText = "Unknown status.";
+  // Encryption health overrides the passkey status display for active/fading bonds
+  if (encryptionOrphaned && (status === 'active' || status === 'fading')) {
+    icon = <KeyRound className="h-5 w-5" />;
+    tooltipText = "Encryption keys need sync — restore from backup or reset keys.";
+    colorClass = "text-amber-500";
+  } else {
+    switch (status) {
+      case "active":
+        icon = <CheckCircle2 className="h-5 w-5" />;
+        tooltipText = "Bond is healthy and secure.";
+        colorClass = "text-accent";
+        break;
+      case "fading":
+        icon = <AlertTriangle className="h-5 w-5" />;
+        tooltipText = "Bond is fading — interact to keep it alive.";
+        colorClass = "text-yellow-500";
+        break;
+      case "dormant":
+        icon = <Moon className="h-5 w-5" />;
+        tooltipText = "Bond is dormant — send a reconnect request.";
+        colorClass = "text-muted-foreground";
+        break;
+      case "expired":
+        icon = <XCircle className="h-5 w-5" />;
+        tooltipText = "Bond has expired. Re-join the tribe or get a new pass.";
+        colorClass = "text-destructive";
+        break;
+      default:
+        icon = <Moon className="h-5 w-5" />;
+        tooltipText = "Unknown status.";
+        colorClass = "text-muted-foreground";
+    }
   }
 
   return (
     <TooltipProvider delayDuration={100}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="flex items-center justify-center">{icon}</span>
+          <button type="button" tabIndex={0} className={cn("inline-flex items-center justify-center bg-transparent border-none p-0 cursor-default", colorClass)}>
+            {icon}
+          </button>
         </TooltipTrigger>
         <TooltipContent>
           <p>{tooltipText}</p>
@@ -185,7 +200,7 @@ export const ConnectVibeIcon: React.FC<{ bond: Bond }> = ({ bond }) => {
     <TooltipProvider delayDuration={100}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="flex items-center justify-center">{iconElement}</span>
+          <button type="button" tabIndex={0} className="inline-flex items-center justify-center bg-transparent border-none p-0 cursor-default">{iconElement}</button>
         </TooltipTrigger>
         <TooltipContent>
           <p>{tooltipText}</p>
@@ -204,9 +219,9 @@ export const InnerCircleBadge: React.FC<{ show: boolean }> = ({ show }) => {
     <TooltipProvider delayDuration={100}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex items-center">
+          <button type="button" tabIndex={0} className="inline-flex items-center bg-transparent border-none p-0 cursor-default">
             <ShieldCheck className="h-4 w-4 text-emerald-500" />
-          </span>
+          </button>
         </TooltipTrigger>
         <TooltipContent>
           <p>Inner Circle</p>

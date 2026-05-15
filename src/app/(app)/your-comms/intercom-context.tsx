@@ -4,7 +4,7 @@ import React, { createContext, useContext, useReducer, useEffect, useMemo, useCa
 import { moodsData as allMoods } from '@/lib/moods-data';
 import type { CommunicationItem, Ring } from '@/lib/types';
 import type { ActivityItem } from '@/lib/services/notification-service';
-import { getUnifiedFeedAction, getActivityFeed } from '@/lib/actions/content-actions';
+import { getUnifiedFeedAction, getActivityFeed, markActivityViewed, markSingleActivityRead } from '@/lib/actions/content-actions';
 import { showLocalNotification } from '@/hooks/use-push-notifications';
 
 // ─── State ───────────────────────────────────────────────────────────────────
@@ -13,6 +13,7 @@ type RingFilterValue = Ring | 'all' | 'streams';
 
 const RING_STORAGE_KEY = 'tribes_ring_filter';
 const MOOD_STORAGE_KEY = 'tribes_mood_filter';
+const TAB_STORAGE_KEY = 'tribes_intercom_tab';
 
 interface IntercomState {
   isLoading: boolean;
@@ -36,6 +37,8 @@ type Action =
   | { type: 'SET_ACTIVE_TAB'; payload: 'feed' | 'activity' }
   | { type: 'SET_ACTIVITY_ITEMS'; payload: ActivityItem[] }
   | { type: 'SET_LOADING_ACTIVITY'; payload: boolean }
+  | { type: 'MARK_ALL_READ' }
+  | { type: 'MARK_ITEM_READ'; payload: string }
   | { type: 'OPEN_EDIT_POST'; payload: CommunicationItem }
   | { type: 'CLOSE_EDIT_POST' };
 
@@ -55,6 +58,16 @@ function reducer(state: IntercomState, action: Action): IntercomState {
     case 'SET_ACTIVE_TAB': return { ...state, activeTab: action.payload };
     case 'SET_ACTIVITY_ITEMS': return { ...state, activityItems: action.payload, isLoadingActivity: false };
     case 'SET_LOADING_ACTIVITY': return { ...state, isLoadingActivity: action.payload };
+    case 'MARK_ALL_READ': return {
+      ...state,
+      activityItems: state.activityItems.map(item => ({ ...item, read: true })),
+    };
+    case 'MARK_ITEM_READ': return {
+      ...state,
+      activityItems: state.activityItems.map(item =>
+        item.id === action.payload ? { ...item, read: true } : item
+      ),
+    };
     case 'OPEN_EDIT_POST': return { ...state, editPostDialog: { open: true, target: action.payload } };
     case 'CLOSE_EDIT_POST': return { ...state, editPostDialog: { open: false, target: null } };
     default: return state;
@@ -73,6 +86,8 @@ interface IntercomContextValue {
   setRingFilter: (ring: RingFilterValue) => void;
   setMoodSlugs: (slugs: string[]) => void;
   handleOpenEditPostDialog: (item: CommunicationItem) => void;
+  markAllRead: () => void;
+  markItemRead: (itemId: string) => void;
 }
 
 const IntercomContext = createContext<IntercomContextValue | null>(null);
@@ -105,6 +120,11 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_RING_FILTER', payload: storedRing });
     }
 
+    const storedTab = localStorage.getItem(TAB_STORAGE_KEY) as 'feed' | 'activity' | null;
+    if (storedTab) {
+      dispatch({ type: 'SET_ACTIVE_TAB', payload: storedTab });
+    }
+
     try {
       const storedMoods = localStorage.getItem(MOOD_STORAGE_KEY);
       if (storedMoods) {
@@ -123,8 +143,9 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
     if (state.hasLoadedFromStorage) {
       localStorage.setItem(RING_STORAGE_KEY, state.ringFilter);
       localStorage.setItem(MOOD_STORAGE_KEY, JSON.stringify(state.selectedMoodSlugs));
+      localStorage.setItem(TAB_STORAGE_KEY, state.activeTab);
     }
-  }, [state.ringFilter, state.selectedMoodSlugs, state.hasLoadedFromStorage]);
+  }, [state.ringFilter, state.selectedMoodSlugs, state.activeTab, state.hasLoadedFromStorage]);
 
   // Fetch unified feed when filters change
   const fetchFeed = useCallback(async () => {
@@ -167,35 +188,79 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'OPEN_EDIT_POST', payload: item });
   }, []);
 
-  // Load activity feed when tab switches + fire local notifications for new items
+  // ── Activity feed: eager load on mount + refresh on tab switch ──
   const prevActivityCountRef = React.useRef(0);
-  useEffect(() => {
-    if (state.activeTab !== 'activity') return;
-    let cancelled = false;
-    dispatch({ type: 'SET_LOADING_ACTIVITY', payload: true });
-    getActivityFeed()
-      .then(items => {
-        if (cancelled) return;
-        dispatch({ type: 'SET_ACTIVITY_ITEMS', payload: items });
 
-        // Fire local notification for new unread activity
-        const unreadCount = items.filter((a: ActivityItem) => !a.read).length;
-        if (unreadCount > prevActivityCountRef.current && prevActivityCountRef.current > 0) {
-          const newest = items.find((a: ActivityItem) => !a.read);
-          if (newest) {
-            showLocalNotification(
-              'New Activity',
-              newest.description || 'You have new activity on Tribes.app',
-              '/your-comms'
-            );
-          }
+  const fetchActivity = useCallback(async () => {
+    dispatch({ type: 'SET_LOADING_ACTIVITY', payload: true });
+    try {
+      const items = await getActivityFeed();
+      dispatch({ type: 'SET_ACTIVITY_ITEMS', payload: items });
+
+      // Fire local notification for new unread activity
+      const unreadCount = items.filter((a: ActivityItem) => !a.read).length;
+      if (unreadCount > prevActivityCountRef.current && prevActivityCountRef.current > 0) {
+        const newest = items.find((a: ActivityItem) => !a.read);
+        if (newest) {
+          showLocalNotification(
+            'New Activity',
+            newest.description || 'You have new activity on Tribes.app',
+            '/your-comms'
+          );
         }
-        prevActivityCountRef.current = unreadCount;
-      })
-      .catch(() => {})
-      .finally(() => { if (!cancelled) dispatch({ type: 'SET_LOADING_ACTIVITY', payload: false }); });
-    return () => { cancelled = true; };
-  }, [state.activeTab]);
+      }
+      prevActivityCountRef.current = unreadCount;
+    } catch {
+      // silent
+    } finally {
+      dispatch({ type: 'SET_LOADING_ACTIVITY', payload: false });
+    }
+  }, []);
+
+  // Eager load activity on mount (so badge count is accurate before tab click)
+  useEffect(() => {
+    fetchActivity();
+  }, [fetchActivity]);
+
+  // Refresh activity data when switching to the activity tab
+  useEffect(() => {
+    if (state.activeTab === 'activity') {
+      fetchActivity();
+    }
+  }, [state.activeTab, fetchActivity]);
+
+  // Mark all read: update client state immediately + persist to server + refetch
+  const markAllRead = useCallback(async () => {
+    dispatch({ type: 'MARK_ALL_READ' });
+    // Notify sidebar badge immediately
+    window.dispatchEvent(new CustomEvent('activity-read-change', { detail: { unreadCount: 0 } }));
+    try {
+      await markActivityViewed();
+      // Refetch so server-derived read state is in sync
+      const items = await getActivityFeed();
+      dispatch({ type: 'SET_ACTIVITY_ITEMS', payload: items });
+      const newCount = items.filter((a: ActivityItem) => !a.read).length;
+      prevActivityCountRef.current = newCount;
+      // Re-sync sidebar in case server count differs
+      window.dispatchEvent(new CustomEvent('activity-read-change', { detail: { unreadCount: newCount } }));
+    } catch {
+      // Client state is already updated, server will catch up
+    }
+  }, []);
+
+  // Mark a single item as read: update client state + persist to server
+  const markItemRead = useCallback((itemId: string) => {
+    dispatch({ type: 'MARK_ITEM_READ', payload: itemId });
+    
+    // Compute new unread count and notify sidebar badge
+    const newUnread = state.activityItems.filter(
+      (a: ActivityItem) => !a.read && a.id !== itemId
+    ).length;
+    window.dispatchEvent(new CustomEvent('activity-read-change', { detail: { unreadCount: newUnread } }));
+    
+    // Fire-and-forget server sync
+    markSingleActivityRead(itemId).catch(() => {});
+  }, [state.activityItems]);
 
   // Derived data
   const activityCount = useMemo(() =>
@@ -204,8 +269,8 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<IntercomContextValue>(() => ({
     state, dispatch, feedItems: state.feedItems, activityCount, allMoods,
     refreshFeed, setRingFilter, setMoodSlugs,
-    handleOpenEditPostDialog,
-  }), [state, activityCount, refreshFeed, setRingFilter, setMoodSlugs, handleOpenEditPostDialog]);
+    handleOpenEditPostDialog, markAllRead, markItemRead,
+  }), [state, activityCount, refreshFeed, setRingFilter, setMoodSlugs, handleOpenEditPostDialog, markAllRead, markItemRead]);
 
   return <IntercomContext.Provider value={value}>{children}</IntercomContext.Provider>;
 }

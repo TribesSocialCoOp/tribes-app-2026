@@ -37,7 +37,7 @@ export async function getTribeAccessLevel(userId: string, tribeId: string): Prom
     .limit(1);
 
   if (!membership) return 'guest';
-  if (membership.role === 'founder') return 'founder';
+  if (membership.role === 'founder' || membership.role === 'admin') return 'founder';
   if (membership.role === 'speaker') return 'speaker';
   return 'member';
 }
