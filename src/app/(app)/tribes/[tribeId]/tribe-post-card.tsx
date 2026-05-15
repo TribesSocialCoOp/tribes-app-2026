@@ -1,29 +1,44 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil, Lock, Globe } from "lucide-react";
+import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil, Lock, Globe, UserRoundX, Send, Loader2, Link2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { createComment } from '@/lib/actions/content-actions';
+import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDistance } from 'date-fns';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  ResponsiveMenu,
+  ResponsiveMenuContent,
+  ResponsiveMenuItem,
+  ResponsiveMenuSeparator,
+  ResponsiveMenuTrigger,
+} from "@/components/ui/responsive-menu";
 import { cn } from '@/lib/utils';
 import { useTimeSince } from '@/hooks/use-time-since';
-import { VIBE_EMOTICONS } from '@/lib/constants';
+import { VibePicker } from '@/components/ui/vibe-picker';
 import { toggleVibe } from '@/lib/actions/content-actions';
 import type { TribePost, DiscussionComment } from '@/lib/types';
 import { CommentCard } from './comment-card';
 import { useTribeDetail } from './tribe-detail-context';
-import { MarkdownContent } from '@/components/ui/markdown-content';
+import { MarkdownContent, getReferencedImageIndices } from '@/components/ui/markdown-content';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
+import { EncryptedImage } from '@/components/ui/encrypted-image';
+import { LinkPreviewCard } from '@/components/ui/link-preview-card';
+import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
 import { triggerHaptic, triggerSelectionHaptic } from '@/lib/capacitor/haptics';
 import { ImpactStyle } from '@capacitor/haptics';
 import { shareContent } from '@/lib/capacitor/share';
+import { RoleBadge } from '@/components/ui/role-badge';
+import { buildPostPath } from '@/lib/utils/slugify';
 
 interface TribePostCardProps {
   post: TribePost;
@@ -36,27 +51,178 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   post, isPromoted, isReported, isCurrentUserAuthor,
 }) => {
   const {
-    state, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker,
+    state, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker, isGlobalAdmin,
     handleOpenPromoteDialog, handleOpenReportPostDialog,
     handleOpenRepostDialog, handleOpenReportCommentDialog,
-    handleOpenCommentDialog, handleDeletePost, 
-    handleTogglePinPost, handleRemovePostAsMod,
-    handleOpenEditPostDialog,
+    handleOpenCommentDialog, handleDeletePost,
+    handleTogglePinPost, handleOpenModRemoveDialog, handleAdminDeletePost,
+    handleOpenEditPostDialog, memberRoleMap,
   } = useTribeDetail();
 
   const router = useRouter();
+  const { toast } = useToast();
+  const tribeId = state.tribe?.id;
+  const isMobile = useIsMobile();
 
   const isMember = state.isMember;
   const displayTime = useTimeSince(post.timestamp);
-  
+
   // Track local override for optimistic updates
   const [localVibesCount, setLocalVibesCount] = useState<number | null>(null);
   const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string, count: number }[] | null>(null);
   const [localHasVibed, setLocalHasVibed] = useState<boolean | null>(null);
-  
+
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
-  const emoticons = VIBE_EMOTICONS;
+
+
+  // Inline reply state
+  const [showInlineReply, setShowInlineReply] = useState(false);
+  const [inlineReplyText, setInlineReplyText] = useState('');
+  const [isSendingInlineReply, setIsSendingInlineReply] = useState(false);
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
+  const [isAdminDeleteDialogOpen, setIsAdminDeleteDialogOpen] = useState(false);
+  const inlineReplyRef = useRef<HTMLDivElement>(null);
+
+  const handleSendInlineReply = async () => {
+    if (!inlineReplyText.trim()) return;
+    setIsSendingInlineReply(true);
+    try {
+      // Encrypt comment for private tribes
+      let encPayload: { ciphertextBase64: string; iv: string } | undefined;
+      if (tribeId && state.tribe && !state.tribe.isPublic) {
+        const { getTribeKey } = await import('@/lib/crypto/key-store');
+        const cachedTribeKey = await getTribeKey(tribeId);
+        if (!cachedTribeKey) {
+          throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
+        }
+        const { encryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
+        const { toBase64 } = await import('@/lib/crypto/encoding');
+        const encrypted = await encryptWithTribeKey(inlineReplyText.trim(), cachedTribeKey.key);
+        encPayload = {
+          ciphertextBase64: toBase64(encrypted.ciphertext),
+          iv: encrypted.iv,
+        };
+      }
+
+      const result = await createComment(post.id, inlineReplyText.trim(), undefined, encPayload);
+      if (result && typeof result === 'object' && 'serverError' in result) {
+        throw new Error(result.serverError as string);
+      }
+      toast({ title: 'Reply sent', description: 'Your comment has been posted.' });
+      setInlineReplyText('');
+      setShowInlineReply(false);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'An unexpected error occurred';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    } finally {
+      setIsSendingInlineReply(false);
+    }
+  };
+
+  // ── Encrypted post text decryption ──────────────────────────
+  const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
+  const [decryptionStatus, setDecryptionStatus] = useState<'decrypting' | 'success' | 'missing_key' | 'key_mismatch' | 'failed' | 'idle'>(post.isEncrypted ? 'decrypting' : 'idle');
+
+  useEffect(() => {
+    if (!post.isEncrypted || !post.ciphertextBase64 || !post.encryptionIv) return;
+
+    let active = true;
+
+    async function decryptText() {
+      try {
+        const effectiveTribeId = post.tribeId || tribeId;
+
+        if (effectiveTribeId) {
+          // TRIBE PATH: try tribe group key first
+          const { getTribeKey } = await import('@/lib/crypto/key-store');
+          const cachedTribeKey = await getTribeKey(effectiveTribeId);
+
+          if (cachedTribeKey) {
+            const { decryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
+            const { fromBase64 } = await import('@/lib/crypto/encoding');
+            const ciphertextBuffer = fromBase64(post.ciphertextBase64!);
+            const plaintext = await decryptWithTribeKey(
+              ciphertextBuffer,
+              post.encryptionIv!,
+              cachedTribeKey.key,
+            );
+            if (active) {
+              setDecryptedContent(plaintext);
+              setDecryptionStatus('success');
+            }
+            return;
+          }
+        }
+
+        // GRANT-BASED FALLBACK: use key grants (pairwise encryption)
+        const { getPostKeyGrants } = await import('@/lib/actions/content-actions');
+        const grants = await getPostKeyGrants([post.id]);
+        const grant = grants[post.id];
+
+        if (!grant) {
+          if (active) setDecryptionStatus('missing_key');
+          return;
+        }
+
+        const { decryptPost } = await import('@/lib/crypto/post-encryption');
+        const { fromBase64 } = await import('@/lib/crypto/encoding');
+        const { getSharedSecret } = await import('@/lib/crypto/key-store');
+
+        let unwrapSecret: CryptoKey;
+
+        if (!grant.bondId) {
+          const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
+          unwrapSecret = await getOrCreateJournalKey();
+        } else {
+          const cached = await getSharedSecret(grant.bondId);
+          if (cached) {
+            unwrapSecret = cached.sharedSecret;
+          } else {
+            const { getBondKey, importPublicKey, deriveSharedSecret } = await import('@/lib/crypto');
+            const bondKey = await getBondKey(grant.bondId);
+            if (!bondKey) { if (active) setDecryptionStatus('missing_key'); return; }
+            const { getBonds } = await import('@/lib/actions/bond-actions');
+            const bonds = await getBonds();
+            const bond = bonds.find(b => b.id === grant.bondId);
+            if (!bond?.peerPublicKeyJwk) { if (active) setDecryptionStatus('missing_key'); return; }
+            const partnerPubKey = await importPublicKey(JSON.parse(bond.peerPublicKeyJwk));
+            unwrapSecret = await deriveSharedSecret(bondKey.privateKey, partnerPubKey);
+          }
+        }
+
+        const ciphertextBuffer = fromBase64(post.ciphertextBase64!);
+        const plaintext = await decryptPost(
+          ciphertextBuffer,
+          post.encryptionIv!,
+          grant.wrappedKey,
+          grant.wrapIv,
+          unwrapSecret,
+        );
+        if (active) {
+          setDecryptedContent(plaintext);
+          setDecryptionStatus('success');
+        }
+      } catch (err) {
+        console.error('[TribePostCard] Decryption failed:', err);
+        if (active) {
+          if (err instanceof DOMException && err.name === 'OperationError') {
+            setDecryptionStatus('key_mismatch');
+          } else {
+            setDecryptionStatus('failed');
+          }
+        }
+      }
+    }
+
+    decryptText();
+    return () => { active = false; };
+  }, [post.id, post.isEncrypted, post.ciphertextBase64, post.encryptionIv, post.tribeId, tribeId]);
+
+  // Display content: decrypted text for encrypted posts, raw content for public
+  const displayContent = post.isEncrypted ? (decryptedContent ?? '') : post.content;
 
   const currentVibesCount = localVibesCount !== null ? localVibesCount : (post.vibes || 0);
   const currentRecentVibes = localRecentVibes !== null ? localRecentVibes : (post.recentVibes || []);
@@ -66,7 +232,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
     // Optimistic update
     const isRemoving = currentUserHasVibed;
     const newCount = isRemoving ? Math.max(0, currentVibesCount - 1) : currentVibesCount + 1;
-    
+
     triggerHaptic(isRemoving ? ImpactStyle.Light : ImpactStyle.Medium);
     setLocalHasVibed(!isRemoving);
     setLocalVibesCount(newCount);
@@ -87,45 +253,75 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
   return (
     <Card className={cn(
-      "overflow-hidden shadow-lg relative",
+      "overflow-hidden shadow-none sm:shadow-lg relative",
       isPromoted && "bg-accent/5 hover:bg-accent/10 border-accent/30",
       isReported && !post.isRemoved && "border-destructive/50 ring-2 ring-destructive/30",
       post.isPinned && "border-primary/50 ring-2 ring-primary/30"
     )}>
-      {post.isRemoved && (
-        <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-10 p-4 space-y-2">
-          <Badge variant="destructive" className="text-md p-2 px-3">POST REMOVED</Badge>
+    {post.isRemoved ? (
+      /* ── Tombstone: scrubbed content — nothing from the original post is in the DOM ── */
+      <div className="p-6 flex flex-col items-center justify-center text-center space-y-3 min-h-[120px]">
+        <Badge variant="destructive" className="text-md p-2 px-3">POST REMOVED</Badge>
+        {post.removalReason && (
+          <p className="text-xs text-muted-foreground italic max-w-xs">
+            Reason: {post.removalReason}
+          </p>
+        )}
+        {!post.canBeReposted && post.removalReason && (
+          <p className="text-xs text-destructive font-semibold max-w-xs">
+            Reposting of this content has been prevented by moderation.
+          </p>
+        )}
+        <div className="flex gap-2 mt-2">
           {isCurrentUserAuthor && post.canBeReposted !== false && (
-            <Button variant="secondary" size="sm" onClick={() => handleOpenRepostDialog(post)} className="pointer-events-auto mt-2">
+            <Button variant="secondary" size="sm" onClick={() => handleOpenRepostDialog(post)}>
               <RefreshCcw className="mr-1.5 h-4 w-4" /> Repost
             </Button>
           )}
-          {post.removalReason && (
-            <p className="text-xs text-white/90 text-center italic max-w-xs bg-black/40 p-1.5 rounded mt-1">
-              Reason: {post.removalReason}
-            </p>
-          )}
-          {!post.canBeReposted && post.removalReason && (
-            <p className="text-xs text-white/90 font-semibold text-center max-w-xs bg-destructive/50 p-1.5 rounded mt-1">
-              Reposting of this content has been prevented by moderation.
-            </p>
+          {isGlobalAdmin && (
+            <Button variant="destructive" size="sm" onClick={() => setIsAdminDeleteDialogOpen(true)}>
+              <Trash2 className="mr-1.5 h-4 w-4" /> Delete Permanently
+            </Button>
           )}
         </div>
-      )}
-      <div className={cn(post.isRemoved && "opacity-40 pointer-events-none")}>
-        <CardHeader className="p-4 pb-2">
+      </div>
+    ) : (
+      <div>
+        <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
           <div className="flex items-start space-x-3">
-            <UserAvatar 
-              user={{ name: post.authorName, avatar: post.authorAvatar }} 
-              className="h-10 w-10" 
-              fallback={post.authorAvatarFallback}
-              dataAiHint={post.dataAiHintAvatar || "avatar"}
-            />
-            <div className="flex-1">
-              <CardTitle className="text-md font-semibold tracking-normal">{post.authorName}</CardTitle>
+            {!post.authorIsAlias ? (
+              <Link href={`/profile/${post.authorId}`}>
+                <UserAvatar
+                  user={{ name: post.authorName, avatar: post.authorAvatar }}
+                  className="h-10 w-10 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
+                  fallback={post.authorAvatarFallback}
+                  dataAiHint={post.dataAiHintAvatar || "avatar"}
+                />
+              </Link>
+            ) : (
+              <UserAvatar
+                user={{ name: post.authorName, avatar: post.authorAvatar }}
+                className="h-10 w-10"
+                fallback={post.authorAvatarFallback}
+                dataAiHint={post.dataAiHintAvatar || "avatar"}
+              />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                {!post.authorIsAlias ? (
+                  <Link href={`/profile/${post.authorId}`} className="hover:underline decoration-primary/30 underline-offset-2">
+                    <CardTitle className="text-md font-semibold tracking-normal truncate">{post.authorName}</CardTitle>
+                  </Link>
+                ) : (
+                  <CardTitle className="text-md font-semibold tracking-normal truncate">{post.authorName}</CardTitle>
+                )}
+                <RoleBadge role={memberRoleMap.get(post.authorId) || 'member'} tribeName={state.tribe?.name} showLabel={!isMobile} />
+              </div>
               <div className="flex items-center space-x-2">
-                <CardDescription className="text-xs">
-                  {displayTime}
+                <CardDescription className="text-xs hover:underline">
+                  <Link href={buildPostPath(post.id, post.slug, state.tribe?.slug)}>
+                    {displayTime}
+                  </Link>
                   {post.editedAt && (
                     <span className="text-muted-foreground/70 ml-1" title={`Edited ${formatDistance(post.editedAt, new Date(), { addSuffix: true })}`}>
                       (edited)
@@ -134,112 +330,220 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                 </CardDescription>
                 {post.isEncrypted ? (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
-                    <div className="flex items-center text-xs text-green-600"><Lock className="h-3 w-3" /></div>
+                    <button type="button" className="flex items-center text-xs text-green-600 bg-transparent border-none p-0 cursor-default"><Lock className="h-3 w-3" /></button>
                   </TooltipTrigger><TooltipContent><p>End-to-end encrypted</p></TooltipContent></Tooltip></TooltipProvider>
                 ) : (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
-                    <div className="flex items-center text-xs text-muted-foreground/50"><Globe className="h-3 w-3" /></div>
+                    <button type="button" className="flex items-center text-xs text-muted-foreground/50 bg-transparent border-none p-0 cursor-default"><Globe className="h-3 w-3" /></button>
                   </TooltipTrigger><TooltipContent><p>Public post</p></TooltipContent></Tooltip></TooltipProvider>
                 )}
                 {post.isPinned && (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
-                    <div className="flex items-center text-xs text-primary"><Pin className="h-3.5 w-3.5" /></div>
+                    <button type="button" className="flex items-center text-xs text-primary bg-transparent border-none p-0 cursor-default"><Pin className="h-3.5 w-3.5" /></button>
                   </TooltipTrigger><TooltipContent><p>Pinned Post</p></TooltipContent></Tooltip></TooltipProvider>
                 )}
                 {isMember && isPromoted && !post.isRemoved && (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
-                    <div className="flex items-center text-xs text-accent"><Rss className="h-3.5 w-3.5" /></div>
+                    <button type="button" className="flex items-center text-xs text-accent bg-transparent border-none p-0 cursor-default"><Rss className="h-3.5 w-3.5" /></button>
                   </TooltipTrigger><TooltipContent><p>Promoted to Mood Stream</p></TooltipContent></Tooltip></TooltipProvider>
                 )}
                 {isReported && !post.isRemoved && (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
-                    <div className="flex items-center text-xs text-destructive"><Flag className="h-3.5 w-3.5" /></div>
+                    <button type="button" className="flex items-center text-xs text-destructive bg-transparent border-none p-0 cursor-default"><Flag className="h-3.5 w-3.5" /></button>
                   </TooltipTrigger><TooltipContent><p>This post has been reported and is under review.</p></TooltipContent></Tooltip></TooltipProvider>
                 )}
               </div>
             </div>
             {isLoggedIn && !post.isRemoved && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <Link 
+                  href={buildPostPath(post.id, post.slug, state.tribe?.slug)} 
+                  className="p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-muted transition-colors" 
+                  title="View Post"
+                >
+                  <Link2 className="h-4 w-4" />
+                </Link>
+                <ResponsiveMenu>
+                <ResponsiveMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 touch-target-44 text-muted-foreground">
                     <MoreVertical className="h-4 w-4" />
                   </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                </ResponsiveMenuTrigger>
+                <ResponsiveMenuContent align="end">
+                  <ResponsiveMenuItem onClick={() => {
+                    const url = `${window.location.origin}${buildPostPath(post.id, post.slug, state.tribe?.slug)}`;
+                    navigator.clipboard.writeText(url);
+                    toast({ title: 'Link copied', description: 'Post link copied to clipboard.' });
+                  }}>
+                    <Link2 className="mr-2 h-4 w-4" /> Copy Link
+                  </ResponsiveMenuItem>
+                  <ResponsiveMenuSeparator />
                   {isTribeSpeaker && (
                     <>
-                      <DropdownMenuItem onClick={() => handleOpenPromoteDialog(post)} disabled={isPromoted}>
+                      <ResponsiveMenuItem onClick={() => handleOpenPromoteDialog(post)} disabled={isPromoted}>
                         <Rss className="mr-2 h-4 w-4" /> {isPromoted ? "Already Promoted" : "Promote to Mood Stream"}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleTogglePinPost(post.id)}>
+                      </ResponsiveMenuItem>
+                      <ResponsiveMenuItem onClick={() => handleTogglePinPost(post.id)}>
                         <Pin className="mr-2 h-4 w-4" /> {post.isPinned ? "Unpin Post" : "Pin to Top"}
-                      </DropdownMenuItem>
+                      </ResponsiveMenuItem>
                       {isTribeSpeaker && !isCurrentUserAuthor && (
-                        <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleRemovePostAsMod(post.id)}>
+                        <ResponsiveMenuItem className="text-destructive focus:text-destructive" onClick={() => handleOpenModRemoveDialog(post)}>
                           <ShieldAlert className="mr-2 h-4 w-4" /> Remove Post (Mod)
-                        </DropdownMenuItem>
+                        </ResponsiveMenuItem>
                       )}
-                      <DropdownMenuSeparator />
+                      <ResponsiveMenuSeparator />
                     </>
                   )}
+                  {isGlobalAdmin && (
+                    <ResponsiveMenuItem className="text-destructive focus:text-destructive" onClick={() => setIsAdminDeleteDialogOpen(true)}>
+                      <Trash2 className="mr-2 h-4 w-4" /> Delete Post (Admin)
+                    </ResponsiveMenuItem>
+                  )}
                   {!isCurrentUserAuthor && (
-                    <DropdownMenuItem onClick={() => handleOpenReportPostDialog(post)}>
-                      <Flag className="mr-2 h-4 w-4" /> Report Post
-                    </DropdownMenuItem>
+                    <>
+                      <ResponsiveMenuItem onClick={() => handleOpenReportPostDialog(post)}>
+                        <Flag className="mr-2 h-4 w-4" /> Report Post
+                      </ResponsiveMenuItem>
+                      <ResponsiveMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setIsBlockDialogOpen(true)}
+                      >
+                        <UserRoundX className="mr-2 h-4 w-4" /> Block User
+                      </ResponsiveMenuItem>
+                    </>
                   )}
                   {isCurrentUserAuthor && (
                     <>
-                      <DropdownMenuItem onClick={() => handleOpenEditPostDialog(post)}>
+                      <ResponsiveMenuItem onClick={() => handleOpenEditPostDialog(post)}>
                         <Pencil className="mr-2 h-4 w-4" /> Edit Post
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => handleDeletePost(post.id)}>
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete Post
-                      </DropdownMenuItem>
+                      </ResponsiveMenuItem>
+                      {!isGlobalAdmin && (
+                        <ResponsiveMenuItem className="text-destructive focus:text-destructive" onClick={() => setIsDeleteDialogOpen(true)}>
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete Post
+                        </ResponsiveMenuItem>
+                      )}
                     </>
                   )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+                </ResponsiveMenuContent>
+              </ResponsiveMenu>
+              </div>
             )}
           </div>
         </CardHeader>
-        <CardContent className="p-4 pt-2">
-          {post.title && <h3 className="text-xl font-semibold mb-2 text-foreground tracking-tight">{post.title}</h3>}
-          {/* Multi-image support */}
-          {post.imageUrls && post.imageUrls.length > 0 ? (
-            <div className={cn(
-              "mb-3 grid gap-2 overflow-hidden rounded-lg border bg-muted/20",
-              post.imageUrls.length === 1 ? "grid-cols-1" : 
-              post.imageUrls.length === 2 ? "grid-cols-2" : 
-              post.imageUrls.length === 3 ? "grid-cols-2" :
-              "grid-cols-2"
-            )}>
-              {post.imageUrls.map((url, idx) => (
-                <div 
-                  key={idx} 
-                  className={cn(
-                    "relative overflow-hidden cursor-pointer group",
-                    post.imageUrls!.length === 1 ? "aspect-video" : "aspect-square",
-                    post.imageUrls!.length === 3 && idx === 0 && "row-span-2 aspect-auto"
-                  )}
-                  onClick={() => { setLightboxIndex(idx); setLightboxOpen(true); }}
-                >
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10" />
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`${post.imageAlt || "Post image"} ${idx + 1}`} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+        <CardContent className="p-3 sm:p-4 pt-2 sm:pt-3 relative">
+          {post.title && (
+            <Link href={buildPostPath(post.id, post.slug, state.tribe?.slug)} className="hover:underline decoration-primary/30 decoration-2">
+              <h3 className="text-lg font-semibold mb-1.5 text-foreground tracking-tight">{post.title}</h3>
+            </Link>
+          )}
+          {/* Multi-image support — only show images NOT referenced inline via [img:N] */}
+          {(() => {
+            const allImages = post.imageUrls?.length ? post.imageUrls : (post.imageUrl ? [post.imageUrl] : []);
+            const inlineRefs = displayContent ? getReferencedImageIndices(displayContent) : new Set<number>();
+            const headerImages = allImages.filter((_, idx) => !inlineRefs.has(idx + 1));
+            
+            if (headerImages.length > 0) {
+              return (
+                <div className={cn(
+                  "mb-3 grid gap-2 overflow-hidden rounded-lg border bg-muted/20",
+                  headerImages.length === 1 ? "grid-cols-1" :
+                    headerImages.length === 2 ? "grid-cols-2" :
+                      headerImages.length === 3 ? "grid-cols-2" :
+                        "grid-cols-2"
+                )}>
+                  {headerImages.map((urlOrId, idx) => {
+                    const origIdx = allImages.indexOf(urlOrId);
+                    return (
+                      <div
+                        key={idx}
+                        className={cn(
+                          "relative overflow-hidden cursor-pointer group",
+                          headerImages.length === 1
+                            ? "flex items-center justify-center max-h-[500px]"
+                            : "aspect-square",
+                          headerImages.length === 3 && idx === 0 && "row-span-2 aspect-auto"
+                        )}
+                        onClick={() => { setLightboxIndex(origIdx >= 0 ? origIdx : idx); setLightboxOpen(true); }}
+                      >
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10" />
+                        {post.isEncrypted ? (
+                          <EncryptedImage fileId={urlOrId} postId={post.id} ring={post.ring || 'tribes'} tribeId={post.tribeId || tribeId} alt={`${post.imageAlt || "Post image"} ${idx + 1}`} className={cn(
+                            "transition-transform duration-300 group-hover:scale-105",
+                            headerImages.length === 1
+                              ? "max-w-full max-h-[500px] w-auto h-auto object-contain"
+                              : "w-full h-full object-cover"
+                          )} />
+                        ) : (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={urlOrId} alt={`${post.imageAlt || "Post image"} ${idx + 1}`} className={cn(
+                            "transition-transform duration-300 group-hover:scale-105",
+                            headerImages.length === 1
+                              ? "max-w-full max-h-[500px] w-auto h-auto object-contain"
+                              : "w-full h-full object-cover"
+                          )} />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
+              );
+            }
+            return null;
+          })()}
+          {/* Post Text Content */}
+          {post.isEncrypted && decryptionStatus === 'decrypting' && (
+            <div className="space-y-2 animate-pulse mb-3 mt-2">
+              <div className="h-4 bg-muted/60 rounded w-full"></div>
+              <div className="h-4 bg-muted/60 rounded w-5/6"></div>
+              <div className="h-4 bg-muted/60 rounded w-4/6"></div>
             </div>
-          ) : post.imageUrl ? (
-            <div 
-              className="mb-3 relative aspect-video w-full overflow-hidden rounded-lg border bg-muted/20 cursor-pointer group"
-              onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }}
-            >
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors z-10" />
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={post.imageUrl} alt={post.imageAlt || "Post image"} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" data-ai-hint={post.dataAiHintImage || "post image"} />
+          )}
+          {post.isEncrypted && decryptionStatus === 'missing_key' && (
+            <div className="flex flex-col items-center justify-center p-6 my-2 bg-secondary/30 backdrop-blur-md rounded-lg border border-border/50 shadow-inner">
+              <div className="bg-background/80 p-3 rounded-full mb-3 shadow-sm">
+                <Lock className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-foreground font-medium text-center">Content Locked</p>
+              <p className="text-xs text-muted-foreground text-center mt-1.5 max-w-[250px] leading-relaxed">
+                Waiting for encryption keys to sync.
+              </p>
             </div>
-          ) : null}
-          <MarkdownContent content={post.content} />
+          )}
+          {post.isEncrypted && decryptionStatus === 'failed' && (
+            <div className="flex items-center text-destructive bg-destructive/10 p-3 rounded-md mb-3 mt-2 border border-destructive/20">
+              <Lock className="h-4 w-4 mr-2" />
+              <span className="text-sm font-medium">Decryption failed.</span>
+            </div>
+          )}
+          {post.isEncrypted && decryptionStatus === 'key_mismatch' && (
+            <div className="flex items-center text-muted-foreground bg-muted/50 p-3 rounded-md mb-3 mt-2 border border-border/50">
+              <Lock className="h-4 w-4 mr-2 flex-shrink-0" />
+              <span className="text-sm">This post was encrypted with a previous key and can no longer be decrypted.</span>
+            </div>
+          )}
+          {(!post.isEncrypted || decryptionStatus === 'success') && displayContent && (
+            <MarkdownContent
+              content={displayContent}
+              imageUrls={post.imageUrls?.length ? post.imageUrls : (post.imageUrl ? [post.imageUrl] : undefined)}
+              isEncrypted={post.isEncrypted}
+              postId={post.id}
+              ring={post.ring || 'tribes'}
+              tribeId={post.tribeId || tribeId}
+              onImageClick={(idx) => { setLightboxIndex(idx); setLightboxOpen(true); }}
+            />
+          )}
+          {/* Link preview card */}
+          {post.linkUrl && (
+            <div className="mt-2">
+              <LinkPreviewCard
+                url={post.linkUrl}
+                title={post.linkTitle}
+                description={post.linkDescription}
+                imageUrl={post.linkImage}
+                siteName={post.linkSiteName}
+              />
+            </div>
+          )}
           {(post.commentsData && post.commentsData.length > 0) && (
             <div className="mt-4 pt-3 border-t">
               {post.commentsData.map(comment => (
@@ -252,38 +556,21 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                   isLoggedIn={isLoggedIn}
                   isMember={isMember}
                   currentUserId={isCurrentUserAuthor ? post.authorId : undefined}
+                  tribeId={tribeId}
                 />
               ))}
             </div>
           )}
         </CardContent>
-        <CardFooter className="p-4 pt-2 flex items-center justify-start space-x-4 border-t bg-muted/30">
+        <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start space-x-4 border-t">
           {isLoggedIn && isMember ? (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="sm" className={cn("text-muted-foreground hover:text-primary transition-all", currentUserHasVibed && "bg-primary/10 text-primary")} disabled={post.isRemoved}>
-                  {currentRecentVibes.length > 0 ? (
-                    <div className="flex -space-x-1.5 mr-2">
-                      {currentRecentVibes.map((rv, i) => (
-                        <span key={i} className="text-base z-10 bg-background rounded-full leading-none p-[1px] shadow-sm relative">{rv.emoji}</span>
-                      ))}
-                    </div>
-                  ) : (
-                    <Smile className="mr-1.5 h-4 w-4" />
-                  )}
-                  {currentVibesCount}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-2">
-                <div className="flex space-x-1">
-                  {emoticons.map((emo) => (
-                    <Button key={emo} variant="ghost" size="icon" className="text-xl p-1.5 h-auto w-auto rounded-md hover:bg-accent" onClick={() => handleVibeSelection(emo)}>
-                      {emo}
-                    </Button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
+            <VibePicker
+              vibeCount={currentVibesCount}
+              recentVibes={currentRecentVibes}
+              hasVibed={currentUserHasVibed}
+              onVibeSelect={handleVibeSelection}
+              disabled={post.isRemoved}
+            />
           ) : (
             <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" disabled={post.isRemoved} onClick={() => { if (!isLoggedIn) router.push('/signup'); }}>
               {currentRecentVibes.length > 0 ? (
@@ -298,11 +585,11 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
               {currentVibesCount}
             </Button>
           )}
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="text-muted-foreground hover:text-primary" 
-            disabled={post.isRemoved} 
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-primary"
+            disabled={post.isRemoved}
             onClick={() => {
               triggerHaptic(ImpactStyle.Light);
               if (isLoggedIn && isMember) handleOpenCommentDialog({ postId: post.id, postTitle: post.title });
@@ -310,30 +597,113 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
           >
             <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
           </Button>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="text-muted-foreground hover:text-primary" 
+          {isLoggedIn && isMember && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground hover:text-primary"
+              disabled={post.isRemoved}
+              onClick={() => {
+                triggerHaptic(ImpactStyle.Light);
+                if (isMobile) {
+                  // On mobile, use the bottom-sheet comment dialog to avoid keyboard overlap
+                  handleOpenCommentDialog({ postId: post.id, postTitle: post.title });
+                } else {
+                  setShowInlineReply(!showInlineReply);
+                }
+              }}
+            >
+              <Send className="mr-1.5 h-4 w-4" /> Reply
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-primary"
             disabled={post.isRemoved}
             onClick={() => {
               triggerHaptic(ImpactStyle.Medium);
               shareContent({
                 title: post.title || 'Check out this post on Tribes',
                 text: post.content.substring(0, 100),
-                url: `${typeof window !== 'undefined' ? window.location.origin : ''}/post/${post.id}`
+                url: `${typeof window !== 'undefined' ? window.location.origin : ''}${buildPostPath(post.id, post.slug, state.tribe?.slug)}`
               });
             }}
           >
             <SquareArrowUp className="mr-1.5 h-4 w-4" /> Share
           </Button>
         </CardFooter>
+        {!isMobile && showInlineReply && (
+          <div ref={inlineReplyRef} className="px-3 sm:px-4 pb-3 sm:pb-4 flex gap-2">
+            <Input
+              placeholder="Write a reply..."
+              value={inlineReplyText}
+              onChange={(e) => setInlineReplyText(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendInlineReply()}
+              className="text-sm"
+              autoFocus
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={!inlineReplyText.trim() || isSendingInlineReply}
+              onClick={handleSendInlineReply}
+              className="shrink-0"
+            >
+              {isSendingInlineReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
+        )}
       </div>
+      )}
 
-      <ImageLightbox 
-        images={post.imageUrls?.length ? post.imageUrls : (post.imageUrl ? [post.imageUrl] : [])} 
+      <ImageLightbox
+        images={post.imageUrls?.length ? post.imageUrls : (post.imageUrl ? [post.imageUrl] : [])}
         initialIndex={lightboxIndex}
         open={lightboxOpen}
         onOpenChange={setLightboxOpen}
+        isEncrypted={post.isEncrypted}
+        postId={post.id}
+        ring="tribes"
+        tribeId={tribeId}
+      />
+
+      <ConfirmActionDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Post"
+        description="Are you sure you want to delete this post? This action cannot be undone."
+        confirmText="Delete"
+        destructive={true}
+        onConfirm={() => handleDeletePost(post.id)}
+      />
+
+      <ConfirmActionDialog
+        open={isAdminDeleteDialogOpen}
+        onOpenChange={setIsAdminDeleteDialogOpen}
+        title="Permanently Delete Post (Admin)"
+        description="This will permanently delete this post and all associated data (comments, vibes, reports, encryption keys). Media files will be queued for cleanup after 30 days. This cannot be undone."
+        confirmText="Delete Permanently"
+        destructive={true}
+        onConfirm={() => handleAdminDeletePost(post.id)}
+      />
+
+      <ConfirmActionDialog
+        open={isBlockDialogOpen}
+        onOpenChange={setIsBlockDialogOpen}
+        title={`Block ${post.authorName}?`}
+        description="Are you sure you want to block this user? You will no longer see their posts or messages."
+        confirmText="Block"
+        destructive={true}
+        onConfirm={async () => {
+          try {
+            const { blockUser } = await import('@/lib/actions/bond-actions');
+            await blockUser(post.authorId, 'Blocked from post context menu');
+            window.location.reload();
+          } catch (err) {
+            console.error('Block failed:', err);
+          }
+        }}
       />
     </Card>
   );

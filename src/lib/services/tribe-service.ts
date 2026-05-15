@@ -59,7 +59,7 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
     description: payload.description,
     memberCount: 1,
     isPublic: payload.isPublic,
-    cover: payload.coverPreview || tribeCoverSvg(payload.name),
+    cover: payload.coverPreview || tribeCoverSvg(payload.name, brandColor),
     dataAiHint: 'community group',
     homepageUrl: payload.homepageUrl || null,
     joinMechanism: 'instant',
@@ -129,17 +129,45 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
   const existing = existingRows[0];
   if (!existing) return null;
 
+  // ── Name change governance ────────────────────────────────────
+  const nameChanged = payload.name !== existing.name;
+  if (nameChanged && (existing.memberCount ?? 0) > 1) {
+    throw new Error(
+      'Tribe name cannot be changed once other members have joined. '
+      + 'Create a new tribe if you need a different name.'
+    );
+  }
+
+  // Solo founder can rename → update slug + create redirect from old slug
+  let newSlug = existing.slug;
+  if (nameChanged && (existing.memberCount ?? 0) <= 1) {
+    const { generateUniqueSlug, createSlugRedirect } = await import('@/lib/slugify');
+    newSlug = await generateUniqueSlug(payload.name);
+    if (existing.slug && existing.slug !== newSlug) {
+      await createSlugRedirect(existing.slug, tribeId);
+    }
+  }
+
+  const newBrandColor = payload.brandColor ?? existing.brandColor;
+  let newCover = payload.cover ?? existing.cover;
+  
+  if (newCover && newCover.startsWith('data:image/svg+xml') && (payload.name !== existing.name || payload.brandColor !== existing.brandColor)) {
+    const { tribeCoverSvg } = await import('@/lib/placeholder-svg');
+    newCover = tribeCoverSvg(payload.name, newBrandColor || undefined);
+  }
+
   await db.update(tribes).set({
     name: payload.name,
+    slug: newSlug,
     description: payload.description,
     homepageUrl: payload.homepageUrl || null,
     isPublic: payload.isPublic,
     joinMechanism: payload.joinMechanism,
     minimumReputation: payload.minimumReputation ?? null,
     minimumAccountAgeDays: payload.minimumAccountAgeDays ?? null,
-    brandColor: payload.brandColor ?? existing.brandColor,
+    brandColor: newBrandColor,
     brandLogo: payload.brandLogo ?? existing.brandLogo,
-    cover: payload.cover ?? existing.cover,
+    cover: newCover,
     coverPosition: payload.coverPosition ?? existing.coverPosition,
     bondDurationDays: payload.bondDurationDays !== undefined ? payload.bondDurationDays : existing.bondDurationDays,
   }).where(eq(tribes.id, tribeId));
@@ -157,9 +185,27 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
 
 // --- Member Management ---
 
-export async function getTribeMembers(tribeId: string): Promise<TribeMember[]> {
+export async function getTribeMembers(
+  tribeId: string,
+  options?: { page?: number; limit?: number },
+): Promise<TribeMember[]> {
   const { users, bonds } = await import('@/db/schema');
-  const rows = await db.select().from(tribeMembers).where(eq(tribeMembers.tribeId, tribeId));
+
+  // When paginated, apply offset/limit to the base query
+  const page = options?.page ?? undefined;
+  const limit = options?.limit ?? undefined;
+
+  let rows;
+  if (page !== undefined && limit !== undefined) {
+    const offset = (page - 1) * limit;
+    rows = await db.select().from(tribeMembers)
+      .where(eq(tribeMembers.tribeId, tribeId))
+      .limit(limit)
+      .offset(offset);
+  } else {
+    rows = await db.select().from(tribeMembers).where(eq(tribeMembers.tribeId, tribeId));
+  }
+
   const memberUserIds = rows.map(r => r.userId);
 
   if (memberUserIds.length === 0) return [];
@@ -201,6 +247,16 @@ export async function getTribeMembers(tribeId: string): Promise<TribeMember[]> {
       reputationStatus: r.reputationStatus as TribeMember['reputationStatus'],
     };
   });
+}
+
+/**
+ * Returns the total count of members in a tribe.
+ * Used alongside paginated getTribeMembers for "showing X of Y".
+ */
+export async function getTribeMemberCount(tribeId: string): Promise<number> {
+  const result = await db.select({ count: count() }).from(tribeMembers)
+    .where(eq(tribeMembers.tribeId, tribeId));
+  return result[0]?.count ?? 0;
 }
 
 
@@ -276,6 +332,52 @@ export async function approveJoinRequest(tribeId: string, pendingMemberId: strin
 
 export async function denyJoinRequest(tribeId: string, pendingMemberId: string): Promise<void> {
   await db.delete(pendingMembers).where(and(eq(pendingMembers.id, pendingMemberId), eq(pendingMembers.tribeId, tribeId)));
+}
+
+/**
+ * Bulk-approve multiple pending join requests.
+ * Processes sequentially because each approval needs subscription cap check,
+ * a DB transaction, and bond creation. Returns a summary of results.
+ */
+export async function bulkApproveJoinRequests(
+  tribeId: string,
+  pendingMemberIds: string[],
+): Promise<{ approved: number; failed: Array<{ id: string; reason: string }> }> {
+  const results = { approved: 0, failed: [] as Array<{ id: string; reason: string }> };
+
+  for (const id of pendingMemberIds) {
+    try {
+      await approveJoinRequest(tribeId, id);
+      results.approved++;
+    } catch (err) {
+      results.failed.push({
+        id,
+        reason: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Bulk-deny multiple pending join requests.
+ * Uses batch delete for efficiency since denial has no side effects.
+ */
+export async function bulkDenyJoinRequests(
+  tribeId: string,
+  pendingMemberIds: string[],
+): Promise<{ denied: number }> {
+  if (pendingMemberIds.length === 0) return { denied: 0 };
+
+  await db.delete(pendingMembers).where(
+    and(
+      eq(pendingMembers.tribeId, tribeId),
+      inArray(pendingMembers.id, pendingMemberIds),
+    ),
+  );
+
+  return { denied: pendingMemberIds.length };
 }
 
 /**
@@ -373,12 +475,23 @@ export async function deleteTribe(userId: string, tribeId: string): Promise<void
 // (see imports at top of file)
 
 /**
+ * Checks whether a user has a pending join request for a tribe.
+ */
+export async function checkPendingMembership(userId: string, tribeId: string): Promise<boolean> {
+  const existing = await db.select({ id: pendingMembers.id })
+    .from(pendingMembers)
+    .where(and(eq(pendingMembers.userId, userId), eq(pendingMembers.tribeId, tribeId)))
+    .limit(1);
+  return existing.length > 0;
+}
+
+/**
  * Request to join a tribe — enforces reputation gates, account age gates,
  * and join mechanism rules.
  * 
  * Bot friction: new/bot accounts with low reputation cannot join gated tribes.
  */
-export async function requestToJoinTribe(userId: string, tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected'> {
+export async function requestToJoinTribe(userId: string, tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending'> {
   const { users } = await import('@/db/schema');
 
   // 1. Load tribe and user
@@ -390,17 +503,17 @@ export async function requestToJoinTribe(userId: string, tribeId: string, aliasN
   const user = userRows[0];
   if (!user) throw new Error('User not found');
 
-  // 2. Check if already a member
+  // 2. Check if already a member — return friendly status instead of throwing
   const existingMember = await db.select().from(tribeMembers)
     .where(and(eq(tribeMembers.userId, userId), eq(tribeMembers.tribeId, tribeId)))
     .limit(1);
-  if (existingMember.length > 0) throw new Error('Already a member');
+  if (existingMember.length > 0) return 'already_member';
 
-  // 3. Check if already pending
+  // 3. Check if already pending — return friendly status instead of throwing
   const existingPending = await db.select().from(pendingMembers)
     .where(and(eq(pendingMembers.userId, userId), eq(pendingMembers.tribeId, tribeId)))
     .limit(1);
-  if (existingPending.length > 0) throw new Error('Request already pending');
+  if (existingPending.length > 0) return 'already_pending';
 
   // 4. GATE: Reputation check
   if (tribe.minimumReputation) {
@@ -440,6 +553,12 @@ export async function requestToJoinTribe(userId: string, tribeId: string, aliasN
       joinedAsAvatar: aliasAvatar || null,
       requestedAt: new Date(),
     });
+
+    // Notify tribe admins about the join request (fire-and-forget)
+    import('@/lib/services/realtime-dispatch').then(({ notifyTribeJoinRequest }) => {
+      notifyTribeJoinRequest(tribeId, user?.name ?? 'Someone', tribe.name);
+    }).catch(() => {});
+
     return 'pending';
   }
 

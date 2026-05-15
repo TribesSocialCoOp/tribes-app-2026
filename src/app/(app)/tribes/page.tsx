@@ -5,13 +5,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, HeartHandshake, Loader2, ShieldCheck, History, X, Globe, Lock } from "lucide-react";
+import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, HeartHandshake, Loader2, ShieldCheck, History, X, Globe, Lock, Clock } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { cn } from '@/lib/utils';
 import type { Tribe, UserProfile } from '@/lib/types';
-import { getTribes, getMyTribeIds, requestToJoinTribe } from '@/lib/actions/tribe-actions';
+import { getTribes, getMyTribeIds, requestToJoinTribe, checkPendingMembership } from '@/lib/actions/tribe-actions';
 import { useUser } from '@/hooks/use-user';
 import { useToast } from '@/hooks/use-toast';
 import { JoinTribeDialog } from '@/components/dialogs/join-tribe-dialog';
@@ -54,7 +54,7 @@ const checkJoinRequirements = (tribe: Tribe, user: UserProfile | null): { canJoi
 };
 
 
-const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean; onJoin: (tribe: Tribe) => void; isJoining: boolean; user: UserProfile | null }> = ({ tribe, isMyTribe, onJoin, isJoining, user }) => {
+const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean; onJoin: (tribe: Tribe) => void; isJoining: boolean; user: UserProfile | null; isPending: boolean }> = ({ tribe, isMyTribe, onJoin, isJoining, user, isPending }) => {
 
   const { canJoin, requirement, reason } = checkJoinRequirements(tribe, user);
   const joinButtonIsDisabled = isJoining || !canJoin;
@@ -123,6 +123,10 @@ const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean; onJoin: (tribe
             <Eye className="mr-1.5 h-3.5 w-3.5" /> View
           </Button>
         </Link>
+      ) : isPending ? (
+        <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+          <Clock className="h-3.5 w-3.5" /> Pending
+        </div>
       ) : !canJoin ? (
             <TooltipProvider>
                 <Tooltip>
@@ -144,11 +148,18 @@ const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean; onJoin: (tribe
 };
 
 export default function TribesPage() {
-  const [viewMode, setViewMode] = useState<'card' | 'list'>('card');
+  const [viewMode, setViewMode] = useState<'card' | 'list'>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('tribes_view_mode');
+      if (stored === 'card' || stored === 'list') return stored;
+    }
+    return 'card';
+  });
   const [allTribes, setAllTribes] = useState<Tribe[]>([]);
   const [myTribeIds, setMyTribeIds] = useState<string[]>([]);
   const [isClient, setIsClient] = useState(false);
   const [joiningStates, setJoiningStates] = useState<Record<string, boolean>>({});
+  const [pendingTribeIds, setPendingTribeIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const { user } = useUser();
   const { toast } = useToast();
@@ -158,6 +169,11 @@ export default function TribesPage() {
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
   const [tribeToJoin, setTribeToJoin] = useState<Tribe | null>(null);
 
+  const handleSetViewMode = (mode: 'card' | 'list') => {
+    setViewMode(mode);
+    localStorage.setItem('tribes_view_mode', mode);
+  };
+
   const syncData = async () => {
     // Fetch membership from DB (sole source of truth)
     const [fetchedTribes, memberTribeIds] = await Promise.all([
@@ -166,6 +182,17 @@ export default function TribesPage() {
     ]);
     setAllTribes(fetchedTribes);
     setMyTribeIds(memberTribeIds);
+
+    // Check pending status for public approval tribes the user hasn't joined
+    const approvalTribes = fetchedTribes.filter(
+      t => t.isPublic && t.joinMechanism === 'approval' && !memberTribeIds.includes(t.id)
+    );
+    if (approvalTribes.length > 0) {
+      const pendingChecks = await Promise.all(
+        approvalTribes.map(t => checkPendingMembership(t.id).then(isPending => ({ id: t.id, isPending })))
+      );
+      setPendingTribeIds(new Set(pendingChecks.filter(c => c.isPending).map(c => c.id)));
+    }
   };
   
   useEffect(() => {
@@ -191,10 +218,17 @@ export default function TribesPage() {
     try {
       const result = await requestToJoinTribe(tribeToJoin.id, selectedAlias, aliasAvatar);
       if (result === 'pending') {
-        toast({ title: "Request Sent", description: `Your request to join ${tribeToJoin.name} is pending approval.` });
+        setPendingTribeIds(prev => new Set(prev).add(tribeToJoin.id));
+        toast({ title: "Request Sent!", description: `Your request to join ${tribeToJoin.name} is pending approval. The tribe admins will review it shortly.` });
       } else if (result === 'joined') {
         await syncData(); // Re-sync data from DB to update the lists
         toast({ title: "Welcome!", description: `You have successfully joined ${tribeToJoin.name}.` });
+      } else if (result === 'already_member') {
+        toast({ title: "Already a Member", description: `You're already a member of ${tribeToJoin.name}.` });
+        await syncData();
+      } else if (result === 'already_pending') {
+        setPendingTribeIds(prev => new Set(prev).add(tribeToJoin.id));
+        toast({ title: "Request Already Sent", description: `Your request to join ${tribeToJoin.name} is still pending approval.` });
       } else {
         toast({ title: "Cannot Join", description: `Your request to join ${tribeToJoin.name} was rejected.`, variant: "destructive" });
       }
@@ -230,7 +264,7 @@ export default function TribesPage() {
     <Card className="shadow-lg">
       <CardContent className="p-0">
         {tribes.length > 0 ? (
-          tribes.map(tribe => <TribeListItem key={tribe.id} tribe={tribe} isMyTribe={isMyTribeList} onJoin={handleOpenJoinDialog} isJoining={!!joiningStates[tribe.id]} user={user} />)
+          tribes.map(tribe => <TribeListItem key={tribe.id} tribe={tribe} isMyTribe={isMyTribeList} onJoin={handleOpenJoinDialog} isJoining={!!joiningStates[tribe.id]} user={user} isPending={pendingTribeIds.has(tribe.id)} />)
         ) : (
           <p className="p-4 text-center text-muted-foreground">No tribes in this category.</p>
         )}
@@ -331,6 +365,11 @@ export default function TribesPage() {
                         View Tribe <ArrowRight className="ml-2 h-4 w-4" />
                         </Button>
                     </Link>
+                    ) : pendingTribeIds.has(tribe.id) ? (
+                        <div className="w-full flex items-center justify-center gap-2 py-2 text-sm text-amber-600 dark:text-amber-400 font-medium">
+                          <Clock className="h-4 w-4" />
+                          <span>Join Request Pending</span>
+                        </div>
                     ) : !canJoin ? (
                         <TooltipProvider>
                             <Tooltip>
@@ -397,10 +436,10 @@ export default function TribesPage() {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant={viewMode === 'card' ? 'default' : 'outline'} size="icon" onClick={() => setViewMode('card')} aria-label="Card view">
+            <Button variant={viewMode === 'card' ? 'default' : 'outline'} size="icon" onClick={() => handleSetViewMode('card')} aria-label="Card view">
               <LayoutGrid className="h-5 w-5" />
             </Button>
-            <Button variant={viewMode === 'list' ? 'default' : 'outline'} size="icon" onClick={() => setViewMode('list')} aria-label="List view">
+            <Button variant={viewMode === 'list' ? 'default' : 'outline'} size="icon" onClick={() => handleSetViewMode('list')} aria-label="List view">
               <List className="h-5 w-5" />
             </Button>
           </div>

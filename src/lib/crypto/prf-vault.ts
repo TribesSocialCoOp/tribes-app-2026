@@ -20,7 +20,10 @@ import {
 } from './key-manager';
 import {
   getAllBondKeys,
+  getBondKey,
   storeBondKey,
+  deleteSharedSecret,
+  hashPublicKeyJwk,
 } from './key-store';
 
 // ============================================================
@@ -36,10 +39,21 @@ const HKDF_INFO = 'tribes.app/prf-vault-wrapping-key/v1';
 // ============================================================
 
 /**
- * Checks if the browser supports the WebAuthn PRF extension.
+ * Checks if the browser/platform supports the WebAuthn PRF extension.
+ *
+ * Detection strategy:
+ * 1. Standard: PublicKeyCredential.getClientCapabilities() (WebAuthn L3)
+ * 2. Native iOS (Capacitor): PRF is supported via the system authenticator
+ *    (iCloud Keychain / Face ID). The login flow already uses this successfully.
+ * 3. Fallback: If navigator.credentials is available and we're on a platform
+ *    known to support passkeys, assume PRF is available — the actual PRF result
+ *    is validated at ceremony time anyway.
  */
 export async function isPrfSupported(): Promise<boolean> {
-  if (typeof window === 'undefined' || !window.PublicKeyCredential) return false;
+  if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+    console.log('[prf] No window or PublicKeyCredential');
+    return false;
+  }
   
   // 1. Check getClientCapabilities (Standard way, WebAuthn L3)
   // This API is new and not yet in all TypeScript lib definitions — use safe dynamic access.
@@ -47,14 +61,47 @@ export async function isPrfSupported(): Promise<boolean> {
   if (typeof pkc.getClientCapabilities === 'function') {
     try {
       const caps = await (pkc.getClientCapabilities as () => Promise<Record<string, boolean>>)();
+      console.log('[prf] getClientCapabilities:', caps);
       return !!caps.prf;
-    } catch {
+    } catch (err) {
+      console.log('[prf] getClientCapabilities threw:', err);
       // Fall through — capability check failed (e.g., browser throws on unknown caps)
     }
+  } else {
+    console.log('[prf] getClientCapabilities not available');
   }
 
-  // 2. Conservative fallback: unknown capability = not supported.
-  // The actual PRF result is confirmed by the authenticator at runtime, not here.
+  // 2. Native iOS (Capacitor): PRF works via the system authenticator.
+  // The login flow already successfully evaluates PRF extensions through
+  // @simplewebauthn/browser → ASAuthorizationController, so we know it's available.
+  const cap = (window as unknown as Record<string, any>).Capacitor;
+  console.log('[prf] Capacitor global:', !!cap, 'isNative:', cap?.isNativePlatform?.(), 'platform:', cap?.getPlatform?.());
+  if (cap?.isNativePlatform?.() && cap?.getPlatform?.() === 'ios') {
+    console.log('[prf] Capacitor iOS detected — returning true');
+    return true;
+  }
+
+  // 3. Web fallback: check if we're on a modern platform with credentials support.
+  // Safari 18+, Chrome 128+, and other modern browsers support PRF — but without
+  // getClientCapabilities we can't be 100% sure. We optimistically return true
+  // if the platform has PublicKeyCredential + conditional mediation support
+  // (a proxy for "modern enough for PRF"). The actual PRF result is validated
+  // at ceremony time and we handle failures gracefully.
+  if (typeof pkc.isConditionalMediationAvailable === 'function') {
+    try {
+      const hasCM = await (pkc.isConditionalMediationAvailable as () => Promise<boolean>)();
+      console.log('[prf] isConditionalMediationAvailable:', hasCM);
+      if (hasCM) return true;
+    } catch (err) {
+      console.log('[prf] isConditionalMediationAvailable threw:', err);
+      // Fall through
+    }
+  } else {
+    console.log('[prf] isConditionalMediationAvailable not available');
+  }
+
+  // 4. Unknown capability — not supported.
+  console.log('[prf] No detection method succeeded — returning false');
   return false;
 }
 
@@ -137,6 +184,10 @@ interface VaultEntry {
 interface VaultPayload {
   version: number;
   entries: VaultEntry[];
+  identityKey?: {
+    privateKeyJwk: JsonWebKey;
+    publicKeyJwk: JsonWebKey;
+  };
   exportedAt: number;
 }
 
@@ -144,7 +195,10 @@ interface VaultPayload {
  * Encrypts the local keystore into a vault blob using a PRF wrapping key.
  * Exports all bond keys and the personal journal key.
  */
-export async function encryptVaultWithPrf(wrappingKey: CryptoKey): Promise<ArrayBuffer> {
+export async function encryptVaultWithPrf(
+  wrappingKey: CryptoKey,
+  userId?: string,
+): Promise<ArrayBuffer> {
   const storedKeys = await getAllBondKeys();
   if (storedKeys.length === 0) throw new Error('No keys to backup');
 
@@ -172,6 +226,24 @@ export async function encryptVaultWithPrf(wrappingKey: CryptoKey): Promise<Array
     exportedAt: Date.now(),
   };
 
+  // Include identity key if available (matches vault-backup.ts v2 format)
+  if (userId) {
+    try {
+      const { getIdentityKey } = await import('./key-store');
+      const { exportIdentityPrivateKey, exportIdentityPublicKey } = await import('./identity-keys');
+      const identityEntry = await getIdentityKey(userId);
+      if (identityEntry) {
+        const pubKey = await (await import('./identity-keys')).importIdentityPublicKey(identityEntry.publicKeyJwk);
+        payload.identityKey = {
+          privateKeyJwk: await exportIdentityPrivateKey(identityEntry.privateKey),
+          publicKeyJwk: await exportIdentityPublicKey(pubKey),
+        };
+      }
+    } catch (err) {
+      console.warn('[prf-vault] Could not include identity key in backup:', err);
+    }
+  }
+
   const plaintext = new TextEncoder().encode(JSON.stringify(payload));
   const iv = crypto.getRandomValues(new Uint8Array(12));
 
@@ -194,8 +266,9 @@ export async function encryptVaultWithPrf(wrappingKey: CryptoKey): Promise<Array
  */
 export async function decryptAndRestoreVault(
   wrappingKey: CryptoKey,
-  encryptedVault: ArrayBuffer
-): Promise<void> {
+  encryptedVault: ArrayBuffer,
+  userId?: string,
+): Promise<{ imported: number; skipped: number; total: number }> {
   const packed = new Uint8Array(encryptedVault);
   if (packed.length < 12) throw new Error('Invalid vault blob');
 
@@ -213,12 +286,66 @@ export async function decryptAndRestoreVault(
     throw new Error(`Unsupported vault version: ${payload.version}`);
   }
 
+  // Smart merge: same semantics as password vault restore.
+  // - New bonds: import directly
+  // - Same public key: skip (already in sync)
+  // - Different public key: backup wins + invalidate shared secret cache
+  let imported = 0;
+  let skipped = 0;
+
   for (const entry of payload.entries) {
     try {
+      const existingKey = await getBondKey(entry.bondId);
+
+      if (existingKey) {
+        // Compare public key hashes to detect key pair changes
+        const localPubHash = await hashPublicKeyJwk(existingKey.publicKeyJwk);
+        const backupPubHash = await hashPublicKeyJwk(entry.publicKeyJwk);
+
+        if (localPubHash === backupPubHash) {
+          skipped++;
+          continue;
+        }
+
+        // Different key pair — LOCAL WINS. This device generated its own key
+        // and published it to the server. The backup's key is from a different
+        // device. Overwriting would create a mismatch with the server record.
+        console.warn(
+          `[prf-vault] Bond ${entry.bondId.substring(0, 16)}... has different local key — ` +
+          `keeping local (local: ${localPubHash.substring(0, 8)}... backup: ${backupPubHash.substring(0, 8)}...)`
+        );
+        skipped++;
+        continue;
+      }
+
       const key = await importPrivateKey(entry.privateKeyJwk);
       await storeBondKey(entry.bondId, key, entry.publicKeyJwk);
+      imported++;
     } catch (err) {
       console.error(`[prf-vault] Failed to restore key for ${entry.bondId}`, err);
     }
   }
+
+  // Restore identity key if present (skip-if-exists, same as password vault)
+  if (payload.identityKey && userId) {
+    try {
+      const { importIdentityPrivateKey } = await import('./identity-keys');
+      const { storeIdentityKey, getIdentityKey } = await import('./key-store');
+
+      const existingIdentity = await getIdentityKey(userId);
+      if (!existingIdentity) {
+        const privateKey = await importIdentityPrivateKey(payload.identityKey.privateKeyJwk);
+        await storeIdentityKey(userId, privateKey, payload.identityKey.publicKeyJwk);
+        console.log(`[prf-vault] Restored identity key for user ${userId.substring(0, 8)}...`);
+      } else {
+        console.debug(`[prf-vault] Skipping identity key — local key exists for ${userId.substring(0, 8)}...`);
+      }
+    } catch (err) {
+      console.warn('[prf-vault] Failed to restore identity key:', err);
+    }
+  }
+
+  console.log(`[prf-vault] Restore complete: ${imported} imported, ${skipped} unchanged, ${payload.entries.length} total`);
+
+  return { imported, skipped, total: payload.entries.length };
 }

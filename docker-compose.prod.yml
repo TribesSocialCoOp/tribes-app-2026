@@ -13,6 +13,8 @@ services:
       valkey:
         condition: service_started
     networks: [tribes]
+    volumes:
+      - ./keys:/app/keys:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9002/api/health"]
       interval: 5s
@@ -37,6 +39,8 @@ services:
       valkey:
         condition: service_started
     networks: [tribes]
+    volumes:
+      - ./keys:/app/keys:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9002/api/health"]
       interval: 5s

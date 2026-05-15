@@ -3,15 +3,17 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
+import { useActionError } from '@/hooks/use-action-error';
 import { useUser } from '@/hooks/use-user';
-import { getTribeById, getTribeBySlug, getTribeMembers, leaveTribe, getMyTribeIds, requestToJoinTribe, checkTribeAccess } from '@/lib/actions/tribe-actions';
+import { getTribeById, getTribeBySlug, getTribeMembers, leaveTribe, getMyTribeIds, requestToJoinTribe, checkTribeAccess, checkPendingMembership } from '@/lib/actions/tribe-actions';
 import { getEventsForTribe } from '@/lib/actions/event-actions';
 import { getPostsForTribe, promotePostToMoods, repost, createTribePost, getActiveReportedPostIds, getActiveReportsForTribe, reportPost, reportComment, toggleVibe, createComment, deleteOwnPost, togglePinTribePost } from '@/lib/actions/content-actions';
-import type { Tribe, Event, TribePost, ReportedPost, TribeMember, DiscussionComment } from '@/lib/types';
+import type { Tribe, Event, TribePost, ReportedPost, TribeMember, DiscussionComment, PaginatedResult } from '@/lib/types';
 import type { PostFormValues } from '@/components/dialogs/create-post-dialog';
 import type { TribeAccessLevel } from '@/lib/services/tribe-auth';
 import { TRIBE_0_ID } from '@/lib/constants';
 import { uploadFile } from '@/lib/upload';
+import { useKeySync } from '@/components/providers/key-sync-provider';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,10 +38,17 @@ interface TribeDetailState {
   reportedPosts: ReportedPost[];
   promotedPostIds: Set<string>;
   isMember: boolean;
+  isPending: boolean;
   isLoading: boolean;
   isJoining: boolean;
   isOwnerVerified: boolean;
+  hasTribeKey: boolean | null;
   reportReason: string;
+
+  // Pagination state for posts feed
+  hasMorePosts: boolean;
+  postsCursor: string | null;
+  isLoadingMorePosts: boolean;
 
   promoteDialog: DialogState<TribePost | null>;
   reportPostDialog: DialogState<TribePost | null>;
@@ -47,6 +56,7 @@ interface TribeDetailState {
   commentDialog: DialogState<CommentContext | null>;
   repostDialog: DialogState<TribePost | null>;
   editPostDialog: DialogState<TribePost | null>;
+  modRemoveDialog: DialogState<TribePost | null>;
   createPostDialog: { open: boolean };
   joinTribeDialog: { open: boolean };
 }
@@ -54,12 +64,17 @@ interface TribeDetailState {
 type Action =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_JOINING'; payload: boolean }
+  | { type: 'SET_PENDING'; payload: boolean }
   | { type: 'SET_TRIBE_DATA'; payload: {
       tribe: Tribe; members: TribeMember[]; posts: TribePost[];
       reportedPostIds: Set<string>; reportedPosts: ReportedPost[];
       events: Event[]; isMember: boolean; isOwnerVerified: boolean;
+      hasMorePosts: boolean; postsCursor: string | null;
     }}
-  | { type: 'SET_POSTS'; payload: TribePost[] }
+  | { type: 'SET_POSTS'; payload: { posts: TribePost[]; hasMorePosts: boolean; postsCursor: string | null } }
+  | { type: 'APPEND_POSTS'; payload: { posts: TribePost[]; hasMorePosts: boolean; postsCursor: string | null } }
+  | { type: 'SET_LOADING_MORE_POSTS'; payload: boolean }
+  | { type: 'SET_HAS_TRIBE_KEY'; payload: boolean | null }
   | { type: 'ADD_PROMOTED_POST'; payload: string }
   | { type: 'SET_REPORT_REASON'; payload: string }
   | { type: 'OPEN_PROMOTE'; payload: TribePost }
@@ -74,6 +89,8 @@ type Action =
   | { type: 'CLOSE_REPOST' }
   | { type: 'OPEN_EDIT_POST'; payload: TribePost }
   | { type: 'CLOSE_EDIT_POST' }
+  | { type: 'OPEN_MOD_REMOVE'; payload: TribePost }
+  | { type: 'CLOSE_MOD_REMOVE' }
   | { type: 'OPEN_CREATE_POST' }
   | { type: 'CLOSE_CREATE_POST' }
   | { type: 'OPEN_JOIN_TRIBE' }
@@ -84,13 +101,15 @@ type Action =
 const initialState: TribeDetailState = {
   tribe: null, posts: [], events: [], members: [],
   reportedPostIds: new Set(), reportedPosts: [], promotedPostIds: new Set(),
-  isMember: false, isLoading: true, isJoining: false, isOwnerVerified: false, reportReason: '',
+  isMember: false, isPending: false, isLoading: true, isJoining: false, isOwnerVerified: false, hasTribeKey: null, reportReason: '',
+  hasMorePosts: false, postsCursor: null, isLoadingMorePosts: false,
   promoteDialog: { open: false, target: null },
   reportPostDialog: { open: false, target: null },
   reportCommentDialog: { open: false, target: null },
   commentDialog: { open: false, target: null },
   repostDialog: { open: false, target: null },
   editPostDialog: { open: false, target: null },
+  modRemoveDialog: { open: false, target: null },
   createPostDialog: { open: false },
   joinTribeDialog: { open: false },
 };
@@ -99,8 +118,12 @@ function reducer(state: TribeDetailState, action: Action): TribeDetailState {
   switch (action.type) {
     case 'SET_LOADING': return { ...state, isLoading: action.payload };
     case 'SET_JOINING': return { ...state, isJoining: action.payload };
+    case 'SET_PENDING': return { ...state, isPending: action.payload };
     case 'SET_TRIBE_DATA': return { ...state, ...action.payload, isLoading: false };
-    case 'SET_POSTS': return { ...state, posts: action.payload };
+    case 'SET_POSTS': return { ...state, posts: action.payload.posts, hasMorePosts: action.payload.hasMorePosts, postsCursor: action.payload.postsCursor };
+    case 'APPEND_POSTS': return { ...state, posts: [...state.posts, ...action.payload.posts], hasMorePosts: action.payload.hasMorePosts, postsCursor: action.payload.postsCursor, isLoadingMorePosts: false };
+    case 'SET_LOADING_MORE_POSTS': return { ...state, isLoadingMorePosts: action.payload };
+    case 'SET_HAS_TRIBE_KEY': return { ...state, hasTribeKey: action.payload };
     case 'ADD_PROMOTED_POST':
       return { ...state, promotedPostIds: new Set(state.promotedPostIds).add(action.payload) };
     case 'SET_REPORT_REASON': return { ...state, reportReason: action.payload };
@@ -116,6 +139,8 @@ function reducer(state: TribeDetailState, action: Action): TribeDetailState {
     case 'CLOSE_REPOST': return { ...state, repostDialog: { open: false, target: null } };
     case 'OPEN_EDIT_POST': return { ...state, editPostDialog: { open: true, target: action.payload } };
     case 'CLOSE_EDIT_POST': return { ...state, editPostDialog: { open: false, target: null } };
+    case 'OPEN_MOD_REMOVE': return { ...state, modRemoveDialog: { open: true, target: action.payload } };
+    case 'CLOSE_MOD_REMOVE': return { ...state, modRemoveDialog: { open: false, target: null } };
     case 'OPEN_CREATE_POST': return { ...state, createPostDialog: { open: true } };
     case 'CLOSE_CREATE_POST': return { ...state, createPostDialog: { open: false } };
     case 'OPEN_JOIN_TRIBE': return { ...state, joinTribeDialog: { open: true } };
@@ -134,6 +159,13 @@ interface TribeDetailContextValue {
   currentUserId: string | undefined;
   isTribeAdmin: boolean;
   isTribeSpeaker: boolean;
+  isGlobalAdmin: boolean;
+  hasTribeKey: boolean | null;
+
+  // Pagination
+  hasMorePosts: boolean;
+  isLoadingMorePosts: boolean;
+  loadMorePosts: () => Promise<void>;
 
   // Actions
   syncAllData: (isBackground?: boolean | Event) => Promise<void>;
@@ -153,8 +185,11 @@ interface TribeDetailContextValue {
   handleCreatePost: (values: PostFormValues) => Promise<void>;
   handleDeletePost: (postId: string) => Promise<void>;
   handleTogglePinPost: (postId: string) => Promise<void>;
-  handleRemovePostAsMod: (postId: string) => Promise<void>;
+  handleOpenModRemoveDialog: (post: TribePost) => void;
+  handleConfirmModRemove: (reason: string, preventRepost: boolean) => Promise<void>;
+  handleAdminDeletePost: (postId: string) => Promise<void>;
   handleLeaveTribe: () => Promise<void>;
+  memberRoleMap: Map<string, 'founder' | 'speaker' | 'member'>;
 }
 
 const TribeDetailContext = createContext<TribeDetailContextValue | null>(null);
@@ -177,9 +212,12 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
   const [resolvedTribeId, setResolvedTribeId] = React.useState<string>(tribeIdParam || '');
   const tribeId = resolvedTribeId || tribeIdParam || '';
   const { toast } = useToast();
+  const { handleError } = useActionError();
   const { role, user } = useUser();
+  const { triggerSync } = useKeySync();
   const isLoggedIn = !!role;
   const currentUserId = user?.id;
+  const isGlobalAdmin = role === 'Admin';
 
   // Tribe access level — derived from server-side check, NOT global role
   const [tribeAccessLevel, setTribeAccessLevel] = React.useState<TribeAccessLevel>('guest');
@@ -213,8 +251,28 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     const myTribeIds = await getMyTribeIds();
     const memberOfTribe = myTribeIds.includes(effectiveTribeId) || effectiveTribeId === TRIBE_0_ID;
 
-    // Resolve tribe access level from server
-    const accessLevel = await checkTribeAccess(effectiveTribeId);
+    // Check for pending join request (non-members only, approval tribes)
+    if (!memberOfTribe && tribeData.joinMechanism === 'approval') {
+      checkPendingMembership(effectiveTribeId).then(isPending => {
+        dispatch({ type: 'SET_PENDING', payload: isPending });
+      }).catch(() => {});
+    } else {
+      dispatch({ type: 'SET_PENDING', payload: false });
+    }
+
+    // Resolve tribe access level from server (with retry for session hydration)
+    let accessLevel: TribeAccessLevel = 'guest';
+    let attempts = 0;
+    while (attempts < 3) {
+      accessLevel = await checkTribeAccess(effectiveTribeId);
+      // If we're logged in (global role exists) but getting 'guest', retry
+      if (accessLevel === 'guest' && isLoggedIn && attempts < 2) {
+        await new Promise(r => setTimeout(r, 500 * (attempts + 1)));
+        attempts++;
+      } else {
+        break;
+      }
+    }
     setTribeAccessLevel(accessLevel);
 
     const isSpeakerOrAbove = accessLevel === 'platform_admin' || accessLevel === 'founder' || accessLevel === 'speaker';
@@ -236,12 +294,14 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
         payload: {
           tribe: tribeData,
           members: membersData,
-          posts: postsData.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()),
+          posts: postsData.items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()),
           reportedPostIds: reportedIds,
           reportedPosts: tribeReports.reports,
           events: eventsData.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime()),
           isMember: memberOfTribe,
           isOwnerVerified: false, // Resolved below
+          hasMorePosts: postsData.nextCursor !== null,
+          postsCursor: postsData.nextCursor,
         },
       });
 
@@ -251,10 +311,12 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
           getTribeOwnerVerified(tribeData.id).then(v => {
             if (v) dispatch({ type: 'SET_TRIBE_DATA', payload: {
               tribe: tribeData, members: membersData,
-              posts: postsData.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()),
+              posts: postsData.items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime()),
               reportedPostIds: reportedIds, reportedPosts: tribeReports.reports,
               events: eventsData.sort((a, b) => a.eventDate.getTime() - b.eventDate.getTime()),
               isMember: memberOfTribe, isOwnerVerified: v,
+              hasMorePosts: postsData.nextCursor !== null,
+              postsCursor: postsData.nextCursor,
             }});
           }).catch(() => {})
         );
@@ -271,11 +333,94 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     return () => window.removeEventListener('focus', handleFocus);
   }, [syncAllData]);
 
+  // ── Key Availability Polling ──
+  useEffect(() => {
+    if (!tribeId || !state.isMember) {
+      if (state.hasTribeKey !== null) dispatch({ type: 'SET_HAS_TRIBE_KEY', payload: null });
+      return;
+    }
+
+    let active = true;
+    const checkKey = async () => {
+      try {
+        const { getTribeKey } = await import('@/lib/crypto/key-store');
+        const key = await getTribeKey(tribeId);
+        if (active) {
+          dispatch({ type: 'SET_HAS_TRIBE_KEY', payload: !!key });
+        }
+      } catch {
+        // Ignore IndexedDB errors
+      }
+    };
+
+    checkKey();
+    const interval = setInterval(() => {
+      if (!state.hasTribeKey) checkKey();
+    }, 5000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [tribeId, state.isMember, state.hasTribeKey]);
+
+  // ── Immediate key generation for founders of private tribes ──
+  // When a founder/admin enters a private tribe without a cached key,
+  // trigger an immediate KeySyncProvider cycle instead of waiting for
+  // the 60-second background interval. This eliminates the race window
+  // that caused the banner to flash and image posts to fail.
+  const hasTriggeredSync = React.useRef(false);
+  useEffect(() => {
+    if (
+      tribeId &&
+      state.isMember &&
+      state.hasTribeKey === false &&
+      isTribeAdmin &&
+      state.tribe &&
+      !state.tribe.isPublic &&
+      !hasTriggeredSync.current
+    ) {
+      hasTriggeredSync.current = true;
+      console.debug('[tribe-detail] Founder detected without tribe key — triggering immediate key sync');
+      triggerSync();
+      // Re-check after a short delay to allow the sync to complete
+      const recheckTimeout = setTimeout(async () => {
+        try {
+          const { getTribeKey } = await import('@/lib/crypto/key-store');
+          const key = await getTribeKey(tribeId);
+          if (key) {
+            dispatch({ type: 'SET_HAS_TRIBE_KEY', payload: true });
+          }
+        } catch {}
+      }, 3000);
+      return () => clearTimeout(recheckTimeout);
+    }
+  }, [tribeId, state.isMember, state.hasTribeKey, isTribeAdmin, state.tribe, triggerSync, dispatch]);
+
   // ── Handlers ──
   const handleInitiateJoinTribe = useCallback(() => {
     if (!isLoggedIn) { router.push('/signup'); return; }
     dispatch({ type: 'OPEN_JOIN_TRIBE' });
   }, [isLoggedIn, router]);
+
+  // ── Post Pagination ──
+  const loadMorePosts = useCallback(async () => {
+    if (!state.tribe || !state.hasMorePosts || state.isLoadingMorePosts) return;
+    dispatch({ type: 'SET_LOADING_MORE_POSTS', payload: true });
+    try {
+      const result = await getPostsForTribe(state.tribe.id, { cursor: state.postsCursor ?? undefined });
+      dispatch({
+        type: 'APPEND_POSTS',
+        payload: {
+          posts: result.items,
+          hasMorePosts: result.nextCursor !== null,
+          postsCursor: result.nextCursor,
+        },
+      });
+    } catch {
+      dispatch({ type: 'SET_LOADING_MORE_POSTS', payload: false });
+    }
+  }, [state.tribe, state.hasMorePosts, state.postsCursor, state.isLoadingMorePosts]);
 
   const handleConfirmJoinTribe = useCallback(async (tribe: Tribe, selectedAlias?: string, aliasAvatar?: string) => {
     if (!state.tribe) return;
@@ -284,15 +429,24 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       const result = await requestToJoinTribe(state.tribe.id, selectedAlias, aliasAvatar);
       dispatch({ type: 'CLOSE_JOIN_TRIBE' });
       if (result === 'pending') {
-        toast({ title: 'Request Sent', description: `Your request to join ${state.tribe.name} is pending approval.` });
+        dispatch({ type: 'SET_PENDING', payload: true });
+        toast({ title: 'Request Sent!', description: `Your request to join ${state.tribe.name} is pending approval. The tribe admins will review it shortly.` });
       } else if (result === 'joined') {
         await syncAllData();
         toast({ title: 'Welcome!', description: `You have successfully joined ${state.tribe.name}.` });
+      } else if (result === 'already_member') {
+        toast({ title: 'Already a Member', description: `You're already a member of ${state.tribe.name}.` });
+        await syncAllData();
+      } else if (result === 'already_pending') {
+        dispatch({ type: 'SET_PENDING', payload: true });
+        toast({ title: 'Request Already Sent', description: `Your request to join ${state.tribe.name} is still pending approval.` });
       } else {
         toast({ title: 'Cannot Join', description: `Your request to join ${state.tribe.name} was rejected.`, variant: 'destructive' });
       }
-    } catch {
-      toast({ title: 'Error', description: 'Failed to join tribe. Please try again.', variant: 'destructive' });
+    } catch (err) {
+      if (!handleError(err, 'Join Failed')) {
+        toast({ title: 'Error', description: 'Failed to join tribe. Please try again.', variant: 'destructive' });
+      }
       dispatch({ type: 'CLOSE_JOIN_TRIBE' });
     } finally {
       dispatch({ type: 'SET_JOINING', payload: false });
@@ -377,16 +531,33 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
   const handleConfirmComment = useCallback(async (content: string) => {
     if (!state.commentDialog.target) return;
     try {
-      const result = await createComment(state.commentDialog.target.postId, content, state.commentDialog.target.parentCommentId);
+      // Encrypt comment for private tribes
+      let encPayload: { ciphertextBase64: string; iv: string } | undefined;
+      if (state.tribe && !state.tribe.isPublic) {
+        const { getTribeKey } = await import('@/lib/crypto/key-store');
+        const cachedTribeKey = await getTribeKey(state.tribe.id);
+        if (!cachedTribeKey) {
+          throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
+        }
+        const { encryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
+        const { toBase64 } = await import('@/lib/crypto/encoding');
+        const encrypted = await encryptWithTribeKey(content.trim(), cachedTribeKey.key);
+        encPayload = {
+          ciphertextBase64: toBase64(encrypted.ciphertext),
+          iv: encrypted.iv,
+        };
+      }
+
+      const result = await createComment(state.commentDialog.target.postId, content, state.commentDialog.target.parentCommentId, encPayload);
       if (result && typeof result === 'object' && 'serverError' in result) {
         throw new Error(result.serverError as string);
       }
       toast({ title: 'Comment Posted!', description: 'Your comment has been added.' });
       await syncAllData();
     } catch (e: unknown) {
-      toast({ title: 'Error', description: ((e instanceof Error) ? e.message : 'An error occurred'), variant: 'destructive' });
+      handleError(e, 'Comment Failed');
     }
-  }, [state.commentDialog.target, toast, syncAllData]);
+  }, [state.commentDialog.target, state.tribe, toast, syncAllData]);
 
   const handleCreatePost = useCallback(async (values: PostFormValues) => {
     if (!state.tribe) return;
@@ -409,9 +580,9 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       dispatch({ type: 'CLOSE_CREATE_POST' });
       toast({ title: 'Post Created', description: 'Your post has been published to the tribe feed.' });
       const refreshedPosts = await getPostsForTribe(state.tribe.id);
-      dispatch({ type: 'SET_POSTS', payload: refreshedPosts });
+      dispatch({ type: 'SET_POSTS', payload: { posts: refreshedPosts.items, hasMorePosts: refreshedPosts.nextCursor !== null, postsCursor: refreshedPosts.nextCursor } });
     } catch (err: unknown) {
-      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') || 'Failed to create post.' });
+      handleError(err, 'Post Failed');
     }
   }, [state.tribe, toast]);
 
@@ -421,7 +592,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       toast({ title: 'Left Tribe', description: `You have left ${state.tribe?.name}.` });
       router.push('/tribes');
     } catch (e: unknown) {
-      toast({ title: 'Error', description: ((e instanceof Error) ? e.message : 'An error occurred'), variant: 'destructive' });
+      handleError(e, 'Leave Failed');
     }
   }, [tribeId, state.tribe, toast, router]);
 
@@ -430,9 +601,9 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       await deleteOwnPost(postId);
       toast({ title: 'Post Deleted', description: 'Your post has been removed.' });
       const refreshedPosts = await getPostsForTribe(state.tribe!.id);
-      dispatch({ type: 'SET_POSTS', payload: refreshedPosts });
+      dispatch({ type: 'SET_POSTS', payload: { posts: refreshedPosts.items, hasMorePosts: refreshedPosts.nextCursor !== null, postsCursor: refreshedPosts.nextCursor } });
     } catch (err: unknown) {
-      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') || 'Failed to delete post.' });
+      handleError(err, 'Delete Failed');
     }
   }, [state.tribe, toast]);
 
@@ -444,30 +615,57 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
         description: pinned ? 'This post will stay at the top of the feed.' : 'Post unpinned from top.' 
       });
       const refreshedPosts = await getPostsForTribe(state.tribe!.id);
-      dispatch({ type: 'SET_POSTS', payload: refreshedPosts });
+      dispatch({ type: 'SET_POSTS', payload: { posts: refreshedPosts.items, hasMorePosts: refreshedPosts.nextCursor !== null, postsCursor: refreshedPosts.nextCursor } });
     } catch (err: unknown) {
-      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') || 'Failed to toggle pin.' });
+      handleError(err, 'Pin Failed');
     }
   }, [state.tribe, toast]);
 
-  const handleRemovePostAsMod = useCallback(async (postId: string) => {
+  const handleOpenModRemoveDialog = useCallback((post: TribePost) => {
+    dispatch({ type: 'OPEN_MOD_REMOVE', payload: post });
+  }, []);
+
+  const handleConfirmModRemove = useCallback(async (reason: string, preventRepost: boolean) => {
+    if (!state.modRemoveDialog.target) return;
     try {
       const { removePost } = await import('@/lib/actions/content-actions');
       await removePost({
-        postId,
-        reason: 'Removed by tribe moderator.',
-        preventRepost: false
+        postId: state.modRemoveDialog.target.id,
+        reason,
+        preventRepost
       });
+      dispatch({ type: 'CLOSE_MOD_REMOVE' });
       toast({ title: 'Post Removed', description: 'Content has been removed from the tribe feed.' });
       const refreshedPosts = await getPostsForTribe(state.tribe!.id);
-      dispatch({ type: 'SET_POSTS', payload: refreshedPosts });
+      dispatch({ type: 'SET_POSTS', payload: { posts: refreshedPosts.items, hasMorePosts: refreshedPosts.nextCursor !== null, postsCursor: refreshedPosts.nextCursor } });
     } catch (err: unknown) {
-      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') || 'Failed to remove post.' });
+      handleError(err, 'Remove Failed');
+    }
+  }, [state.modRemoveDialog.target, state.tribe, toast]);
+
+  const handleAdminDeletePost = useCallback(async (postId: string) => {
+    try {
+      const { adminDeletePost } = await import('@/lib/actions/content-actions');
+      await adminDeletePost(postId);
+      toast({ title: 'Post Permanently Deleted', description: 'The post and all associated data have been removed.' });
+      const refreshedPosts = await getPostsForTribe(state.tribe!.id);
+      dispatch({ type: 'SET_POSTS', payload: { posts: refreshedPosts.items, hasMorePosts: refreshedPosts.nextCursor !== null, postsCursor: refreshedPosts.nextCursor } });
+    } catch (err: unknown) {
+      handleError(err, 'Delete Failed');
     }
   }, [state.tribe, toast]);
 
+  const memberRoleMap = useMemo(() => {
+    const map = new Map<string, 'founder' | 'speaker' | 'member'>();
+    state.members.forEach(m => {
+      map.set(m.id, m.role || 'member');
+    });
+    return map;
+  }, [state.members]);
+
   const value = useMemo(() => ({
-    state, dispatch, tribeId, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker,
+    state, dispatch, tribeId, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker, isGlobalAdmin, hasTribeKey: state.hasTribeKey,
+    hasMorePosts: state.hasMorePosts, isLoadingMorePosts: state.isLoadingMorePosts, loadMorePosts,
     syncAllData, handleInitiateJoinTribe, handleConfirmJoinTribe,
     handleOpenPromoteDialog, handleConfirmPromotion,
     handleOpenReportPostDialog, handleConfirmReportPost,
@@ -475,9 +673,13 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     handleOpenRepostDialog, handleConfirmRepost,
     handleOpenEditPostDialog,
     handleOpenCommentDialog, handleConfirmComment,
-    handleCreatePost, handleDeletePost, handleTogglePinPost, handleRemovePostAsMod, handleLeaveTribe,
+    handleCreatePost, handleDeletePost, handleTogglePinPost,
+    handleOpenModRemoveDialog, handleConfirmModRemove, handleAdminDeletePost,
+    handleLeaveTribe,
+    memberRoleMap,
   }), [
-    state, tribeId, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker,
+    state, tribeId, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker, isGlobalAdmin, state.hasTribeKey,
+    state.hasMorePosts, state.isLoadingMorePosts, loadMorePosts,
     syncAllData, handleInitiateJoinTribe, handleConfirmJoinTribe,
     handleOpenPromoteDialog, handleConfirmPromotion,
     handleOpenReportPostDialog, handleConfirmReportPost,
@@ -485,7 +687,10 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     handleOpenRepostDialog, handleConfirmRepost,
     handleOpenEditPostDialog,
     handleOpenCommentDialog, handleConfirmComment,
-    handleCreatePost, handleDeletePost, handleTogglePinPost, handleRemovePostAsMod, handleLeaveTribe,
+    handleCreatePost, handleDeletePost, handleTogglePinPost,
+    handleOpenModRemoveDialog, handleConfirmModRemove, handleAdminDeletePost,
+    handleLeaveTribe,
+    memberRoleMap,
   ]);
 
   return (

@@ -480,6 +480,7 @@ export async function submitBondPublicKey(
 
     await tx.update(bonds).set({
       publicKeyJwk,
+      lastRefreshedAt: new Date(),
     }).where(eq(bonds.id, bondId));
   });
 

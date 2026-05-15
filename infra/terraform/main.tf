@@ -86,6 +86,10 @@ resource "hcloud_server" "tribes_prod" {
   ssh_keys    = [hcloud_ssh_key.tribes.id]
   firewall_ids = [hcloud_firewall.tribes_prod.id]
 
+  # Destruction protection — blocks Hetzner Console/API deletion
+  delete_protection  = true
+  rebuild_protection = true
+
   # Attach the reserved static IP — survives server rebuilds
   # This is the IP whitelisted in Google Workspace SMTP relay
   public_net {
@@ -106,8 +110,10 @@ resource "hcloud_server" "tribes_prod" {
   # ssh_keys, user_data, and public_net are write-only or already-assigned at
   # creation time — the Hetzner provider cannot reconcile them after import.
   # Ignore to prevent spurious diffs and failed apply attempts.
+  # prevent_destroy blocks tofu destroy / accidental resource removal.
   lifecycle {
-    ignore_changes = [ssh_keys, user_data, public_net]
+    prevent_destroy = true
+    ignore_changes  = [ssh_keys, user_data, public_net]
   }
 }
 
@@ -119,6 +125,10 @@ resource "hcloud_server" "tribes_backup" {
   image       = "ubuntu-24.04"
   ssh_keys    = [hcloud_ssh_key.tribes.id]
   firewall_ids = [hcloud_firewall.tribes_backup.id]
+
+  # Destruction protection — blocks Hetzner Console/API deletion
+  delete_protection  = true
+  rebuild_protection = true
 
   user_data = templatefile("${path.module}/cloud-init-backup.yaml", {
     deploy_user = "tribes"
@@ -133,8 +143,10 @@ resource "hcloud_server" "tribes_backup" {
   # ssh_keys and user_data are write-only at creation time — the Hetzner
   # provider cannot read them back after import, so tofu will always see
   # drift on these fields. Ignore them to prevent accidental server replacement.
+  # prevent_destroy blocks tofu destroy / accidental resource removal.
   lifecycle {
-    ignore_changes = [ssh_keys, user_data]
+    prevent_destroy = true
+    ignore_changes  = [ssh_keys, user_data]
   }
 }
 
@@ -145,4 +157,11 @@ resource "hcloud_primary_ip" "tribes_prod" {
   type          = "ipv4"
   assignee_type = "server"
   auto_delete   = false             # Keep IP even if server is deleted
+
+  # Destruction protection — losing this IP breaks DNS + SMTP relay whitelist
+  delete_protection = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }

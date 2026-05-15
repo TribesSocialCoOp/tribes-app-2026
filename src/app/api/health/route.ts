@@ -28,6 +28,7 @@ export async function GET() {
 
     return NextResponse.json({
       status: 'ok',
+      buildId: process.env.NEXT_PUBLIC_BUILD_ID || 'unknown',
       timestamp: new Date().toISOString(),
       latencyMs: Date.now() - start,
     });

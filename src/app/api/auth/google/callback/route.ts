@@ -157,10 +157,17 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // Auto-join the welcome tribe ("The Trials", id: 0)
+        // Auto-join the welcome tribe (looked up by slug, not hardcoded ID)
         try {
           const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
-          await joinTribeDirectly(userId, '0');
+          const { tribes: tribesTable } = await import('@/db/schema');
+          const [welcomeTribe] = await db.select({ id: tribesTable.id })
+            .from(tribesTable)
+            .where(eq(tribesTable.slug, 'welcome-to-tribes'))
+            .limit(1);
+          if (welcomeTribe) {
+            await joinTribeDirectly(userId, welcomeTribe.id);
+          }
         } catch (e) {
           console.warn('[Google OAuth] Auto-join welcome tribe failed:', e);
         }

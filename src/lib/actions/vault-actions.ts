@@ -78,6 +78,21 @@ export async function hasVaultBackup(): Promise<boolean> {
 }
 
 /**
+ * Returns the vault backup date for the current user without fetching the blob.
+ * Used to warn users if their backup is older than orphaned bonds.
+ */
+export async function getVaultBackupDate(): Promise<Date | null> {
+  const userId = await getCurrentUserId();
+  if (!userId) return null;
+
+  const [backup] = await db.select({ createdAt: vaultBackups.createdAt }).from(vaultBackups)
+    .where(eq(vaultBackups.userId, userId))
+    .limit(1);
+
+  return backup?.createdAt ?? null;
+}
+
+/**
  * Deletes all vault backups for the current user.
  */
 export async function deleteVaultBackup(): Promise<void> {

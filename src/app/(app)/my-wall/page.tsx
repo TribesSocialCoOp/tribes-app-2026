@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import {
   PlusCircle, Brush, Loader2, Pin, Music, ExternalLink,
   Pencil, Check, X, Megaphone, BookLock, ChevronDown, ChevronUp,
+  Camera, CheckCircle2,
 } from "lucide-react";
+
 
 import { AddBlockDialog } from '@/components/dialogs/add-block-dialog';
 import { EditBlockDialog } from '@/components/dialogs/edit-block-dialog';
@@ -23,16 +25,21 @@ import {
   getWallStyle, saveWallStyle,
 } from '@/lib/actions/profile-actions';
 import {
-  getPinnedWallPosts, getCurrentMood, togglePinToWall,
+  getPinnedWallPosts, getCurrentMood, togglePinToWall, unpinWallClone,
 } from '@/lib/actions/content-actions';
+
 import HtmlBlock from '@/components/wall-blocks/html-block';
 import MusicBlock from '@/components/wall-blocks/music-block';
 import VideoBlock from '@/components/wall-blocks/video-block';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
+import { updateUserProfile } from '@/lib/actions/profile-actions';
+import { uploadFile } from '@/lib/upload';
+
 import { moodsData } from '@/lib/moods-data';
 import { AuthGuard } from '@/components/providers/auth-guard';
 import { getEmbedUrl } from '@/lib/media-embeds';
+import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -48,6 +55,22 @@ export interface WallStyles {
   nowPlayingUrl?: string;
 }
 
+/**
+ * Normalize legacy light-only background color values to theme-aware equivalents.
+ * Users who saved wall colors before dark-mode support will have values like
+ * 'bg-slate-200' without a dark: counterpart — this maps them forward.
+ */
+const LEGACY_BG_MAP: Record<string, string> = {
+  'bg-slate-200': 'bg-slate-200 dark:bg-slate-800',
+  'bg-blue-100':  'bg-blue-100 dark:bg-blue-950',
+  'bg-green-100': 'bg-green-100 dark:bg-green-950',
+  'bg-pink-100':  'bg-pink-100 dark:bg-pink-950',
+};
+
+function normalizeWallBg(bg: string): string {
+  return LEGACY_BG_MAP[bg] ?? bg;
+}
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 
@@ -60,11 +83,21 @@ export default function MyWallPage() {
 }
 
 function WallContent() {
-  const { user } = useUser();
-  const name = user?.name;
-  const avatar = user?.avatar;
-  const bio = user?.bio;
+  const { user, refresh: refreshUser } = useUser();
   const { toast } = useToast();
+
+  const [givenName, setGivenName] = useState(user?.name || "");
+  const [bio, setBio] = useState(user?.bio || "");
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Identity save statuses
+  const [nameSaveStatus, setNameSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [bioSaveStatus, setBioSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const lastSavedName = React.useRef(user?.name || "");
+  const lastSavedBio = React.useRef(user?.bio || "");
+  const savedFadeRef = React.useRef<NodeJS.Timeout | null>(null);
+
 
   // Wall state
   const [blocks, setBlocks] = useState<WallBlock[]>([]);
@@ -82,8 +115,81 @@ function WallContent() {
 
   // Now Playing (Task 4.4)
   const [nowPlayingUrl, setNowPlayingUrl] = useState('');
-  const [isEditingNowPlaying, setIsEditingNowPlaying] = useState(false);
   const [nowPlayingInput, setNowPlayingInput] = useState('');
+  const [isEditingNowPlaying, setIsEditingNowPlaying] = useState(false);
+  const [isRemoveNowPlayingOpen, setIsRemoveNowPlayingOpen] = useState(false);
+
+  // ─── Identity Autosave ──────────────────────────────────────────────────
+
+  const autoSaveProfile = React.useCallback(async (name: string, bioVal: string) => {
+    if (!user) return;
+    if (name === lastSavedName.current && bioVal === lastSavedBio.current) return;
+
+    const nameChanged = name !== lastSavedName.current;
+    const bioChanged = bioVal !== lastSavedBio.current;
+
+    if (nameChanged) setNameSaveStatus('saving');
+    if (bioChanged) setBioSaveStatus('saving');
+    if (savedFadeRef.current) clearTimeout(savedFadeRef.current);
+
+    try {
+      const result = await updateUserProfile(user.id, { name, bio: bioVal });
+      if (result.success) {
+        lastSavedName.current = name;
+        lastSavedBio.current = bioVal;
+        if (nameChanged) {
+          refreshUser();
+          setNameSaveStatus('saved');
+        }
+        if (bioChanged) setBioSaveStatus('saved');
+        
+        savedFadeRef.current = setTimeout(() => {
+          setNameSaveStatus('idle');
+          setBioSaveStatus('idle');
+        }, 2000);
+      } else {
+        if (nameChanged) setNameSaveStatus('error');
+        if (bioChanged) setBioSaveStatus('error');
+        toast({ variant: 'destructive', title: 'Save Failed', description: result.error });
+      }
+    } catch {
+      if (nameChanged) setNameSaveStatus('error');
+      if (bioChanged) setBioSaveStatus('error');
+    }
+  }, [user, refreshUser, toast]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      autoSaveProfile(givenName, bio);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [givenName, bio, autoSaveProfile]);
+
+  const handleAvatarUpload = async (file: File) => {
+    if (!user) return;
+    setIsUploadingAvatar(true);
+    try {
+      const { normalizeImage } = await import('@/lib/image-utils');
+      const normalizedFile = await normalizeImage(file);
+      const url = await uploadFile(normalizedFile, 'avatars', 'avatar');
+      const result = await updateUserProfile(user.id, { avatar: url });
+      if (result.success) {
+        refreshUser();
+        toast({ title: 'Avatar updated', description: 'Your profile picture has been changed.' });
+      } else {
+        toast({ variant: 'destructive', title: 'Upload failed', description: result.error });
+      }
+    } catch (err: unknown) {
+      toast({ 
+        variant: 'destructive', 
+        title: 'Upload failed', 
+        description: ((err instanceof Error) ? err.message : 'An error occurred') 
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
 
   // Dialogs
   const [isAddBlockDialogOpen, setIsAddBlockDialogOpen] = useState(false);
@@ -116,6 +222,7 @@ function WallContent() {
         );
 
         const wallStyle = dbStyle as WallStyles;
+        wallStyle.backgroundColor = normalizeWallBg(wallStyle.backgroundColor);
         setStyles(wallStyle);
         setNowPlayingUrl(wallStyle.nowPlayingUrl || '');
 
@@ -191,13 +298,22 @@ function WallContent() {
 
   const handleUnpin = async (postId: string) => {
     try {
-      await togglePinToWall(postId);
+      const post = pinnedPosts.find(p => p.id === postId);
+      if (post?.originalPostId) {
+        // It's a clone, delete it
+        await unpinWallClone(postId);
+      } else {
+        // It's a direct pin, toggle it
+        await togglePinToWall(postId);
+      }
       setPinnedPosts(prev => prev.filter(p => p.id !== postId));
       toast({ title: 'Unpinned', description: 'Post removed from your wall.' });
-    } catch {
+    } catch (error) {
+      console.error('Unpin failed:', error);
       toast({ title: 'Error', description: 'Could not unpin post.', variant: 'destructive' });
     }
   };
+
 
   const handleDeleteBlock = async (blockId: string) => {
     setBlocks(prev => prev.filter(b => b.id !== blockId));
@@ -220,25 +336,88 @@ function WallContent() {
   }
 
   const embedUrl = getEmbedUrl(nowPlayingUrl);
-  const initials = (name || 'U').substring(0, 2).toUpperCase();
+  const initials = (givenName || user?.name || 'U').substring(0, 2).toUpperCase();
+
+  const SaveIndicator = ({ status }: { status: 'idle' | 'saving' | 'saved' | 'error' }) => {
+    if (status === 'idle') return null;
+    if (status === 'saving') return <span className="text-[10px] text-muted-foreground animate-pulse ml-2">Saving...</span>;
+    if (status === 'saved') return <span className="text-[10px] text-green-500 font-medium ml-2 flex items-center gap-0.5"><CheckCircle2 className="h-3 w-3" /> Saved</span>;
+    if (status === 'error') return <span className="text-[10px] text-destructive font-medium ml-2">Error saving</span>;
+    return null;
+  };
+
 
   return (
     <div className={cn("p-4 md:p-6 rounded-lg transition-colors", styles.backgroundColor)}>
       <div className="space-y-8 max-w-3xl mx-auto">
 
-        {/* ─── Profile Header (Task 4.5) ──────────────────────────────── */}
-        <div className="flex flex-col items-center text-center gap-4 py-6">
-          <Avatar className="h-24 w-24 ring-4 ring-background shadow-lg">
-            {avatar && <AvatarImage src={avatar} alt={name || 'You'} />}
-            <AvatarFallback className="text-2xl font-bold">
-              <span className="mt-1">{initials}</span>
-            </AvatarFallback>
-          </Avatar>
-
-          <div className="flex flex-col md:flex-row md:items-baseline md:gap-3">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-normal text-foreground font-mono">{name || 'Your Wall'}</h1>
-            {bio && <p className="text-sm text-muted-foreground mt-1 md:mt-0 max-w-md">{bio}</p>}
+        {/* ─── Profile Header ────────────────────────────────────────── */}
+        <div className="flex flex-col items-center text-center gap-6 py-8">
+          <div className="relative group">
+            <Avatar className="h-28 w-28 ring-4 ring-background shadow-xl transition-transform hover:scale-105 duration-300">
+              {user?.avatar && <AvatarImage src={user.avatar} alt={givenName || 'User'} />}
+              <AvatarFallback className="text-3xl font-bold bg-primary/10 text-primary">
+                {initials}
+              </AvatarFallback>
+            </Avatar>
+            <button 
+              className={cn(
+                "absolute inset-0 flex flex-col items-center justify-center bg-black/40 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer",
+                isUploadingAvatar && "opacity-100"
+              )}
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={isUploadingAvatar}
+            >
+              {isUploadingAvatar ? (
+                <Loader2 className="h-6 w-6 animate-spin" />
+              ) : (
+                <>
+                  <Camera className="h-6 w-6 mb-1" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Change</span>
+                </>
+              )}
+            </button>
+            <input 
+              type="file" 
+              ref={avatarInputRef} 
+              className="hidden" 
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleAvatarUpload(file);
+              }}
+            />
           </div>
+
+          <div className="w-full max-w-md space-y-4">
+            <div className="space-y-1">
+              <div className="flex items-center justify-center gap-2">
+                <input
+                  value={givenName}
+                  onChange={(e) => setGivenName(e.target.value)}
+                  className="text-3xl font-bold tracking-tight text-foreground bg-transparent border-none text-center focus:outline-none focus:ring-0 w-full placeholder:opacity-50"
+                  placeholder="Your Name"
+                />
+              </div>
+              <div className="h-4 flex items-center justify-center">
+                <SaveIndicator status={nameSaveStatus} />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <textarea
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                rows={2}
+                className="text-muted-foreground text-sm sm:text-base max-w-lg mx-auto bg-transparent border-none text-center focus:outline-none focus:ring-0 w-full resize-none placeholder:opacity-50"
+                placeholder="Tell the world about yourself..."
+              />
+              <div className="h-4 flex items-center justify-center">
+                <SaveIndicator status={bioSaveStatus} />
+              </div>
+            </div>
+          </div>
+
 
           {/* Current Mood (Task 4.3) */}
           {currentMood && (
@@ -292,13 +471,7 @@ function WallContent() {
                     variant="ghost"
                     size="icon"
                     className="h-5 w-5 text-destructive hover:text-destructive"
-                    onClick={() => {
-                      if (window.confirm("Remove Now Playing?")) {
-                        setNowPlayingInput('');
-                        setNowPlayingUrl('');
-                        saveWallStyle({ ...styles, nowPlayingUrl: '' } as any).catch(() => {});
-                      }
-                    }}
+                    onClick={() => setIsRemoveNowPlayingOpen(true)}
                   >
                     <X className="h-3 w-3" />
                   </Button>
@@ -350,8 +523,16 @@ function WallContent() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Pin className="h-3.5 w-3.5 text-amber-600 fill-amber-600" />
-                        <CardTitle className="text-base">{post.title || 'Pinned Post'}</CardTitle>
+                        <CardTitle className="text-base flex items-center gap-2">
+                          {post.title || 'Pinned Post'}
+                          {post.originalPostId && (
+                            <Badge variant="secondary" className="text-[9px] h-4 px-1 bg-amber-100 text-amber-700 border-amber-200">
+                              Shared from Journal
+                            </Badge>
+                          )}
+                        </CardTitle>
                       </div>
+
                       <Button
                         variant="ghost"
                         size="sm"
@@ -458,6 +639,19 @@ function WallContent() {
         block={editingBlock}
         onSave={handleEditBlockSave}
         onDelete={handleDeleteBlock}
+      />
+      <ConfirmActionDialog
+        open={isRemoveNowPlayingOpen}
+        onOpenChange={setIsRemoveNowPlayingOpen}
+        title="Remove Now Playing"
+        description="Are you sure you want to remove the currently playing track from your wall?"
+        confirmText="Remove"
+        destructive={true}
+        onConfirm={() => {
+          setNowPlayingInput('');
+          setNowPlayingUrl('');
+          saveWallStyle({ ...styles, nowPlayingUrl: '' } as any).catch(() => {});
+        }}
       />
     </div>
   );

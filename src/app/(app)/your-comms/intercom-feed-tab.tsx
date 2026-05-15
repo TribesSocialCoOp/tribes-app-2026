@@ -4,18 +4,25 @@ import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
-import { MessageSquareText, Loader2, BookLock, PenLine } from "lucide-react";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { MessageSquareText, Loader2, BookLock, PenLine, KeyRound } from "lucide-react";
 import { useIntercom } from './intercom-context';
 import { IntercomFeedItem } from './intercom-feed-item';
 import { RingFilterBar } from '@/components/feed/ring-filter-bar';
 import { MoodFilterBar } from '@/components/feed/mood-filter-bar';
 import { usePostDecryption } from '@/hooks/use-post-decryption';
+import { useKeySync } from '@/components/providers/key-sync-provider';
+import { useScrollToPost } from '@/hooks/use-scroll-to-post';
 
 export function IntercomFeedTab() {
   const { state, feedItems, setRingFilter, setMoodSlugs } = useIntercom();
+  const { orphanedBondCount } = useKeySync();
 
   // Decrypt encrypted posts client-side (E2E)
   const { getContent, isDecrypting } = usePostDecryption(feedItems);
+  
+  // Deep-link: scroll to a specific post when ?postId=<id> or ?post=<id> is present
+  useScrollToPost([feedItems.length]);
 
   // Merge decrypted content into feed items
   const decryptedFeedItems = useMemo(() =>
@@ -26,6 +33,8 @@ export function IntercomFeedTab() {
     }),
     [feedItems, getContent],
   );
+
+
 
   return (
     <div className="space-y-4 min-w-0">
@@ -41,6 +50,22 @@ export function IntercomFeedTab() {
         onChange={setMoodSlugs}
         className="mt-1"
       />
+
+      {/* Orphaned Bond Notice — points to Key Sync Banner and Settings */}
+      {orphanedBondCount > 0 && (
+        <Alert variant="default" className="bg-amber-500/10 border-amber-500/50 text-amber-700 dark:text-amber-400 mt-4">
+          <KeyRound className="h-5 w-5 !text-amber-500" />
+          <AlertTitle className="font-semibold">Encryption Keys Missing on This Device</AlertTitle>
+          <AlertDescription className="text-sm mt-1 leading-relaxed">
+            <p>
+              {orphanedBondCount} {orphanedBondCount === 1 ? 'bond was' : 'bonds were'} encrypted
+              on another device. Sync your keys from the banner above, or go to{' '}
+              <Link href="/settings" className="text-primary hover:underline font-medium">Settings &gt; Key Vault</Link>{' '}
+              to restore from a backup.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Loading */}
       {state.isLoading && (

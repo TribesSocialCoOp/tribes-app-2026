@@ -47,20 +47,19 @@ trap 'rm -rf "$STAGING_DIR"' EXIT   # Always clean up staging dir
 
 echo "$LOG_PREFIX Starting backup..."
 
-# ── Step 1: Database snapshot (atomic) ───────────────────
-echo "$LOG_PREFIX Snapshotting database..."
-docker compose -f "$COMPOSE_DIR/docker-compose.prod.yml" exec -T sqld \
-  sqlite3 /var/lib/sqld/data.db ".backup /tmp/tribes-backup.db" 2>/dev/null || {
-    # Fallback: direct file copy (sqld WAL-consistent snapshot)
-    docker compose -f "$COMPOSE_DIR/docker-compose.prod.yml" \
-      cp sqld:/var/lib/sqld/data.db "$STAGING_DIR/db/tribes.db"
-  }
-
-# Copy out of container if sqlite3 method succeeded
+# ── Step 1: PostgreSQL dump (atomic, custom format for fast restore) ──
+echo "$LOG_PREFIX Dumping PostgreSQL database..."
 docker compose -f "$COMPOSE_DIR/docker-compose.prod.yml" \
-  cp sqld:/tmp/tribes-backup.db "$STAGING_DIR/db/tribes.db" 2>/dev/null || true
+  exec -T postgres pg_dump -U tribes -Fc --no-owner tribes \
+  > "$STAGING_DIR/db/tribes.pgdump"
 
-echo "$LOG_PREFIX DB snapshot: $(du -sh "$STAGING_DIR/db/tribes.db" 2>/dev/null || echo 'N/A')"
+DB_SIZE=$(du -sh "$STAGING_DIR/db/tribes.pgdump" 2>/dev/null | cut -f1)
+echo "$LOG_PREFIX DB dump: $DB_SIZE"
+
+if [ ! -s "$STAGING_DIR/db/tribes.pgdump" ]; then
+  echo "$LOG_PREFIX ERROR: pg_dump produced empty file!" >&2
+  exit 1
+fi
 
 # ── Step 2: SeaweedFS filer metadata ──────────────────────
 echo "$LOG_PREFIX Snapshotting SeaweedFS metadata..."
@@ -107,7 +106,7 @@ fi
 if [[ -n "$BACKUP_HOST" ]]; then
   echo "$LOG_PREFIX Pushing to offsite ($BACKUP_HOST)..."
   rsync -az --delete \
-    -e "ssh -o StrictHostKeyChecking=accept-new -i /home/tribes/.ssh/backup_key" \
+    -e "ssh -o StrictHostKeyChecking=accept-new -i /root/.ssh/backup_key" \
     "$RESTIC_REPO/" \
     "$BACKUP_USER@$BACKUP_HOST:$BACKUP_REMOTE_PATH/"
   echo "$LOG_PREFIX Offsite push complete."

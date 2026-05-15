@@ -6,7 +6,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Loader2, LayoutGrid, Shield, MessageSquareText, User as UserIcon, Handshake, Clock } from "lucide-react";
+import {
+  ResponsiveMenu,
+  ResponsiveMenuContent,
+  ResponsiveMenuItem,
+  ResponsiveMenuSeparator,
+  ResponsiveMenuTrigger,
+} from "@/components/ui/responsive-menu";
+import { ArrowLeft, Loader2, LayoutGrid, Shield, MessageSquareText, User as UserIcon, Handshake, Clock, MoreVertical, Ban, Flag } from "lucide-react";
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 import { getPublicProfile, getPublicWallBlocks, getPublicWallStyle } from '@/lib/actions/profile-actions';
@@ -16,6 +23,14 @@ import VideoBlock from '@/components/wall-blocks/video-block';
 import MyPostsBlock from '@/components/wall-blocks/my-posts-block';
 import { BondRequestDialog } from '@/components/dialogs/bond-request-dialog';
 import { hasOutgoingBondRequest } from '@/lib/actions/bond-actions';
+import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
+import { useToast } from '@/hooks/use-toast';
+import { getPinnedWallPosts, getCurrentMood } from '@/lib/actions/content-actions';
+import { moodsData } from '@/lib/moods-data';
+import { getEmbedUrl } from '@/lib/media-embeds';
+import { Music, Pin, BookLock } from "lucide-react";
+import type { TribePost } from '@/lib/types';
+
 
 interface WallBlock {
   id: string;
@@ -26,6 +41,19 @@ interface WallBlock {
 interface WallStyles {
   backgroundColor: string;
   layout: 'single-column' | 'two-column';
+  nowPlayingUrl?: string;
+}
+
+
+/** Normalize legacy light-only bg values to theme-aware equivalents. */
+const LEGACY_BG_MAP: Record<string, string> = {
+  'bg-slate-200': 'bg-slate-200 dark:bg-slate-800',
+  'bg-blue-100':  'bg-blue-100 dark:bg-blue-950',
+  'bg-green-100': 'bg-green-100 dark:bg-green-950',
+  'bg-pink-100':  'bg-pink-100 dark:bg-pink-950',
+};
+function normalizeWallBg(bg: string): string {
+  return LEGACY_BG_MAP[bg] ?? bg;
 }
 
 interface PublicProfile {
@@ -59,6 +87,11 @@ export default function PublicProfilePage() {
   const [bondId, setBondId] = useState<string | null>(null);
   const [hasPending, setHasPending] = useState(false);
   const [showBondDialog, setShowBondDialog] = useState(false);
+  const [showBlockConfirm, setShowBlockConfirm] = useState(false);
+  const [pinnedPosts, setPinnedPosts] = useState<TribePost[]>([]);
+  const [currentMood, setCurrentMood] = useState<{ slug: string; emoji: string; name: string } | null>(null);
+  const { toast } = useToast();
+
 
   // If viewing own profile, redirect to /my-wall
   useEffect(() => {
@@ -71,11 +104,14 @@ export default function PublicProfilePage() {
     async function load() {
       setIsLoading(true);
       try {
-        const [prof, rawBlocks, wallStyle] = await Promise.all([
+        const [prof, rawBlocks, wallStyle, pinned, mood] = await Promise.all([
           getPublicProfile(userId),
           getPublicWallBlocks(userId),
           getPublicWallStyle(userId),
+          getPinnedWallPosts(userId),
+          getCurrentMood(userId),
         ]);
+
 
         if (!prof) {
           setNotFound(true);
@@ -83,7 +119,9 @@ export default function PublicProfilePage() {
         }
 
         setProfile(prof);
-        setStyles(wallStyle as WallStyles);
+        const ws = wallStyle as WallStyles;
+        ws.backgroundColor = normalizeWallBg(ws.backgroundColor);
+        setStyles(ws);
 
         if (rawBlocks.length > 0) {
           setBlocks(rawBlocks.map((b: any) => ({
@@ -92,6 +130,13 @@ export default function PublicProfilePage() {
             content: JSON.parse(b.content),
           })));
         }
+
+        setPinnedPosts(pinned);
+        if (mood) {
+          const m = moodsData.find(item => item.slug === mood.moodTag);
+          if (m) setCurrentMood(m);
+        }
+
       } catch {
         setNotFound(true);
       } finally {
@@ -195,12 +240,19 @@ export default function PublicProfilePage() {
                   {profile.reputationStatus}
                 </Badge>
               )}
+              {currentMood && (
+                <Badge variant="secondary" className="bg-primary/5 text-primary border-primary/10">
+                  <span className="mr-1.5">{currentMood.emoji}</span>
+                  Feeling {currentMood.name}
+                </Badge>
+              )}
             </div>
             {profile.bio && (
               <p className="text-muted-foreground mt-1 text-sm sm:text-base line-clamp-3">
                 {profile.bio}
               </p>
             )}
+
             {userId !== user?.id && (
               user?.id && bondId ? (
                 <Button
@@ -235,27 +287,148 @@ export default function PublicProfilePage() {
               )
             )}
           </div>
+          {/* Block / Report menu — only for other users */}
+          {user?.id && userId !== user.id && (
+            <ResponsiveMenu>
+              <ResponsiveMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="shrink-0 self-start">
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </ResponsiveMenuTrigger>
+              <ResponsiveMenuContent align="end">
+                <ResponsiveMenuItem
+                  onClick={async () => {
+                    try {
+                      const { reportUser } = await import('@/lib/actions/bond-actions');
+                      await reportUser(userId, 'Reported from profile page');
+                      toast({ title: 'User Reported', description: 'Thank you for helping keep the community safe.' });
+                    } catch {
+                      toast({ variant: 'destructive', title: 'Error', description: 'Could not submit report.' });
+                    }
+                  }}
+                >
+                  <Flag className="mr-2 h-4 w-4" /> Report User
+                </ResponsiveMenuItem>
+                <ResponsiveMenuSeparator />
+                <ResponsiveMenuItem
+                  className="text-destructive hover:!bg-destructive/10 hover:!text-destructive"
+                  onClick={() => setShowBlockConfirm(true)}
+                >
+                  <Ban className="mr-2 h-4 w-4" /> Block User
+                </ResponsiveMenuItem>
+              </ResponsiveMenuContent>
+            </ResponsiveMenu>
+          )}
         </header>
 
+        {/* Block Confirmation Dialog */}
+        <ConfirmActionDialog
+          open={showBlockConfirm}
+          onOpenChange={setShowBlockConfirm}
+          title={`Block ${profile.name}?`}
+          description={`${profile.name} will no longer be able to see your posts, find you in search, or message you. You won't see their content either. This can be undone from your bond settings.`}
+          confirmText="Block User"
+          destructive
+          onConfirm={async () => {
+            try {
+              const { blockUser } = await import('@/lib/actions/bond-actions');
+              await blockUser(userId, 'Blocked from profile page');
+              toast({ title: 'User Blocked', description: `${profile.name} has been blocked.` });
+              router.back();
+            } catch {
+              toast({ variant: 'destructive', title: 'Error', description: 'Could not block user.' });
+            }
+          }}
+        />
+
+        
         {/* Wall Content */}
-        {blocks.length > 0 ? (
-          <div className={cn(
-            "space-y-8",
-            styles.layout === 'two-column' && "md:grid md:grid-cols-2 md:gap-8 md:space-y-0"
-          )}>
-            {blocks.map(block => renderBlock(block))}
-          </div>
-        ) : (
-          <Card className="border-dashed shadow-none">
-            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <LayoutGrid className="h-12 w-12 text-muted-foreground/30 mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-1">No wall content yet</h3>
-              <p className="text-sm text-muted-foreground max-w-sm">
-                {profile.name} hasn't customized their wall yet. Check back later!
-              </p>
-            </CardContent>
-          </Card>
-        )}
+        <div className="space-y-8">
+          {/* Now Playing (Parity with Wall) */}
+          {styles.nowPlayingUrl && (
+            <div className="max-w-md mx-auto sm:mx-0">
+              <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
+                <Music className="h-3.5 w-3.5 animate-pulse text-primary" />
+                <span className="font-medium">Now Playing</span>
+              </div>
+              <div className="rounded-lg overflow-hidden shadow-sm border bg-background/50 backdrop-blur-sm">
+                <iframe
+                  src={getEmbedUrl(styles.nowPlayingUrl) ?? undefined}
+                  width="100%"
+                  height={styles.nowPlayingUrl.includes('youtube') || styles.nowPlayingUrl.includes('vimeo') ? '200' : '152'}
+                  allow="autoplay; encrypted-media; fullscreen"
+                  className="border-0 block"
+                  loading="lazy"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Pinned Posts (Parity with Wall) */}
+          {pinnedPosts.length > 0 && (
+            <section>
+              <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                <Pin className="h-5 w-5 text-amber-600" /> Pinned Posts
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {pinnedPosts.map(post => (
+                  <Card key={post.id} className="overflow-hidden shadow-sm border-primary/10 hover:border-primary/20 transition-colors">
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Pin className="h-3.5 w-3.5 text-amber-600 fill-amber-600" />
+                          <span className="text-sm font-semibold truncate">
+                            {post.title || 'Pinned Post'}
+                          </span>
+                          {post.originalPostId && (
+                            <Badge variant="secondary" className="text-[9px] h-4 px-1 bg-amber-100 text-amber-700 border-amber-200">
+                              Shared from Journal
+                            </Badge>
+                          )}
+                        </div>
+                        {post.moodTag && (
+                          <span className="text-xs text-muted-foreground">
+                            {moodsData.find(m => m.slug === post.moodTag)?.emoji} {post.moodTag}
+                          </span>
+                        )}
+                      </div>
+                      {post.imageUrl && (
+                        <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-md">
+                          <img src={post.imageUrl} alt={post.title || 'Image'} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      {post.content && (
+                        <p className="text-sm text-foreground whitespace-pre-line line-clamp-4 leading-relaxed">
+                          {post.content}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Custom Blocks */}
+          {blocks.length > 0 ? (
+            <div className={cn(
+              "space-y-8",
+              styles.layout === 'two-column' && "md:grid md:grid-cols-2 md:gap-8 md:space-y-0"
+            )}>
+              {blocks.map(block => renderBlock(block))}
+            </div>
+          ) : (
+            <Card className="border-dashed shadow-none">
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <LayoutGrid className="h-12 w-12 text-muted-foreground/30 mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-1">No wall content yet</h3>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  {profile.name} hasn't customized their wall yet. Check back later!
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
 
       <BondRequestDialog 

@@ -10,6 +10,23 @@ export default {
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  safelist: [
+    // Wall background colors — stored in DB and applied dynamically via cn()
+    'bg-slate-200',   'dark:bg-slate-800',
+    'bg-stone-200',   'dark:bg-stone-800',
+    'bg-sky-100',     'dark:bg-sky-950',
+    'bg-blue-100',    'dark:bg-blue-950',
+    'bg-indigo-100',  'dark:bg-indigo-950',
+    'bg-teal-100',    'dark:bg-teal-950',
+    'bg-green-100',   'dark:bg-green-950',
+    'bg-emerald-100', 'dark:bg-emerald-950',
+    'bg-amber-100',   'dark:bg-amber-950',
+    'bg-orange-100',  'dark:bg-orange-950',
+    'bg-rose-100',    'dark:bg-rose-950',
+    'bg-pink-100',    'dark:bg-pink-950',
+    'bg-fuchsia-100', 'dark:bg-fuchsia-950',
+    'bg-violet-100',  'dark:bg-violet-950',
+  ],
   theme: {
   	extend: {
       fontFamily: {
@@ -89,11 +106,16 @@ export default {
   				to: {
   					height: '0'
   				}
+  			},
+  			'fade-out': {
+  				'0%, 70%': { opacity: '1' },
+  				'100%': { opacity: '0' }
   			}
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out'
+  			'accordion-up': 'accordion-up 0.2s ease-out',
+  			'fade-out': 'fade-out 2s ease-in forwards'
   		}
   	}
   },

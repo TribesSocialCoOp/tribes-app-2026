@@ -103,7 +103,7 @@ export async function importPublicKey(jwk: JsonWebKey): Promise<CryptoKey> {
 
 /**
  * Imports a private key (asymmetric) or symmetric key from JWK format (for vault restore).
- * The imported key is non-extractable — it can only be used, never re-exported.
+ * The imported key is extractable — allowing the device to re-export it for vault backup.
  */
 export async function importPrivateKey(jwk: JsonWebKey): Promise<CryptoKey> {
   // Detect if it's a symmetric key (oct) or asymmetric (EC)
@@ -112,7 +112,7 @@ export async function importPrivateKey(jwk: JsonWebKey): Promise<CryptoKey> {
       'jwk',
       jwk,
       { name: 'AES-GCM' },
-      false, // imported as non-extractable
+      true, // extractable: allow re-export for vault backup
       ['encrypt', 'decrypt'],
     );
   }
@@ -122,7 +122,7 @@ export async function importPrivateKey(jwk: JsonWebKey): Promise<CryptoKey> {
     'jwk',
     jwk,
     ECDH_ALGORITHM,
-    false, // imported as non-extractable for security
+    true, // extractable: allow re-export for vault backup on other devices
     ['deriveKey', 'deriveBits'],
   );
 }

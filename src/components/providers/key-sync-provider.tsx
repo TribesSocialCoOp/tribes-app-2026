@@ -40,6 +40,8 @@ interface KeySyncState {
   orphanedBondNames: string[];
   /** The most recent date an orphaned bond key was created (used to check backup freshness) */
   newestOrphanDate: Date | null;
+  /** The most recent date a HEALTHY local bond key was pushed to the server */
+  newestKeyDate: Date | null;
   /** Number of private tribes with a locally cached group key */
   tribeKeysReady: number;
   /** Whether the initial sync has completed at least once */
@@ -58,6 +60,7 @@ const KeySyncContext = createContext<KeySyncState>({
   orphanedBondCount: 0,
   orphanedBondNames: [],
   newestOrphanDate: null,
+  newestKeyDate: null,
   tribeKeysReady: 0,
   initialSyncDone: false,
   isSyncing: false,
@@ -81,6 +84,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
   const [orphanedBondCount, setOrphanedBondCount] = useState(0);
   const [orphanedBondNames, setOrphanedBondNames] = useState<string[]>([]);
   const [newestOrphanDate, setNewestOrphanDate] = useState<Date | null>(null);
+  const [newestKeyDate, setNewestKeyDate] = useState<Date | null>(null);
   const [tribeKeysReady, setTribeKeysReady] = useState(0);
   const [initialSyncDone, setInitialSyncDone] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -195,22 +199,15 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       // ========================================
       // ONE-TIME MIGRATION: Forward-migrate broken bond keys
       // ========================================
-      // If a bond has a server-side key that doesn't match any local key,
-      // the encryption handshake is permanently broken. Clear the server key
-      // so both sides can cleanly re-generate via the CAS-guarded flow.
-      const BOND_KEY_MIGRATION_KEY = 'tribes_bond_key_migration_v1';
-      if (typeof localStorage !== 'undefined' && !localStorage.getItem(BOND_KEY_MIGRATION_KEY)) {
-        try {
-          const { migrateBrokenBondKeys } = await import('@/lib/actions/bond-actions');
-          const fixed = await migrateBrokenBondKeys();
-          if (fixed > 0) {
-            console.log(`[key-sync] Forward-migrated ${fixed} broken bond key(s). Next sync will re-generate.`);
-          }
-          localStorage.setItem(BOND_KEY_MIGRATION_KEY, 'done');
-        } catch (migrationErr) {
-          console.warn('[key-sync] Bond key migration failed:', migrationErr);
-        }
-      }
+      // DISABLED — This migration was running per-device (localStorage flag),
+      // which meant every new browser/device that opened the app would wipe
+      // all server-side bond keys and regenerate, clobbering the keys that
+      // the previous device had submitted. The root cause (refreshBond and
+      // toggleInnerCircle clearing publicKeyJwk) has been fixed directly.
+      // This migration is no longer needed.
+      //
+      // If a bond truly has a broken key-pair mismatch, the Step 1c check
+      // below will detect it and mark it as orphaned for vault restore.
 
       // ========================================
       // PHASE A: Bond shared secret sync
@@ -223,6 +220,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       let ready = 0;
       let orphaned = 0;
       let maxOrphanDate: Date | null = null;
+      let maxKeyDate: Date | null = null;
       const orphanNames: string[] = [];
 
       for (const bond of userBonds) {
@@ -323,6 +321,12 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
                   `  Hashes: local=${localKeyHash.substring(0, 12)}... server=${serverKeyHash.substring(0, 12)}...`
                 );
                 continue;
+              } else {
+                // Key matches! This is a healthy bond.
+                // Track the date to detect if it's newer than the vault backup.
+                if (bond.lastRefreshedAt && (!maxKeyDate || bond.lastRefreshedAt > maxKeyDate)) {
+                  maxKeyDate = bond.lastRefreshedAt;
+                }
               }
             } catch (parseErr) {
               console.warn(`[key-sync] Could not parse server public key for bond ${bond.id.substring(0, 16)}...`, parseErr);
@@ -378,6 +382,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       setOrphanedBondCount(orphaned);
       setOrphanedBondNames(orphanNames);
       setNewestOrphanDate(maxOrphanDate);
+      setNewestKeyDate(maxKeyDate);
 
       // ========================================
       // PHASE B: Tribe group key sync
@@ -663,6 +668,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       orphanedBondCount,
       orphanedBondNames,
       newestOrphanDate,
+      newestKeyDate,
       tribeKeysReady,
       initialSyncDone,
       isSyncing,

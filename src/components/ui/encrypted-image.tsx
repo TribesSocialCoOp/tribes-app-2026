@@ -1,19 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { resolveMediaUrl } from '@/lib/actions/media-actions';
-import { decryptDownloadedFile, EncryptionMeta } from '@/lib/crypto/file-encryption';
+import { decryptFileWithKey, EncryptionMeta } from '@/lib/crypto/file-encryption';
 import { getPostKeyGrants } from '@/lib/actions/content-actions';
-import { unwrapPostKey, decryptPost } from '@/lib/crypto/post-encryption';
-import { getOrCreateJournalKey } from '@/lib/crypto/journal-encryption';
+import { unwrapPostKey } from '@/lib/crypto/post-encryption';
 import { Loader2, Lock } from 'lucide-react';
+import type { Ring } from '@/lib/types';
 
 interface EncryptedImageProps {
   fileId: string;
   postId: string;
+  /** Ring type of the post — determines which decryption path to use */
+  ring?: Ring;
+  /** Tribe ID — required for tribe group key decryption */
+  tribeId?: string;
   alt?: string;
   className?: string;
 }
 
-export function EncryptedImage({ fileId, postId, alt, className }: EncryptedImageProps) {
+export function EncryptedImage({ fileId, postId, ring, tribeId, alt, className }: EncryptedImageProps) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,33 +28,54 @@ export function EncryptedImage({ fileId, postId, alt, className }: EncryptedImag
     async function load() {
       try {
         setLoading(true);
-        // 1. Resolve media URL and encryption meta
-        const mediaInfo = await resolveMediaUrl(fileId);
-        if (!mediaInfo || !mediaInfo.url || !mediaInfo.encryptionMeta) {
-          throw new Error('Failed to resolve media info');
+        // 1. Fetch ciphertext via same-origin server proxy (avoids CSP issues
+        //    from internal Docker S3 presigned URLs)
+        const response = await fetch(`/api/media/${fileId}`);
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+          throw new Error(errBody.error || 'Failed to fetch media');
         }
 
-        // 2. Fetch the ciphertext blob
-        const response = await fetch(mediaInfo.url);
-        if (!response.ok) throw new Error('Failed to fetch media');
         const ciphertextBuffer = await response.arrayBuffer();
 
-        // 3. Get the postKey for decryption
-        // We need the post key. Wait, post key was wrapped for the user.
-        // We can fetch key grants for this post.
-        const grants = await getPostKeyGrants([postId]);
-        const selfGrant = grants[postId];
-        if (!selfGrant) throw new Error('No decryption key found for this post');
+        // 2. Parse encryption meta from response header
+        const metaHeader = response.headers.get('X-Encryption-Meta');
+        if (!metaHeader) throw new Error('No encryption metadata');
+        const meta: EncryptionMeta = JSON.parse(metaHeader);
 
-        const journalKey = await getOrCreateJournalKey();
-        const postKey = await unwrapPostKey(selfGrant.wrappedKey, selfGrant.wrapIv, journalKey);
+        // 3. Determine the correct decryption key based on ring type
+        let decryptionKey: CryptoKey;
+
+        if (ring === 'tribes' && tribeId) {
+          // TRIBE PATH: Try tribe group key first, then fall back to key grants
+          const { getTribeKey } = await import('@/lib/crypto/key-store');
+          const cachedTribeKey = await getTribeKey(tribeId);
+
+          if (cachedTribeKey) {
+            // Direct tribe key decryption — no key grant unwrapping needed
+            decryptionKey = cachedTribeKey.key;
+          } else {
+            // Fallback: pairwise key grants (tribe key not yet distributed)
+            decryptionKey = await resolveKeyFromGrants(postId);
+          }
+        } else if (ring === 'journal') {
+          // JOURNAL PATH: personal key only
+          const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
+          const journalKey = await getOrCreateJournalKey();
+
+          // Journal images are encrypted directly with the journal key
+          // (no key grants for journal posts)
+          decryptionKey = journalKey;
+        } else {
+          // BOND RING PATH (inner_circle, my_people): use key grants
+          decryptionKey = await resolveKeyFromGrants(postId);
+        }
 
         // 4. Decrypt the file
-        const { decryptFileWithKey } = await import('@/lib/crypto/file-encryption');
         const blob = await decryptFileWithKey(
           ciphertextBuffer,
-          mediaInfo.encryptionMeta as EncryptionMeta,
-          postKey,
+          meta,
+          decryptionKey,
           'image/jpeg' // Default to jpeg, actual type is derived by browser if possible
         );
 
@@ -61,6 +85,7 @@ export function EncryptedImage({ fileId, postId, alt, className }: EncryptedImag
           setObjectUrl(url);
         }
       } catch (err: any) {
+        console.error('[EncryptedImage] Decryption failed:', err);
         if (active) setError(err.message);
       } finally {
         if (active) setLoading(false);
@@ -73,7 +98,7 @@ export function EncryptedImage({ fileId, postId, alt, className }: EncryptedImag
       active = false;
       if (urlToRevoke) URL.revokeObjectURL(urlToRevoke);
     };
-  }, [fileId, postId]);
+  }, [fileId, postId, ring, tribeId]);
 
   if (loading) {
     return (
@@ -93,4 +118,27 @@ export function EncryptedImage({ fileId, postId, alt, className }: EncryptedImag
   }
 
   return <img src={objectUrl} alt={alt || 'Encrypted image'} className={className} />;
+}
+
+/**
+ * Resolves the post decryption key from key grants.
+ * Handles both self-grants (journal key) and bond grants (shared secret).
+ */
+async function resolveKeyFromGrants(postId: string): Promise<CryptoKey> {
+  const grants = await getPostKeyGrants([postId]);
+  const grant = grants[postId];
+  if (!grant) throw new Error('No decryption key found for this post');
+
+  if (!grant.bondId) {
+    // Self-grant: wrapped with the author's personal journal key
+    const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
+    const unwrapSecret = await getOrCreateJournalKey();
+    return unwrapPostKey(grant.wrappedKey, grant.wrapIv, unwrapSecret);
+  } else {
+    // Bond grant: use rotation-aware resolver (Phase 1)
+    const { resolvePostKeyForGrant } = await import('@/lib/crypto/key-rotation');
+    const postKey = await resolvePostKeyForGrant(grant.bondId, grant.wrappedKey, grant.wrapIv);
+    if (!postKey) throw new Error('Key mismatch or access denied (Sync keys in settings)');
+    return postKey;
+  }
 }

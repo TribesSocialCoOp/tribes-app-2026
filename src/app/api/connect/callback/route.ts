@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { buildUrl } from '@/lib/url';
 
 /**
  * Stripe Connect onboarding callback.
@@ -8,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(request: NextRequest) {
   const tribeId = request.nextUrl.searchParams.get('tribeId');
   if (!tribeId) {
-    return NextResponse.redirect(new URL('/tribes', request.url));
+    return NextResponse.redirect(buildUrl('/tribes', request));
   }
 
   try {
@@ -27,6 +28,6 @@ export async function GET(request: NextRequest) {
   const slug = tribe?.slug || tribeId;
 
   return NextResponse.redirect(
-    new URL(`/t/${slug}/settings?connect=success`, request.url)
+    buildUrl(`/t/${slug}/settings?connect=success`, request)
   );
 }

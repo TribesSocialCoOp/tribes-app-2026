@@ -17,8 +17,25 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Tribes',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://tribes.app'),
+  title: {
+    default: 'Tribes',
+    template: '%s | Tribes',
+  },
   description: 'Connect and communicate with your tribes.',
+  openGraph: {
+    type: 'website',
+    siteName: 'Tribes',
+    title: 'Tribes',
+    description: 'Connect and communicate with your tribes.',
+    images: [{ url: '/api/og/default', width: 1200, height: 630, alt: 'Tribes' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Tribes',
+    description: 'Connect and communicate with your tribes.',
+    images: ['/api/og/default'],
+  },
 };
 
 export const viewport: Viewport = {
@@ -36,9 +53,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${oxanium.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}>
+      <head>
         {/* Prevent FOUC: apply dark mode class before React hydrates */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('tribes-theme');var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.classList.add('dark')}catch(e){}})()` }} />
+      </head>
+      <body className={`${oxanium.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}>
         {children}
         <Toaster />
         <CookieConsent />

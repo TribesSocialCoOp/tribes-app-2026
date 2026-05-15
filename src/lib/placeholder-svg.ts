@@ -47,8 +47,10 @@ function getInitials(name: string): string {
  * Generates a tribe cover image as an inline SVG data-URI.
  * 400x200 with geometric accents, initials, and subtle grid pattern.
  */
-export function tribeCoverSvg(tribeName: string): string {
-  const { bg, fg } = getColorPair(tribeName);
+export function tribeCoverSvg(tribeName: string, brandColor?: string): string {
+  const { bg: defaultBg, fg: defaultFg } = getColorPair(tribeName);
+  const bg = brandColor || defaultBg;
+  const fg = brandColor ? '#FFFFFF' : defaultFg;
   const initials = getInitials(tribeName);
   
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="200" viewBox="0 0 400 200">

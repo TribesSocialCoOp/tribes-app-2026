@@ -1,16 +1,16 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { UserCircle, Loader2, PlusCircle, AtSign, X, Star, CreditCard, Mail, AlertTriangle, Cpu, CheckCircle2, ScrollText } from "lucide-react";
+import { UserCircle, Loader2, PlusCircle, AtSign, X, Star, CreditCard, Mail, AlertTriangle, Cpu, CheckCircle2, ScrollText, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { UserProfile } from '@/lib/types';
 import { getUserProfile, updateUserProfile } from '@/lib/actions/profile-actions';
@@ -28,7 +28,10 @@ import { SessionsSection } from '@/components/settings/sessions-section';
 import { AppearanceSection, BillingSection, AccountActionsSection } from '@/components/settings/minor-sections';
 import { AiSettingsSection } from '@/components/settings/ai-settings-section';
 import { VaultBackupSection } from '@/components/settings/vault-backup-section';
+import { useScrollToHash } from '@/hooks/use-scroll-to-hash';
 import { AuthGuard } from '@/components/providers/auth-guard';
+
+
 
 export default function SettingsPage() {
   return (
@@ -43,19 +46,15 @@ function SettingsContent() {
   const { role, user: sessionUser, isLoading: isUserLoading, refresh: refreshUser } = useUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  
+
   // Identity form state
-  const [givenName, setGivenName] = useState("");
-  const [bio, setBio] = useState("");
   const [aliases, setAliases] = useState<import('@/lib/types').UserAlias[]>([]);
   const [newAlias, setNewAlias] = useState("");
   const [reservedAliasInput, setReservedAliasInput] = useState('');
   const [isSavingAlias, setIsSavingAlias] = useState(false);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [isUploadingReservedAliasAvatar, setIsUploadingReservedAliasAvatar] = useState(false);
-  const avatarInputRef = React.useRef<HTMLInputElement>(null);
   const reservedAliasAvatarRef = React.useRef<HTMLInputElement>(null);
+
 
   // Email verification banner state
   const [verifyBannerDismissed, setVerifyBannerDismissed] = useState(false);
@@ -170,21 +169,42 @@ function SettingsContent() {
       const userProfile = await getUserProfile(sessionUser.id);
       if (userProfile) {
         setProfile(userProfile);
-        setGivenName(userProfile.name);
-        setBio(userProfile.bio || "");
         setAliases(userProfile.aliases || []);
         setReservedAliasInput(userProfile.reservedAlias || "");
         setUserTotpEnabled(userProfile.totpEnabled ?? false);
         setUserAiSharing(userProfile.aiDataSharingEnabled ?? true);
       }
+
       setIsLoading(false);
     };
     if (!isUserLoading) {
         fetchProfile();
     }
   }, [sessionUser, isUserLoading]);
+
+
+
+  // Scroll to hash fragment (e.g. /settings#vault) after page loads
+  useScrollToHash([isLoading, !!profile]);
   
-  const handleAddAlias = () => {
+  // ── Alias auto-persist helper ────────────────────────────────
+  const persistAliases = useCallback(async (newAliases: import('@/lib/types').UserAlias[]) => {
+    if (!profile) return;
+    try {
+      const result = await updateUserProfile(profile.id, { aliases: newAliases });
+      if (result.success) {
+        setProfile(result.profile);
+        setAliases(result.profile.aliases || []);
+        refreshUser();
+      } else {
+        toast({ variant: 'destructive', title: 'Save failed', description: result.error });
+      }
+    } catch (err: unknown) {
+      toast({ variant: 'destructive', title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') });
+    }
+  }, [profile, refreshUser, toast]);
+
+  const handleAddAlias = async () => {
     const trimmed = newAlias.trim();
     if (!trimmed) return;
     if (aliases.find(a => a.name === trimmed)) return;
@@ -201,12 +221,16 @@ function SettingsContent() {
     }
 
     const { avatarSvg } = require('@/lib/placeholder-svg');
-    setAliases([...aliases, { name: trimmed, avatar: avatarSvg(trimmed) }]);
+    const updated = [...aliases, { name: trimmed, avatar: avatarSvg(trimmed) }];
+    setAliases(updated);
     setNewAlias("");
+    await persistAliases(updated);
   };
 
-  const handleRemoveAlias = (aliasName: string) => {
-    setAliases(aliases.filter(a => a.name !== aliasName));
+  const handleRemoveAlias = async (aliasName: string) => {
+    const updated = aliases.filter(a => a.name !== aliasName);
+    setAliases(updated);
+    await persistAliases(updated);
   };
 
   const [isUploadingAliasAvatar, setIsUploadingAliasAvatar] = useState<number | null>(null);
@@ -215,7 +239,9 @@ function SettingsContent() {
     if (!profile) return;
     setIsUploadingAliasAvatar(index);
     try {
-      const url = await uploadFile(file, 'avatars', 'avatar');
+      const { normalizeImage } = await import('@/lib/image-utils');
+      const normalizedFile = await normalizeImage(file);
+      const url = await uploadFile(normalizedFile, 'avatars', 'avatar');
       const newAliases = [...aliases];
       newAliases[index] = { ...newAliases[index]!, avatar: url };
       setAliases(newAliases);
@@ -237,32 +263,7 @@ function SettingsContent() {
     }
   };
 
-  const handleSaveChanges = async () => {
-    if (!profile) return;
-    setIsSaving(true);
-    
-    const result = await updateUserProfile(profile.id, {
-      name: givenName,
-      bio: bio,
-      aliases: aliases,
-    });
-    if (result.success) {
-      setProfile(result.profile);
-      setAliases(result.profile.aliases || []);
-      refreshUser(); // Propagate alias+avatar changes to ComposeBox identity dropdown
-      toast({
-        title: "Profile Saved",
-        description: "Your identity and profile information has been updated.",
-      });
-    } else {
-      toast({
-        variant: "destructive",
-        title: "Save Failed",
-        description: result.error,
-      });
-    }
-    setIsSaving(false);
-  };
+
   
   const handleReserveAlias = async () => {
     if (!profile) return;
@@ -398,48 +399,20 @@ function SettingsContent() {
           <CardDescription>Update your personal details and manage how you appear on the platform.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <Avatar className="h-20 w-20 shrink-0">
-              <AvatarImage src={profile.avatar} alt={profile.name} data-ai-hint="profile person" />
+          <div className="flex items-center gap-4">
+            <Avatar className="h-16 w-16 shrink-0 border-2 border-primary/20">
+              <AvatarImage src={profile.avatar} alt={profile.name} />
               <AvatarFallback>{profile.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
             </Avatar>
-            <div className="flex flex-col gap-2">
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file || !profile) return;
-                  setIsUploadingAvatar(true);
-                  try {
-                    const url = await uploadFile(file, 'avatars', 'avatar');
-                    const result = await updateUserProfile(profile.id, { avatar: url });
-                    if (result.success) {
-                      setProfile({ ...profile, avatar: url });
-                      refreshUser(); // Propagate avatar change globally
-                      toast({ title: 'Avatar updated', description: 'Your profile picture has been changed.' });
-                    } else {
-                      toast({ variant: 'destructive', title: 'Upload failed', description: result.error });
-                    }
-                  } catch (err: unknown) {
-                    toast({ variant: 'destructive', title: 'Upload failed', description: ((err instanceof Error) ? err.message : 'An error occurred') });
-                  } finally {
-                    setIsUploadingAvatar(false);
-                  }
-                }}
-              />
-              <Button variant="outline" disabled={isUploadingAvatar} onClick={() => avatarInputRef.current?.click()}>
-                {isUploadingAvatar ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Uploading...</> : 'Change Picture'}
-              </Button>
+            <div className="flex-1">
+              <p className="text-lg font-semibold">{profile.name}</p>
+              <p className="text-sm text-muted-foreground line-clamp-1">{profile.bio || "No bio set."}</p>
+              <Link href="/my-wall" className="text-xs text-primary hover:underline flex items-center gap-1 mt-1">
+                Edit identity on My Wall <ScrollText className="h-3 w-3" />
+              </Link>
             </div>
           </div>
-           <div className="space-y-1.5">
-              <Label htmlFor="givenName">Given Name</Label>
-              <Input id="givenName" value={givenName} onChange={(e) => setGivenName(e.target.value)} />
-              <p className="text-xs text-muted-foreground">This is your main profile name.</p>
-            </div>
+
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="email">Email Address</Label>
@@ -455,10 +428,7 @@ function SettingsContent() {
               </div>
               <Input id="email" type="email" value={profile.email} disabled />
             </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="bio">Bio</Label>
-            <Input id="bio" placeholder="Tell us a little about yourself" value={bio} onChange={(e) => setBio(e.target.value)} />
-          </div>
+
           
           <Separator />
           
@@ -501,7 +471,9 @@ function SettingsContent() {
                               if (!file || !profile) return;
                               setIsUploadingReservedAliasAvatar(true);
                               try {
-                                const url = await uploadFile(file, 'avatars', 'avatar');
+                                const { normalizeImage } = await import('@/lib/image-utils');
+                                const normalizedFile = await normalizeImage(file);
+                                const url = await uploadFile(normalizedFile, 'avatars', 'avatar');
                                 const result = await updateUserProfile(profile.id, { reservedAliasAvatar: url });
                                 if (result.success) {
                                   setProfile(result.profile);
@@ -612,12 +584,6 @@ function SettingsContent() {
                 </div>
             </div>
         </CardContent>
-        <CardFooter>
-          <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleSaveChanges} disabled={isSaving}>
-            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-            {isSaving ? "Saving..." : "Save Profile Changes"}
-          </Button>
-        </CardFooter>
       </Card>
 
       <Separator />

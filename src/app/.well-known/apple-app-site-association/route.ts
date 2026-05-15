@@ -31,7 +31,7 @@ export async function GET() {
         details: [
           {
             appID: 'ABXVW6PWCW.app.tribes.TribesApp',
-            paths: ['/bond/tap/*', '/tribe/*', '/post/*', '/signup'],
+            paths: ['/bond/tap/*', '/bonds/*', '/tribe/*', '/post/*', '/profile/*', '/my-wall', '/events/*', '/signup'],
           },
         ],
       },

@@ -34,7 +34,7 @@ export function ResponsiveDialog({ open, onOpenChange, children, className }: Re
   if (isMobile) {
     return (
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <ShadSheetContent side="bottom" className="h-auto max-h-[90vh] flex flex-col p-0">
+        <ShadSheetContent side="bottom" className="h-auto flex flex-col p-0" style={{ maxHeight: 'calc(90vh - var(--keyboard-height, 0px))' }}>
           <ScrollArea className="flex-1">
             <div className="p-4 sm:p-6">
               {children}

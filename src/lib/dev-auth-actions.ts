@@ -12,6 +12,10 @@ export async function devLoginAction(role: 'admin' | 'member' | 'speaker' | 'fre
   if (process.env.NODE_ENV !== 'development') {
     throw new Error('Forbidden');
   }
+  // Defense-in-depth: even if NODE_ENV leaks, this blocks without the secret
+  if (!process.env.DEV_BYPASS_SECRET || process.env.DEV_BYPASS_SECRET !== 'local-dev-only') {
+    throw new Error('Forbidden: DEV_BYPASS_SECRET not configured');
+  }
   const ObjectDb = await import('@/db');
   const sessionAuth = await import('@/lib/auth/session');
   

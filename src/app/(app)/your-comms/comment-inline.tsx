@@ -1,6 +1,7 @@
 "use client";
 
 import React from 'react';
+import Link from 'next/link';
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { format } from 'date-fns';
 import type { DiscussionComment } from '@/lib/types';
@@ -8,14 +9,30 @@ import type { DiscussionComment } from '@/lib/types';
 export const CommentInline: React.FC<{ comment: DiscussionComment; level?: number }> = ({ comment, level = 0 }) => (
   <div className={level > 0 ? 'ml-6 border-l-2 pl-3' : ''}>
     <div className="flex items-start gap-2">
-      <UserAvatar 
-        user={{ name: comment.authorName, avatar: comment.authorAvatar }} 
-        className="h-6 w-6 mt-0.5" 
-        fallback={comment.authorAvatarFallback}
-      />
+      {!comment.authorIsAlias ? (
+        <Link href={`/profile/${comment.authorId}`}>
+          <UserAvatar 
+            user={{ name: comment.authorName, avatar: comment.authorAvatar }} 
+            className="h-6 w-6 mt-0.5 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" 
+            fallback={comment.authorAvatarFallback}
+          />
+        </Link>
+      ) : (
+        <UserAvatar 
+          user={{ name: comment.authorName, avatar: comment.authorAvatar }} 
+          className="h-6 w-6 mt-0.5" 
+          fallback={comment.authorAvatarFallback}
+        />
+      )}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
-          <span className="text-xs font-semibold">{comment.authorName}</span>
+          {!comment.authorIsAlias ? (
+            <Link href={`/profile/${comment.authorId}`} className="hover:underline decoration-primary/30 underline-offset-2">
+              <span className="text-xs font-semibold">{comment.authorName}</span>
+            </Link>
+          ) : (
+            <span className="text-xs font-semibold">{comment.authorName}</span>
+          )}
           <span className="text-[10px] text-muted-foreground">{format(comment.timestamp, 'MMM d, h:mm a')}</span>
         </div>
         <p className="text-sm text-foreground whitespace-pre-line">{comment.content}</p>

@@ -11,14 +11,15 @@ import { MoodTagSelector } from './mood-tag-selector';
 import { useUser } from '@/hooks/use-user';
 import { useToast } from '@/hooks/use-toast';
 import { createRingPost, type CreateRingPostPayload } from '@/lib/actions/content-actions';
-import type { Ring } from '@/lib/types';
-import { ImagePlus, Send, Loader2, X, Lock, Globe } from 'lucide-react';
+import type { Ring, LinkPreviewData } from '@/lib/types';
+import { ImagePlus, Send, Loader2, X, Lock, Globe, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useActionError } from '@/hooks/use-action-error';
 import { uploadFile } from '@/lib/upload';
 import { useKeySync } from '@/components/providers/key-sync-provider';
 import { triggerHaptic } from '@/lib/capacitor/haptics';
 import { ImpactStyle } from '@capacitor/haptics';
+import { LinkPreviewCard, LinkPreviewSkeleton } from '@/components/ui/link-preview-card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -106,6 +107,12 @@ export function ComposeBox({
   // Identity state
   const [selectedIdentity, setSelectedIdentity] = useState<{ name: string; avatar?: string } | null>(null);
 
+  // Link preview state
+  const [linkPreview, setLinkPreview] = useState<LinkPreviewData | null>(null);
+  const [isUnfurling, setIsUnfurling] = useState(false);
+  const [linkDismissed, setLinkDismissed] = useState(false);
+  const lastUnfurledUrl = useRef<string | null>(null);
+
   const activeTribe = ring === 'tribes' && selectedTribeIds.length > 0 
     ? loadedTribes.find(t => t.id === selectedTribeIds[0]) 
     : null;
@@ -124,6 +131,79 @@ export function ComposeBox({
   }, [ring, activeTribe, moodTag]);
 
   const composeUser = selectedIdentity || defaultIdentity;
+
+  // ── URL detection & unfurl ──────────────────────────────────
+  const URL_REGEX = /https?:\/\/[^\s<>"']+/i;
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    // Skip if dismissed or no content
+    if (linkDismissed || !content) {
+      // Only clear preview if content was fully emptied (not just dismissed)
+      if (!content && lastUnfurledUrl.current) {
+        setLinkPreview(null);
+        setIsUnfurling(false);
+        lastUnfurledUrl.current = null;
+      }
+      return;
+    }
+
+    const match = content.match(URL_REGEX);
+    const detectedUrl = match?.[0] ?? null;
+
+    // URL was removed from content — clear preview
+    if (!detectedUrl && lastUnfurledUrl.current) {
+      setLinkPreview(null);
+      setIsUnfurling(false);
+      lastUnfurledUrl.current = null;
+      return;
+    }
+
+    // No URL found and none previously tracked — nothing to do
+    if (!detectedUrl) return;
+
+    // Same URL as before — keep existing preview, don't refetch
+    if (detectedUrl === lastUnfurledUrl.current) return;
+
+    // New URL detected — debounce the fetch
+    const timer = setTimeout(() => {
+      // Abort any in-flight request
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      lastUnfurledUrl.current = detectedUrl;
+      setIsUnfurling(true);
+
+      fetch('/api/unfurl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: detectedUrl }),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (controller.signal.aborted) return;
+          if (response.ok) {
+            const data: LinkPreviewData = await response.json();
+            if (!controller.signal.aborted) {
+              setLinkPreview(data);
+            }
+          }
+          // On non-ok response, just leave preview as-is (don't clear)
+        })
+        .catch(() => {
+          // Aborted or network error — don't clear existing preview
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setIsUnfurling(false);
+          }
+        });
+    }, 600);
+
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, linkDismissed]);
 
   const initials = (user?.name ?? 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
 
@@ -151,105 +231,49 @@ export function ComposeBox({
             };
             imageEncryptionKey = journalKey; // Use journal key for images too
           } catch (encErr) {
-            console.warn('[ComposeBox] Journal encryption failed, posting unencrypted:', encErr);
+            throw new Error('Journal encryption failed');
           }
         } else if (ring === 'tribes' && selectedTribeIds.length > 0) {
           // TRIBE RING: Use group symmetric key for private tribes (O(1) encryption)
-          try {
-            const { getEncryptionRecipients } = await import('@/lib/actions/content-actions');
-            const recipients = await getEncryptionRecipients(
-              'tribes',
-              selectedTribeIds,
-            );
+          // Decision to encrypt is based on the tribe's privacy flag, NOT on
+          // the recipients list. This prevents the bug where a solo founder
+          // (the only member) would skip encryption because
+          // getEncryptionRecipients excludes the author, returning [].
+          if (activeTribe && !activeTribe.isPublic) {
+            // Private tribe — encryption is ALWAYS required regardless of member count
+            const { getTribeKey } = await import('@/lib/crypto/key-store');
+            const primaryTribeId = selectedTribeIds[0];
+            const cachedTribeKey = primaryTribeId ? await getTribeKey(primaryTribeId) : null;
 
-            if (recipients.length > 0) {
-              // Private tribe detected — try group key encryption first
-              const { getTribeKey } = await import('@/lib/crypto/key-store');
-
-              // Check if we have a cached tribe group key for the primary tribe
-              const primaryTribeId = selectedTribeIds[0];
-              const cachedTribeKey = primaryTribeId ? await getTribeKey(primaryTribeId) : null;
-
-              if (cachedTribeKey) {
-                // O(1) path: encrypt once with tribe group key
-                const { encryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
-                const { toBase64 } = await import('@/lib/crypto/encoding');
-
-                const result = await encryptWithTribeKey(content.trim(), cachedTribeKey.key);
-
-                encryption = {
-                  ciphertextBase64: toBase64(result.ciphertext),
-                  iv: result.iv,
-                  keyGrants: [], // No per-recipient grants — all members share the tribe key
-                };
-                imageEncryptionKey = cachedTribeKey.key;
-
-                setEncryptionStatus({ encrypted: true, totalRecipients: recipients.length, encryptedRecipients: recipients.length });
-              } else {
-                // Fallback: pairwise encryption (group key not yet distributed)
-                const { getSharedSecret } = await import('@/lib/crypto/key-store');
-                const { getBondKey, importPublicKey, deriveSharedSecret } = await import('@/lib/crypto');
-                const { getBonds } = await import('@/lib/actions/bond-actions');
-                const allBonds = await getBonds();
-                const bondMap = new Map(allBonds.map(b => [b.id, b]));
-
-                const recipientKeys: Array<{ userId: string; bondId?: string; sharedSecret: CryptoKey }> = [];
-
-                for (const r of recipients) {
-                  const cached = await getSharedSecret(r.bondId);
-                  if (cached) {
-                    recipientKeys.push({ userId: r.userId, bondId: r.bondId, sharedSecret: cached.sharedSecret });
-                    continue;
-                  }
-
-                  const bondKey = await getBondKey(r.bondId);
-                  const bond = bondMap.get(r.bondId);
-                  if (!bondKey || !bond?.peerPublicKeyJwk) continue;
-
-                  const peerPub = await importPublicKey(JSON.parse(bond.peerPublicKeyJwk));
-                  const shared = await deriveSharedSecret(bondKey.privateKey, peerPub);
-                  recipientKeys.push({ userId: r.userId, bondId: r.bondId, sharedSecret: shared });
-                }
-
-                setEncryptionStatus({
-                  encrypted: recipientKeys.length > 0,
-                  totalRecipients: recipients.length,
-                  encryptedRecipients: recipientKeys.length,
-                });
-
-                if (recipientKeys.length > 0) {
-                  try {
-                    const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
-                    const personalKey = await getOrCreateJournalKey();
-                    recipientKeys.push({ userId: user!.id, bondId: undefined, sharedSecret: personalKey });
-                  } catch {
-                    console.warn('[ComposeBox] Could not add self-grant');
-                  }
-
-                  const { encryptPostForRecipients } = await import('@/lib/crypto/post-encryption');
-                  const { toBase64 } = await import('@/lib/crypto/encoding');
-                  const result = await encryptPostForRecipients(content.trim(), recipientKeys);
-
-                  encryption = {
-                    ciphertextBase64: toBase64(result.ciphertext),
-                    iv: result.iv,
-                    keyGrants: result.keyGrants,
-                  };
-                  imageEncryptionKey = result.postKey;
-                }
-              }
-            } else {
-              // Public tribe — no encryption needed
-              setEncryptionStatus({ encrypted: false, totalRecipients: 0, encryptedRecipients: 0 });
+            if (!cachedTribeKey) {
+              // No tribe key available — block the post entirely
+              toast({
+                variant: 'destructive',
+                title: 'Encryption Keys Syncing',
+                description: 'Your device is still receiving the encryption keys for this tribe. Please wait a moment and try again.',
+              });
+              // Trigger a key sync to speed up the process
+              triggerSync();
+              return;
             }
-          } catch (encErr) {
-            console.error('[ComposeBox] Tribe encryption failed:', encErr);
+
+            // Encrypt with tribe group key (O(1) — single encrypt for all members)
+            const { encryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
+            const { toBase64 } = await import('@/lib/crypto/encoding');
+
+            const result = await encryptWithTribeKey(content.trim(), cachedTribeKey.key);
+
+            encryption = {
+              ciphertextBase64: toBase64(result.ciphertext),
+              iv: result.iv,
+              keyGrants: [], // No per-recipient grants — all members share the tribe key
+            };
+            imageEncryptionKey = cachedTribeKey.key;
+
+            setEncryptionStatus({ encrypted: true, totalRecipients: 1, encryptedRecipients: 1 });
+          } else {
+            // Public tribe — no encryption needed
             setEncryptionStatus({ encrypted: false, totalRecipients: 0, encryptedRecipients: 0 });
-            toast({
-              variant: 'destructive',
-              title: 'Encryption Error',
-              description: 'Could not encrypt this post. It will be stored unencrypted.',
-            });
           }
         } else if (ring === 'inner_circle' || ring === 'my_people') {
           // BOND RINGS: Pairwise sender key model
@@ -355,6 +379,7 @@ export function ComposeBox({
           overrideName: selectedIdentity?.name,
           overrideAvatar: selectedIdentity?.avatar,
           encryption,
+          linkPreview: linkPreview ?? undefined,
         });
 
         if (result && 'serverError' in result) {
@@ -372,6 +397,9 @@ export function ComposeBox({
         setImageFiles([]);
         setPreviewUrls([]);
         setIsExpanded(false);
+        setLinkPreview(null);
+        setLinkDismissed(false);
+        lastUnfurledUrl.current = null;
 
         toast({
           title: encryption ? 'Posted (encrypted)' : 'Posted!',
@@ -403,8 +431,12 @@ export function ComposeBox({
       return;
     }
 
-    const newPreviewUrls = files.map(file => URL.createObjectURL(file));
-    setImageFiles(prev => [...prev, ...files]);
+    // Normalize images: convert HEIC/HEIF→JPEG, compress large files (runs in Web Worker)
+    const { normalizeImage } = await import('@/lib/image-utils');
+    const normalized = await Promise.all(files.map(f => normalizeImage(f)));
+
+    const newPreviewUrls = normalized.map(file => URL.createObjectURL(file));
+    setImageFiles(prev => [...prev, ...normalized]);
     setPreviewUrls(prev => [...prev, ...newPreviewUrls]);
   };
 
@@ -412,6 +444,26 @@ export function ComposeBox({
     URL.revokeObjectURL(previewUrls[index]);
     setImageFiles(prev => prev.filter((_, i) => i !== index));
     setPreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const insertImageRef = (index: number) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const token = `[img:${index + 1}]`;
+    const pos = textarea.selectionStart ?? content.length;
+    const before = content.slice(0, pos);
+    const after = content.slice(pos);
+    // Add newlines around the token if not already at a line boundary
+    const prefix = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
+    const suffix = after.length > 0 && !after.startsWith('\n') ? '\n' : '';
+    const newContent = `${before}${prefix}${token}${suffix}${after}`;
+    setContent(newContent);
+    // Move cursor after the token
+    const newPos = before.length + prefix.length + token.length;
+    setTimeout(() => {
+      textarea.selectionStart = textarea.selectionEnd = newPos;
+      textarea.focus();
+    }, 0);
   };
 
   return (
@@ -517,19 +569,51 @@ export function ComposeBox({
                 {previewUrls.length > 0 && (
                   <div className="flex flex-wrap gap-2 overflow-x-auto pb-2">
                     {previewUrls.map((url, idx) => (
-                      <div key={idx} className="relative group">
+                      <div key={idx} className="relative group hover:z-10">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={url} alt={`Preview ${idx}`} className="h-20 w-20 rounded-md object-cover border shadow-sm" />
+                        {/* Insert inline ref at cursor */}
+                        <button
+                          onClick={() => insertImageRef(idx)}
+                          className="absolute bottom-0.5 left-0.5 bg-primary text-primary-foreground rounded-full h-5 w-5 flex items-center justify-center text-[10px] shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                          title={`Insert [img:${idx + 1}] at cursor`}
+                        >
+                          <Link2 className="h-3 w-3" />
+                        </button>
                         <button
                           onClick={() => removeImage(idx)}
                           className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full h-5 w-5 flex items-center justify-center text-[10px] shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <X className="h-3 w-3" />
                         </button>
+                        {/* Image index badge */}
+                        <span className="absolute top-0.5 left-0.5 bg-black/60 text-white text-[9px] font-bold rounded px-1 py-0.5 leading-none">
+                          {idx + 1}
+                        </span>
                       </div>
                     ))}
                   </div>
                 )}
+
+                {/* Link preview */}
+                {isUnfurling && (
+                  <LinkPreviewSkeleton />
+                )}
+                {linkPreview && !isUnfurling && (
+                  <LinkPreviewCard
+                    url={linkPreview.url}
+                    title={linkPreview.title}
+                    description={linkPreview.description}
+                    imageUrl={linkPreview.imageUrl}
+                    siteName={linkPreview.siteName}
+                    compact
+                    onDismiss={() => {
+                      setLinkPreview(null);
+                      setLinkDismissed(true);
+                    }}
+                  />
+                )
+                }
 
                 {/* Controls bar */}
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t">
@@ -610,6 +694,9 @@ export function ComposeBox({
                         previewUrls.forEach(url => URL.revokeObjectURL(url));
                         setImageFiles([]);
                         setPreviewUrls([]);
+                        setLinkPreview(null);
+                        setLinkDismissed(false);
+                        lastUnfurledUrl.current = null;
                       }}
                     >
                       Cancel

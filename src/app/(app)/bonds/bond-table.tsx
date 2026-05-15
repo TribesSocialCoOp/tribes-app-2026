@@ -116,8 +116,8 @@ export function BondTable() {
                 <SortableHeaderCell columnKey="targetName" title="Target" />
                 <TableHead className="hidden md:table-cell w-[80px]" />
                 <SortableHeaderCell columnKey="bondType" title="Type" className="hidden sm:table-cell" />
-                <SortableHeaderCell columnKey="passkeyStatus" title="Passkey Status" className="text-center" />
-                <TableHead className="text-center hidden md:table-cell">Connect Vibe</TableHead>
+                <SortableHeaderCell columnKey="passkeyStatus" title="Bond Health" className="text-center hidden sm:table-cell" />
+                <TableHead className="text-center">Sentiment</TableHead>
                 <SortableHeaderCell columnKey="expiresAt" title="Expires" className="hidden md:table-cell" />
                 <TableHead className="hidden sm:table-cell">Intercom Feed</TableHead>
                 <TableHead className="text-right">Actions</TableHead>

@@ -98,6 +98,79 @@ export const initialSampleTribePosts: TribePost[] = [
     vibes: 5, comments: 0, dataAiHintAvatar: "founder portrait",
     isPinned: false,
   },
+  {
+    id: "ai_post_1", tribeId: "1", authorId: "authorAE", authorName: "Alice Example", authorAvatarFallback: "AE",
+    timestamp: new Date(MOCK_POST_DATE_MS - 86400000),
+    title: "The future of Agentic Workflows",
+    content: "I've been thinking a lot about how we move from simple LLM prompts to complex agentic loops. The main challenge seems to be reliable state management across long-running tasks.\n\nWhat patterns are you all seeing in production? We're currently experimenting with a hierarchical supervisor model where a 'planner' delegates sub-tasks to specialized workers.",
+    vibes: 42, comments: 4,
+    commentsData: [
+      {
+        id: "ai_comment_1", authorId: "authorXY", authorName: "AI Ethicist", authorAvatarFallback: "AE",
+        content: "The hierarchical model works great until the planner gets stuck in a loop. Have you implemented any circuit breakers?",
+        timestamp: new Date(MOCK_POST_DATE_MS - 86400000 + 3600000),
+        vibes: 5,
+        replies: [
+          {
+            id: "ai_reply_1", authorId: "authorAE", authorName: "Alice Example", authorAvatarFallback: "AE",
+            content: "Exactly! We added a max-turn counter and a validator agent that checks if the plan is actually progressing.",
+            timestamp: new Date(MOCK_POST_DATE_MS - 86400000 + 7200000),
+            vibes: 3,
+          }
+        ]
+      },
+      {
+        id: "ai_comment_2", authorId: "user2", authorName: "Bob Builder", authorAvatarFallback: "BB",
+        content: "I'm more interested in the observability side. How are you tracing these agent decisions?",
+        timestamp: new Date(MOCK_POST_DATE_MS - 86400000 + 4200000),
+        vibes: 2,
+      },
+      {
+        id: "ai_comment_3", authorId: "test-service-member", authorName: "TSM", authorAvatarFallback: "TS",
+        content: "We should host a workshop on this. There's a lot of interest in the tribe.",
+        timestamp: new Date(MOCK_POST_DATE_MS - 86400000 + 10000000),
+        vibes: 10,
+      }
+    ]
+  },
+  {
+    id: "hiking_post_1", tribeId: "2", authorId: "test-speaker-user", authorName: "Speaker Sam", authorAvatarFallback: "SS",
+    timestamp: new Date(MOCK_POST_DATE_MS - 43200000),
+    title: "Best sunrise spot at Blue Mountain?",
+    content: "Planning a hike this Saturday and want to catch the sunrise. Is the North Ridge still the best spot, or has anyone found a better lookout recently?",
+    vibes: 15, comments: 2,
+    commentsData: [
+      {
+        id: "hike_comment_1", authorId: "user3", authorName: "Carol Cosmos", authorAvatarFallback: "CC",
+        content: "North Ridge is classic, but Eagle's Peak is actually better this time of year because the sun rises further south.",
+        timestamp: new Date(MOCK_POST_DATE_MS - 43200000 + 1800000),
+        vibes: 4,
+      },
+      {
+        id: "hike_comment_2", authorId: "test-free-user", authorName: "Free Explorer", authorAvatarFallback: "FE",
+        content: "Watch out for the mud on the lower trail, rained quite a bit last night.",
+        timestamp: new Date(MOCK_POST_DATE_MS - 43200000 + 3600000),
+        vibes: 1,
+      }
+    ]
+  },
+  {
+    id: "game_post_1", tribeId: "3", authorId: "authorRD", authorName: "RockstarDev", authorAvatarFallback: "RD",
+    timestamp: new Date(MOCK_POST_DATE_MS - 172800000),
+    title: "Just released my first demo on itch.io!",
+    content: "It's a small puzzle game called 'Refract'. Would love some feedback from fellow devs. It's built in Godot 4 and uses some pretty neat shader tricks for the lighting.\n\nCheck it out here: [itch.io/refract](https://example.com/itch)",
+    imageUrl: "/seed/post-landscape.svg",
+    imageAlt: "Game screenshot",
+    vibes: 88, comments: 1,
+    commentsData: [
+      {
+        id: "game_comment_1", authorId: "test-service-admin", authorName: "Test Service Admin", authorAvatarFallback: "TA",
+        content: "This looks stunning! The lighting really adds to the atmosphere. I'll give it a play tonight.",
+        timestamp: new Date(MOCK_POST_DATE_MS - 172800000 + 7200000),
+        vibes: 12,
+      }
+    ]
+  },
 ];
 
 

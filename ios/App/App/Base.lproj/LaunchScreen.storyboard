@@ -15,18 +15,16 @@
                         <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Splash" translatesAutoresizingMaskIntoConstraints="NO" id="imgSplash">
-                                <rect key="frame" x="137.5" y="283.5" width="100" height="100"/>
-                                <constraints>
-                                    <constraint firstAttribute="width" constant="100" id="splW"/>
-                                    <constraint firstAttribute="height" constant="100" id="splH"/>
-                                </constraints>
+                            <imageView contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Splash" translatesAutoresizingMaskIntoConstraints="NO" id="imgSplash">
+                                <rect key="frame" x="0.0" y="0.0" width="375" height="667"/>
                             </imageView>
                         </subviews>
                         <color key="backgroundColor" red="0.039" green="0.039" blue="0.082" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
-                            <constraint firstItem="imgSplash" firstAttribute="centerX" secondItem="snD-IY-ifK" secondAttribute="centerX" id="ctrX"/>
-                            <constraint firstItem="imgSplash" firstAttribute="centerY" secondItem="snD-IY-ifK" secondAttribute="centerY" id="ctrY"/>
+                            <constraint firstItem="imgSplash" firstAttribute="top" secondItem="snD-IY-ifK" secondAttribute="top" id="topC"/>
+                            <constraint firstItem="imgSplash" firstAttribute="bottom" secondItem="snD-IY-ifK" secondAttribute="bottom" id="botC"/>
+                            <constraint firstItem="imgSplash" firstAttribute="leading" secondItem="snD-IY-ifK" secondAttribute="leading" id="leadC"/>
+                            <constraint firstItem="imgSplash" firstAttribute="trailing" secondItem="snD-IY-ifK" secondAttribute="trailing" id="trailC"/>
                         </constraints>
                     </view>
                 </viewController>

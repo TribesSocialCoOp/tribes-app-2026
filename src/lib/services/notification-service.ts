@@ -15,8 +15,11 @@ import {
   tribes,
   users,
   mentions,
+  posts,
+  comments,
 } from '@/db/schema';
-import { eq, and, isNull, ne, desc, sql } from 'drizzle-orm';
+import { eq, and, isNull, ne, desc, sql, inArray, gte } from 'drizzle-orm';
+import { buildPostPath } from '@/lib/utils/slugify';
 
 // ============================================================
 // TYPES
@@ -24,7 +27,7 @@ import { eq, and, isNull, ne, desc, sql } from 'drizzle-orm';
 
 export interface ActivityItem {
   id: string;
-  type: 'bond_request' | 'unread_message' | 'tribe_join_request' | 'mention' | 'system';
+  type: 'bond_request' | 'unread_message' | 'tribe_join_request' | 'mention' | 'new_tribe_post' | 'new_comment' | 'system';
   title: string;
   description: string;
   timestamp: Date;
@@ -104,6 +107,17 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
   const prefs = await getPreferences(userId);
   const items: ActivityItem[] = [];
 
+  // Get the last time the user viewed activity — items before this are "read"
+  const [prefRow] = await db.select({
+    lastViewed: notificationPreferences.lastActivityViewedAt,
+    readIds: notificationPreferences.readActivityIds,
+  })
+    .from(notificationPreferences)
+    .where(eq(notificationPreferences.userId, userId))
+    .limit(1);
+  const lastViewed = prefRow?.lastViewed ?? null;
+  const readIds = new Set<string>(prefRow?.readIds ?? []);
+
   // 1. Pending bond requests TO this user
   const pendingBondReqs = await db.select({
     id: bondRequests.id,
@@ -167,13 +181,13 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
     }
   }
 
-  // 3. Tribe join requests (if user is admin/speaker of any tribe)
+  // 3. Tribe join requests (if user is founder/admin/speaker of any tribe)
   if (prefs.tribeActivityEnabled) {
     const adminMemberships = await db.select({ tribeId: tribeMembers.tribeId })
       .from(tribeMembers)
       .where(and(
         eq(tribeMembers.userId, userId),
-        eq(tribeMembers.role, 'admin'),
+        inArray(tribeMembers.role, ['founder', 'admin', 'speaker']),
       ));
 
     for (const membership of adminMemberships) {
@@ -237,10 +251,132 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
     }
   }
 
+  // 5. New tribe posts from the user's tribes (last 7 days, excluding own posts)
+  if (prefs.tribeActivityEnabled) {
+    const userMemberships = await db.select({ tribeId: tribeMembers.tribeId })
+      .from(tribeMembers)
+      .where(eq(tribeMembers.userId, userId));
+
+    if (userMemberships.length > 0) {
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+      const tribeIds = userMemberships.map(m => m.tribeId);
+      const recentPosts = await db.select({
+        id: posts.id,
+        authorId: posts.authorId,
+        authorName: posts.authorName,
+        tribeId: posts.tribeId,
+        createdAt: posts.createdAt,
+        title: posts.title,
+        slug: posts.slug,
+      }).from(posts)
+        .where(and(
+          inArray(posts.tribeId, tribeIds),
+          gte(posts.createdAt, sevenDaysAgo),
+        ))
+        .orderBy(desc(posts.createdAt))
+        .limit(15);
+
+      // Look up tribe names and slugs for display/routing
+      const tribeNameMap = new Map<string, string>();
+      const tribeSlugMap = new Map<string, string>();
+      for (const tId of tribeIds) {
+        const [tribe] = await db.select({ name: tribes.name, slug: tribes.slug })
+          .from(tribes).where(eq(tribes.id, tId)).limit(1);
+        if (tribe) {
+          tribeNameMap.set(tId, tribe.name);
+          if (tribe.slug) tribeSlugMap.set(tId, tribe.slug);
+        }
+      }
+
+      for (const post of recentPosts) {
+        if (post.authorId === userId) continue; // Skip own posts
+        items.push({
+          id: `activity-tribepost-${post.id}`,
+          type: 'new_tribe_post',
+          title: tribeNameMap.get(post.tribeId!) ?? 'Your tribe',
+          description: `${post.authorName ?? 'Someone'} posted${post.title ? `: ${post.title}` : ''}`,
+          timestamp: post.createdAt ?? new Date(),
+          actionUrl: buildPostPath(post.id, post.slug, tribeSlugMap.get(post.tribeId!)),
+          read: false,
+        });
+      }
+    }
+  }
+
+  // 6. Comments on user's posts (last 7 days)
+  if (prefs.tribeActivityEnabled) {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const userPosts = await db.select({ id: posts.id, tribeId: posts.tribeId, slug: posts.slug })
+      .from(posts)
+      .where(eq(posts.authorId, userId));
+
+    if (userPosts.length > 0) {
+      const postIds = userPosts.map(p => p.id);
+      const postTribeMap = new Map(userPosts.map(p => [p.id, p.tribeId]));
+      const postSlugMap = new Map(userPosts.map(p => [p.id, p.slug]));
+      
+      // Also fetch slugs for these tribes
+      const tribeIds = [...new Set(userPosts.map(p => p.tribeId).filter(Boolean) as string[])];
+      const tribeSlugMap = new Map<string, string>();
+      if (tribeIds.length > 0) {
+        const tRows = await db.select({ id: tribes.id, slug: tribes.slug }).from(tribes).where(inArray(tribes.id, tribeIds));
+        for (const tr of tRows) { if (tr.slug) tribeSlugMap.set(tr.id, tr.slug); }
+      }
+
+      const recentComments = await db.select({
+        id: comments.id,
+        authorId: comments.authorId,
+        authorName: comments.authorName,
+        postId: comments.postId,
+        createdAt: comments.createdAt,
+      }).from(comments)
+        .where(and(
+          inArray(comments.postId, postIds),
+          gte(comments.createdAt, sevenDaysAgo),
+        ))
+        .orderBy(desc(comments.createdAt))
+        .limit(10);
+
+      for (const cmt of recentComments) {
+        if (cmt.authorId === userId) continue; // Skip own comments
+        const tribeId = postTribeMap.get(cmt.postId);
+        items.push({
+          id: `activity-comment-${cmt.id}`,
+          type: 'new_comment',
+          title: 'New Comment',
+          description: `${cmt.authorName ?? 'Someone'} commented on your post`,
+          timestamp: cmt.createdAt ?? new Date(),
+          actionUrl: `${buildPostPath(cmt.postId, postSlugMap.get(cmt.postId), tribeId ? tribeSlugMap.get(tribeId) : undefined)}?commentId=${cmt.id}`,
+          read: false,
+        });
+      }
+    }
+  }
+
   // Sort all items by timestamp desc
   items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
 
-  return items.slice(0, 30);
+  // Derive read state based on lastActivityViewedAt
+  // Bond requests and join requests are always unread (require action), other types use timestamp
+  const result = items.slice(0, 30);
+  for (const item of result) {
+    if (item.type === 'bond_request' || item.type === 'tribe_join_request') {
+      // Actionable items stay unread until resolved
+      item.read = false;
+    } else if (readIds.has(item.id)) {
+      // Individually marked read (click-to-read)
+      item.read = true;
+    } else if (lastViewed && item.timestamp <= lastViewed) {
+      // Bulk-marked read via "Mark all read"
+      item.read = true;
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -249,4 +385,58 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
 export async function getUnreadActivityCount(userId: string): Promise<number> {
   const feed = await getActivityFeed(userId);
   return feed.filter(item => !item.read).length;
+}
+
+/**
+ * Stamps the current time so all current activity items become "read".
+ */
+export async function markActivityViewed(userId: string): Promise<void> {
+  const [existing] = await db.select().from(notificationPreferences)
+    .where(eq(notificationPreferences.userId, userId))
+    .limit(1);
+
+  if (existing) {
+    await db.update(notificationPreferences)
+      .set({ lastActivityViewedAt: new Date(), readActivityIds: [] })
+      .where(eq(notificationPreferences.userId, userId));
+  } else {
+    await db.insert(notificationPreferences).values({
+      userId,
+      lastActivityViewedAt: new Date(),
+      readActivityIds: [],
+    });
+  }
+}
+
+/**
+ * Marks a single activity item as read by appending its ID to the per-item list.
+ * The list is bounded to 50 entries to prevent unbounded growth.
+ */
+export async function markSingleActivityRead(userId: string, activityId: string): Promise<void> {
+  const MAX_READ_IDS = 50;
+
+  const [existing] = await db.select({
+    readIds: notificationPreferences.readActivityIds,
+  }).from(notificationPreferences)
+    .where(eq(notificationPreferences.userId, userId))
+    .limit(1);
+
+  const currentIds: string[] = (existing?.readIds as string[] | null) ?? [];
+
+  // Deduplicate: don't add if already present
+  if (currentIds.includes(activityId)) return;
+
+  // Append and trim to max length (evict oldest = front of array)
+  const updated = [...currentIds, activityId].slice(-MAX_READ_IDS);
+
+  if (existing) {
+    await db.update(notificationPreferences)
+      .set({ readActivityIds: updated })
+      .where(eq(notificationPreferences.userId, userId));
+  } else {
+    await db.insert(notificationPreferences).values({
+      userId,
+      readActivityIds: updated,
+    });
+  }
 }

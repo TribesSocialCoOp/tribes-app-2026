@@ -13,9 +13,7 @@ import { MoodTagSelector } from '@/components/compose/mood-tag-selector';
 import type { TribePost } from '@/lib/types';
 import { editPost, editEncryptedPost, getPostKeyGrants } from '@/lib/actions/content-actions';
 import type { EditPostPayload } from '@/lib/actions/content-actions';
-import { decryptPost, reEncryptPost, unwrapPostKey } from '@/lib/crypto/post-encryption';
-import { getOrCreateJournalKey } from '@/lib/crypto/journal-encryption';
-import { fromBase64 } from '@/lib/crypto/encoding';
+import { reEncryptPost } from '@/lib/crypto/post-encryption';
 import { uploadFile } from '@/lib/upload';
 import { cn } from '@/lib/utils';
 
@@ -91,30 +89,54 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
     setIsDecrypting(true);
     setDecryptionError(null);
     try {
+      const { fromBase64 } = await import('@/lib/crypto/encoding');
+      const ciphertext = fromBase64(encryptedPost.ciphertextBase64!);
+      let decryptionKey: CryptoKey;
+
+      // ── Tribe group key path ──────────────────────────────────────
+      // Private tribe posts are encrypted with the tribe's AES-256-GCM
+      // group key — not per-bond key grants.
+      if (encryptedPost.ring === 'tribes' && encryptedPost.tribeId) {
+        const { getTribeKey } = await import('@/lib/crypto/key-store');
+        const storedKey = await getTribeKey(encryptedPost.tribeId);
+        if (!storedKey) {
+          throw new Error('Tribe encryption key not found. You may need to sync your keys in Settings.');
+        }
+        decryptionKey = storedKey.key;
+
+        const { decryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
+        setPostKey(decryptionKey);
+        const plaintext = await decryptWithTribeKey(ciphertext, encryptedPost.encryptionIv!, decryptionKey);
+        setContent(plaintext);
+        return;
+      }
+
+      // ── Bond / Journal key grant path ─────────────────────────────
       const grants = await getPostKeyGrants([encryptedPost.id]);
-      const selfGrant = grants[encryptedPost.id];
+      const grant = grants[encryptedPost.id];
       
-      if (!selfGrant) {
+      if (!grant) {
         throw new Error('Encryption key not found for this post.');
       }
 
-      const journalKey = await getOrCreateJournalKey();
-      const unwrappedKey = await unwrapPostKey(
-        selfGrant.wrappedKey,
-        selfGrant.wrapIv,
-        journalKey
-      );
-      setPostKey(unwrappedKey);
+      const { decryptWithPostKey } = await import('@/lib/crypto/post-encryption');
+      
+      if (!grant.bondId) {
+        // Self-grant: wrapped with the author's personal journal key
+        const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
+        const { unwrapPostKey } = await import('@/lib/crypto/post-encryption');
+        const journalKey = await getOrCreateJournalKey();
+        decryptionKey = await unwrapPostKey(grant.wrappedKey, grant.wrapIv, journalKey);
+      } else {
+        // Bond grant: use rotation-aware resolver (Phase 1)
+        const { resolvePostKeyForGrant } = await import('@/lib/crypto/key-rotation');
+        const resolved = await resolvePostKeyForGrant(grant.bondId, grant.wrappedKey, grant.wrapIv);
+        if (!resolved) throw new Error('Key mismatch or access denied (Sync keys in settings)');
+        decryptionKey = resolved;
+      }
 
-      const ciphertext = fromBase64(encryptedPost.ciphertextBase64!);
-      const plaintext = await decryptPost(
-        ciphertext,
-        encryptedPost.encryptionIv!,
-        selfGrant.wrappedKey,
-        selfGrant.wrapIv,
-        journalKey
-      );
-
+      setPostKey(decryptionKey);
+      const plaintext = await decryptWithPostKey(ciphertext, encryptedPost.encryptionIv!, decryptionKey);
       setContent(plaintext);
     } catch (err: any) {
       console.error('[EditPostDialog] Decryption failed:', err);
@@ -124,7 +146,7 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
     }
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
@@ -141,8 +163,12 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
       return;
     }
 
-    const previews = files.map(f => URL.createObjectURL(f));
-    setNewImageFiles(prev => [...prev, ...files]);
+    // Normalize images: convert HEIC/HEIF→JPEG, compress large files
+    const { normalizeImage } = await import('@/lib/image-utils');
+    const normalizedFiles = await Promise.all(files.map(f => normalizeImage(f)));
+
+    const previews = normalizedFiles.map(f => URL.createObjectURL(f));
+    setNewImageFiles(prev => [...prev, ...normalizedFiles]);
     setNewPreviewUrls(prev => [...prev, ...previews]);
 
     // Reset the input so the same file can be re-selected

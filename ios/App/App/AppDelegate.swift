@@ -8,6 +8,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
+
+        // Enable native iOS edge-swipe to go back
+        DispatchQueue.main.async {
+            if let rootVC = self.window?.rootViewController as? CAPBridgeViewController {
+                rootVC.webView?.allowsBackForwardNavigationGestures = true
+            }
+        }
+
         return true
     }
 

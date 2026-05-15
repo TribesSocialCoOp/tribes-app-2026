@@ -2,7 +2,11 @@
 
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { 
+  Popover, 
+  PopoverContent, 
+  PopoverTrigger 
+} from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { moodsData } from '@/lib/moods-data';
 import { X } from 'lucide-react';
@@ -41,15 +45,25 @@ export function MoodTagSelector({ value, onChange, allowedMoods }: MoodTagSelect
             <>
               <span>{selectedMood.emoji}</span>
               <span>{selectedMood.name}</span>
-              <button
+              <span
+                role="button"
+                tabIndex={0}
                 onClick={(e) => {
                   e.stopPropagation();
+                  e.preventDefault();
                   onChange(null);
                 }}
-                className="ml-0.5 rounded-full hover:bg-muted p-0.5"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    onChange(null);
+                  }
+                }}
+                className="ml-0.5 rounded-full hover:bg-muted p-0.5 cursor-pointer inline-flex"
               >
                 <X className="h-3 w-3" />
-              </button>
+              </span>
             </>
           ) : (
             <span>+ Mood</span>

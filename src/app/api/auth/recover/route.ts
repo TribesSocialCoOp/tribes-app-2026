@@ -5,12 +5,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { buildUrl } from '@/lib/url';
 
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get('token');
 
   if (!token) {
-    return NextResponse.redirect(new URL('/login?error=missing-token', request.url));
+    return NextResponse.redirect(buildUrl('/login?error=missing-token', request));
   }
 
   try {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     const result = await validateAndConsumeToken(token);
 
     if (result.type !== 'passkey_recovery') {
-      return NextResponse.redirect(new URL('/login?error=invalid-token-type', request.url));
+      return NextResponse.redirect(buildUrl('/login?error=invalid-token-type', request));
     }
 
     // Create a session for the recovered user so they can register a new passkey
@@ -27,9 +28,9 @@ export async function GET(request: NextRequest) {
 
     // Redirect to signup with recover flag — the page will detect
     // the existing session and offer passkey re-registration
-    return NextResponse.redirect(new URL('/signup?recover=true', request.url));
+    return NextResponse.redirect(buildUrl('/signup?recover=true', request));
   } catch (err: unknown) {
     const message = encodeURIComponent(((err instanceof Error) ? err.message : 'An error occurred') || 'Recovery failed');
-    return NextResponse.redirect(new URL(`/login?error=${message}`, request.url));
+    return NextResponse.redirect(buildUrl(`/login?error=${message}`, request));
   }
 }

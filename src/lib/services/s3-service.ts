@@ -219,6 +219,41 @@ export async function getPresignedUrl(
 // ============================================================
 
 /**
+ * Fetches a private file directly from S3 as a readable stream.
+ * Used by the server-side media proxy to stream encrypted file content
+ * to the browser without exposing internal S3 endpoints.
+ *
+ * @param s3Key  The S3 object key in the private bucket
+ * @returns Object with body stream and content length, or null if not found
+ */
+export async function getPrivateFileStream(
+  s3Key: string,
+): Promise<{ body: ReadableStream; contentLength?: number } | null> {
+  try {
+    const command = new GetObjectCommand({
+      Bucket: PRIVATE_BUCKET,
+      Key: s3Key,
+    });
+
+    const response = await s3Client.send(command);
+
+    if (!response.Body) return null;
+
+    // Convert the S3 SDK stream to a web ReadableStream
+    const webStream = response.Body.transformToWebStream();
+
+    return {
+      body: webStream,
+      contentLength: response.ContentLength,
+    };
+  } catch (err: unknown) {
+    s3Logger.error({ err, s3Key }, 'Failed to fetch private file from S3');
+    return null;
+  }
+}
+
+
+/**
  * Delete an object from S3 (used by cleanup/purge jobs).
  */
 export async function deleteObject(s3Key: string, bucket: BucketType): Promise<void> {
@@ -300,10 +335,11 @@ export async function getMediaUrl(
     return file.publicUrl;
   }
 
-  // Private files — verify ownership or bond access
+  // Private files — verify ownership or shared access
   if (file.userId !== requestingUserId) {
-    // Check if requester has an active bond with the file owner
-    const { bonds } = await import('@/db/schema');
+    // Check 1: Direct bond with the file owner (DM attachments)
+    const { bonds, tribeMembers: tribeMembersTable } = await import('@/db/schema');
+    const { inArray } = await import('drizzle-orm');
     const [bond] = await db.select({ id: bonds.id })
       .from(bonds)
       .where(or(
@@ -317,7 +353,28 @@ export async function getMediaUrl(
       return getPresignedUrl(file.s3Key);
     }
 
-    // No ownership, no bond — deny
+    // Check 2: Shared tribe membership (encrypted tribe post images)
+    // If both the file owner and the requester are members of the same tribe, grant access.
+    const ownerTribes = await db.select({ tribeId: tribeMembersTable.tribeId })
+      .from(tribeMembersTable)
+      .where(eq(tribeMembersTable.userId, file.userId));
+    const ownerTribeIds = ownerTribes.map(t => t.tribeId);
+
+    if (ownerTribeIds.length > 0) {
+      const [sharedMembership] = await db.select({ id: tribeMembersTable.id })
+        .from(tribeMembersTable)
+        .where(and(
+          eq(tribeMembersTable.userId, requestingUserId),
+          inArray(tribeMembersTable.tribeId, ownerTribeIds),
+        ))
+        .limit(1);
+
+      if (sharedMembership) {
+        return getPresignedUrl(file.s3Key);
+      }
+    }
+
+    // No ownership, no bond, no shared tribe — deny
     s3Logger.warn({ fileId, ownerId: file.userId, requesterId: requestingUserId }, 'Unauthorized media access attempt');
     return null;
   }
@@ -341,8 +398,11 @@ export async function getUserStorageUsage(userId: string): Promise<{ public: num
   let publicUsage = 0;
   let privateUsage = 0;
   for (const row of rows) {
-    if (row.bucket === 'public') publicUsage = row.total ?? 0;
-    if (row.bucket === 'private') privateUsage = row.total ?? 0;
+    // PostgreSQL SUM() returns bigint, which the pg driver sends as a string.
+    // Must explicitly cast to number to avoid string concatenation in comparisons.
+    const total = Number(row.total) || 0;
+    if (row.bucket === 'public') publicUsage = total;
+    if (row.bucket === 'private') privateUsage = total;
   }
 
   return { public: publicUsage, private: privateUsage, total: publicUsage + privateUsage };

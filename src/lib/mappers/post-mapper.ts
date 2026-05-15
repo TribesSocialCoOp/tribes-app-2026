@@ -13,6 +13,7 @@ export function rowToTribePost(
   row: typeof posts.$inferSelect,
   commentsData?: DiscussionComment[],
   liveAvatar?: string | null,
+  authorIsAlias?: boolean,
 ): TribePost {
   return {
     id: row.id,
@@ -24,6 +25,7 @@ export function rowToTribePost(
     dataAiHintAvatar: row.dataAiHintAvatar ?? undefined,
     timestamp: row.createdAt ?? new Date(),
     title: row.title ?? undefined,
+    slug: row.slug ?? undefined,
     content: row.content,
     imageUrl: row.imageUrl ?? undefined,
     imageUrls: row.imageUrls ?? undefined,
@@ -46,6 +48,13 @@ export function rowToTribePost(
       ? Buffer.from(row.ciphertext as Buffer).toString('base64')
       : undefined,
     encryptionIv: row.encryptionIv ?? undefined,
+    // Link preview metadata
+    linkUrl: row.linkUrl ?? undefined,
+    linkTitle: row.linkTitle ?? undefined,
+    linkDescription: row.linkDescription ?? undefined,
+    linkImage: row.linkImage ?? undefined,
+    linkSiteName: row.linkSiteName ?? undefined,
     editedAt: row.editedAt ?? undefined,
+    authorIsAlias: authorIsAlias ?? false,
   };
 }

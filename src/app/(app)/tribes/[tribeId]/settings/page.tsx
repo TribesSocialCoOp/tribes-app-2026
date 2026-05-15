@@ -89,8 +89,9 @@ function TribeSettingsContent() {
   const startPosY = useRef(50);
 
   useEffect(() => {
-    // Resolve slug → tribeId if coming from /t/[slug]/settings
-    const resolveAndCheckAccess = async () => {
+    let cancelled = false;
+
+    const resolveAndCheckAccess = async (attempt = 0) => {
       let effectiveId = tribeIdParam || '';
       if (slugParam && !tribeIdParam) {
         const resolved = await getTribeBySlug(slugParam);
@@ -98,13 +99,23 @@ function TribeSettingsContent() {
         effectiveId = resolved.id;
         setTribeId(effectiveId);
       }
-      // Determine access via server-side tribe authorization (not global role)
-      const accessLevel = await checkTribeAccess(effectiveId);
-      // Only founders and platform admins can access settings
-      const canAccess = accessLevel === 'platform_admin' || accessLevel === 'founder';
-      setHasAccess(canAccess);
+      try {
+        const accessLevel = await checkTribeAccess(effectiveId);
+        // Retry if session hasn't hydrated yet (AuthGuard confirms login)
+        if (accessLevel === 'guest' && attempt < 3) {
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          if (!cancelled) return resolveAndCheckAccess(attempt + 1);
+          return;
+        }
+        if (cancelled) return;
+        const canAccess = accessLevel === 'platform_admin' || accessLevel === 'founder';
+        setHasAccess(canAccess);
+      } catch {
+        if (!cancelled) setHasAccess(false);
+      }
     };
     resolveAndCheckAccess();
+    return () => { cancelled = true; };
   }, [slugParam, tribeIdParam]);
 
   const form = useForm<TribeSettingsFormValues>({
@@ -434,9 +445,13 @@ function TribeSettingsContent() {
                   <FormItem>
                     <FormLabel className="text-md">Tribe Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Your tribe's awesome name" {...field} className="text-base"/>
+                      <Input placeholder="Your tribe's awesome name" {...field} className="text-base" disabled={(tribe?.members ?? 0) > 1} />
                     </FormControl>
-                    <FormDescription>The public name of your tribe.</FormDescription>
+                    <FormDescription>
+                      {(tribe?.members ?? 0) > 1
+                        ? 'Tribe names are locked once members have joined to protect shared links and community identity.'
+                        : 'You can change this while your tribe has no other members. The URL will update automatically.'}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
