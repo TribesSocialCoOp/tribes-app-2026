@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Network Security Configuration for Tribes
+  - Block ALL cleartext (HTTP) traffic
+  - Enforce TLS for tribes.app and subdomains
+  - Standard system trust anchors (no pinning — hosted WebView architecture)
+-->
+<network-security-config>
+    <!-- Global default: no cleartext allowed -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Tribes domain — TLS only, system trust -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">tribes.app</domain>
+    </domain-config>
+</network-security-config>

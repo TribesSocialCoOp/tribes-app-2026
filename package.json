@@ -19,7 +19,11 @@
     "ios:build": "./scripts/build_ios.sh",
     "ios:build:dev": "./scripts/build_ios.sh --dev",
     "ios:upload": "./scripts/upload_testflight.sh",
-    "ios:icons": "./scripts/generate_icons.sh"
+    "ios:icons": "./scripts/generate_icons.sh",
+    "android:sync": "npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:copy": "npx cap copy android",
+    "cap:sync": "npx cap sync"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1019.0",
