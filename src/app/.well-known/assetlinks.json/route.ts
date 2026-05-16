@@ -32,7 +32,7 @@ export async function GET() {
           namespace: 'android_app',
           package_name: 'app.tribes.TribesApp',
           sha256_cert_fingerprints: [
-            '00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00',
+            'C3:74:0E:64:03:60:57:DC:D5:B0:BB:3B:BF:A8:2D:81:1C:A1:68:C4:CC:C6:87:BE:8E:6E:5E:8F:2B:0A:B7:5B',
           ],
         },
       },
