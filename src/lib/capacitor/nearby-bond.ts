@@ -12,7 +12,7 @@
  * 4. Receiver navigates to /bond/tap/[token] for acceptance
  */
 
-import { isNative } from './platform';
+import { isNative, platform } from './platform';
 import { triggerHaptic, triggerNotificationHaptic } from './haptics';
 import { ImpactStyle, NotificationType } from '@capacitor/haptics';
 
@@ -53,10 +53,12 @@ let currentBondUrl: string | null = null;
 
 export const NearbyBondService = {
   /**
-   * Check if nearby discovery is available (native only).
+   * Check if nearby discovery is available.
+   * The underlying plugin uses Apple MultipeerConnectivity — iOS only.
+   * Android users bond via QR code instead.
    */
   isAvailable(): boolean {
-    return isNative;
+    return isNative && platform === 'ios';
   },
 
   /**
