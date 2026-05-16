@@ -23,6 +23,8 @@
     "android:sync": "npx cap sync android",
     "android:open": "npx cap open android",
     "android:copy": "npx cap copy android",
+    "android:build": "./scripts/build_android.sh",
+    "android:build:apk": "./scripts/build_android.sh --apk",
     "cap:sync": "npx cap sync"
   },
   "dependencies": {

@@ -24,6 +24,18 @@ allprojects {
     }
 }
 
+// Force all subprojects (including third-party Capacitor plugins compiled
+// against older SDKs) to use our compileSdk version.
+subprojects {
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                compileSdk = rootProject.ext.compileSdkVersion
+            }
+        }
+    }
+}
+
 task clean(type: Delete) {
     delete rootProject.buildDir
 }
