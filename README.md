@@ -1,6 +1,6 @@
 # 🌌 Tribes.app — The Privacy-First Social Hub
 
-[![Release](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/dustmoo/tribes-app-2026/releases)
+[![Release](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/dustmoo/tribes-app-2026/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Welcome to **Tribes.app**, a modern, beautiful, and open-source social communication platform built with a deep commitment to **End-to-End Encryption (E2EE)** and a state-of-the-art **Concentric Rings UX** design. 
