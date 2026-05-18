@@ -7,8 +7,8 @@
  */
 
 import { db } from '@/db';
-import { tribes, tribeSlugRedirects } from '@/db/schema';
-import { eq, gt, and } from 'drizzle-orm';
+import { tribes, tribeSlugRedirects, posts, postSlugRedirects } from '@/db/schema';
+import { eq, gt, and, isNull } from 'drizzle-orm';
 
 /**
  * Slugs that collide with sub-routes under /t/[slug]/ or system paths.
@@ -159,3 +159,120 @@ export async function resolveSlugRedirect(oldSlug: string): Promise<string | nul
 
   return tribe?.slug || null;
 }
+
+/**
+ * Generate a unique slug for a post, unique within the scope of a tribe (or standalone).
+ */
+export async function generateUniquePostSlug(text: string, tribeId: string | null): Promise<string> {
+  const base = slugify(text) || 'post';
+  let candidate = base;
+  let suffix = 2;
+
+  while (true) {
+    // Reject reserved slugs that collide with static paths
+    if (RESERVED_SLUGS.has(candidate)) {
+      candidate = `${base}-${suffix}`;
+      suffix++;
+      continue;
+    }
+
+    // Check if slug is already taken by a post in this tribe scope
+    const existingPostQuery = db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(
+        and(
+          eq(posts.slug, candidate),
+          tribeId ? eq(posts.tribeId, tribeId) : isNull(posts.tribeId)
+        )
+      )
+      .limit(1);
+
+    const existingPost = await existingPostQuery;
+
+    if (existingPost.length > 0) {
+      candidate = `${base}-${suffix}`;
+      suffix++;
+      continue;
+    }
+
+    // Check if slug is actively redirected in this tribe scope
+    const activeRedirectQuery = db
+      .select({ id: postSlugRedirects.id })
+      .from(postSlugRedirects)
+      .where(
+        and(
+          eq(postSlugRedirects.oldSlug, candidate),
+          tribeId ? eq(postSlugRedirects.tribeId, tribeId) : isNull(postSlugRedirects.tribeId)
+        )
+      )
+      .limit(1);
+
+    const activeRedirect = await activeRedirectQuery;
+
+    if (activeRedirect.length > 0) {
+      candidate = `${base}-${suffix}`;
+      suffix++;
+      continue;
+    }
+
+    return candidate;
+  }
+}
+
+/**
+ * Creates a permanent redirect from an old post slug to the current post.
+ */
+export async function createPostSlugRedirect(oldSlug: string, postId: string, tribeId: string | null): Promise<void> {
+  // Upsert: if this slug already has a redirect, update it
+  const existing = await db.select({ id: postSlugRedirects.id })
+    .from(postSlugRedirects)
+    .where(
+      and(
+        eq(postSlugRedirects.oldSlug, oldSlug),
+        tribeId ? eq(postSlugRedirects.tribeId, tribeId) : isNull(postSlugRedirects.tribeId)
+      )
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    await db.update(postSlugRedirects)
+      .set({ postId })
+      .where(eq(postSlugRedirects.id, existing[0].id));
+  } else {
+    await db.insert(postSlugRedirects).values({
+      id: `psr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      oldSlug,
+      postId,
+      tribeId,
+    });
+  }
+}
+
+/**
+ * Looks up an old post slug redirect. Returns the current post slug if a valid redirect exists, or null.
+ */
+export async function resolvePostSlugRedirect(oldSlug: string, tribeId: string | null): Promise<string | null> {
+  const [redirect] = await db.select({
+    postId: postSlugRedirects.postId,
+  })
+    .from(postSlugRedirects)
+    .where(
+      and(
+        eq(postSlugRedirects.oldSlug, oldSlug),
+        tribeId ? eq(postSlugRedirects.tribeId, tribeId) : isNull(postSlugRedirects.tribeId)
+      )
+    )
+    .limit(1);
+
+  if (!redirect) return null;
+
+  // Look up the current slug for the post
+  const [post] = await db.select({ slug: posts.slug })
+    .from(posts)
+    .where(eq(posts.id, redirect.postId))
+    .limit(1);
+
+  return post?.slug || null;
+}
+

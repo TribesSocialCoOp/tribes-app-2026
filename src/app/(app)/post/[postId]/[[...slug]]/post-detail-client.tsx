@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import { profilePath } from '@/lib/utils/paths';
 import { useRouter } from 'next/navigation';
 import { useScrollToPost } from '@/hooks/use-scroll-to-post';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -358,7 +359,7 @@ export function PostDetailClient({
         <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
           <div className="flex items-start space-x-3">
             {!post.authorIsAlias ? (
-              <Link href={`/profile/${post.authorId}`}>
+              <Link href={profilePath(post.authorId, post.authorSlug)}>
                 <UserAvatar
                   user={{ name: post.authorName, avatar: post.authorAvatar }}
                   className="h-10 w-10 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
@@ -378,7 +379,7 @@ export function PostDetailClient({
               <div className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   {!post.authorIsAlias ? (
-                    <Link href={`/profile/${post.authorId}`} className="hover:underline decoration-primary/30 underline-offset-2">
+                    <Link href={profilePath(post.authorId, post.authorSlug)} className="hover:underline decoration-primary/30 underline-offset-2">
                       <CardTitle className="text-md font-semibold tracking-normal truncate">{post.authorName}</CardTitle>
                     </Link>
                   ) : (

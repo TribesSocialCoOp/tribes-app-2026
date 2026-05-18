@@ -26,6 +26,7 @@ function rowToEvent(row: typeof events.$inferSelect): Event {
     latitude: row.latitude ?? undefined,
     longitude: row.longitude ?? undefined,
     rsvpPointsReward: row.rsvpPointsReward ?? 0,
+    slug: row.slug ?? undefined,
   };
 }
 
@@ -84,6 +85,14 @@ export async function createEvent(payload: EventCreatePayload): Promise<Event> {
   }
   const rsvpPoints = Math.min(payload.rsvpPointsReward ?? 0, rsvpCap);
 
+  // Generate unique slug
+  const { slugify, generateUniqueSlug } = await import('@/lib/utils/slugify');
+  const baseSlug = slugify(payload.name) || 'event';
+  const uniqueSlug = await generateUniqueSlug(baseSlug, async (candidate) => {
+    const existing = await db.select({ id: events.id }).from(events).where(eq(events.slug, candidate)).limit(1);
+    return existing.length > 0;
+  });
+
   await db.insert(events).values({
     id,
     name: payload.name,
@@ -99,6 +108,7 @@ export async function createEvent(payload: EventCreatePayload): Promise<Event> {
     coverImage: payload.coverPreview || eventCoverSvg(payload.name),
     dataAiHintCover: 'event banner',
     rsvpPointsReward: rsvpPoints,
+    slug: uniqueSlug,
   });
 
   const eventRows = await db.select().from(events).where(eq(events.id, id)).limit(1);

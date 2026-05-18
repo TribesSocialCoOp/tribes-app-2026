@@ -67,19 +67,11 @@ export function BondQRDialog({
     }
   }, [isOpen, fetchInvite]);
 
-  useEffect(() => {
-    if (!timeLeft) return;
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [timeLeft]);
+  // With a 1-year TTL, we don't need a per-second countdown.
+  // Just check once that the token hasn't expired.
+  // timeLeft > 0 gates the QR display, so we keep it as a simple boolean flag.
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+
 
   const handleCopy = () => {
     if (!inviteData) return;
@@ -138,7 +130,7 @@ export function BondQRDialog({
               <X className="h-12 w-12 text-destructive/40" />
               <div className="space-y-1">
                 <p className="text-sm font-semibold text-destructive">Code Expired</p>
-                <p className="text-xs text-muted-foreground leading-tight">Bonding keys are short-lived for security.</p>
+                <p className="text-xs text-muted-foreground leading-tight">Bonding keys are single-use for security.</p>
               </div>
               <Button size="sm" variant="outline" onClick={fetchInvite} className="mt-2">
                 <RefreshCw className="mr-2 h-4 w-4" />
@@ -150,12 +142,12 @@ export function BondQRDialog({
 
         {inviteData && timeLeft > 0 && (
           <div className="flex flex-col items-center gap-3 w-full max-w-xs">
-            <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-bold font-mono">
+            <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 text-primary rounded-full text-xs font-bold">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
               </span>
-              EXPIRES IN {formatTime(timeLeft)}
+              VALID FOR 1 YEAR (SINGLE-USE)
             </div>
             
             <div className="grid grid-cols-2 gap-3 w-full pt-4">

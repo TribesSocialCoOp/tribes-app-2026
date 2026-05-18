@@ -24,6 +24,7 @@ import { sendMessage, getMessagesForBond, markMessagesRead } from '@/lib/actions
 import { getWsToken } from '@/lib/actions/auth-actions';
 import { TribesWebSocket } from "@/lib/ws-client";
 import type { Bond } from "@/lib/types";
+import { profilePath } from '@/lib/utils/paths';
 import { useMessageSearch, type DateRangePreset } from "@/hooks/use-message-search";
 
 import { AuthGuard } from '@/components/providers/auth-guard';
@@ -369,7 +370,7 @@ function BondChatContent() {
           </div>
         </div>
         {bond.targetId && (
-          <Button variant="ghost" size="icon" onClick={() => router.push(`/profile/${bond.targetId}`)} title="View Wall">
+          <Button variant="ghost" size="icon" onClick={() => router.push(profilePath(bond.targetId!, bond.targetSlug))} title="View Wall">
             <UserIcon className="h-4 w-4" />
           </Button>
         )}

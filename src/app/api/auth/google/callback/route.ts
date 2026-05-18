@@ -136,6 +136,14 @@ export async function GET(request: NextRequest) {
 
         // Create a new user
         userId = crypto.randomUUID();
+        const { generateUniqueSlug } = await import('@/lib/utils/slugify');
+        const userSlug = await generateUniqueSlug(name || 'Google User', async (candidate) => {
+          const existing = await db.query.users.findFirst({
+            where: eq(users.slug, candidate),
+          });
+          return !!existing;
+        });
+
         await db.insert(users).values({
           id: userId,
           name: name || 'Google User',
@@ -144,33 +152,34 @@ export async function GET(request: NextRequest) {
           avatar: picture || null,
           reputationStatus: 'Newcomer',
           reputationScore: 0,
+          slug: userSlug,
           createdAt: new Date(),
         });
+      }
 
-        // Auto-redeem invite code
-        if (inviteCode) {
-          try {
-            const { redeemInviteCode } = await import('@/lib/services/invite-service');
-            await redeemInviteCode(userId, inviteCode);
-          } catch (e) {
-            console.warn('[Google OAuth] Invite redemption failed:', e);
-          }
-        }
-
-        // Auto-join the welcome tribe (looked up by slug, not hardcoded ID)
+      // Auto-redeem invite code (runs for both new users AND email-linked existing users)
+      if (inviteCode) {
         try {
-          const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
-          const { tribes: tribesTable } = await import('@/db/schema');
-          const [welcomeTribe] = await db.select({ id: tribesTable.id })
-            .from(tribesTable)
-            .where(eq(tribesTable.slug, 'welcome-to-tribes'))
-            .limit(1);
-          if (welcomeTribe) {
-            await joinTribeDirectly(userId, welcomeTribe.id);
-          }
+          const { redeemInviteCode } = await import('@/lib/services/invite-service');
+          await redeemInviteCode(userId, inviteCode);
         } catch (e) {
-          console.warn('[Google OAuth] Auto-join welcome tribe failed:', e);
+          console.warn('[Google OAuth] Invite redemption failed:', e);
         }
+      }
+
+      // Auto-join the welcome tribe (runs for both new AND email-linked users)
+      try {
+        const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
+        const { tribes: tribesTable } = await import('@/db/schema');
+        const [welcomeTribe] = await db.select({ id: tribesTable.id })
+          .from(tribesTable)
+          .where(eq(tribesTable.slug, 'welcome-to-tribes'))
+          .limit(1);
+        if (welcomeTribe) {
+          await joinTribeDirectly(userId, welcomeTribe.id);
+        }
+      } catch (e) {
+        console.warn('[Google OAuth] Auto-join welcome tribe failed:', e);
       }
 
       // Link the Google account to this user

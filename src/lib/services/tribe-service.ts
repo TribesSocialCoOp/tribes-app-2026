@@ -238,6 +238,7 @@ export async function getTribeMembers(
 
     return {
       id: r.userId,
+      slug: user?.slug ?? undefined,
       name: resolvedName,
       avatar: resolvedAvatar ?? '',
       dataAiHint: 'person',
@@ -269,6 +270,7 @@ export async function getPendingMembers(tribeId: string): Promise<PendingMemberT
     const user = userRows[0];
     return {
       id: r.id,
+      slug: user?.slug ?? undefined,
       name: user?.name ?? r.userId,
       avatar: user?.avatar ?? '',
       dataAiHint: 'person',

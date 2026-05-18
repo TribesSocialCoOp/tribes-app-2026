@@ -184,6 +184,12 @@ export const loginLimiter = new RateLimiter({
   maxRequests: 10,
 });
 
+export const passwordLoginLimiter = new RateLimiter({
+  prefix: 'password_login',
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  maxRequests: 5,            // Stricter than passkey's 10
+});
+
 export const signupLimiter = new RateLimiter({
   prefix: 'signup',
   windowMs: 60 * 60 * 1000,  // 1 hour

@@ -22,6 +22,7 @@ import { v4 as uuidv4 } from 'uuid';
 const TTL: Record<string, number> = {
   verify_email: 24 * 60 * 60 * 1000,     // 24 hours
   passkey_recovery: 15 * 60 * 1000,       // 15 minutes
+  password_reset: 15 * 60 * 1000,         // 15 minutes
 };
 
 function getSecret(): string {
@@ -40,7 +41,7 @@ function getSecret(): string {
  */
 export async function createVerificationToken(
   userId: string,
-  type: 'verify_email' | 'passkey_recovery',
+  type: 'verify_email' | 'passkey_recovery' | 'password_reset',
 ): Promise<string> {
   const nonce = randomBytes(16).toString('hex');
   const ttl = TTL[type] ?? TTL.verify_email;

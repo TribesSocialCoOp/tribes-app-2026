@@ -28,6 +28,7 @@ import { VibePicker } from '@/components/ui/vibe-picker';
 import { toggleVibe } from '@/lib/actions/content-actions';
 import type { TribePost, DiscussionComment } from '@/lib/types';
 import { CommentCard } from './comment-card';
+import { EditSlugDialog } from '@/components/dialogs/edit-slug-dialog';
 import { useTribeDetail } from './tribe-detail-context';
 import { MarkdownContent, getReferencedImageIndices } from '@/components/ui/markdown-content';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
@@ -39,6 +40,7 @@ import { ImpactStyle } from '@capacitor/haptics';
 import { shareContent } from '@/lib/capacitor/share';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { buildPostPath } from '@/lib/utils/slugify';
+import { profilePath } from '@/lib/utils/paths';
 
 interface TribePostCardProps {
   post: TribePost;
@@ -67,6 +69,11 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   const isMember = state.isMember;
   const displayTime = useTimeSince(post.timestamp);
 
+  const isTribeFounder = state.tribe?.createdBy === currentUserId || memberRoleMap.get(currentUserId || '') === 'founder';
+  const isTribeLeader = isTribeFounder || isTribeSpeaker || isGlobalAdmin;
+  const canEditSlug = !!(isGlobalAdmin || isTribeFounder || isTribeSpeaker || (isCurrentUserAuthor && !post.slugEditedBy));
+  const isSlugLocked = !!(isCurrentUserAuthor && post.slugEditedBy && !isTribeLeader);
+
   // Track local override for optimistic updates
   const [localVibesCount, setLocalVibesCount] = useState<number | null>(null);
   const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string, count: number }[] | null>(null);
@@ -84,6 +91,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const [isAdminDeleteDialogOpen, setIsAdminDeleteDialogOpen] = useState(false);
+  const [isEditSlugDialogOpen, setIsEditSlugDialogOpen] = useState(false);
   const inlineReplyRef = useRef<HTMLDivElement>(null);
 
   const handleSendInlineReply = async () => {
@@ -290,7 +298,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
         <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
           <div className="flex items-start space-x-3">
             {!post.authorIsAlias ? (
-              <Link href={`/profile/${post.authorId}`}>
+              <Link href={profilePath(post.authorId, post.authorSlug)}>
                 <UserAvatar
                   user={{ name: post.authorName, avatar: post.authorAvatar }}
                   className="h-10 w-10 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
@@ -309,7 +317,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 {!post.authorIsAlias ? (
-                  <Link href={`/profile/${post.authorId}`} className="hover:underline decoration-primary/30 underline-offset-2">
+                  <Link href={profilePath(post.authorId, post.authorSlug)} className="hover:underline decoration-primary/30 underline-offset-2">
                     <CardTitle className="text-md font-semibold tracking-normal truncate">{post.authorName}</CardTitle>
                   </Link>
                 ) : (
@@ -417,12 +425,40 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                       <ResponsiveMenuItem onClick={() => handleOpenEditPostDialog(post)}>
                         <Pencil className="mr-2 h-4 w-4" /> Edit Post
                       </ResponsiveMenuItem>
+                      {isSlugLocked ? (
+                        <TooltipProvider delayDuration={100}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div className="w-full">
+                                <ResponsiveMenuItem disabled className="opacity-60 cursor-not-allowed flex items-center justify-between">
+                                  <span className="flex items-center">
+                                    <Link2 className="mr-2 h-4 w-4" /> Edit URL Slug
+                                  </span>
+                                  <Lock className="h-3.5 w-3.5 text-muted-foreground ml-2" />
+                                </ResponsiveMenuItem>
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Locked by a Tribe Leader</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : canEditSlug ? (
+                        <ResponsiveMenuItem onClick={() => setIsEditSlugDialogOpen(true)}>
+                          <Link2 className="mr-2 h-4 w-4" /> Edit URL Slug
+                        </ResponsiveMenuItem>
+                      ) : null}
                       {!isGlobalAdmin && (
                         <ResponsiveMenuItem className="text-destructive focus:text-destructive" onClick={() => setIsDeleteDialogOpen(true)}>
                           <Trash2 className="mr-2 h-4 w-4" /> Delete Post
                         </ResponsiveMenuItem>
                       )}
                     </>
+                  )}
+                  {!isCurrentUserAuthor && canEditSlug && (
+                    <ResponsiveMenuItem onClick={() => setIsEditSlugDialogOpen(true)}>
+                      <Link2 className="mr-2 h-4 w-4" /> Edit URL Slug (Mod)
+                    </ResponsiveMenuItem>
                   )}
                 </ResponsiveMenuContent>
               </ResponsiveMenu>
@@ -703,6 +739,20 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
           } catch (err) {
             console.error('Block failed:', err);
           }
+        }}
+      />
+
+      <EditSlugDialog
+        open={isEditSlugDialogOpen}
+        onOpenChange={setIsEditSlugDialogOpen}
+        post={post}
+        tribeSlug={state.tribe?.slug}
+        onSuccess={(newSlug, slugEditedBy) => {
+          post.slug = newSlug;
+          if (slugEditedBy !== undefined) {
+            post.slugEditedBy = slugEditedBy;
+          }
+          router.refresh();
         }}
       />
     </Card>

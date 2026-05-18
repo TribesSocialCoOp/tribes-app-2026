@@ -8,8 +8,8 @@ import { like, or, sql, and, notInArray } from 'drizzle-orm';
 
 export interface SearchResults {
   tribes: { id: string; slug: string; name: string; description: string; memberCount: number; isPublic: boolean }[];
-  events: { id: string; name: string; description: string; eventDate: Date | null; locationName: string; coverImage?: string }[];
-  users: { id: string; name: string; avatarUrl?: string }[];
+  events: { id: string; name: string; description: string; eventDate: Date | null; locationName: string; coverImage?: string; slug?: string | null }[];
+  users: { id: string; name: string; avatarUrl?: string; slug?: string | null }[];
 }
 
 /**
@@ -61,6 +61,7 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
       eventDate: events.eventDate,
       locationName: events.locationName,
       coverImage: events.coverImage,
+      slug: events.slug,
     })
       .from(events)
       .where(or(
@@ -74,6 +75,7 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
       id: users.id,
       name: users.name,
       avatarUrl: users.avatar,
+      slug: users.slug,
     })
       .from(users)
       .where(
@@ -100,11 +102,13 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
       eventDate: e.eventDate,
       locationName: e.locationName ?? '',
       coverImage: e.coverImage ?? undefined,
+      slug: e.slug,
     })),
     users: userResults.map(u => ({
       id: u.id,
       name: u.name ?? 'Unknown',
       avatarUrl: u.avatarUrl ?? undefined,
+      slug: u.slug,
     })),
   };
 }

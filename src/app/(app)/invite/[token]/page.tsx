@@ -74,7 +74,7 @@ export default function InvitePage() {
       // Already a member — just redirect them to the tribe
       if (msg.includes('Already a member')) {
         toast({ title: 'Already a member!', description: `You're already in ${tribe.name}. Redirecting...` });
-        router.push(`/t/${tribe.slug}`);
+        router.replace(`/t/${tribe.slug}`);
         return;
       }
       toast({ title: 'Error', description: msg, variant: 'destructive' });

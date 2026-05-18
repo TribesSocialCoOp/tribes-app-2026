@@ -14,14 +14,19 @@ export function rowToTribePost(
   commentsData?: DiscussionComment[],
   liveAvatar?: string | null,
   authorIsAlias?: boolean,
+  liveName?: string | null,
 ): TribePost {
+  const displayName = liveName || row.authorName;
+  const displayFallback = liveName
+    ? liveName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || row.authorAvatarFallback
+    : row.authorAvatarFallback;
   return {
     id: row.id,
     tribeId: row.tribeId ?? undefined,
     authorId: row.authorId,
-    authorName: row.authorName,
+    authorName: displayName,
     authorAvatar: liveAvatar || (row.authorAvatar ?? undefined),
-    authorAvatarFallback: row.authorAvatarFallback,
+    authorAvatarFallback: displayFallback,
     dataAiHintAvatar: row.dataAiHintAvatar ?? undefined,
     timestamp: row.createdAt ?? new Date(),
     title: row.title ?? undefined,
@@ -56,5 +61,6 @@ export function rowToTribePost(
     linkSiteName: row.linkSiteName ?? undefined,
     editedAt: row.editedAt ?? undefined,
     authorIsAlias: authorIsAlias ?? false,
+    slugEditedBy: row.slugEditedBy ?? undefined,
   };
 }

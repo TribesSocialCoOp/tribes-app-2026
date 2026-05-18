@@ -50,7 +50,7 @@ function CompleteContent() {
         {inviteSent && (
           <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
             <Link2 className="h-4 w-4" />
-            <span>Invite link expires in 5 minutes from when it was created.</span>
+            <span>Invite link is valid for 1 year from when it was created (single-use).</span>
           </div>
         )}
       </CardContent>

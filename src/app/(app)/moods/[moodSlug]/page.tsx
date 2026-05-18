@@ -4,6 +4,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import { profilePath } from '@/lib/utils/paths';
 import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ const CommentInline: React.FC<{ comment: DiscussionComment; level?: number }> = 
   <div className={level > 0 ? 'ml-6 border-l-2 pl-3' : ''}>
     <div className="flex items-start gap-2">
       {!comment.authorIsAlias ? (
-        <Link href={`/profile/${comment.authorId}`}>
+        <Link href={profilePath(comment.authorId, comment.authorSlug)}>
           <Avatar className="h-6 w-6 mt-0.5 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all">
             {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} />}
             <AvatarFallback className="text-[10px]">{comment.authorAvatarFallback}</AvatarFallback>
@@ -43,7 +44,7 @@ const CommentInline: React.FC<{ comment: DiscussionComment; level?: number }> = 
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline gap-2">
           {!comment.authorIsAlias ? (
-            <Link href={`/profile/${comment.authorId}`} className="hover:underline decoration-primary/30 underline-offset-2">
+            <Link href={profilePath(comment.authorId, comment.authorSlug)} className="hover:underline decoration-primary/30 underline-offset-2">
               <span className="text-xs font-semibold">{comment.authorName}</span>
             </Link>
           ) : (

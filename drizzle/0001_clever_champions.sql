@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "votes_user_proposal_idx" ON "votes" USING btree ("user_id","proposal_id");

@@ -1,1 +1,0 @@
-ALTER TABLE posts ADD COLUMN edited_at INTEGER;

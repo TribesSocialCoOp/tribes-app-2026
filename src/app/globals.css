@@ -118,14 +118,13 @@ body {
 }
 
 /* Capacitor Native Polish */
-.capacitor-native {
+body.capacitor-native {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   user-select: none;
 }
 
-.capacitor-native,
-.capacitor-native body {
+body.capacitor-native {
   /* Prevent the native webview from rubber-banding/bouncing and pulling away from the notch */
   overscroll-behavior: none;
   /* Lock the body to the viewport so only the <main> container scrolls */
@@ -148,11 +147,11 @@ body {
  *
  * This CSS safety net ensures those runtime mutations are neutralized inside Capacitor.
  */
-.capacitor-native body {
+body.capacitor-native {
   pointer-events: auto !important;
 }
 
-.capacitor-native body[data-scroll-locked] {
+body.capacitor-native[data-scroll-locked] {
   overflow: hidden !important;
   margin-right: 0 !important;
 }

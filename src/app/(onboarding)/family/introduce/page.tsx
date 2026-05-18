@@ -89,7 +89,7 @@ function IntroduceContent() {
       const result = await createBondInviteLink();
       const fullUrl = `${window.location.origin}${result.url}`;
       setInviteUrl(fullUrl);
-      toast({ title: 'Invite link created!', description: `Expires at ${result.expiresAt.toLocaleTimeString()}` });
+      toast({ title: 'Invite link created!', description: `Valid for 1 year (expires ${result.expiresAt.toLocaleDateString()})` });
     } catch (err: unknown) {
       toast({ title: 'Error', description: ((err instanceof Error) ? err.message : 'An error occurred') || 'Failed to generate invite link.', variant: 'destructive' });
     } finally {
@@ -219,7 +219,7 @@ function IntroduceContent() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                This link creates a family bond when opened. It expires in 5 minutes.
+                This link creates a family bond when opened. It is valid for 1 year (single-use).
               </p>
             </div>
           ) : (

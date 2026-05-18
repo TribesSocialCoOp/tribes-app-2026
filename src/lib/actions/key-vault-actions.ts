@@ -109,7 +109,14 @@ export async function getPassphraseVaultAction() {
  * Power the "Connected Devices" and "Key Sync" status indicators.
  */
 export async function getVaultStatusAction() {
-  const userId = await requireAuth();
+  const { getCurrentUserId } = await import('./shared');
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return {
+      hasVault: false,
+      devices: [],
+    };
+  }
   const vaults = await service.getKeyVaultsForUser(userId);
   
   return {
@@ -121,3 +128,4 @@ export async function getVaultStatusAction() {
     })),
   };
 }
+

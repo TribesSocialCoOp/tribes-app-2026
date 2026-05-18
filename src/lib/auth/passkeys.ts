@@ -19,12 +19,18 @@ const ORIGIN = process.env.WEBAUTHN_ORIGIN || 'http://localhost:9002';
 // REGISTRATION
 // -------------------------------------------------------------------------
 
-export async function startRegistration(userId: string) {
-  const user = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-  });
+export async function startRegistration(userId: string, name?: string, email?: string) {
+  let userDisplayName = name;
+  let userName = email || name;
 
-  if (!user) throw new Error('User not found');
+  if (!userDisplayName || !userName) {
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+    if (!user) throw new Error('User not found');
+    userDisplayName = user.name;
+    userName = user.email || user.name;
+  }
 
   const userCredentials = await db.query.credentials.findMany({
     where: eq(credentials.userId, userId),
@@ -33,9 +39,9 @@ export async function startRegistration(userId: string) {
   const options = await generateRegistrationOptions({
     rpName: RP_NAME,
     rpID: RP_ID,
-    userID: Uint8Array.from(user.id, (c) => c.charCodeAt(0)),
-    userName: user.name,
-    userDisplayName: user.name,
+    userID: Uint8Array.from(userId, (c) => c.charCodeAt(0)),
+    userName: userName!,
+    userDisplayName: userDisplayName!,
     attestationType: 'none',
     excludeCredentials: userCredentials.map((cred) => ({
       id: cred.id, // cred.id is the base64url credential ID
@@ -60,7 +66,12 @@ export async function startRegistration(userId: string) {
   return options;
 }
 
-export async function finishRegistration(userId: string, body: RegistrationResponseJSON) {
+export async function finishRegistration(
+  userId: string,
+  body: RegistrationResponseJSON,
+  name?: string,
+  email?: string
+) {
   const challenge = (await cookies()).get('webauthn_challenge')?.value;
   if (!challenge) throw new Error('Challenge not found');
 
@@ -80,12 +91,41 @@ export async function finishRegistration(userId: string, body: RegistrationRespo
     // credential.id is already a base64url string in v10 or needs to be encoded
     const credentialIdBase64 = typeof id === 'string' ? id : Buffer.from(id).toString('base64url');
 
-    await db.insert(credentials).values({
-      id: credentialIdBase64,
-      userId,
-      publicKey: Buffer.from(publicKey),
-      counter,
-      createdAt: new Date(),
+    // Run user insert (if deferred) and credential insert in a transaction
+    await db.transaction(async (tx) => {
+      if (name && email) {
+        const existingUser = await tx.query.users.findFirst({
+          where: eq(users.id, userId),
+        });
+
+        if (!existingUser) {
+          const { generateUniqueSlug } = await import('@/lib/utils/slugify');
+          const userSlug = await generateUniqueSlug(name, async (candidate) => {
+            const existing = await tx.query.users.findFirst({
+              where: eq(users.slug, candidate),
+            });
+            return !!existing;
+          });
+
+          await tx.insert(users).values({
+            id: userId,
+            name,
+            email,
+            role: 'Human_Free',
+            ageConfirmedAt: new Date(),
+            slug: userSlug,
+            createdAt: new Date(),
+          });
+        }
+      }
+
+      await tx.insert(credentials).values({
+        id: credentialIdBase64,
+        userId,
+        publicKey: Buffer.from(publicKey),
+        counter,
+        createdAt: new Date(),
+      });
     });
 
     // Auto-login after successful registration

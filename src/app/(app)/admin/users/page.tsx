@@ -231,6 +231,17 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
+      {/* Total Members Counter */}
+      <div className="flex items-center gap-3 px-1">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <UserIcon className="h-4 w-4" />
+          <span>
+            <span className="font-semibold text-foreground">{totalCount}</span>
+            {' '}{roleFilter !== 'all' || search.trim() ? 'matching' : 'total'} users
+          </span>
+        </div>
+      </div>
+
       <Card>
         <CardContent className="p-0">
           <Table>

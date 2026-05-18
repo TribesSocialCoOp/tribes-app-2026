@@ -90,6 +90,15 @@ else
   GIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "nogit")
   BUILD_TS=$(date +%s)
   BUILD_ID="${GIT_SHA}-${BUILD_TS}"
+
+  # ── Step 3a: Preserve current image for instant rollback ──────
+  # Tag the currently running image BEFORE building the new one.
+  # If anything goes wrong, we can restore tribes-app:rollback instantly.
+  log "Preserving current image as tribes-app:rollback..."
+  ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
+    "docker tag tribes-app:latest tribes-app:rollback 2>/dev/null || echo 'No existing image to preserve (first deploy)'"
+  ok "Rollback image preserved"
+
   log "Building tribes-app:latest image (build: ${BUILD_ID})..."
   ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
     "cd $REMOTE_DIR && docker build --build-arg BUILD_ID=${BUILD_ID} -t tribes-app:latest -f Dockerfile . 2>&1" \
@@ -158,8 +167,14 @@ INTEGRITY_EOF
   fi
 fi
 
-# ── Step 4: Push schema to PostgreSQL ────────────────────────
-log "Pushing Drizzle schema to PostgreSQL..."
+# ── Step 4: Run versioned schema migrations ─────────────────
+# Uses drizzle-kit migrate (versioned SQL files in ./drizzle/)
+# instead of push --force. Migration failures are FATAL.
+#
+# To generate a new migration locally:
+#   npx drizzle-kit generate
+# Review the SQL, commit it, then deploy.
+log "Running database migrations..."
 
 set +e
 MIGRATE_OUTPUT=$(ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" 'bash -s' <<'MIGRATE_EOF'
@@ -170,28 +185,28 @@ PG_IP=$(docker inspect tribes-postgres-1 --format '{{range .NetworkSettings.Netw
 PG_NETWORK=$(docker inspect tribes-postgres-1 --format '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' 2>/dev/null)
 
 if [ -z "$PG_IP" ]; then
-  echo "PostgreSQL container not found — skipping"
-  exit 0
+  echo "FATAL: PostgreSQL container not found"
+  exit 1
 fi
 
 # Build the builder stage (has all node_modules including drizzle-kit)
 docker build -q --target builder -t tribes-builder . > /dev/null 2>&1
 
-# Run drizzle-kit push on the same network as Postgres
+# Run versioned migrations (NOT push --force)
 docker run --rm \
   --network="$PG_NETWORK" \
   -e DATABASE_URL="postgresql://tribes:${POSTGRES_PASSWORD}@${PG_IP}:5432/tribes" \
-  tribes-builder npx drizzle-kit push --force 2>&1
+  tribes-builder npx drizzle-kit migrate 2>&1
 MIGRATE_EOF
 )
 MIGRATE_EXIT=$?
 set -e
 
-echo "$MIGRATE_OUTPUT" | tail -5
+echo "$MIGRATE_OUTPUT" | tail -10
 if [ "$MIGRATE_EXIT" -ne 0 ]; then
-  warn "Schema push failed — ignoring since no schema changes were made"
+  fail "DATABASE MIGRATION FAILED — deploy aborted. Fix the migration and retry. The current production deployment is still running."
 fi
-ok "Schema pushed to PostgreSQL"
+ok "Database migrations applied successfully"
 
 # ── Step 4b: Backfill post slugs (one-time) ──────────────────
 # Ensures all existing posts have SEO slugs before the new app goes live.
@@ -231,6 +246,46 @@ else
     ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
       "date -u '+completed %Y-%m-%dT%H:%M:%SZ' > $REMOTE_DIR/$BACKFILL_SENTINEL"
     ok "Post slug backfill complete (sentinel written)"
+  fi
+fi
+
+# ── Step 4c: Backfill user slugs (one-time) ───────────────────
+# Ensures all existing users have URL slugs for /u/{slug} routing.
+# Gated by a sentinel file — only runs once per server.
+# To re-run: ssh root@... rm /opt/tribes/.backfill-user-slugs-done
+USER_SLUG_SENTINEL=".backfill-user-slugs-done"
+USER_SLUG_EXISTS=$(ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
+  "test -f $REMOTE_DIR/$USER_SLUG_SENTINEL && echo 'yes' || echo 'no'")
+
+if [ "$USER_SLUG_EXISTS" = "yes" ]; then
+  ok "User slug backfill already completed (sentinel exists) — skipping"
+else
+  log "Running user slug backfill..."
+
+  set +e
+  ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" "bash -c '
+    cd /opt/tribes
+    source .env.production
+    PG_IP=\$(docker inspect tribes-postgres-1 --format \"{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}\" 2>/dev/null)
+    PG_NETWORK=\$(docker inspect tribes-postgres-1 --format \"{{range \\\$k, \\\$v := .NetworkSettings.Networks}}{{\\\$k}}{{end}}\" 2>/dev/null)
+    if [ -z \"\$PG_IP\" ]; then
+      echo \"PostgreSQL container not found — skipping backfill\"
+      exit 0
+    fi
+    docker run --rm \
+      --network=\"\$PG_NETWORK\" \
+      -e DATABASE_URL=\"postgresql://tribes:\${POSTGRES_PASSWORD}@\${PG_IP}:5432/tribes\" \
+      tribes-builder npx tsx src/db/backfill-user-slugs.ts 2>&1
+  '" | tail -5
+  USER_BACKFILL_EXIT=${PIPESTATUS[0]}
+  set -e
+
+  if [ "$USER_BACKFILL_EXIT" -ne 0 ]; then
+    warn "User slug backfill failed — will retry next deploy"
+  else
+    ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
+      "date -u '+completed %Y-%m-%dT%H:%M:%SZ' > $REMOTE_DIR/$USER_SLUG_SENTINEL"
+    ok "User slug backfill complete (sentinel written)"
   fi
 fi
 
@@ -304,10 +359,16 @@ echo "" # newline after progress
 
 if [ "$HEALTHY" = false ]; then
   warn "app-${NEW_COLOR} failed to become healthy within ${MAX_WAIT}s"
-  warn "Rolling back: stopping app-${NEW_COLOR}, keeping app-${ACTIVE_COLOR}"
+  warn "Rolling back: stopping app-${NEW_COLOR}, restoring rollback image..."
   ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
     "cd $REMOTE_DIR && docker compose -f $COMPOSE_FILE --profile $NEW_COLOR stop app-$NEW_COLOR 2>&1"
-  fail "Deploy aborted — old deployment is still running"
+
+  # Restore the rollback image so the still-running old container stays healthy
+  # and any restart uses the known-good code
+  ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" \
+    "docker tag tribes-app:rollback tribes-app:latest 2>/dev/null || true"
+
+  fail "Deploy aborted — old deployment is still running (rollback image restored)"
 fi
 ok "app-${NEW_COLOR} is healthy!"
 

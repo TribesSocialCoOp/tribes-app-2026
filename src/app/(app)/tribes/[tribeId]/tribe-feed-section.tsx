@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import { format } from 'date-fns';
 import Image from 'next/image';
 import Link from 'next/link';
+import { eventPath } from '@/lib/utils/paths';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +42,7 @@ const EventHighlightCard: React.FC<{ event: Event }> = ({ event }) => (
       <p className="text-muted-foreground line-clamp-2">{event.description}</p>
     </CardContent>
     <CardFooter className="p-3 border-t bg-primary/10">
-      <Link href={`/events/${event.id}`} passHref className="w-full">
+      <Link href={eventPath(event.id, event.slug)} passHref className="w-full">
         <Button variant="default" size="sm" className="w-full bg-primary hover:bg-primary/90">View Event</Button>
       </Link>
     </CardFooter>

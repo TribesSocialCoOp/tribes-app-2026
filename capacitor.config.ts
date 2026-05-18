@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 import { KeyboardResize } from '@capacitor/keyboard';
 
 const config: CapacitorConfig = {
-  appId: 'app.tribes.TribesApp',
+  appId: 'app.tribes.android',
   appName: 'Tribes',
   webDir: 'out',
   server: {

@@ -17,13 +17,13 @@ import { computePasskeyStatus } from '@/lib/crypto/passkey-lifecycle';
  * Returns { avatar, name } so callers can skip the live avatar override
  * when a post was authored under an alias (authorName ≠ user.name).
  */
-async function batchFetchLiveAvatarInfo(userIds: string[]): Promise<Map<string, { avatar: string | null; name: string }>> {
+async function batchFetchLiveAvatarInfo(userIds: string[]): Promise<Map<string, { avatar: string | null; name: string; slug: string | null }>> {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   if (uniqueIds.length === 0) return new Map();
-  const rows = await db.select({ id: users.id, avatar: users.avatar, name: users.name })
+  const rows = await db.select({ id: users.id, avatar: users.avatar, name: users.name, slug: users.slug })
     .from(users)
     .where(inArray(users.id, uniqueIds));
-  return new Map(rows.map(r => [r.id, { avatar: r.avatar, name: r.name }]));
+  return new Map(rows.map(r => [r.id, { avatar: r.avatar, name: r.name, slug: r.slug }]));
 }
 
 /**
@@ -178,19 +178,52 @@ export async function getUnifiedFeed(params: UnifiedFeedParams): Promise<Communi
     batchFetchAuthorTribeRoles(tribeAuthorPairs),
   ]);
 
+  // Batch-fetch tribe membership aliases so we can distinguish real alias posts
+  // from simple name-change mismatches in the enrichment loop.
+  const tribeAuthorLookups = deduped
+    .filter(i => i.tribeId && i.authorId)
+    .map(i => ({ tribeId: i.tribeId!, userId: i.authorId! }));
+  
+  const memberAliasMap = new Map<string, string | null>();
+  if (tribeAuthorLookups.length > 0) {
+    const uniqueTribeIds = [...new Set(tribeAuthorLookups.map(l => l.tribeId))];
+    const uniqueUserIds = [...new Set(tribeAuthorLookups.map(l => l.userId))];
+    const aliasRows = await db.select({
+      tribeId: tribeMembers.tribeId,
+      userId: tribeMembers.userId,
+      joinedAsAlias: tribeMembers.joinedAsAlias,
+    }).from(tribeMembers)
+      .where(and(
+        inArray(tribeMembers.tribeId, uniqueTribeIds),
+        inArray(tribeMembers.userId, uniqueUserIds),
+      ));
+    for (const r of aliasRows) {
+      memberAliasMap.set(`${r.tribeId}:${r.userId}`, r.joinedAsAlias);
+    }
+  }
+
   for (const item of deduped) {
-    // 1. Live Avatar — only override if the post was authored under the user's real name
+    // 1. Live Avatar + Name — only override if the post was NOT authored under an alias
     const userIdForAvatar = item.authorId || item.bondTargetId;
     if (userIdForAvatar) {
       const info = liveAvatarInfo.get(userIdForAvatar);
-      if (info?.avatar) {
-        // Skip live avatar override for alias posts (where authorName ≠ user's real name)
-        const isAliasPost = item.sender && item.sender !== info.name;
+      if (info) {
+        // A post is an alias post only when the author explicitly joined the tribe
+        // under an alias AND the stored sender matches that alias.
+        const memberAlias = (item.tribeId && item.authorId)
+          ? memberAliasMap.get(`${item.tribeId}:${item.authorId}`)
+          : null;
+        const isAliasPost = !!(memberAlias && item.sender === memberAlias);
+        
         if (!isAliasPost) {
-          item.avatarSrc = info.avatar;
+          if (info.avatar) item.avatarSrc = info.avatar;
+          // Sync the live name so posts reflect current display name
+          if (info.name) item.sender = info.name;
         }
-        item.authorIsAlias = !!isAliasPost;
+        item.authorIsAlias = isAliasPost;
       }
+      // Set authorSlug for direct profile linking
+      item.authorSlug = info?.slug ?? undefined;
     }
     // 2. Vibes Enrichment
     if (vibesData.vibesByPost.has(item.id)) {
@@ -450,6 +483,7 @@ async function fetchMoodStreamPosts(
       id: postRow.id,
       type: 'mood-stream',
       authorId: postRow.authorId,
+      authorSlug: undefined, // Populated during enrichment pass
       tribeName,
       tribeId: postRow.tribeId ?? undefined,
       tribeSlug: postRow.tribeId ? tribeSlugMap.get(postRow.tribeId) || undefined : undefined,
@@ -528,6 +562,7 @@ function postRowToFeedItem(
     type: 'ring-post',
     ring,
     authorId: row.authorId,
+    authorSlug: undefined, // Populated during enrichment pass
     sender: row.authorName,
     content: row.content,
     title: row.title ?? undefined,

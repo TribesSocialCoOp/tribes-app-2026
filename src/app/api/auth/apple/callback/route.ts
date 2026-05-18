@@ -210,6 +210,14 @@ export async function POST(request: NextRequest) {
 
         // Create a new user
         userId = crypto.randomUUID();
+        const { generateUniqueSlug } = await import('@/lib/utils/slugify');
+        const userSlug = await generateUniqueSlug(userName, async (candidate) => {
+          const existing = await db.query.users.findFirst({
+            where: eq(users.slug, candidate),
+          });
+          return !!existing;
+        });
+
         await db.insert(users).values({
           id: userId,
           name: userName,
@@ -218,33 +226,34 @@ export async function POST(request: NextRequest) {
           avatar: null, // Apple doesn't provide profile photos
           reputationStatus: 'Newcomer',
           reputationScore: 0,
+          slug: userSlug,
           createdAt: new Date(),
         });
+      }
 
-        // Auto-redeem invite code
-        if (inviteCode) {
-          try {
-            const { redeemInviteCode } = await import('@/lib/services/invite-service');
-            await redeemInviteCode(userId, inviteCode);
-          } catch (e) {
-            console.warn('[Apple OAuth] Invite redemption failed:', e);
-          }
-        }
-
-        // Auto-join the welcome tribe
+      // Auto-redeem invite code (runs for both new users AND email-linked existing users)
+      if (inviteCode) {
         try {
-          const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
-          const { tribes: tribesTable } = await import('@/db/schema');
-          const [welcomeTribe] = await db.select({ id: tribesTable.id })
-            .from(tribesTable)
-            .where(eq(tribesTable.slug, 'welcome-to-tribes'))
-            .limit(1);
-          if (welcomeTribe) {
-            await joinTribeDirectly(userId, welcomeTribe.id);
-          }
+          const { redeemInviteCode } = await import('@/lib/services/invite-service');
+          await redeemInviteCode(userId, inviteCode);
         } catch (e) {
-          console.warn('[Apple OAuth] Auto-join welcome tribe failed:', e);
+          console.warn('[Apple OAuth] Invite redemption failed:', e);
         }
+      }
+
+      // Auto-join the welcome tribe (runs for both new AND email-linked users)
+      try {
+        const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
+        const { tribes: tribesTable } = await import('@/db/schema');
+        const [welcomeTribe] = await db.select({ id: tribesTable.id })
+          .from(tribesTable)
+          .where(eq(tribesTable.slug, 'welcome-to-tribes'))
+          .limit(1);
+        if (welcomeTribe) {
+          await joinTribeDirectly(userId, welcomeTribe.id);
+        }
+      } catch (e) {
+        console.warn('[Apple OAuth] Auto-join welcome tribe failed:', e);
       }
 
       // Link the Apple account to this user

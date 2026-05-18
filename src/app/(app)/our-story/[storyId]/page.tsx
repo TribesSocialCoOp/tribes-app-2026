@@ -3,6 +3,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { profilePath } from '@/lib/utils/paths';
 import Image from 'next/image';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { format } from 'date-fns';
@@ -108,7 +109,7 @@ const StoryCommentCard: React.FC<CommentCardProps> = ({ comment, storyId, level 
       <CardHeader className="p-3 pb-2">
         <div className="flex items-start space-x-2">
           {!comment.authorIsAlias ? (
-            <Link href={`/profile/${comment.authorId}`}>
+            <Link href={profilePath(comment.authorId, comment.authorSlug)}>
               <Avatar className="h-8 w-8 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all">
                 {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} data-ai-hint={comment.dataAiHintAvatar || "avatar"} />}
                 <AvatarFallback className="text-xs">{comment.authorAvatarFallback}</AvatarFallback>
@@ -122,7 +123,7 @@ const StoryCommentCard: React.FC<CommentCardProps> = ({ comment, storyId, level 
           )}
           <div className="flex-1">
             {!comment.authorIsAlias ? (
-              <Link href={`/profile/${comment.authorId}`} className="hover:underline decoration-primary/30 underline-offset-2">
+              <Link href={profilePath(comment.authorId, comment.authorSlug)} className="hover:underline decoration-primary/30 underline-offset-2">
                 <p className="text-xs font-semibold">{comment.authorName}</p>
               </Link>
             ) : (

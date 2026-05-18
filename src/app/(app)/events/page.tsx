@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from "next/link";
+import { eventPath } from '@/lib/utils/paths';
 import Image from "next/image";
 import { format } from 'date-fns';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,7 +20,7 @@ import { AuthGuard } from '@/components/providers/auth-guard';
 const EventCard: React.FC<{ event: Event }> = ({ event }) => {
   return (
     <Card className="shadow-lg hover:shadow-xl transition-shadow flex flex-col overflow-hidden">
-      <Link href={`/events/${event.id}`} passHref className="flex flex-col flex-grow">
+      <Link href={eventPath(event.id, event.slug)} passHref className="flex flex-col flex-grow">
         {event.coverImage && (
           <div className="relative h-40 w-full">
             <Image
@@ -66,7 +67,7 @@ const EventCard: React.FC<{ event: Event }> = ({ event }) => {
         </CardContent>
       </Link>
       <CardFooter>
-        <Link href={`/events/${event.id}`} passHref className="w-full">
+        <Link href={eventPath(event.id, event.slug)} passHref className="w-full">
           <Button variant="default" className="w-full bg-primary hover:bg-primary/90">
             View Details <ArrowRight className="ml-2 h-4 w-4" />
           </Button>

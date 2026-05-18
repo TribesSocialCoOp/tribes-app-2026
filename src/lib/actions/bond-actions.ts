@@ -206,3 +206,68 @@ export async function migrateBrokenBondKeys(): Promise<number> {
 
   return fixed;
 }
+
+export async function searchUsersForBonding(query: string): Promise<Array<{
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  status: 'none' | 'bonded' | 'pending';
+}>> {
+  const userId = await requireAuth();
+  if (!query || query.trim().length < 2) return [];
+
+  const escaped = query.trim().replace(/[%_\\]/g, '\\$&');
+  const pattern = `%${escaped}%`;
+
+  const { db } = await import('@/db');
+  const { users, blockedUsers } = await import('@/db/schema');
+  const { sql, and, like, ne } = await import('drizzle-orm');
+  const { getBonds, getPendingBondRequests } = await import('@/lib/services/bond-service');
+
+  const blockedIdsSql = sql`(
+    SELECT ${blockedUsers.blockedUserId} FROM ${blockedUsers} WHERE ${blockedUsers.userId} = ${userId}
+    UNION
+    SELECT ${blockedUsers.userId} FROM ${blockedUsers} WHERE ${blockedUsers.blockedUserId} = ${userId}
+  )`;
+
+  const matches = await db.select({
+    id: users.id,
+    name: users.name,
+    avatarUrl: users.avatar,
+  })
+    .from(users)
+    .where(and(
+      ne(users.id, userId),
+      like(users.name, pattern),
+      sql`${users.id} NOT IN ${blockedIdsSql}`
+    ))
+    .limit(10);
+
+  // Get active bonds & pending requests to map statuses
+  const [bondsList, pendingReqs] = await Promise.all([
+    getBonds(userId),
+    getPendingBondRequests(userId),
+  ]);
+
+  const bondedUserIds = new Set(bondsList.map(b => b.targetId));
+  const pendingUserIds = new Set([
+    ...pendingReqs.incoming.map(r => r.fromUserId),
+    ...pendingReqs.outgoing.map(r => r.toUserId),
+  ]);
+
+  return matches.map(m => {
+    let status: 'none' | 'bonded' | 'pending' = 'none';
+    if (bondedUserIds.has(m.id)) {
+      status = 'bonded';
+    } else if (pendingUserIds.has(m.id)) {
+      status = 'pending';
+    }
+    return {
+      id: m.id,
+      name: m.name ?? 'Unknown',
+      avatarUrl: m.avatarUrl ?? undefined,
+      status,
+    };
+  });
+}
+

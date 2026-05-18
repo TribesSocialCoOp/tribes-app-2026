@@ -23,18 +23,18 @@ import { useToast } from '@/hooks/use-toast';
 
 import { AuthGuard } from '@/components/providers/auth-guard';
 
-export default function EventDetailPage() {
+export default function EventDetailPage({ eventId: propEventId }: { eventId?: string }) {
   return (
     <AuthGuard message="Sign in to view event details and RSVP.">
-      <EventDetailContent />
+      <EventDetailContent eventId={propEventId} />
     </AuthGuard>
   );
 }
 
-function EventDetailContent() {
+function EventDetailContent({ eventId: propEventId }: { eventId?: string }) {
   const router = useRouter();
   const params = useParams();
-  const eventId = params.eventId as string;
+  const eventId = propEventId || (params.eventId as string);
 
   const { role } = useUser();
   const { toast } = useToast();

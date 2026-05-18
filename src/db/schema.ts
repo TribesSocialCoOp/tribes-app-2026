@@ -28,8 +28,21 @@ export const users = pgTable('users', {
   hasPiiAccess: boolean('has_pii_access').default(false), // Restricted dev/system flag for viewing full emails
   encryptionPublicKey: text('encryption_public_key'), // RSA-OAEP JWK (JSON string)
   ageConfirmedAt: timestamp('age_confirmed_at', { withTimezone: true }), // App Store compliance — records 13+ age confirmation
+  slug: text('slug').unique(),
+  username: text('username').unique(),
+  passwordHash: text('password_hash'),
   createdAt: timestamp('created_at', { withTimezone: true }),
 });
+
+export const userSlugRedirects = pgTable('user_slug_redirects', {
+  id: text('id').primaryKey(),
+  oldSlug: text('old_slug').notNull().unique(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_user_slug_redirects_slug').on(table.oldSlug),
+]);
 
 export const userAliases = pgTable('user_aliases', {
   id: text('id').primaryKey(),
@@ -363,11 +376,27 @@ export const posts = pgTable('posts', {
 
   editedAt: timestamp('edited_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }),
+  slugEditedBy: text('slug_edited_by').references(() => users.id),
 }, (table) => [
   index('idx_posts_ring_author').on(table.ring, table.authorId),
   index('idx_posts_tribe_ring').on(table.tribeId, table.ring),
   index('idx_posts_author_created').on(table.authorId, table.createdAt),
-  index('idx_posts_wall').on(table.authorId, table.pinnedToWall)
+  index('idx_posts_wall').on(table.authorId, table.pinnedToWall),
+  index('idx_posts_slug').on(table.tribeId, table.slug),
+  uniqueIndex('posts_tribe_slug_unique').on(table.tribeId, table.slug).where(sql`tribe_id IS NOT NULL`),
+  uniqueIndex('posts_standalone_slug_unique').on(table.slug).where(sql`tribe_id IS NULL`),
+]);
+
+export const postSlugRedirects = pgTable('post_slug_redirects', {
+  id: text('id').primaryKey(),
+  oldSlug: text('old_slug').notNull(),
+  postId: text('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
+  tribeId: text('tribe_id').references(() => tribes.id, { onDelete: 'cascade' }), // NULL = standalone scope
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+}, (table) => [
+  index('idx_post_slug_redirects_slug').on(table.oldSlug),
+  uniqueIndex('idx_post_slug_redirects_standalone').on(table.oldSlug).where(sql`tribe_id IS NULL`),
+  uniqueIndex('idx_post_slug_redirects_tribe').on(table.tribeId, table.oldSlug).where(sql`tribe_id IS NOT NULL`),
 ]);
 
 export const postMoodTags = pgTable('post_mood_tags', {
@@ -523,7 +552,18 @@ export const events = pgTable('events', {
   latitude: doublePrecision('latitude'),
   longitude: doublePrecision('longitude'),
   rsvpPointsReward: integer('rsvp_points_reward').default(0), // Set by coordinator, capped by reputation
+  slug: text('slug').unique(),
 });
+
+export const eventSlugRedirects = pgTable('event_slug_redirects', {
+  id: text('id').primaryKey(),
+  oldSlug: text('old_slug').notNull().unique(),
+  eventId: text('event_id').notNull().references(() => events.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_event_slug_redirects_slug').on(table.oldSlug),
+]);
 
 export const eventRsvps = pgTable('event_rsvps', {
   id: text('id').primaryKey(),
@@ -754,7 +794,18 @@ export const proposals = pgTable('proposals', {
   deadline: timestamp('deadline', { withTimezone: true }).notNull(),
   voteCount: integer('vote_count').default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+  slug: text('slug').unique(),
 });
+
+export const proposalSlugRedirects = pgTable('proposal_slug_redirects', {
+  id: text('id').primaryKey(),
+  oldSlug: text('old_slug').notNull().unique(),
+  proposalId: text('proposal_id').notNull().references(() => proposals.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_proposal_slug_redirects_slug').on(table.oldSlug),
+]);
 
 export const proposalOptions = pgTable('proposal_options', {
   id: text('id').primaryKey(),
@@ -770,7 +821,43 @@ export const votes = pgTable('votes', {
   optionId: text('option_id').notNull().references(() => proposalOptions.id, { onDelete: 'cascade' }),
   userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
-});
+}, (table) => [
+  uniqueIndex('votes_user_proposal_idx').on(table.userId, table.proposalId),
+]);
+
+/**
+ * Discussion comments on proposals.
+ * Reuses the same tree model as post comments (parentCommentId for nesting).
+ */
+export const proposalComments = pgTable('proposal_comments', {
+  id: text('id').primaryKey(),
+  proposalId: text('proposal_id').notNull().references(() => proposals.id, { onDelete: 'cascade' }),
+  parentCommentId: text('parent_comment_id'), // null = root-level comment
+  authorId: text('author_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  authorName: text('author_name').notNull(),
+  authorAvatar: text('author_avatar'),
+  authorAvatarFallback: text('author_avatar_fallback').notNull().default('??'),
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+}, (table) => [
+  index('idx_proposal_comments_proposal').on(table.proposalId, table.createdAt),
+]);
+
+/**
+ * Reactions on proposal comments.
+ * Only three choices: 👍 (agree), 😐 (neutral), 👎 (disagree).
+ * One reaction per user per comment (unique constraint enforced).
+ */
+export const proposalCommentReactions = pgTable('proposal_comment_reactions', {
+  id: text('id').primaryKey(),
+  commentId: text('comment_id').notNull().references(() => proposalComments.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  reaction: text('reaction').notNull(), // '👍' | '👊' | '👎'
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+}, (table) => [
+  index('idx_proposal_comment_reactions_comment').on(table.commentId),
+  uniqueIndex('proposal_comment_reactions_user_comment_idx').on(table.userId, table.commentId),
+]);
 
 // ============================================================
 // COMMERCE — STRIPE CONNECT (Phase 4B)

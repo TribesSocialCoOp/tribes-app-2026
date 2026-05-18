@@ -358,12 +358,14 @@ export function tribePostEmail(
   const safeTribeName = escapeHtml(tribeName);
   const subject = `New post in ${safeTribeName} — Tribes`;
 
-  // Build canonical post URL: /t/{tribeSlug}/post/{id}/{slug} if available,
+  // Build canonical post URL: /t/{tribeSlug}/{slug} or /p/{slug} if available,
   // otherwise /post/{id} (the app's 308 redirect will normalize).
   let postUrl = '/your-comms';
   if (postId) {
     if (tribeSlug && postSlug) {
-      postUrl = `/t/${tribeSlug}/post/${postId}/${postSlug}`;
+      postUrl = `/t/${tribeSlug}/${postSlug}`;
+    } else if (postSlug) {
+      postUrl = `/p/${postSlug}`;
     } else {
       postUrl = `/post/${postId}`;
     }

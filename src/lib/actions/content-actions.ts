@@ -174,7 +174,7 @@ export async function getPostById(postId: string): Promise<{
 } | null> {
   const userId = await getCurrentUserId();
   const { db } = await import('@/db');
-  const { posts, tribes, tribeMembers, vibes, comments } = await import('@/db/schema');
+  const { posts, tribes, tribeMembers, vibes, comments, users } = await import('@/db/schema');
   const { eq, and, inArray } = await import('drizzle-orm');
   const { rowToTribePost } = await import('@/lib/mappers/post-mapper');
 
@@ -233,12 +233,20 @@ export async function getPostById(postId: string): Promise<{
     .where(eq(comments.postId, postId))
     .orderBy(comments.createdAt);
 
+  // Batch-fetch slugs for comment authors
+  const commentAuthorIds = [...new Set(allComments.map(c => c.authorId))];
+  const slugRows = commentAuthorIds.length > 0
+    ? await db.select({ id: users.id, slug: users.slug }).from(users).where(inArray(users.id, commentAuthorIds))
+    : [];
+  const commentSlugMap = new Map<string, string | null>(slugRows.map(r => [r.id, r.slug]));
+
   function buildTree(parentId: string | null): import('@/lib/types').DiscussionComment[] {
     return allComments
       .filter(c => c.parentCommentId === parentId)
       .map(c => ({
         id: c.id,
         authorId: c.authorId,
+        authorSlug: commentSlugMap.get(c.authorId) ?? undefined,
         authorName: c.authorName,
         authorAvatar: c.authorAvatar ?? undefined,
         authorAvatarFallback: c.authorAvatarFallback,
@@ -269,9 +277,26 @@ export async function getPostById(postId: string): Promise<{
     .sort((a, b) => b.count - a.count)
     .slice(0, 3);
 
-  const post = rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined);
+  // Fetch author info for live name/avatar syncing
+  const [authorUser] = await db.select({ name: users.name, slug: users.slug, avatar: users.avatar })
+    .from(users).where(eq(users.id, row.authorId)).limit(1);
+
+  // Explicit alias detection: check if the author joined the tribe under an alias
+  let isAliasPost = false;
+  if (row.tribeId) {
+    const [memberRow] = await db.select({ joinedAsAlias: tribeMembers.joinedAsAlias })
+      .from(tribeMembers)
+      .where(and(eq(tribeMembers.tribeId, row.tribeId), eq(tribeMembers.userId, row.authorId)))
+      .limit(1);
+    isAliasPost = !!(memberRow?.joinedAsAlias && row.authorName === memberRow.joinedAsAlias);
+  }
+
+  const liveAvatar = isAliasPost ? undefined : (authorUser?.avatar ?? undefined);
+  const liveName = isAliasPost ? null : (authorUser?.name ?? null);
+  const post = rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined, liveAvatar, isAliasPost, liveName);
   post.recentVibes = recentVibes;
   post.hasVibed = hasVibed;
+  post.authorSlug = authorUser?.slug ?? undefined;
 
   return {
     post,
@@ -281,6 +306,211 @@ export async function getPostById(postId: string): Promise<{
     isPublic,
     authorRole,
     viewerIsMember,
+  };
+}
+
+/**
+ * Server action: Fetch a single post by slug (scoped by tribeSlug if provided)
+ * with full context for the standalone post page.
+ * Supports resolution of old slug redirects.
+ */
+export async function getPostBySlug(
+  postSlug: string,
+  tribeSlug?: string,
+): Promise<{
+  post: TribePost;
+  tribeName: string | null;
+  tribeSlug: string | null;
+  tribeId: string | null;
+  isPublic: boolean;
+  authorRole: 'founder' | 'speaker' | 'member';
+  viewerIsMember: boolean;
+  redirectSlug?: string;
+} | null> {
+  const { db } = await import('@/db');
+  const { posts, tribes, postSlugRedirects } = await import('@/db/schema');
+  const { eq, and, isNull } = await import('drizzle-orm');
+
+  let postId: string | null = null;
+  let redirectSlug: string | undefined = undefined;
+
+  if (tribeSlug) {
+    // 1. Direct compound lookup (post slug + tribe slug)
+    const [direct] = await db.select({ id: posts.id })
+      .from(posts)
+      .innerJoin(tribes, eq(posts.tribeId, tribes.id))
+      .where(and(eq(posts.slug, postSlug), eq(tribes.slug, tribeSlug)))
+      .limit(1);
+
+    if (direct) {
+      postId = direct.id;
+    } else {
+      // 2. Look up the tribe ID first to scope the redirect search
+      const [tribe] = await db.select({ id: tribes.id }).from(tribes).where(eq(tribes.slug, tribeSlug)).limit(1);
+      if (tribe) {
+        const [redirect] = await db.select({ postId: postSlugRedirects.postId })
+          .from(postSlugRedirects)
+          .where(and(eq(postSlugRedirects.oldSlug, postSlug), eq(postSlugRedirects.tribeId, tribe.id)))
+          .limit(1);
+
+        if (redirect) {
+          postId = redirect.postId;
+          // Get the current slug for redirection
+          const [currentPost] = await db.select({ slug: posts.slug }).from(posts).where(eq(posts.id, postId)).limit(1);
+          if (currentPost?.slug) {
+            redirectSlug = currentPost.slug;
+          }
+        }
+      }
+    }
+  } else {
+    // Standalone post lookup (where tribeId is null)
+    const [direct] = await db.select({ id: posts.id })
+      .from(posts)
+      .where(and(eq(posts.slug, postSlug), isNull(posts.tribeId)))
+      .limit(1);
+
+    if (direct) {
+      postId = direct.id;
+    } else {
+      // Look up standalone redirect
+      const [redirect] = await db.select({ postId: postSlugRedirects.postId })
+        .from(postSlugRedirects)
+        .where(and(eq(postSlugRedirects.oldSlug, postSlug), isNull(postSlugRedirects.tribeId)))
+        .limit(1);
+
+      if (redirect) {
+        postId = redirect.postId;
+        const [currentPost] = await db.select({ slug: posts.slug }).from(posts).where(eq(posts.id, postId)).limit(1);
+        if (currentPost?.slug) {
+          redirectSlug = currentPost.slug;
+        }
+      }
+    }
+  }
+
+  if (!postId) return null;
+
+  const result = await getPostById(postId);
+  if (!result) return null;
+
+  return {
+    ...result,
+    redirectSlug,
+  };
+}
+
+/**
+ * Server action: Edit a post's custom URL/slug.
+ * Validates permissions (platform admin, tribe leader, or owner if not locked) and uniqueness.
+ */
+export async function updatePostSlug(postId: string, newSlug: string): Promise<{ success: boolean; newSlug: string; slugEditedBy?: string | null }> {
+  const userId = await requireAuth();
+  const cleanSlug = slugify(newSlug);
+  if (!cleanSlug) throw new Error('Invalid URL format.');
+  if (cleanSlug.length < 3) throw new Error('Slug must be at least 3 characters.');
+
+  // Reject slugs that collide with tribe sub-routes (settings, analytics, etc.)
+  const RESERVED_POST_SLUGS = new Set([
+    'settings', 'analytics', 'manage-members', 'mod-queue',
+    'post', 'admin', 'api', 'invite', 'login', 'signup', 'new',
+  ]);
+  if (RESERVED_POST_SLUGS.has(cleanSlug)) {
+    throw new Error(`"${cleanSlug}" is a reserved URL and cannot be used.`);
+  }
+
+  const { db } = await import('@/db');
+  const { posts, users, tribeMembers, postSlugRedirects } = await import('@/db/schema');
+  const { eq, and, isNull } = await import('drizzle-orm');
+
+  // 1. Fetch current post
+  const [post] = await db.select().from(posts).where(eq(posts.id, postId)).limit(1);
+  if (!post) throw new Error('Post not found.');
+
+  // 2. Determine permissions
+  const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+  const isPlatformAdmin = user?.role === 'Admin';
+
+  let isTribeLeader = false;
+  if (post.tribeId) {
+    const [membership] = await db.select({ role: tribeMembers.role })
+      .from(tribeMembers)
+      .where(and(eq(tribeMembers.tribeId, post.tribeId), eq(tribeMembers.userId, userId)))
+      .limit(1);
+    isTribeLeader = membership?.role === 'founder' || membership?.role === 'speaker';
+  }
+
+  const isAuthor = post.authorId === userId;
+
+  if (isPlatformAdmin) {
+    // Platform admin has full access
+  } else if (isTribeLeader) {
+    // Tribe founder/speaker has full access
+  } else if (isAuthor) {
+    // Author can only edit if not locked by a tribe leader
+    if (post.slugEditedBy) {
+      throw new Error('This URL has been locked by a tribe leader.');
+    }
+  } else {
+    throw new Error('Not authorized to edit this URL.');
+  }
+
+  // 3. Collision checks (ensure slug is unique in this scope)
+  if (cleanSlug !== post.slug) {
+    const existingPostQuery = db
+      .select({ id: posts.id })
+      .from(posts)
+      .where(
+        and(
+          eq(posts.slug, cleanSlug),
+          post.tribeId ? eq(posts.tribeId, post.tribeId) : isNull(posts.tribeId)
+        )
+      )
+      .limit(1);
+
+    const [existingPost] = await existingPostQuery;
+    if (existingPost) {
+      throw new Error('This URL is already taken in this tribe/scope.');
+    }
+
+    const activeRedirectQuery = db
+      .select({ id: postSlugRedirects.id })
+      .from(postSlugRedirects)
+      .where(
+        and(
+          eq(postSlugRedirects.oldSlug, cleanSlug),
+          post.tribeId ? eq(postSlugRedirects.tribeId, post.tribeId) : isNull(postSlugRedirects.tribeId)
+        )
+      )
+      .limit(1);
+
+    const [activeRedirect] = await activeRedirectQuery;
+    if (activeRedirect) {
+      throw new Error('This URL is already taken in this tribe/scope.');
+    }
+
+    // 4. Create redirect for old slug
+    if (post.slug) {
+      const { createPostSlugRedirect } = await import('@/lib/slugify');
+      await createPostSlugRedirect(post.slug, postId, post.tribeId);
+    }
+  }
+
+  // 5. Update slug and potentially lock if edited by leader
+  const updateSet: Record<string, unknown> = {
+    slug: cleanSlug,
+  };
+  
+  if (isTribeLeader && !isAuthor) {
+    updateSet.slugEditedBy = userId;
+  }
+
+  await db.update(posts).set(updateSet).where(eq(posts.id, postId));
+
+  return { 
+    success: true, 
+    newSlug: cleanSlug, 
+    slugEditedBy: (updateSet.slugEditedBy as string | null) || post.slugEditedBy 
   };
 }
 
@@ -641,6 +871,13 @@ export const createRingPost = withPublicErrors(async (payload: CreateRingPostPay
   // Non-tribe rings: journal, inner_circle, my_people
   const id = `post-${payload.ring}-${Date.now()}`;
   const isEncrypted = !!payload.encryption;
+
+  let uniqueSlug: string | null = null;
+  if (!isEncrypted) {
+    const { generateUniquePostSlug } = await import('@/lib/slugify');
+    uniqueSlug = await generateUniquePostSlug(payload.title || payload.content.substring(0, 60), null);
+  }
+
   await db.insert(posts).values({
     id,
     tribeId: null, // No tribe for non-tribe rings
@@ -649,7 +886,7 @@ export const createRingPost = withPublicErrors(async (payload: CreateRingPostPay
     authorAvatar: payload.overrideAvatar || author?.avatar || null,
     authorAvatarFallback: (payload.overrideName || authorName).substring(0, 2).toUpperCase() || '??',
     // SECURITY: Encrypted posts must never have slugs — they would leak plaintext in the URL.
-    slug: isEncrypted ? null : (slugify(payload.title || payload.content.substring(0, 60)) || null),
+    slug: uniqueSlug,
     title: isEncrypted ? null : (payload.title || null),
     content: isEncrypted ? '🔒 Encrypted post' : payload.content.trim(),
     imageUrl: payload.imageUrl || null,

@@ -15,21 +15,22 @@ import { slugify } from '@/lib/utils/slugify';
  * Returns { avatar, name } so callers can skip the live avatar override
  * when a post was authored under an alias (authorName ≠ user.name).
  */
-async function batchFetchLiveAvatarInfo(userIds: string[]): Promise<Map<string, { avatar: string | null; name: string }>> {
+async function batchFetchLiveAvatarInfo(userIds: string[]): Promise<Map<string, { avatar: string | null; name: string; slug: string | null }>> {
   const uniqueIds = [...new Set(userIds.filter(Boolean))];
   if (uniqueIds.length === 0) return new Map();
-  const rows = await db.select({ id: users.id, avatar: users.avatar, name: users.name })
+  const rows = await db.select({ id: users.id, avatar: users.avatar, name: users.name, slug: users.slug })
     .from(users)
     .where(inArray(users.id, uniqueIds));
-  return new Map(rows.map(r => [r.id, { avatar: r.avatar, name: r.name }]));
+  return new Map(rows.map(r => [r.id, { avatar: r.avatar, name: r.name, slug: r.slug }]));
 }
 
-function buildCommentTree(allComments: (typeof comments.$inferSelect)[], parentId: string | null): DiscussionComment[] {
+function buildCommentTree(allComments: (typeof comments.$inferSelect)[], parentId: string | null, slugMap?: Map<string, string | null>): DiscussionComment[] {
   return allComments
     .filter(c => c.parentCommentId === parentId)
     .map(c => ({
       id: c.id,
       authorId: c.authorId,
+      authorSlug: slugMap?.get(c.authorId) ?? undefined,
       authorName: c.authorName,
       authorAvatar: c.authorAvatar ?? undefined,
       authorAvatarFallback: c.authorAvatarFallback,
@@ -37,7 +38,7 @@ function buildCommentTree(allComments: (typeof comments.$inferSelect)[], parentI
       content: c.content,
       vibes: c.vibeCount ?? 0,
       timestamp: c.createdAt ?? new Date(),
-      replies: buildCommentTree(allComments, c.id),
+      replies: buildCommentTree(allComments, c.id, slugMap),
       // E2E encryption fields
       isEncrypted: c.isEncrypted ?? false,
       ciphertextBase64: c.ciphertext
@@ -107,10 +108,25 @@ export async function getPostsForTribe(
     vibesByPost.get(v.targetId)!.push(v);
   }
 
-  // Fetch live avatars + names so we can skip the override for alias posts
+  // Fetch live avatars + names + slugs so we can skip the override for alias posts
   const authorIds = rows.map(r => r.authorId);
-  const liveAvatarInfo = await batchFetchLiveAvatarInfo(authorIds);
+  const commentAuthorIds = allComments.map(c => c.authorId);
+  const liveAvatarInfo = await batchFetchLiveAvatarInfo([...authorIds, ...commentAuthorIds]);
 
+  // Build slug lookup map for comments
+  const slugMap = new Map<string, string | null>();
+  for (const [id, info] of liveAvatarInfo) {
+    slugMap.set(id, info.slug);
+  }
+
+  // Batch-fetch tribe membership aliases so we can distinguish real alias posts
+  // from simple name-change mismatches.
+  const memberAliasRows = await db.select({
+    userId: tribeMembers.userId,
+    joinedAsAlias: tribeMembers.joinedAsAlias,
+  }).from(tribeMembers)
+    .where(and(eq(tribeMembers.tribeId, tribeId), inArray(tribeMembers.userId, authorIds)));
+  const aliasMap = new Map(memberAliasRows.map(r => [r.userId, r.joinedAsAlias]));
 
   const items = rows.map((row) => {
     const commentRows = commentsByPost.get(row.id) ?? [];
@@ -118,7 +134,7 @@ export async function getPostsForTribe(
     const filteredComments = blockedIds.length > 0
       ? commentRows.filter(c => !blockedIds.includes(c.authorId))
       : commentRows;
-    const commentsData = buildCommentTree(filteredComments, null);
+    const commentsData = buildCommentTree(filteredComments, null, slugMap);
     
     const postVibes = vibesByPost.get(row.id) ?? [];
     const hasVibed = viewerUserId ? postVibes.some(v => v.userId === viewerUserId) : false;
@@ -133,12 +149,16 @@ export async function getPostsForTribe(
       .sort((a, b) => b.count - a.count)
       .slice(0, 3);
 
-    // Only apply live avatar when post was authored under the user's real name
-    // (not an alias). Alias posts store the alias avatar at creation time.
+    // A post is an alias post only when the author explicitly joined the tribe
+    // under an alias AND the stored authorName matches that alias.
+    // Simple name changes (user updated their profile) are NOT alias posts.
     const info = liveAvatarInfo.get(row.authorId);
-    const isAliasPost = info && row.authorName !== info.name;
+    const memberAlias = aliasMap.get(row.authorId);
+    const isAliasPost = !!(memberAlias && row.authorName === memberAlias);
     const liveAvatar = isAliasPost ? undefined : info?.avatar;
-    const post = rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined, liveAvatar, !!isAliasPost);
+    const liveName = isAliasPost ? null : (info?.name ?? null);
+    const post = rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined, liveAvatar, isAliasPost, liveName);
+    post.authorSlug = info?.slug ?? undefined;
     post.recentVibes = recentVibes;
     post.hasVibed = hasVibed;
     return post;
@@ -230,16 +250,45 @@ export async function getMoodStreamPosts(
   const authorIds = allPosts.map(p => p.authorId);
   const liveAvatarInfo = await batchFetchLiveAvatarInfo(authorIds);
 
+  // Batch-fetch tribe membership aliases for explicit alias detection
+  const moodAuthorIds = [...new Set(allPosts.map(p => p.authorId))];
+  const moodTribeIds = [...new Set(allPosts.map(p => p.tribeId).filter(Boolean) as string[])];
+  const moodAliasMap = new Map<string, string | null>();
+  if (moodTribeIds.length > 0 && moodAuthorIds.length > 0) {
+    const aliasRows = await db.select({
+      tribeId: tribeMembers.tribeId,
+      userId: tribeMembers.userId,
+      joinedAsAlias: tribeMembers.joinedAsAlias,
+    }).from(tribeMembers)
+      .where(and(
+        inArray(tribeMembers.tribeId, moodTribeIds),
+        inArray(tribeMembers.userId, moodAuthorIds),
+      ));
+    for (const r of aliasRows) {
+      moodAliasMap.set(`${r.tribeId}:${r.userId}`, r.joinedAsAlias);
+    }
+  }
+
   const items: MoodStreamPost[] = allPosts.map(postRow => {
     const tags = taggedPosts.filter(t => t.postId === postRow.id).map(t => t.moodSlug);
     const tribeName = postRow.tribeId ? tribeMap.get(postRow.tribeId) : undefined;
     const promoterTag = taggedPosts.find(t => t.postId === postRow.id && t.promotedBy);
     const promotedByName = promoterTag?.promotedBy ? promoterMap.get(promoterTag.promotedBy) : undefined;
 
-    // Only apply live avatar for non-alias posts
+    // Explicit alias detection: only treat as alias when member joined under
+    // an alias AND the stored authorName matches that alias
     const info = liveAvatarInfo.get(postRow.authorId);
-    const isAliasPost = info && postRow.authorName !== info.name;
+    const memberAlias = postRow.tribeId
+      ? moodAliasMap.get(`${postRow.tribeId}:${postRow.authorId}`)
+      : null;
+    const isAliasPost = !!(memberAlias && postRow.authorName === memberAlias);
     const postAvatar = isAliasPost ? (postRow.authorAvatar ?? undefined) : (info?.avatar || (postRow.authorAvatar ?? undefined));
+    const displayName = isAliasPost ? postRow.authorName : (info?.name || postRow.authorName);
+    const displayFallback = isAliasPost
+      ? postRow.authorAvatarFallback
+      : (info?.name
+        ? info.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+        : postRow.authorAvatarFallback);
 
     const postVibes = vibesByPost.get(postRow.id) ?? [];
     const hasVibed = viewerUserId ? postVibes.some(v => v.userId === viewerUserId) : false;
@@ -255,9 +304,9 @@ export async function getMoodStreamPosts(
 
     return {
       id: postRow.id,
-      author: postRow.authorName,
+      author: displayName,
       authorAvatarSrc: postAvatar,
-      authorAvatarFallback: postRow.authorAvatarFallback,
+      authorAvatarFallback: displayFallback,
       dataAiHintAvatar: postRow.dataAiHintAvatar ?? undefined,
       tribeName,
       tribeId: postRow.tribeId ?? undefined,
@@ -331,6 +380,9 @@ export async function createTribePost(
 
   const finalImageUrl = payload.imageUrl || null;
 
+  const { generateUniquePostSlug } = await import('@/lib/slugify');
+  const postSlug = await generateUniquePostSlug(payload.title || payload.content.substring(0, 60), tribeId);
+
   await db.insert(posts).values({
     id,
     tribeId,
@@ -338,7 +390,7 @@ export async function createTribePost(
     authorName: resolvedName,
     authorAvatar: resolvedAvatar,
     authorAvatarFallback: resolvedAvatarFallback,
-    slug: slugify(payload.title || payload.content.substring(0, 60)) || null,
+    slug: postSlug || null,
     title: payload.title || null,
     content: payload.content,
     imageUrl: payload.imageUrl || null,
@@ -386,6 +438,10 @@ export async function repost(postToRepost: TribePost, editedContent: string): Pr
   // Mark original as non-repostable
   await db.update(posts).set({ canBeReposted: false }).where(eq(posts.id, postToRepost.id));
 
+  const { generateUniquePostSlug } = await import('@/lib/slugify');
+  const baseSlugText = postToRepost.title ? `Repost: ${postToRepost.title}` : `Repost: ${editedContent.substring(0, 60)}`;
+  const postSlug = await generateUniquePostSlug(baseSlugText, postToRepost.tribeId || null);
+
   await db.insert(posts).values({
     id,
     tribeId: postToRepost.tribeId,
@@ -394,7 +450,7 @@ export async function repost(postToRepost: TribePost, editedContent: string): Pr
     authorAvatar: postToRepost.authorAvatar ?? null,
     authorAvatarFallback: postToRepost.authorAvatarFallback,
     dataAiHintAvatar: postToRepost.dataAiHintAvatar ?? null,
-    slug: (postToRepost.title ? slugify(`Repost: ${postToRepost.title}`) : slugify(`Repost: ${editedContent.substring(0, 60)}`)) || null,
+    slug: postSlug || null,
     title: postToRepost.title ? `Repost: ${postToRepost.title}` : 'Repost: Untitled',
     content: editedContent,
     imageUrl: postToRepost.imageUrl ?? null,
@@ -443,6 +499,10 @@ export async function sharePostToTribe(
 
   const id = crypto.randomUUID();
 
+  const { generateUniquePostSlug } = await import('@/lib/slugify');
+  const baseSlugText = source.title ? `Shared: ${source.title}` : 'Shared Post';
+  const postSlug = await generateUniquePostSlug(baseSlugText, targetTribeId);
+
   await db.insert(posts).values({
     id,
     tribeId: targetTribeId,
@@ -450,7 +510,7 @@ export async function sharePostToTribe(
     authorName: displayName,
     authorAvatar: author?.avatar ?? null,
     authorAvatarFallback: displayName.substring(0, 2).toUpperCase(),
-    slug: (source.title ? slugify(`Shared: ${source.title}`) : slugify('Shared Post')) || null,
+    slug: postSlug || null,
     title: source.title ? `Shared: ${source.title}` : 'Shared Post',
     content: source.content,
     imageUrl: source.imageUrl,
@@ -678,7 +738,15 @@ export async function getCommentsForPost(postId: string): Promise<DiscussionComm
   const allComments = await db.select().from(comments)
     .where(eq(comments.postId, postId))
     .orderBy(comments.createdAt);
-  return buildCommentTree(allComments, null);
+
+  // Batch-fetch slugs for comment authors
+  const commentAuthorIds = [...new Set(allComments.map(c => c.authorId))];
+  const slugRows = commentAuthorIds.length > 0
+    ? await db.select({ id: users.id, slug: users.slug }).from(users).where(inArray(users.id, commentAuthorIds))
+    : [];
+  const slugMap = new Map<string, string | null>(slugRows.map(r => [r.id, r.slug]));
+
+  return buildCommentTree(allComments, null, slugMap);
 }
 
 /**
@@ -765,6 +833,7 @@ export async function createComment(
   return {
     id,
     authorId: userId,
+    authorSlug: author.slug ?? undefined,
     authorName: resolvedName,
     authorAvatar: resolvedAvatar ?? undefined,
     authorAvatarFallback: initials,

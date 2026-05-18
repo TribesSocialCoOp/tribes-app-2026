@@ -243,7 +243,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     }
 
     if (!tribeData) {
-      router.push('/tribes');
+      router.replace('/tribes');
       return;
     }
 
@@ -322,7 +322,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
         );
       }
     } else {
-      router.push('/tribes');
+      router.replace('/tribes');
     }
   }, [slugParam, tribeIdParam, router]);
 

@@ -28,6 +28,7 @@ import {
   Tent,
   Link2,
   SquarePen,
+  Scale,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ const navItems: { href: string; icon: React.ElementType; label: string; tooltip:
   { href: "/bonds", icon: Link2, label: "Bonds", tooltip: "Your Bonds" },
   { href: "/discover", icon: Compass, label: "Discover", tooltip: "Explore" },
   { href: "/my-wall", icon: User, label: "My Wall", tooltip: "Your Wall & Profile" },
+  { href: "/voting", icon: Scale, label: "Governance", tooltip: "Co-Op Governance" },
 ];
 
 const bottomNavItems: { href: string; icon: React.ElementType; label: string; tooltip: string; roles?: UserRole[] }[] = [
@@ -74,6 +76,29 @@ export function AppSidebar() {
 
   // Notification badge — event-driven via WS + custom events, no polling
   const [unreadCount, setUnreadCount] = useState(0);
+  const [activeProposalCount, setActiveProposalCount] = useState(0);
+
+  // Active proposals badge fetch
+  useEffect(() => {
+    if (isGuest) return;
+    async function fetchActiveProposals() {
+      try {
+        const { getActiveProposalCount } = await import('@/lib/actions/voting-actions');
+        const count = await getActiveProposalCount();
+        setActiveProposalCount(count);
+      } catch { } // silent fail
+    }
+    fetchActiveProposals();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchActiveProposals();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isGuest, pathname]);
 
   // Initial fetch + focus reconciliation (no interval)
   useEffect(() => {
@@ -265,6 +290,11 @@ export function AppSidebar() {
                   {item.href === '/your-comms' && unreadCount > 0 && (
                     <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-0 group-data-[collapsible=icon]:right-0 group-data-[collapsible=icon]:h-3 group-data-[collapsible=icon]:min-w-[12px] group-data-[collapsible=icon]:text-[10px]">
                       {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                  {item.href === '/voting' && activeProposalCount > 0 && (
+                    <span className="ml-auto bg-emerald-500 text-white text-[10px] font-bold rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 animate-pulse group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:h-2 group-data-[collapsible=icon]:w-2 group-data-[collapsible=icon]:min-w-[8px] group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:text-[0px]">
+                      {activeProposalCount}
                     </span>
                   )}
                 </Link>

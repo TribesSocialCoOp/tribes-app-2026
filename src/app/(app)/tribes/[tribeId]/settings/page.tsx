@@ -37,6 +37,7 @@ const reputationLevels = REPUTATION_GATE_OPTIONS;
 
 const tribeSettingsFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
+  slug: z.string().min(3, { message: "URL slug must be at least 3 characters." }).max(80).regex(/^[a-zA-Z0-9_-]+$/, { message: "URL slug can only contain letters, numbers, hyphens, and underscores." }).optional(),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
   homepageUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   isPublic: z.boolean().default(true),
@@ -95,7 +96,7 @@ function TribeSettingsContent() {
       let effectiveId = tribeIdParam || '';
       if (slugParam && !tribeIdParam) {
         const resolved = await getTribeBySlug(slugParam);
-        if (!resolved) { router.push('/tribes'); return; }
+        if (!resolved) { router.replace('/tribes'); return; }
         effectiveId = resolved.id;
         setTribeId(effectiveId);
       }
@@ -122,6 +123,7 @@ function TribeSettingsContent() {
     resolver: zodResolver(tribeSettingsFormSchema),
     defaultValues: {
       name: "",
+      slug: "",
       description: "",
       homepageUrl: "",
       isPublic: true,
@@ -145,6 +147,7 @@ function TribeSettingsContent() {
           setCoverPosition(currentTribeData.coverPosition || 'center');
           form.reset({
             name: currentTribeData.name,
+            slug: currentTribeData.slug || "",
             description: currentTribeData.description,
             isPublic: currentTribeData.isPublic,
             moods: currentTribeData.moods || [],
@@ -156,7 +159,7 @@ function TribeSettingsContent() {
             brandLogo: currentTribeData.brandLogo || "",
           });
         } else {
-          router.push('/tribes');
+          router.replace('/tribes');
         }
         setIsPageLoading(false);
       };
@@ -165,8 +168,30 @@ function TribeSettingsContent() {
   }, [tribeId, form, router]);
 
   async function onSubmit(values: TribeSettingsFormValues) {
+    if (!tribe) return;
     setIsLoading(true);
     
+    if (values.slug && values.slug !== tribe.slug) {
+      try {
+        const { updateTribeSlug } = await import('@/lib/actions/tribe-actions');
+        const slugResult = await updateTribeSlug(tribeId, values.slug);
+        if (slugResult.success) {
+          tribe.slug = slugResult.newSlug;
+          if (slugParam) {
+            router.replace(`/t/${slugResult.newSlug}/settings`);
+          }
+        }
+      } catch (err) {
+        toast({
+          variant: "destructive",
+          title: "URL Slug Update Failed",
+          description: (err as Error).message
+        });
+        setIsLoading(false);
+        return;
+      }
+    }
+
     const ageDaysValue = values.minimumAccountAgeDays ? parseInt(values.minimumAccountAgeDays, 10) : 0;
 
     const payload = {
@@ -451,6 +476,32 @@ function TribeSettingsContent() {
                       {(tribe?.members ?? 0) > 1
                         ? 'Tribe names are locked once members have joined to protect shared links and community identity.'
                         : 'You can change this while your tribe has no other members. The URL will update automatically.'}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="slug"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-md">Custom URL Slug</FormLabel>
+                    <div className="flex items-center">
+                      <span className="text-sm text-muted-foreground bg-muted border border-r-0 rounded-l-md px-3 py-2 select-none h-10 flex items-center">
+                        {typeof window !== 'undefined' ? window.location.origin : 'https://tribes.app'}/t/
+                      </span>
+                      <FormControl>
+                        <Input
+                          placeholder="custom-slug"
+                          {...field}
+                          className="rounded-l-none text-base h-10"
+                        />
+                      </FormControl>
+                    </div>
+                    <FormDescription>
+                      A short, unique web address for your tribe. Only letters, numbers, hyphens, and underscores are allowed.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

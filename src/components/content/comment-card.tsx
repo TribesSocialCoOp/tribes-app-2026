@@ -25,6 +25,7 @@ import { toggleVibe, createComment, editComment, reportComment } from '@/lib/act
 import { useToast } from '@/hooks/use-toast';
 import type { DiscussionComment } from '@/lib/types';
 import Link from 'next/link';
+import { profilePath } from '@/lib/utils/paths';
 
 interface CommentCardProps {
   comment: DiscussionComment;
@@ -237,7 +238,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
             {/* Desktop: still show avatar */}
             <div className="hidden md:block shrink-0">
               {!comment.authorIsAlias ? (
-                <Link href={`/profile/${comment.authorId}`}>
+                <Link href={profilePath(comment.authorId, comment.authorSlug)}>
                   <UserAvatar
                     user={{ name: comment.authorName, avatar: comment.authorAvatar }}
                     className="h-6 w-6 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
@@ -255,7 +256,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
           </>
         ) : (
           !comment.authorIsAlias ? (
-            <Link href={`/profile/${comment.authorId}`}>
+            <Link href={profilePath(comment.authorId, comment.authorSlug)}>
               <UserAvatar
                 user={{ name: comment.authorName, avatar: comment.authorAvatar }}
                 className="h-8 w-8 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
@@ -274,7 +275,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
           <div className={cn("flex justify-between", isDeep ? "flex-col gap-0.5 md:flex-row md:items-center" : "items-center")}>
             <div className="flex items-center gap-1.5 min-w-0">
               {!comment.authorIsAlias ? (
-                <Link href={`/profile/${comment.authorId}`} className="hover:underline decoration-primary/30 underline-offset-2">
+                <Link href={profilePath(comment.authorId, comment.authorSlug)} className="hover:underline decoration-primary/30 underline-offset-2">
                   <p className="text-xs font-semibold truncate max-w-[150px]">{comment.authorName}</p>
                 </Link>
               ) : (

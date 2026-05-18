@@ -2,14 +2,12 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Link2, Loader2, Handshake, Search, Share2, QrCode } from "lucide-react";
-import Link from 'next/link';
+import { Link2, Loader2, Handshake, Share2, QrCode } from "lucide-react";
 import { useToast } from '@/hooks/use-toast';
-import { createBondInviteLink } from '@/lib/actions/bond-actions';
-import { getOrCreatePersonalInviteCode, getUserProfile } from '@/lib/actions/profile-actions';
 import { BondSettingsDialog } from '@/components/dialogs/bond-settings-dialog';
 import { IntroductionDialog } from '@/components/dialogs/introduction-dialog';
 import { BondQRDialog } from '@/components/dialogs/bond-qr-dialog';
+import { BondInviteDialog } from '@/components/dialogs/bond-invite-dialog';
 import { TapToBondScreen } from '@/components/bond/tap-to-bond-screen';
 import { isNative } from '@/lib/capacitor/platform';
 import { BondsProvider, useBonds } from './bonds-context';
@@ -17,34 +15,14 @@ import { BondPendingRequests } from './bond-pending-requests';
 import { BondFamilyCapacity } from './bond-family-capacity';
 import { BondTable } from './bond-table';
 import { Button } from '@/components/ui/button';
-import { ShareLinkCard } from '@/components/ui/share-link-card';
 
 function BondsContent() {
   const { state, dispatch, handleSaveBondSettings, handleConfirmIntroduction } = useBonds();
   const [showQRDialog, setShowQRDialog] = useState(false);
+  const [showInviteDialog, setShowInviteDialog] = useState(false);
   const [showTapScreen, setShowTapScreen] = useState(false);
   const [displayName, setDisplayName] = useState('Tribes User');
-  const [shareLink, setShareLink] = useState<string | null>(null);
-  const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const { toast } = useToast();
-
-  const handleGenerateInvite = async () => {
-    setIsGeneratingLink(true);
-    try {
-      const [data, inviteCode] = await Promise.all([
-        createBondInviteLink(),
-        getOrCreatePersonalInviteCode(),
-      ]);
-      // Embed the invite code into the bond URL
-      const separator = data.url.includes('?') ? '&' : '?';
-      setShareLink(`${data.url}${separator}invite=${inviteCode}`);
-      toast({ title: 'Invite link generated', description: 'Share it with someone to bond!' });
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to generate invite link', variant: 'destructive' });
-    } finally {
-      setIsGeneratingLink(false);
-    }
-  };
 
   if (state.isLoading) {
     return (
@@ -76,30 +54,13 @@ function BondsContent() {
           </Button>
           <Button 
             variant="outline" 
-            onClick={handleGenerateInvite}
-            disabled={isGeneratingLink}
+            onClick={() => setShowInviteDialog(true)}
             className="h-11 px-6 rounded-xl border-primary/20 hover:bg-primary/5 hover:text-primary transition-all"
           >
-            {isGeneratingLink ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
+            <Share2 className="mr-2 h-4 w-4" />
             Invite to Bond
           </Button>
-          <Link href="/search">
-            <Button variant="ghost" className="h-11 px-6 rounded-xl text-muted-foreground hover:text-foreground">
-              <Search className="mr-2 h-4 w-4" /> Find People
-            </Button>
-          </Link>
         </div>
-        
-        {shareLink && (
-          <div className="mt-4">
-            <ShareLinkCard
-              url={shareLink}
-              title="Bond with me on Tribes"
-              expiryLabel="Expires in 5 minutes"
-              onDismiss={() => setShareLink(null)}
-            />
-          </div>
-        )}
       </header>
 
       <BondPendingRequests />
@@ -126,6 +87,10 @@ function BondsContent() {
       <BondQRDialog 
         isOpen={showQRDialog} 
         onOpenChange={setShowQRDialog} 
+      />
+      <BondInviteDialog
+        isOpen={showInviteDialog}
+        onOpenChange={setShowInviteDialog}
       />
       <TapToBondScreen
         isOpen={showTapScreen}

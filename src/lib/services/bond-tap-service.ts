@@ -3,7 +3,7 @@
  * Phase 2E: Token-based physical proximity bond initiation.
  *
  * Flow:
- * 1. Initiator creates a tap token (HMAC-signed, 5-min TTL)
+ * 1. Initiator creates a tap token (HMAC-signed, 1-year TTL)
  * 2. Token is encoded as URL: /bond/tap/{token}
  * 3. Displayed as QR code + optional NFC broadcast
  * 4. Recipient scans/taps → lands on redemption page
@@ -21,7 +21,7 @@ import { getBaseUrl } from '@/lib/url';
 // CONSTANTS
 // ============================================================
 
-const TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const TOKEN_TTL_MS = 365 * 24 * 60 * 60 * 1000; // 365 days (1 year)
 const TOKEN_VERSION = 1;
 
 function getHmacSecret(): string {

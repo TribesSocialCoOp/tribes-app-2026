@@ -1,1 +1,0 @@
-ALTER TABLE `tribes` ADD `bond_duration_days` integer;

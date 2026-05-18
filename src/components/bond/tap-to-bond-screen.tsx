@@ -181,14 +181,8 @@ export function TapToBondScreen({ isOpen, onClose, displayName = 'Tribes User' }
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Countdown timer
-  useEffect(() => {
-    if (!timeLeft || timeLeft <= 0) return;
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [timeLeft]);
+  // With a 1-year TTL, we don't need a per-second countdown.
+  // timeLeft > 0 is used as a boolean gate for showing the QR/actions.
 
   // Role switch handler
   const handleRoleSwitch = async (newRole: Role) => {
@@ -294,11 +288,7 @@ export function TapToBondScreen({ isOpen, onClose, displayName = 'Tribes User' }
     onClose();
   };
 
-  const formatTime = (s: number) => {
-    const mins = Math.floor(s / 60);
-    const secs = s % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+
 
   // ============================================================
   // RENDER
@@ -421,8 +411,8 @@ export function TapToBondScreen({ isOpen, onClose, displayName = 'Tribes User' }
 
             {/* Timer */}
             {timeLeft > 0 && (
-              <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold font-mono text-gray-300" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
-                Expires in {formatTime(timeLeft)}
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold text-gray-300" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
+                Valid for 1 year (single-use)
               </div>
             )}
 

@@ -5,6 +5,7 @@ import React, { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
+import { profilePath, eventPath } from '@/lib/utils/paths';
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,8 +27,8 @@ import { format } from 'date-fns';
 
 type SearchResults = {
   tribes: { id: string; slug: string; name: string; description: string; memberCount: number; isPublic: boolean }[];
-  events: { id: string; name: string; description: string; eventDate: Date | null; locationName: string; coverImage?: string }[];
-  users: { id: string; name: string; avatarUrl?: string }[];
+  events: { id: string; name: string; description: string; eventDate: Date | null; locationName: string; coverImage?: string; slug?: string | null }[];
+  users: { id: string; name: string; avatarUrl?: string; slug?: string | null }[];
 };
 
 export default function SearchPage() {
@@ -172,7 +173,7 @@ export default function SearchPage() {
               </h2>
               <div className="space-y-2">
                 {results.events.map(event => (
-                  <Link key={event.id} href={`/events/${event.id}`}>
+                  <Link key={event.id} href={eventPath(event.id, event.slug)}>
                     <Card className="hover:bg-accent/50 transition-colors cursor-pointer border-border/50">
                       <CardContent className="p-4 flex items-center gap-4">
                         {event.coverImage ? (
@@ -220,7 +221,7 @@ export default function SearchPage() {
               </h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {results.users.map(user => (
-                  <Link key={user.id} href={`/profile/${user.id}`}>
+                  <Link key={user.id} href={profilePath(user.id, user.slug)}>
                     <Card className="hover:bg-accent/50 transition-all duration-300 border-border/50 hover:border-primary/30 hover:shadow-md group cursor-pointer">
                       <CardContent className="p-4 flex items-center gap-3">
                         <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-sm font-semibold text-primary group-hover:scale-110 transition-transform">

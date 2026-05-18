@@ -1,21 +1,56 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/icons/app-logo";
-import { Fingerprint, Loader2, Mail } from "lucide-react";
+import { Fingerprint, Loader2, Mail, KeyRound } from "lucide-react";
 import { startAuthentication } from "@simplewebauthn/browser";
-import { loginUserAction, finishLoginAction } from "@/lib/auth-actions";
+import { loginUserAction, finishLoginAction, loginWithPasswordAction } from "@/lib/auth-actions";
 import { useToast } from "@/hooks/use-toast";
+import { isAuthMethodEnabled } from "@/lib/auth/auth-config";
+import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/turnstile-widget";
 
 function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  const [loginMethod, setLoginMethod] = useState<'passkey' | 'password'>('passkey');
+  const [emailOrUsername, setEmailOrUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [webAuthnSupported, setWebAuthnSupported] = useState<boolean | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const turnstileRef = useRef<TurnstileWidgetRef | null>(null);
+
+  useEffect(() => {
+    const isSupported = typeof window !== 'undefined'
+      && !!window.PublicKeyCredential
+      && typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function';
+
+    if (isSupported) {
+      window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+        .then(available => {
+          setWebAuthnSupported(available);
+        })
+        .catch(() => {
+          setWebAuthnSupported(false);
+        });
+    } else {
+      setWebAuthnSupported(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (webAuthnSupported === false) {
+      setLoginMethod('password');
+    }
+  }, [webAuthnSupported]);
 
   useEffect(() => {
     const error = searchParams.get('error');
@@ -147,6 +182,54 @@ function LoginForm() {
     }
   }
 
+  async function handlePasswordLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!emailOrUsername.trim() || !password) return;
+
+    setIsLoading(true);
+    try {
+      const result = await loginWithPasswordAction(emailOrUsername, password, turnstileToken || undefined);
+
+      if ('error' in result) {
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: result.error,
+        });
+        turnstileRef.current?.reset();
+        setTurnstileToken(null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Initialize local E2E key in IndexedDB if not already present
+      try {
+        const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
+        await getOrCreateJournalKey();
+      } catch (cryptoErr) {
+        console.error('[auth] Failed to initialize local E2E key store:', cryptoErr);
+      }
+
+      toast({
+        title: "Welcome Back",
+        description: "You have been logged in successfully.",
+      });
+
+      const returnTo = searchParams.get('callbackUrl') || searchParams.get('returnTo');
+      router.push(returnTo || "/your-comms");
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: err?.message || "An unexpected error occurred.",
+      });
+      turnstileRef.current?.reset();
+      setTurnstileToken(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   async function handleDevLogin(role: 'admin' | 'member' | 'speaker' | 'free') {
     setIsLoading(true);
     try {
@@ -181,18 +264,106 @@ function LoginForm() {
           <CardDescription>Authentication via biometric secure enclave</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 py-6">
-          <Button 
-            onClick={handleLogin}
-            disabled={isLoading}
-            className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xl group transition-all"
-          >
-            {isLoading ? (
-              <Loader2 className="mr-3 h-6 w-6 animate-spin" />
-            ) : (
-              <Fingerprint className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" />
-            )}
-            Sign in with Passkey
-          </Button>
+          {isAuthMethodEnabled('password') && webAuthnSupported !== false && (
+            <div className="flex gap-2 p-1 bg-muted/50 rounded-lg border mb-4">
+              <button
+                type="button"
+                onClick={() => setLoginMethod('passkey')}
+                className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${loginMethod === 'passkey' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                Secure Passkey
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoginMethod('password')}
+                className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${loginMethod === 'password' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                Password fallback
+              </button>
+            </div>
+          )}
+
+          {loginMethod === 'password' ? (
+            <form onSubmit={handlePasswordLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email-or-username">Email or Username</Label>
+                <Input
+                  id="email-or-username"
+                  type="text"
+                  placeholder="you@example.com or username"
+                  required
+                  disabled={isLoading}
+                  value={emailOrUsername}
+                  onChange={(e) => setEmailOrUsername(e.target.value)}
+                  className="h-11 bg-background/50 border-primary/20 focus-visible:ring-primary"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="password">Password</Label>
+                  <Link href="/forgot-password" className="text-xs font-semibold text-primary hover:underline">
+                    Forgot Password?
+                  </Link>
+                </div>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  disabled={isLoading}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="h-11 bg-background/50 border-primary/20 focus-visible:ring-primary"
+                />
+              </div>
+
+              {/* Turnstile Widget */}
+              <div className="flex justify-center py-2">
+                <TurnstileWidget
+                  ref={turnstileRef}
+                  onVerified={setTurnstileToken}
+                  onExpired={() => setTurnstileToken(null)}
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isLoading || !emailOrUsername.trim() || !password}
+                className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg"
+              >
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                ) : (
+                  <KeyRound className="mr-2 h-5 w-5" />
+                )}
+                Sign In
+              </Button>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              {webAuthnSupported === false && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
+                  <p className="font-semibold mb-1">Passkeys Not Supported</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Your browser or device does not support secure passkeys. Please use the password fallback option.
+                  </p>
+                </div>
+              )}
+
+              <Button 
+                onClick={handleLogin}
+                disabled={isLoading || webAuthnSupported === false}
+                className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xl group transition-all"
+              >
+                {isLoading ? (
+                  <Loader2 className="mr-3 h-6 w-6 animate-spin" />
+                ) : (
+                  <Fingerprint className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" />
+                )}
+                Sign in with Passkey
+              </Button>
+            </div>
+          )}
           
           <div className="relative flex items-center justify-center">
             <span className="absolute inset-x-0 h-px bg-muted" />

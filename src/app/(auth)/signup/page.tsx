@@ -8,12 +8,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/icons/app-logo";
-import { Fingerprint, Loader2, Mail, Ticket, CheckCircle2 } from "lucide-react";
+import { Fingerprint, Loader2, Mail, Ticket, CheckCircle2, AlertTriangle, KeyRound, XCircle, User } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { startRegistration } from "@simplewebauthn/browser";
-import { registerUserAction, finishRegistrationAction } from "@/lib/auth-actions";
+import { registerUserAction, finishRegistrationAction, registerWithPasswordAction } from "@/lib/auth-actions";
 import { validateInviteCode } from '@/lib/actions/profile-actions';
 import { useToast } from "@/hooks/use-toast";
+import { isAuthMethodEnabled } from "@/lib/auth/auth-config";
 import { HoneypotField } from "@/components/ui/captcha-challenge";
 import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/turnstile-widget";
 
@@ -34,6 +35,37 @@ function SignupForm() {
   const { toast } = useToast();
   const [tosAgreed, setTosAgreed] = useState(false);
   const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [webAuthnSupported, setWebAuthnSupported] = useState<boolean | null>(null);
+
+  // Username & Password fallback state
+  const [signupMethod, setSignupMethod] = useState<'passkey' | 'password'>('passkey');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
+  useEffect(() => {
+    if (webAuthnSupported === false) {
+      setSignupMethod('password');
+    }
+  }, [webAuthnSupported]);
+
+  useEffect(() => {
+    const isSupported = typeof window !== 'undefined'
+      && !!window.PublicKeyCredential
+      && typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function';
+
+    if (isSupported) {
+      window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
+        .then(available => {
+          setWebAuthnSupported(available);
+        })
+        .catch(() => {
+          setWebAuthnSupported(false);
+        });
+    } else {
+      setWebAuthnSupported(false);
+    }
+  }, []);
 
   useEffect(() => {
     const error = searchParams.get('error');
@@ -114,77 +146,115 @@ function SignupForm() {
     if (!name || !email) return;
     if (INVITE_ONLY && !isInviteValidated) return;
 
+    if (signupMethod === 'password') {
+      const meetsMinLength = password.length >= 12;
+      const hasUppercase = /[A-Z]/.test(password);
+      const hasLowercase = /[a-z]/.test(password);
+      const hasNumberOrSymbol = /[0-9]/.test(password) || /[!@#$%^&*(),.?":{}|<>]/.test(password);
+      const matchesConfirm = password === confirmPassword;
+
+      if (!meetsMinLength || !hasUppercase || !hasLowercase || !hasNumberOrSymbol || !matchesConfirm) {
+        toast({
+          variant: "destructive",
+          title: "Invalid Password",
+          description: "Please make sure your password matches all requirements and matches the confirmation.",
+        });
+        return;
+      }
+    }
+
     // Honeypot check
     const honeypot = (document.getElementById('website_url') as HTMLInputElement)?.value;
     if (honeypot) {
       // Bot detected — silently fail
-      toast({ title: "Account Created!", description: "Your passkey has been registered successfully." });
+      toast({ title: "Account Created!", description: "Your account has been registered successfully." });
       return;
-    }
-
-    // Turnstile bot challenge — pass token if available, server validates server-side
-    // (widget may not fire in all environments; server gracefully skips if no key configured)
-    if (turnstileToken === null) {
-      // Token not yet received — still attempt registration (server will validate)
-      console.debug('[turnstile] No token yet, proceeding without client challenge');
     }
 
     setIsLoading(true);
     try {
-      // 1. Get registration options from server (with invite code validation)
-      const result = await registerUserAction(name, email, inviteCode || undefined, turnstileToken ?? undefined);
+      if (signupMethod === 'password') {
+        const result = await registerWithPasswordAction(
+          name,
+          email,
+          username,
+          password,
+          inviteCode || undefined,
+          turnstileToken ?? undefined
+        );
 
-      // Surface any server-side errors (rate limit, duplicate email, bot check, etc.)
-      if ('error' in result) {
-        toast({ variant: 'destructive', title: 'Registration Failed', description: result.error });
-        turnstileRef.current?.reset();
-        setTurnstileToken(null);
-        setIsLoading(false);
-        return;
-      }
-
-      const { options, userId, inviteCode: validatedCode } = result;
-
-      // 2. Start biometric registration in browser
-      const regResponse = await startRegistration({
-        optionsJSON: options,
-      });
-
-      // 3. Finish registration on server (auto-redeems invite code)
-      await finishRegistrationAction(userId, regResponse, validatedCode);
-
-      // 4. Initialize E2E Vault (Phase 3: PRF)
-      try {
-        const { derivePrfWrappingKey, encryptVaultWithPrf } = await import('@/lib/crypto');
-        const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
-        const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
-
-        // Create the initial personal journal key (stored in IndexedDB)
-        console.log('[auth] Initializing E2E journal key...');
-        await getOrCreateJournalKey();
-
-        // Evaluate PRF output from registration
-        // @ts-expect-error — PRF extension results type not yet in @simplewebauthn/browser types
-        const rawPrf = regResponse.clientExtensionResults?.prf?.results?.first;
-        // Validate it is actually an ArrayBuffer of the expected size before use
-        const prfOutput = rawPrf instanceof ArrayBuffer && rawPrf.byteLength >= 32 ? rawPrf : null;
-
-        if (prfOutput) {
-          console.log('[auth] PRF extension found, creating initial vault...');
-          const wrappingKey = await derivePrfWrappingKey(prfOutput);
-          const encryptedVault = await encryptVaultWithPrf(wrappingKey);
-          
-          // Efficiently convert ArrayBuffer to base64 via Buffer (O(n), not O(n^2))
-          const base64Vault = Buffer.from(encryptedVault).toString('base64');
-
-          await savePrfVaultAction(base64Vault, regResponse.id);
-          console.log('[auth] Initial PRF vault saved.');
-        } else {
-          console.warn('[auth] Authenticator did not provide a valid PRF output. Skipping vault creation.');
+        if ('error' in result) {
+          toast({ variant: 'destructive', title: 'Registration Failed', description: result.error });
+          turnstileRef.current?.reset();
+          setTurnstileToken(null);
+          setIsLoading(false);
+          return;
         }
-      } catch (cryptoErr) {
-        console.error('[auth] E2E initialization failed:', cryptoErr);
-        // We don't block registration if vault creation fails, but it is a degraded state.
+
+        // Initialize local E2E key in IndexedDB so they can start reading/writing encrypted posts immediately
+        try {
+          const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
+          await getOrCreateJournalKey();
+          console.log('[auth] Initialized local E2E key store for password user.');
+        } catch (cryptoErr) {
+          console.error('[auth] Failed to initialize local E2E key store:', cryptoErr);
+        }
+      } else {
+        // 1. Get registration options from server (with invite code validation)
+        const result = await registerUserAction(name, email, inviteCode || undefined, turnstileToken ?? undefined);
+
+        // Surface any server-side errors (rate limit, duplicate email, bot check, etc.)
+        if ('error' in result) {
+          toast({ variant: 'destructive', title: 'Registration Failed', description: result.error });
+          turnstileRef.current?.reset();
+          setTurnstileToken(null);
+          setIsLoading(false);
+          return;
+        }
+
+        const { options, userId, inviteCode: validatedCode } = result;
+
+        // 2. Start biometric registration in browser
+        const regResponse = await startRegistration({
+          optionsJSON: options,
+        });
+
+        // 3. Finish registration on server (auto-redeems invite code + creates user atomically)
+        await finishRegistrationAction(userId, regResponse, name, email, validatedCode);
+
+        // 4. Initialize E2E Vault (Phase 3: PRF)
+        try {
+          const { derivePrfWrappingKey, encryptVaultWithPrf } = await import('@/lib/crypto');
+          const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
+          const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
+
+          // Create the initial personal journal key (stored in IndexedDB)
+          console.log('[auth] Initializing E2E journal key...');
+          await getOrCreateJournalKey();
+
+          // Evaluate PRF output from registration
+          // @ts-expect-error — PRF extension results type not yet in @simplewebauthn/browser types
+          const rawPrf = regResponse.clientExtensionResults?.prf?.results?.first;
+          // Validate it is actually an ArrayBuffer of the expected size before use
+          const prfOutput = rawPrf instanceof ArrayBuffer && rawPrf.byteLength >= 32 ? rawPrf : null;
+
+          if (prfOutput) {
+            console.log('[auth] PRF extension found, creating initial vault...');
+            const wrappingKey = await derivePrfWrappingKey(prfOutput);
+            const encryptedVault = await encryptVaultWithPrf(wrappingKey);
+            
+            // Efficiently convert ArrayBuffer to base64 via Buffer (O(n), not O(n^2))
+            const base64Vault = Buffer.from(encryptedVault).toString('base64');
+
+            await savePrfVaultAction(base64Vault, regResponse.id);
+            console.log('[auth] Initial PRF vault saved.');
+          } else {
+            console.warn('[auth] Authenticator did not provide a valid PRF output. Skipping vault creation.');
+          }
+        } catch (cryptoErr) {
+          console.error('[auth] E2E initialization failed:', cryptoErr);
+          // We don't block registration if vault creation fails, but it is a degraded state.
+        }
       }
 
       // Record TOS acceptance (user checked the checkbox before submit)
@@ -199,7 +269,9 @@ function SignupForm() {
 
       toast({
         title: "Account Created!",
-        description: "Your passkey has been registered successfully.",
+        description: signupMethod === 'password'
+          ? "Your account has been created successfully."
+          : "Your passkey has been registered successfully.",
       });
 
       // Redirect to returnTo (e.g. the tribe/bond invite) or default feed
@@ -284,6 +356,26 @@ function SignupForm() {
                 )}
               </div>
             )}
+
+            {isAuthMethodEnabled('password') && webAuthnSupported !== false && (
+              <div className="flex gap-2 p-1 bg-muted/50 rounded-lg border mb-4">
+                <button
+                  type="button"
+                  onClick={() => setSignupMethod('passkey')}
+                  className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${signupMethod === 'passkey' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Biometric Passkey
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSignupMethod('password')}
+                  className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${signupMethod === 'password' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  Password fallback
+                </button>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
               <Input 
@@ -296,6 +388,23 @@ function SignupForm() {
                 disabled={isLoading || !isInviteValidated}
               />
             </div>
+
+            {signupMethod === 'password' && (
+              <div className="space-y-2">
+                <Label htmlFor="username">Username</Label>
+                <Input 
+                  id="username" 
+                  type="text" 
+                  placeholder="nemo" 
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  required 
+                  disabled={isLoading || !isInviteValidated}
+                  className="lowercase"
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
               <Input 
@@ -308,6 +417,101 @@ function SignupForm() {
                 disabled={isLoading || !isInviteValidated}
               />
             </div>
+
+            {signupMethod === 'password' && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input 
+                    id="password" 
+                    type="password" 
+                    required 
+                    disabled={isLoading || !isInviteValidated}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <Input 
+                    id="confirm-password" 
+                    type="password" 
+                    required 
+                    disabled={isLoading || !isInviteValidated}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                </div>
+
+                {/* Password strength checklist */}
+                <div className="p-4 bg-muted/40 rounded-xl border border-border/50 space-y-2 text-xs">
+                  <span className="font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Complexity Requirements</span>
+                  <div className="flex items-center gap-2">
+                    {password.length >= 12 ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                    )}
+                    <span className={password.length >= 12 ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground"}>
+                      At least 12 characters
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/[A-Z]/.test(password) ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                    )}
+                    <span className={/[A-Z]/.test(password) ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground"}>
+                      At least one uppercase letter
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {/[a-z]/.test(password) ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                    )}
+                    <span className={/[a-z]/.test(password) ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground"}>
+                      At least one lowercase letter
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {(/[0-9]/.test(password) || /[!@#$%^&*(),.?":{}|<>]/.test(password)) ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                    ) : (
+                      <XCircle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                    )}
+                    <span className={(/[0-9]/.test(password) || /[!@#$%^&*(),.?":{}|<>]/.test(password)) ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground"}>
+                      At least one number or symbol
+                    </span>
+                  </div>
+                  {confirmPassword.length > 0 && (
+                    <div className="flex items-center gap-2 pt-1 border-t border-border/40 mt-1">
+                      {password === confirmPassword ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      ) : (
+                        <XCircle className="h-4 w-4 text-destructive shrink-0" />
+                      )}
+                      <span className={password === confirmPassword ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-destructive font-medium"}>
+                        {password === confirmPassword ? "Passwords match" : "Passwords do not match"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* E2E Informational Alert Callout */}
+                <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl text-xs space-y-1.5 leading-relaxed text-purple-600 dark:text-purple-400">
+                  <p className="font-bold flex items-center gap-1.5 text-purple-700 dark:text-purple-300">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-purple-600 dark:text-purple-400" />
+                    E2E Encryption Manual Backup
+                  </p>
+                  <p className="text-muted-foreground">
+                    Since you are registering with a username & password instead of a passkey, your encryption keys cannot sync automatically across devices. You <strong>must</strong> manually save your Recovery Phrase under <strong>Settings → Vault Backup</strong> after signing up to prevent losing access to your private messages and private tribes if you log in on a new device.
+                  </p>
+                </div>
+              </>
+            )}
 
             {/* Honeypot + Turnstile bot protection */}
             <HoneypotField />
@@ -354,18 +558,55 @@ function SignupForm() {
             </div>
 
             <div className="pt-4 space-y-3">
-              <Button 
-                type="submit" 
-                disabled={isLoading || !name || !email || !tosAgreed || !ageConfirmed || (INVITE_ONLY && !isInviteValidated)}
-                className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg"
-              >
-                {isLoading ? (
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                ) : (
-                  <Fingerprint className="mr-2 h-5 w-5" />
-                )}
-                Register with Passkey
-              </Button>
+              {webAuthnSupported === false && signupMethod === 'passkey' && (
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
+                  <p className="font-semibold mb-1">Passkeys Not Supported</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Your browser or device does not support secure passkey registration. Please use the password fallback option.
+                  </p>
+                </div>
+              )}
+
+              {signupMethod === 'password' ? (
+                <Button 
+                  type="submit" 
+                  disabled={
+                    isLoading || 
+                    !name || 
+                    !email || 
+                    !username || 
+                    password.length < 12 ||
+                    !/[A-Z]/.test(password) ||
+                    !/[a-z]/.test(password) ||
+                    (!/[0-9]/.test(password) && !/[!@#$%^&*(),.?":{}|<>]/.test(password)) ||
+                    password !== confirmPassword ||
+                    !tosAgreed || 
+                    !ageConfirmed || 
+                    (INVITE_ONLY && !isInviteValidated)
+                  }
+                  className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg"
+                >
+                  {isLoading ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  ) : (
+                    <KeyRound className="mr-2 h-5 w-5" />
+                  )}
+                  Register with Password
+                </Button>
+              ) : (
+                <Button 
+                  type="submit" 
+                  disabled={isLoading || !name || !email || !tosAgreed || !ageConfirmed || (INVITE_ONLY && !isInviteValidated) || webAuthnSupported === false}
+                  className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg"
+                >
+                  {isLoading ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  ) : (
+                    <Fingerprint className="mr-2 h-5 w-5" />
+                  )}
+                  Register with Passkey
+                </Button>
+              )}
               
               <div className="relative flex items-center justify-center py-2">
                 <span className="absolute inset-x-0 h-px bg-muted" />

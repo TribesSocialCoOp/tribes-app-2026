@@ -127,18 +127,18 @@ describe('Auth Guard Patterns', () => {
   });
 
   describe('requireAuth() — used by write actions', () => {
-    it('throws Unauthorized when no session exists', async () => {
+    it('returns serverError when no session exists', async () => {
       mockGetCurrentUserId.mockResolvedValue(null);
 
       // Import a write action that uses requireAuth
       const { createTribe } = await import('@/lib/actions/tribe-actions');
 
-      await expect(
-        createTribe({ name: 'Test', description: 'test', moods: ['tech'], isPublic: true })
-      ).rejects.toThrow('Unauthorized');
+      const result = await createTribe({ name: 'Test', description: 'test', moods: ['tech'], isPublic: true });
+      expect(result).toHaveProperty('serverError');
+      expect((result as any).serverError).toContain('Unauthorized');
     });
 
-    it('throws "account suspended" when user is banned', async () => {
+    it('returns serverError when user is banned', async () => {
       mockGetCurrentUserId.mockResolvedValue('banned-user-456');
       mockIsUserBanned.mockResolvedValueOnce({
         reason: 'Repeated policy violations',
@@ -147,9 +147,9 @@ describe('Auth Guard Patterns', () => {
 
       const { createTribe } = await import('@/lib/actions/tribe-actions');
 
-      await expect(
-        createTribe({ name: 'Test', description: 'test', moods: ['tech'], isPublic: true })
-      ).rejects.toThrow('Your account has been suspended');
+      const result = await createTribe({ name: 'Test', description: 'test', moods: ['tech'], isPublic: true });
+      expect(result).toHaveProperty('serverError');
+      expect((result as any).serverError).toContain('Your account has been suspended');
 
       // Verify isUserBanned was actually called with the right userId
       expect(mockIsUserBanned).toHaveBeenCalledWith('banned-user-456');

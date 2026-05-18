@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
   try {
     // 1. Verify the identity token against Apple's JWKS
     // The audience will be the iOS Bundle ID for native sign-ins, and the Web Service ID for web sign-ins.
-    const validAudiences = [clientId, 'app.tribes.TribesApp'];
+    const validAudiences = [clientId, 'app.tribes.TribesApp', 'app.tribes.android'];
     
     const JWKS = createRemoteJWKSet(new URL(APPLE_JWKS_URL));
     const { payload } = await jwtVerify(identityToken, JWKS, {
@@ -108,6 +108,14 @@ export async function POST(request: NextRequest) {
 
         // Create new user
         userId = crypto.randomUUID();
+        const { generateUniqueSlug } = await import('@/lib/utils/slugify');
+        const userSlug = await generateUniqueSlug(userName, async (candidate) => {
+          const existing = await db.query.users.findFirst({
+            where: eq(users.slug, candidate),
+          });
+          return !!existing;
+        });
+
         await db.insert(users).values({
           id: userId,
           name: userName,
@@ -116,35 +124,36 @@ export async function POST(request: NextRequest) {
           avatar: null,
           reputationStatus: 'Newcomer',
           reputationScore: 0,
+          slug: userSlug,
           createdAt: new Date(),
         });
 
         console.log('[Apple Native] Created new user:', userId);
+      }
 
-        // Auto-redeem invite code
-        if (inviteCode) {
-          try {
-            const { redeemInviteCode } = await import('@/lib/services/invite-service');
-            await redeemInviteCode(userId, inviteCode);
-          } catch (e) {
-            console.warn('[Apple Native] Invite redemption failed:', e);
-          }
-        }
-
-        // Auto-join welcome tribe
+      // Auto-redeem invite code (runs for both new users AND email-linked existing users)
+      if (inviteCode) {
         try {
-          const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
-          const { tribes: tribesTable } = await import('@/db/schema');
-          const [welcomeTribe] = await db.select({ id: tribesTable.id })
-            .from(tribesTable)
-            .where(eq(tribesTable.slug, 'welcome-to-tribes'))
-            .limit(1);
-          if (welcomeTribe) {
-            await joinTribeDirectly(userId, welcomeTribe.id);
-          }
+          const { redeemInviteCode } = await import('@/lib/services/invite-service');
+          await redeemInviteCode(userId, inviteCode);
         } catch (e) {
-          console.warn('[Apple Native] Auto-join welcome tribe failed:', e);
+          console.warn('[Apple Native] Invite redemption failed:', e);
         }
+      }
+
+      // Auto-join welcome tribe (runs for both new AND email-linked users)
+      try {
+        const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
+        const { tribes: tribesTable } = await import('@/db/schema');
+        const [welcomeTribe] = await db.select({ id: tribesTable.id })
+          .from(tribesTable)
+          .where(eq(tribesTable.slug, 'welcome-to-tribes'))
+          .limit(1);
+        if (welcomeTribe) {
+          await joinTribeDirectly(userId, welcomeTribe.id);
+        }
+      } catch (e) {
+        console.warn('[Apple Native] Auto-join welcome tribe failed:', e);
       }
 
       // Link the Apple account

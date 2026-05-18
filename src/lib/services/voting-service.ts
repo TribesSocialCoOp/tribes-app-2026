@@ -9,10 +9,12 @@
  *   - Voting requires `coop_voting` feature flag (paid members only)
  *   - One vote per user per proposal (enforced at DB + service level)
  *   - Proposals auto-close after deadline
+ *   - Each proposal has "Support" / "Oppose" options (binary up/down)
+ *   - Creator flair: platform role (Admin) and tribe-founder status are exposed
  */
 
 import { db } from '@/db';
-import { proposals, proposalOptions, votes, users } from '@/db/schema';
+import { proposals, proposalOptions, votes, users, tribes } from '@/db/schema';
 import { eq, and, desc, count, sql, lte } from 'drizzle-orm';
 
 // ── Types ──
@@ -23,6 +25,9 @@ export interface Proposal {
   description: string;
   createdBy: string;
   creatorName: string;
+  creatorAvatar?: string | null;
+  creatorRole: string;          // Platform role — 'Admin', 'Human_Paid', etc.
+  creatorIsFounder: boolean;    // True if this user has founded at least one tribe
   status: 'active' | 'closed' | 'canceled';
   tribeId: string | null;
   deadline: Date;
@@ -30,6 +35,7 @@ export interface Proposal {
   createdAt: Date;
   options: ProposalOption[];
   userVoteOptionId?: string | null; // Which option the current user voted for
+  slug?: string;
 }
 
 export interface ProposalOption {
@@ -61,6 +67,14 @@ export async function createProposal(payload: {
 
   const id = `prop-${Date.now()}`;
 
+  // Generate unique slug
+  const { slugify, generateUniqueSlug } = await import('@/lib/utils/slugify');
+  const baseSlug = slugify(payload.title) || 'proposal';
+  const uniqueSlug = await generateUniqueSlug(baseSlug, async (candidate) => {
+    const existing = await db.select({ id: proposals.id }).from(proposals).where(eq(proposals.slug, candidate)).limit(1);
+    return existing.length > 0;
+  });
+
   await db.insert(proposals).values({
     id,
     title: payload.title,
@@ -71,6 +85,7 @@ export async function createProposal(payload: {
     status: 'active',
     voteCount: 0,
     createdAt: new Date(),
+    slug: uniqueSlug,
   });
 
   // Insert options
@@ -182,12 +197,30 @@ export async function getProposalById(proposalId: string, currentUserId?: string
   return hydrateProposal(row, currentUserId);
 }
 
+/**
+ * Checks whether a user has founded at least one tribe.
+ */
+async function isUserTribeFounder(userId: string): Promise<boolean> {
+  const [row] = await db.select({ id: tribes.id })
+    .from(tribes)
+    .where(eq(tribes.createdBy, userId))
+    .limit(1);
+  return !!row;
+}
+
 async function hydrateProposal(
   row: typeof proposals.$inferSelect,
   currentUserId?: string,
 ): Promise<Proposal> {
-  // Get creator name
-  const [creator] = await db.select({ name: users.name }).from(users).where(eq(users.id, row.createdBy)).limit(1);
+  // Get creator details (name, role, avatar)
+  const [creator] = await db.select({
+    name: users.name,
+    role: users.role,
+    avatar: users.avatar,
+  }).from(users).where(eq(users.id, row.createdBy)).limit(1);
+
+  // Check if creator is a tribe founder
+  const creatorIsFounder = await isUserTribeFounder(row.createdBy);
 
   // Get options
   const optRows = await db.select().from(proposalOptions)
@@ -217,6 +250,9 @@ async function hydrateProposal(
     description: row.description,
     createdBy: row.createdBy,
     creatorName: creator?.name ?? 'Unknown',
+    creatorAvatar: creator?.avatar ?? null,
+    creatorRole: creator?.role ?? 'Human_Free',
+    creatorIsFounder,
     status: row.status as Proposal['status'],
     tribeId: row.tribeId,
     deadline: row.deadline,
@@ -224,5 +260,6 @@ async function hydrateProposal(
     createdAt: row.createdAt ?? new Date(),
     options: opts,
     userVoteOptionId,
+    slug: row.slug ?? undefined,
   };
 }

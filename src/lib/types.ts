@@ -69,6 +69,7 @@ export interface LinkPreviewData {
 export interface Bond {
   id: string;
   targetId?: string; // The raw user/tribe ID of the bond target (for blocking, etc.)
+  targetSlug?: string; // Target user's slug for canonical profile linking
   targetName: string;
   targetType: "user" | "tribe";
   bondType: BondType;
@@ -142,14 +143,17 @@ export interface Event {
   rsvpPointsReward?: number; // Contribution points awarded for RSVP, set by coordinator
   rsvpCount?: number; // Number of 'going' RSVPs
   userRsvpStatus?: 'going' | 'interested' | 'not_going' | null; // Current user's RSVP
+  slug?: string;
 }
 
 
 export interface TribePost {
   id: string;
   slug?: string;
+  slugEditedBy?: string | null;
   tribeId?: string; // Nullable for journal/bond-ring posts
   authorId: string;
+  authorSlug?: string;
   authorName: string;
   authorAvatar?: string;
   authorAvatarFallback: string;
@@ -204,6 +208,7 @@ export interface ReportedPost {
 export interface DiscussionComment {
   id: string;
   authorId: string;
+  authorSlug?: string;
   authorName: string;
   authorAvatar?: string;
   authorAvatarFallback: string;
@@ -221,6 +226,7 @@ export interface DiscussionComment {
 
 export interface TribeMember {
   id: string;
+  slug?: string;
   name: string;
   avatar?: string;
   dataAiHint?: string;
@@ -232,6 +238,7 @@ export interface TribeMember {
 
 export interface PendingMember {
   id: string;
+  slug?: string;
   name: string;
   avatar: string;
   dataAiHint: string;
@@ -325,10 +332,12 @@ export interface SourceArticle {
 export interface CommunicationItem {
   id: string;
   slug?: string;
+  slugEditedBy?: string | null;
   tribeSlug?: string;
   type: "mood-stream" | "ring-post";
   ring?: Ring;
   authorId?: string;
+  authorSlug?: string;
   sender?: string;
   currentUserTribeRole?: string;
   authorTribeRole?: 'founder' | 'speaker' | 'member';

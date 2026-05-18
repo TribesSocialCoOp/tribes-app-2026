@@ -376,3 +376,77 @@ export async function deleteTribeKeyGrantForSelf(grantId: string): Promise<void>
       eq(tribeKeyGrants.recipientId, userId),
     ));
 }
+
+/**
+ * Server action: Edit a tribe's custom URL/slug.
+ * Validates permissions (platform admin or tribe founder only) and uniqueness.
+ */
+export async function updateTribeSlug(tribeId: string, newSlug: string): Promise<{ success: boolean; newSlug: string }> {
+  const userId = await requireAuth();
+  
+  const { db } = await import('@/db');
+  const { tribes, users, tribeMembers, tribeSlugRedirects } = await import('@/db/schema');
+  const { eq, and, ne } = await import('drizzle-orm');
+  const { slugify } = await import('@/lib/slugify');
+
+  const cleanSlug = slugify(newSlug);
+  if (!cleanSlug) throw new Error('Invalid URL format.');
+  if (cleanSlug.length < 3) throw new Error('Slug must be at least 3 characters.');
+
+  // Reject slugs that collide with tribe sub-routes
+  const RESERVED_SLUGS = new Set([
+    'settings', 'analytics', 'manage-members', 'mod-queue',
+    'post', 'admin', 'api', 'invite', 'login', 'signup', 'new',
+  ]);
+  if (RESERVED_SLUGS.has(cleanSlug)) {
+    throw new Error(`"${cleanSlug}" is a reserved URL and cannot be used.`);
+  }
+
+  // 1. Fetch current tribe
+  const [tribe] = await db.select().from(tribes).where(eq(tribes.id, tribeId)).limit(1);
+  if (!tribe) throw new Error('Tribe not found.');
+
+  // 2. Permission check
+  const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+  const isPlatformAdmin = user?.role === 'Admin';
+
+  const [membership] = await db.select({ role: tribeMembers.role })
+    .from(tribeMembers)
+    .where(and(eq(tribeMembers.tribeId, tribeId), eq(tribeMembers.userId, userId)))
+    .limit(1);
+  const isFounder = membership?.role === 'founder';
+
+  if (!isPlatformAdmin && !isFounder) {
+    throw new Error('Only tribe founders and platform admins can change the tribe URL.');
+  }
+
+  // 3. Collision checks
+  if (cleanSlug !== tribe.slug) {
+    const [existingTribe] = await db.select({ id: tribes.id })
+      .from(tribes)
+      .where(and(eq(tribes.slug, cleanSlug), ne(tribes.id, tribeId)))
+      .limit(1);
+    if (existingTribe) {
+      throw new Error('This URL is already taken.');
+    }
+
+    const [activeRedirect] = await db.select({ id: tribeSlugRedirects.id })
+      .from(tribeSlugRedirects)
+      .where(and(eq(tribeSlugRedirects.oldSlug, cleanSlug), ne(tribeSlugRedirects.tribeId, tribeId)))
+      .limit(1);
+    if (activeRedirect) {
+      throw new Error('This URL is already taken.');
+    }
+
+    // 4. Create redirect for old slug
+    if (tribe.slug) {
+      const { createSlugRedirect } = await import('@/lib/slugify');
+      await createSlugRedirect(tribe.slug, tribeId);
+    }
+  }
+
+  // 5. Update DB
+  await db.update(tribes).set({ slug: cleanSlug }).where(eq(tribes.id, tribeId));
+
+  return { success: true, newSlug: cleanSlug };
+}

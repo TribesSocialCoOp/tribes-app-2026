@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Users, Search, PlusCircle, ArrowRight, Smile, MessageCircle, LayoutGrid, List, Eye, UserPlus, HeartHandshake, Loader2, ShieldCheck, History, X, Globe, Lock, Clock } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from 'next/navigation';
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { cn } from '@/lib/utils';
@@ -54,13 +55,13 @@ const checkJoinRequirements = (tribe: Tribe, user: UserProfile | null): { canJoi
 };
 
 
-const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean; onJoin: (tribe: Tribe) => void; isJoining: boolean; user: UserProfile | null; isPending: boolean }> = ({ tribe, isMyTribe, onJoin, isJoining, user, isPending }) => {
+const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean; onJoin: (tribe: Tribe) => void; isJoining: boolean; user: UserProfile | null; isPending: boolean; isLoggedIn: boolean }> = ({ tribe, isMyTribe, onJoin, isJoining, user, isPending, isLoggedIn }) => {
 
   const { canJoin, requirement, reason } = checkJoinRequirements(tribe, user);
-  const joinButtonIsDisabled = isJoining || !canJoin;
+  const joinButtonIsDisabled = isJoining || (!isLoggedIn ? false : !canJoin);
 
   const joinButton = (
-    <Button variant="outline" size="sm" onClick={() => onJoin(tribe)} disabled={joinButtonIsDisabled}>
+    <Button variant="outline" size="sm" onClick={() => onJoin(tribe)} disabled={isJoining}>
         {isJoining ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin"/> : <UserPlus className="mr-1.5 h-3.5 w-3.5" />}
         {isJoining ? 'Joining...' : 'Join'}
     </Button>
@@ -123,6 +124,12 @@ const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean; onJoin: (tribe
             <Eye className="mr-1.5 h-3.5 w-3.5" /> View
           </Button>
         </Link>
+      ) : !isLoggedIn ? (
+        <Link href={`/t/${tribe.slug}`} passHref>
+          <Button variant="outline" size="sm">
+            <Eye className="mr-1.5 h-3.5 w-3.5" /> View
+          </Button>
+        </Link>
       ) : isPending ? (
         <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
           <Clock className="h-3.5 w-3.5" /> Pending
@@ -131,7 +138,6 @@ const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean; onJoin: (tribe
             <TooltipProvider>
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        {/* The disabled button needs a div wrapper for TooltipTrigger to work */}
                         <div className="inline-block">{joinButton}</div>
                     </TooltipTrigger>
                     <TooltipContent>
@@ -161,9 +167,11 @@ export default function TribesPage() {
   const [joiningStates, setJoiningStates] = useState<Record<string, boolean>>({});
   const [pendingTribeIds, setPendingTribeIds] = useState<Set<string>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
-  const { user } = useUser();
+  const { user, role } = useUser();
+  const router = useRouter();
   const { toast } = useToast();
-  const canCreate = user?.role !== 'Human_Free';
+  const isLoggedIn = !!role;
+  const canCreate = isLoggedIn && user?.role !== 'Human_Free';
 
   // New state for the join dialog
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
@@ -175,7 +183,7 @@ export default function TribesPage() {
   };
 
   const syncData = async () => {
-    // Fetch membership from DB (sole source of truth)
+    // Fetch tribes (public ones for guests, all visible for logged-in users)
     const [fetchedTribes, memberTribeIds] = await Promise.all([
       getTribes(),
       getMyTribeIds(),
@@ -183,15 +191,17 @@ export default function TribesPage() {
     setAllTribes(fetchedTribes);
     setMyTribeIds(memberTribeIds);
 
-    // Check pending status for public approval tribes the user hasn't joined
-    const approvalTribes = fetchedTribes.filter(
-      t => t.isPublic && t.joinMechanism === 'approval' && !memberTribeIds.includes(t.id)
-    );
-    if (approvalTribes.length > 0) {
-      const pendingChecks = await Promise.all(
-        approvalTribes.map(t => checkPendingMembership(t.id).then(isPending => ({ id: t.id, isPending })))
+    // Check pending status only for logged-in users on approval tribes
+    if (memberTribeIds.length > 0 || isLoggedIn) {
+      const approvalTribes = fetchedTribes.filter(
+        t => t.isPublic && t.joinMechanism === 'approval' && !memberTribeIds.includes(t.id)
       );
-      setPendingTribeIds(new Set(pendingChecks.filter(c => c.isPending).map(c => c.id)));
+      if (approvalTribes.length > 0) {
+        const pendingChecks = await Promise.all(
+          approvalTribes.map(t => checkPendingMembership(t.id).then(isPending => ({ id: t.id, isPending })))
+        );
+        setPendingTribeIds(new Set(pendingChecks.filter(c => c.isPending).map(c => c.id)));
+      }
     }
   };
   
@@ -207,6 +217,11 @@ export default function TribesPage() {
   
   const handleOpenJoinDialog = (tribeToJoin: Tribe) => {
     if (!tribeToJoin) return;
+    if (!isLoggedIn) {
+      // Redirect unauthenticated users to signup
+      router.push('/signup');
+      return;
+    }
     setTribeToJoin(tribeToJoin);
     setIsJoinDialogOpen(true);
   };
@@ -255,16 +270,18 @@ export default function TribesPage() {
       );
     };
 
-    const myTribesList = allTribes.filter(t => myTribeIds.includes(t.id) && matchesSearch(t));
+    const myTribesList = isLoggedIn
+      ? allTribes.filter(t => myTribeIds.includes(t.id) && matchesSearch(t))
+      : [];
     const discoverTribesList = allTribes.filter(t => !myTribeIds.includes(t.id) && t.isPublic && t.id !== '0' && matchesSearch(t));
     return { myTribes: myTribesList, discoverTribes: discoverTribesList };
-  }, [allTribes, myTribeIds, isClient, searchTerm]);
+  }, [allTribes, myTribeIds, isClient, searchTerm, isLoggedIn]);
 
   const renderTribeList = (tribes: Tribe[], isMyTribeList: boolean) => (
     <Card className="shadow-lg">
       <CardContent className="p-0">
         {tribes.length > 0 ? (
-          tribes.map(tribe => <TribeListItem key={tribe.id} tribe={tribe} isMyTribe={isMyTribeList} onJoin={handleOpenJoinDialog} isJoining={!!joiningStates[tribe.id]} user={user} isPending={pendingTribeIds.has(tribe.id)} />)
+          tribes.map(tribe => <TribeListItem key={tribe.id} tribe={tribe} isMyTribe={isMyTribeList} onJoin={handleOpenJoinDialog} isJoining={!!joiningStates[tribe.id]} user={user} isPending={pendingTribeIds.has(tribe.id)} isLoggedIn={isLoggedIn} />)
         ) : (
           <p className="p-4 text-center text-muted-foreground">No tribes in this category.</p>
         )}
@@ -365,6 +382,12 @@ export default function TribesPage() {
                         View Tribe <ArrowRight className="ml-2 h-4 w-4" />
                         </Button>
                     </Link>
+                    ) : !isLoggedIn ? (
+                    <Link href={`/t/${tribe.slug}`} passHref className="w-full">
+                        <Button variant="outline" className="w-full">
+                        <Eye className="mr-2 h-4 w-4" /> View Tribe
+                        </Button>
+                    </Link>
                     ) : pendingTribeIds.has(tribe.id) ? (
                         <div className="w-full flex items-center justify-center gap-2 py-2 text-sm text-amber-600 dark:text-amber-400 font-medium">
                           <Clock className="h-4 w-4" />
@@ -397,21 +420,30 @@ export default function TribesPage() {
       <div className="space-y-8">
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
           <div className="flex flex-col md:flex-row md:items-baseline md:gap-3">
-            <h1 className="text-2xl sm:text-4xl font-bold tracking-normal text-foreground font-mono">Your Tribes</h1>
+            <h1 className="text-2xl sm:text-4xl font-bold tracking-normal text-foreground font-mono">{isLoggedIn ? 'Your Tribes' : 'Explore Tribes'}</h1>
             <p className="text-lg text-muted-foreground mt-1 md:mt-0">
-              Manage your existing tribes or discover new ones to join.
+              {isLoggedIn ? 'Manage your existing tribes or discover new ones to join.' : 'Discover public communities and find your people.'}
             </p>
           </div>
-          <Link href={canCreate ? "/tribes/create" : "/billing"} passHref>
-            <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-              {canCreate ? (
-                <PlusCircle className="mr-2 h-5 w-5" />
-              ) : (
-                <HeartHandshake className="mr-2 h-5 w-5" />
-              )}
-              {canCreate ? "Create New Tribe" : "Upgrade to Create"}
-            </Button>
-          </Link>
+          {isLoggedIn ? (
+            <Link href={canCreate ? "/tribes/create" : "/billing"} passHref>
+              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                {canCreate ? (
+                  <PlusCircle className="mr-2 h-5 w-5" />
+                ) : (
+                  <HeartHandshake className="mr-2 h-5 w-5" />
+                )}
+                {canCreate ? "Create New Tribe" : "Upgrade to Create"}
+              </Button>
+            </Link>
+          ) : (
+            <Link href="/signup" passHref>
+              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <UserPlus className="mr-2 h-5 w-5" />
+                Sign Up to Join
+              </Button>
+            </Link>
+          )}
         </header>
 
         <div className="mb-8 flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -445,24 +477,26 @@ export default function TribesPage() {
           </div>
         </div>
 
-        <section>
-          <h2 className="text-2xl font-semibold text-foreground mb-4">My Tribes</h2>
-          {myTribes.length > 0 ? (
-            viewMode === 'card' ? renderTribeCards(myTribes, true) : renderTribeList(myTribes, true)
-          ) : (
-            <Card className="text-center p-8">
-              <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <CardTitle className="tracking-normal">No Tribes Yet</CardTitle>
-              <CardDescription className="mt-2 mb-4">You haven't joined or created any tribes. Start by creating one or exploring existing communities.</CardDescription>
-              <Link href="/tribes/create" passHref>
-                <Button variant="default">Create Your First Tribe</Button>
-              </Link>
-            </Card>
-          )}
-        </section>
+        {isLoggedIn && (
+          <section>
+            <h2 className="text-2xl font-semibold text-foreground mb-4">My Tribes</h2>
+            {myTribes.length > 0 ? (
+              viewMode === 'card' ? renderTribeCards(myTribes, true) : renderTribeList(myTribes, true)
+            ) : (
+              <Card className="text-center p-8">
+                <Users className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                <CardTitle className="tracking-normal">No Tribes Yet</CardTitle>
+                <CardDescription className="mt-2 mb-4">You haven't joined or created any tribes. Start by creating one or exploring existing communities.</CardDescription>
+                <Link href="/tribes/create" passHref>
+                  <Button variant="default">Create Your First Tribe</Button>
+                </Link>
+              </Card>
+            )}
+          </section>
+        )}
 
-        <section className="mt-12">
-          <h2 className="text-2xl font-semibold text-foreground mb-4">Discover Tribes</h2>
+        <section className={isLoggedIn ? "mt-12" : ""}>
+          <h2 className="text-2xl font-semibold text-foreground mb-4">{isLoggedIn ? 'Discover Tribes' : 'Public Tribes'}</h2>
          {discoverTribes.length > 0 ? (
            viewMode === 'card' ? renderTribeCards(discoverTribes, false) : renderTribeList(discoverTribes, false)
          ) : (

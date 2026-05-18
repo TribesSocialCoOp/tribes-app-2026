@@ -6,9 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft, Vote, Clock, Users, CheckCircle2, XCircle,
   Loader2, Lock, Sparkles, AlertTriangle,
+  Shield, Crown, ThumbsUp, ThumbsDown, Scale, Landmark,
+  Gavel, Globe,
 } from "lucide-react";
 import { useUser } from "@/hooks/use-user";
 import { useToast } from "@/hooks/use-toast";
@@ -17,19 +21,41 @@ import { getMySubscription } from "@/lib/actions/profile-actions";
 import type { Proposal } from "@/lib/services/voting-service";
 
 import { AuthGuard } from '@/components/providers/auth-guard';
+import { ProposalDiscussion } from './proposal-discussion';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 
-export default function ProposalDetailPage() {
+export default function ProposalDetailPage({ proposalId: propProposalId }: { proposalId?: string }) {
   return (
     <AuthGuard message="Sign in to view proposal details and cast your vote.">
-      <ProposalDetailContent />
+      <ProposalDetailContent proposalId={propProposalId} />
     </AuthGuard>
   );
 }
 
-function ProposalDetailContent() {
+/** Renders the admin shield or founder crown flair badge */
+function CreatorFlair({ role, isFounder, size = 'sm' }: { role: string; isFounder: boolean; size?: 'sm' | 'lg' }) {
+  const isLg = size === 'lg';
+  if (role === 'Admin') {
+    return (
+      <Badge variant="outline" className={`gap-1 border-amber-400/50 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 font-semibold ${isLg ? 'text-xs px-2.5 py-0.5' : 'text-[10px]'}`}>
+        <Shield className={isLg ? 'h-3.5 w-3.5' : 'h-3 w-3'} /> Platform Admin
+      </Badge>
+    );
+  }
+  if (isFounder) {
+    return (
+      <Badge variant="outline" className={`gap-1 border-violet-400/50 bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 font-semibold ${isLg ? 'text-xs px-2.5 py-0.5' : 'text-[10px]'}`}>
+        <Crown className={isLg ? 'h-3.5 w-3.5' : 'h-3 w-3'} /> Tribe Founder
+      </Badge>
+    );
+  }
+  return null;
+}
+
+function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: string }) {
   const router = useRouter();
   const params = useParams();
-  const proposalId = params.proposalId as string;
+  const proposalId = propProposalId || (params.proposalId as string);
   const { role, user } = useUser();
   const { toast } = useToast();
 
@@ -132,6 +158,19 @@ function ProposalDetailContent() {
   const showResults = hasVoted || !isActive || isExpired;
   const winningOption = [...proposal.options].sort((a, b) => b.voteCount - a.voteCount)[0];
 
+  // Detect binary up/down vote structure
+  const isBinaryVote = proposal.options.length === 2;
+  const supportOpt = proposal.options.find(o =>
+    o.label.toLowerCase().includes('support') || o.label.toLowerCase().includes('yes') ||
+    o.label.toLowerCase().includes('adopt') || o.label.toLowerCase().includes('approve')
+  );
+  const opposeOpt = proposal.options.find(o =>
+    o.label.toLowerCase().includes('oppose') || o.label.toLowerCase().includes('no') ||
+    o.label.toLowerCase().includes('reject') || o.label.toLowerCase().includes('ban') ||
+    o.label.toLowerCase().includes('send back')
+  );
+  const showBinaryUI = isBinaryVote && supportOpt && opposeOpt;
+
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <div className="flex items-center mt-2">
@@ -140,12 +179,18 @@ function ProposalDetailContent() {
         </Button>
       </div>
 
-      {/* Proposal Header */}
-      <Card className="shadow-xl">
-        <CardHeader>
+      {/* ── Proposal Header ── */}
+      <Card className="shadow-xl overflow-hidden">
+        {/* Status ribbon */}
+        <div className={`h-1.5 w-full ${
+          proposal.status === 'active' ? 'bg-gradient-to-r from-green-400 to-emerald-500' :
+          proposal.status === 'closed' ? 'bg-gradient-to-r from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700' :
+          'bg-gradient-to-r from-red-400 to-rose-500'
+        }`} />
+        <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1 min-w-0">
-              <div className="flex items-center gap-2">
+            <div className="space-y-2 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
                 <CardTitle className="text-xl font-bold">{proposal.title}</CardTitle>
                 <Badge
                   variant={proposal.status === 'active' ? 'default' : proposal.status === 'closed' ? 'secondary' : 'destructive'}
@@ -154,45 +199,217 @@ function ProposalDetailContent() {
                   {proposal.status}
                 </Badge>
               </div>
-              <CardDescription className="text-sm">
-                Proposed by <span className="font-medium">{proposal.creatorName}</span>
-                {' · '}
-                {proposal.createdAt.toLocaleDateString()}
-              </CardDescription>
+
+              {/* Creator info with flair */}
+              <div className="flex items-center gap-3">
+                <Avatar className="h-8 w-8">
+                  {proposal.creatorAvatar && <AvatarImage src={proposal.creatorAvatar} alt={proposal.creatorName} />}
+                  <AvatarFallback className="text-xs font-semibold">
+                    {proposal.creatorName.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-muted-foreground">
+                    Proposed by <span className="font-semibold text-foreground">{proposal.creatorName}</span>
+                  </span>
+                  <CreatorFlair role={proposal.creatorRole} isFounder={proposal.creatorIsFounder} size="lg" />
+                </div>
+              </div>
             </div>
-            <Vote className="h-8 w-8 text-primary shrink-0" />
+            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <Scale className="h-6 w-6 text-primary" />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm leading-relaxed">{proposal.description}</p>
+          <MarkdownContent content={proposal.description} className="text-sm leading-relaxed" />
+
+          <Separator />
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <Users className="h-4 w-4" /> {proposal.voteCount} total votes
+              <Users className="h-4 w-4" /> {proposal.voteCount} total vote{proposal.voteCount !== 1 ? 's' : ''}
             </span>
             <span className="flex items-center gap-1.5">
               <Clock className="h-4 w-4" />
               {isExpired ? 'Ended ' : 'Ends '}
               {proposal.deadline.toLocaleDateString()}
             </span>
+            <span className="text-xs">
+              {proposal.createdAt.toLocaleDateString()}
+            </span>
           </div>
         </CardContent>
       </Card>
 
-      {/* Voting / Results */}
+      {/* ── Legal Disclaimer ── */}
+      <div className="rounded-lg border border-amber-200 dark:border-amber-800/50 bg-amber-50/80 dark:bg-amber-950/30 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Landmark className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+          <p className="text-xs text-amber-800/80 dark:text-amber-300/70">
+            Tribes cannot entertain any proposals that violate United States Federal Law or Washington State Law.
+            Tribes reserves the right to refuse any proposal, but is committed to giving a reason.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Voting / Results ── */}
       <Card className="shadow-xl">
         <CardHeader>
-          <CardTitle className="text-lg">
-            {showResults ? 'Results' : 'Cast Your Vote'}
-          </CardTitle>
+          <div className="flex items-center gap-2">
+            {showResults ? (
+              <Gavel className="h-5 w-5 text-primary" />
+            ) : (
+              <Vote className="h-5 w-5 text-primary" />
+            )}
+            <CardTitle className="text-lg">
+              {showResults ? 'Results' : 'Cast Your Vote'}
+            </CardTitle>
+          </div>
           {hasVoted && isActive && (
             <CardDescription className="flex items-center gap-1 text-green-600">
               <CheckCircle2 className="h-4 w-4" /> You've already voted
             </CardDescription>
           )}
+          {!hasVoted && isActive && canVote && (
+            <CardDescription>You have one vote — choose wisely.</CardDescription>
+          )}
         </CardHeader>
         <CardContent className="space-y-3">
-          {proposal.options.map(opt => {
+
+          {/* ── Binary Up/Down Vote UI ── */}
+          {showBinaryUI && !showResults && isActive ? (
+            <div className="grid grid-cols-2 gap-4">
+              {/* SUPPORT */}
+              <button
+                className={`group relative flex flex-col items-center justify-center rounded-xl border-2 p-6 transition-all duration-200 ${
+                  hasVoted || !canVote
+                    ? 'opacity-60 cursor-not-allowed border-muted'
+                    : 'border-green-200 dark:border-green-800 hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer active:scale-[0.98]'
+                } ${voting === supportOpt!.id ? 'animate-pulse border-green-500' : ''}`}
+                onClick={() => { if (canVote && !hasVoted && !voting) handleVote(supportOpt!.id); }}
+                disabled={!!voting || hasVoted || !canVote}
+              >
+                {voting === supportOpt!.id ? (
+                  <Loader2 className="h-10 w-10 animate-spin text-green-500 mb-2" />
+                ) : (
+                  <ThumbsUp className={`h-10 w-10 mb-2 transition-transform ${
+                    canVote && !hasVoted ? 'text-green-500 group-hover:scale-110' : 'text-muted-foreground'
+                  }`} />
+                )}
+                <span className="font-semibold text-sm">{supportOpt!.label}</span>
+              </button>
+
+              {/* OPPOSE */}
+              <button
+                className={`group relative flex flex-col items-center justify-center rounded-xl border-2 p-6 transition-all duration-200 ${
+                  hasVoted || !canVote
+                    ? 'opacity-60 cursor-not-allowed border-muted'
+                    : 'border-red-200 dark:border-red-800 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer active:scale-[0.98]'
+                } ${voting === opposeOpt!.id ? 'animate-pulse border-red-500' : ''}`}
+                onClick={() => { if (canVote && !hasVoted && !voting) handleVote(opposeOpt!.id); }}
+                disabled={!!voting || hasVoted || !canVote}
+              >
+                {voting === opposeOpt!.id ? (
+                  <Loader2 className="h-10 w-10 animate-spin text-red-500 mb-2" />
+                ) : (
+                  <ThumbsDown className={`h-10 w-10 mb-2 transition-transform ${
+                    canVote && !hasVoted ? 'text-red-400 group-hover:scale-110' : 'text-muted-foreground'
+                  }`} />
+                )}
+                <span className="font-semibold text-sm">{opposeOpt!.label}</span>
+              </button>
+            </div>
+          ) : null}
+
+          {/* ── Binary Results View ── */}
+          {showBinaryUI && showResults ? (
+            <div className="space-y-4">
+              {/* Support bar */}
+              <div className={`rounded-lg border p-4 transition-all ${
+                proposal.userVoteOptionId === supportOpt!.id
+                  ? 'border-green-500/50 bg-green-50/50 dark:bg-green-900/10 ring-1 ring-green-500/20'
+                  : 'border-border'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <ThumbsUp className="h-5 w-5 text-green-500" />
+                    <span className="font-semibold text-sm">{supportOpt!.label}</span>
+                    {proposal.userVoteOptionId === supportOpt!.id && (
+                      <Badge variant="outline" className="text-[10px] border-green-300 text-green-700 dark:text-green-300">Your vote</Badge>
+                    )}
+                    {supportOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
+                      <Badge className="text-[10px] bg-green-600 text-white">Leading</Badge>
+                    )}
+                  </div>
+                  <span className="text-sm font-mono font-bold text-green-700 dark:text-green-300">
+                    {supportOpt!.percentage}% <span className="text-xs text-muted-foreground">({supportOpt!.voteCount})</span>
+                  </span>
+                </div>
+                <div className="h-3 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${supportOpt!.percentage}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Oppose bar */}
+              <div className={`rounded-lg border p-4 transition-all ${
+                proposal.userVoteOptionId === opposeOpt!.id
+                  ? 'border-red-500/50 bg-red-50/50 dark:bg-red-900/10 ring-1 ring-red-500/20'
+                  : 'border-border'
+              }`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <ThumbsDown className="h-5 w-5 text-red-400" />
+                    <span className="font-semibold text-sm">{opposeOpt!.label}</span>
+                    {proposal.userVoteOptionId === opposeOpt!.id && (
+                      <Badge variant="outline" className="text-[10px] border-red-300 text-red-700 dark:text-red-300">Your vote</Badge>
+                    )}
+                    {opposeOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
+                      <Badge className="text-[10px] bg-red-600 text-white">Leading</Badge>
+                    )}
+                  </div>
+                  <span className="text-sm font-mono font-bold text-red-700 dark:text-red-300">
+                    {opposeOpt!.percentage}% <span className="text-xs text-muted-foreground">({opposeOpt!.voteCount})</span>
+                  </span>
+                </div>
+                <div className="h-3 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-red-400 to-rose-500 rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${opposeOpt!.percentage}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Remaining options (option 3+) */}
+              {proposal.options.filter(o => o.id !== supportOpt!.id && o.id !== opposeOpt!.id).map(opt => (
+                <div key={opt.id} className={`rounded-lg border p-4 ${
+                  proposal.userVoteOptionId === opt.id ? 'border-primary bg-primary/5' : ''
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-sm">{opt.label}</span>
+                      {opt.id === proposal.userVoteOptionId && <Badge variant="outline" className="text-[10px]">Your vote</Badge>}
+                    </div>
+                    <span className="text-sm font-mono font-bold">
+                      {opt.percentage}% <span className="text-xs text-muted-foreground">({opt.voteCount})</span>
+                    </span>
+                  </div>
+                  <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary/70 rounded-full transition-all duration-500"
+                      style={{ width: `${opt.percentage}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {/* ── Multi-option fallback (not binary) ── */}
+          {!showBinaryUI && proposal.options.map(opt => {
             const isUserChoice = opt.id === proposal.userVoteOptionId;
             const isWinner = showResults && opt.id === winningOption?.id && proposal.voteCount > 0;
             const isVotingThis = voting === opt.id;
@@ -271,6 +488,37 @@ function ProposalDetailContent() {
             </Button>
           </CardFooter>
         )}
+      </Card>
+
+      {/* ── Discussion Thread ── */}
+      <ProposalDiscussion
+        proposalId={proposal.id}
+        currentUserId={user?.id}
+        isAdmin={isAdmin}
+      />
+
+      {/* ── How It Works ── */}
+      <Card className="bg-muted/30 border-dashed">
+        <CardContent className="p-4 sm:p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Gavel className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-muted-foreground">How Co-Op Governance Works</h3>
+          </div>
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <div className="flex items-start gap-2">
+              <span className="font-mono text-primary font-bold">1.</span>
+              <span>Each member gets <strong>one vote</strong> per proposal — up or down.</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-mono text-primary font-bold">2.</span>
+              <span>Only paid or founding Co-Op members can vote.</span>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="font-mono text-primary font-bold">3.</span>
+              <span>Proposals auto-close at their deadline. Results are final.</span>
+            </div>
+          </div>
+        </CardContent>
       </Card>
     </div>
   );

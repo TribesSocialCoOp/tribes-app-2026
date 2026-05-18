@@ -2,6 +2,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useTribeIdFromParams } from '@/hooks/use-tribe-id';
 import { Button } from '@/components/ui/button';
 import { RoleBadge } from '@/components/ui/role-badge';
@@ -446,12 +447,16 @@ function ManageMembersContent() {
                                     onCheckedChange={() => togglePendingSelection(member.id)}
                                     disabled={isBulkProcessing}
                                   />
-                                  <Avatar className="h-9 w-9">
-                                      <AvatarImage src={member.avatar} alt={member.name} data-ai-hint={member.dataAiHint} />
-                                      <AvatarFallback>{member.name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                                  </Avatar>
+                                  <Link href={`/u/${member.slug || member.id}`} className="hover:opacity-80 transition-opacity">
+                                    <Avatar className="h-9 w-9">
+                                        <AvatarImage src={member.avatar} alt={member.name} data-ai-hint={member.dataAiHint} />
+                                        <AvatarFallback>{member.name.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                    </Avatar>
+                                  </Link>
                                   <div>
-                                      <p className="font-semibold text-sm">{member.name}</p>
+                                      <Link href={`/u/${member.slug || member.id}`} className="hover:underline">
+                                        <p className="font-semibold text-sm">{member.name}</p>
+                                      </Link>
                                       <p className="text-xs text-muted-foreground">Requested {new Date(member.requestTimestamp).toLocaleDateString()}</p>
                                   </div>
                               </div>
@@ -489,12 +494,16 @@ function ManageMembersContent() {
               {currentTribeMembers.map(member => (
                 <Card key={member.id} className="p-3 flex items-center justify-between hover:bg-muted/30 transition-colors">
                   <div className="flex items-center space-x-3 flex-grow">
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={member.avatar} alt={member.name} data-ai-hint={member.dataAiHint} />
-                      <AvatarFallback>{member.name.substring(0,2).toUpperCase()}</AvatarFallback>
-                    </Avatar>
+                    <Link href={`/u/${member.slug || member.id}`} className="hover:opacity-80 transition-opacity">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={member.avatar} alt={member.name} data-ai-hint={member.dataAiHint} />
+                        <AvatarFallback>{member.name.substring(0,2).toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                    </Link>
                     <div className="flex-grow">
-                      <p className="font-semibold text-sm">{member.name}</p>
+                      <Link href={`/u/${member.slug || member.id}`} className="hover:underline">
+                        <p className="font-semibold text-sm">{member.name}</p>
+                      </Link>
                       {member.tribeAssignedNickname ? (
                         <p className="text-xs text-primary mt-0.5">Nickname: <span className="italic">{member.tribeAssignedNickname}</span></p>
                       ) : (

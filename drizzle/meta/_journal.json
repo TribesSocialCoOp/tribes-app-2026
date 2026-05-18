@@ -1,145 +1,26 @@
 {
   "version": "7",
-  "dialect": "sqlite",
+  "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "6",
-      "when": 1774806619218,
-      "tag": "0000_rapid_wendell_rand",
+      "version": "7",
+      "when": 1779063601343,
+      "tag": "0000_modern_violations",
       "breakpoints": true
     },
     {
       "idx": 1,
-      "version": "6",
-      "when": 1774808620717,
-      "tag": "0001_lovely_frightful_four",
+      "version": "7",
+      "when": 1779072977574,
+      "tag": "0001_clever_champions",
       "breakpoints": true
     },
     {
       "idx": 2,
-      "version": "6",
-      "when": 1775262002546,
-      "tag": "0002_quiet_jack_flag",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1776902236888,
-      "tag": "0003_powerful_spectrum",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1776959078267,
-      "tag": "0004_ordinary_dazzler",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1776959572403,
-      "tag": "0005_smooth_reaper",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1776961359315,
-      "tag": "0006_late_captain_marvel",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1776961918889,
-      "tag": "0007_spicy_rhino",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1777071021017,
-      "tag": "0008_little_prism",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "6",
-      "when": 1777074362187,
-      "tag": "0009_nervous_centennial",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "6",
-      "when": 1777076007216,
-      "tag": "0010_mean_tyrannus",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "6",
-      "when": 1777153655575,
-      "tag": "0011_chief_steve_rogers",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "6",
-      "when": 1777163730885,
-      "tag": "0012_vengeful_power_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "6",
-      "when": 1777226103550,
-      "tag": "0013_curly_lionheart",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "6",
-      "when": 1777230444059,
-      "tag": "0014_glorious_purple_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "6",
-      "when": 1777230956794,
-      "tag": "0015_marvelous_misty_knight",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "6",
-      "when": 1777313741240,
-      "tag": "0016_smiling_dexter_bennett",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "6",
-      "when": 1777319947916,
-      "tag": "0017_cuddly_marvex",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "6",
-      "when": 1777340382594,
-      "tag": "0018_freezing_skin",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "6",
-      "when": 1777420733829,
-      "tag": "0019_chilly_psylocke",
+      "version": "7",
+      "when": 1779133850786,
+      "tag": "0002_even_fallen_one",
       "breakpoints": true
     }
   ]

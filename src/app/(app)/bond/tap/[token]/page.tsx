@@ -132,7 +132,7 @@ export default async function TapRedemptionPage({ params, searchParams }: TapRed
 
         {/* Expiry Notice */}
         <p className="mt-4 text-xs text-gray-500">
-          This link expires at {tokenInfo.expiresAt.toLocaleTimeString()}
+          This link expires on {tokenInfo.expiresAt.toLocaleDateString()} at {tokenInfo.expiresAt.toLocaleTimeString()}
         </p>
       </div>
     </div>

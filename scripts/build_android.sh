@@ -24,7 +24,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 AS_JDK="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 if [ -d "$AS_JDK" ]; then
     export JAVA_HOME="$AS_JDK"
-    echo -e "${GREEN}✓${NC} Using Android Studio JDK: $($JAVA_HOME/bin/java --version 2>&1 | head -1)"
+    echo -e "${GREEN}✓${NC} Using Android Studio JDK: $("$JAVA_HOME/bin/java" --version 2>&1 | head -1)"
 fi
 
 # Check Android SDK

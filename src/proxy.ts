@@ -26,7 +26,10 @@ function isPublicRoute(pathname: string): boolean {
   if (pathname.startsWith('/moods')) return true;
   if (pathname.startsWith('/post/')) return true;
   if (pathname.startsWith('/t/')) return true;  // New slug-based tribe routes
-  if (pathname.startsWith('/tribes/') && pathname !== '/tribes/create') return true;
+  if (pathname.startsWith('/u/')) return true;  // New slug-based profile routes
+  if (pathname.startsWith('/e/')) return true;  // New slug-based event routes
+  if (pathname.startsWith('/vote/')) return true;  // New slug-based voting routes
+  if ((pathname === '/tribes' || pathname.startsWith('/tribes/')) && pathname !== '/tribes/create') return true;
   
   // API routes handle their own auth
   if (pathname.startsWith('/api')) return true;
@@ -41,6 +44,30 @@ function isPublicRoute(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // ── Legacy voting URL redirect: /voting/[proposalId] → /api/resolve-proposal/[proposalId] ──
+  const legacyProposalMatch = pathname.match(/^\/voting\/(prop[a-zA-Z0-9_-]+)$/);
+  if (legacyProposalMatch) {
+    const proposalId = legacyProposalMatch[1];
+    const resolveUrl = buildUrl(`/api/resolve-proposal/${proposalId}`, request);
+    return NextResponse.rewrite(resolveUrl);
+  }
+
+  // ── Legacy event URL redirect: /events/[eventId] → /api/resolve-event/[eventId] ──
+  const legacyEventMatch = pathname.match(/^\/events\/(event[a-zA-Z0-9_-]+)$/);
+  if (legacyEventMatch) {
+    const eventId = legacyEventMatch[1];
+    const resolveUrl = buildUrl(`/api/resolve-event/${eventId}`, request);
+    return NextResponse.rewrite(resolveUrl);
+  }
+
+  // ── Legacy profile URL redirect: /profile/[userId] → /api/resolve-profile/[userId] ──
+  const legacyProfileMatch = pathname.match(/^\/profile\/([a-zA-Z0-9_-]+)$/);
+  if (legacyProfileMatch) {
+    const userId = legacyProfileMatch[1];
+    const resolveUrl = buildUrl(`/api/resolve-profile/${userId}`, request);
+    return NextResponse.rewrite(resolveUrl);
+  }
 
   // ── Legacy tribe URL redirect: /tribes/tribe-XXXX → /api/resolve-tribe/tribe-XXXX ──
   const legacyTribeMatch = pathname.match(/^\/tribes\/(tribe-\d+)(\/.*)?$/);

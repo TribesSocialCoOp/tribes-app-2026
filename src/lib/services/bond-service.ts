@@ -156,7 +156,7 @@ export async function getBonds(userId: string): Promise<Bond[]> {
         .where(eq(bonds.id, bond.id));
     }
 
-    // Phase 2C: Enrich user-type bonds with the peer's public key
+    // Phase 2C: Enrich user-type bonds with the peer's public key and slug
     if (bond.targetType === 'user') {
       const targetId = rows.find(r => r.id === bond.id)?.targetId;
       if (targetId) {
@@ -165,6 +165,13 @@ export async function getBonds(userId: string): Promise<Bond[]> {
           .where(and(eq(bonds.userId, targetId), eq(bonds.targetId, userId)))
           .limit(1);
         bond.peerPublicKeyJwk = peerBondRow?.publicKeyJwk ?? undefined;
+
+        // Fetch target user slug for canonical profile linking
+        const [targetUser] = await db.select({ slug: users.slug })
+          .from(users)
+          .where(eq(users.id, targetId))
+          .limit(1);
+        bond.targetSlug = targetUser?.slug ?? undefined;
       }
     }
 

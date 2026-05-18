@@ -73,9 +73,9 @@ const STATUS_COLORS: Record<string, string> = {
   'Elder': 'bg-rose-500/10 text-rose-400 border-rose-500/20',
 };
 
-export default function PublicProfilePage() {
+export default function PublicProfilePage({ userId: propUserId }: { userId?: string }) {
   const params = useParams();
-  const userId = params.userId as string;
+  const userId = propUserId || (params.userId as string);
   const router = useRouter();
   const { user } = useUser();
 

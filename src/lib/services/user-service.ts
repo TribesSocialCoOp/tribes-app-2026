@@ -73,6 +73,39 @@ export async function updateUserProfile(userId: string, updates: Partial<Omit<Us
     }
   }
 
+  // ── Handle user slug generation and redirect on name change ──
+  let newSlug = existing.slug;
+  if (updates.name && updates.name !== existing.name) {
+    const { generateUniqueSlug } = await import('@/lib/utils/slugify');
+    newSlug = await generateUniqueSlug(updates.name, async (candidate) => {
+      const existingCollision = await db.select({ id: users.id })
+        .from(users)
+        .where(and(
+          eq(users.slug, candidate),
+          ne(users.id, userId)
+        ))
+        .limit(1);
+      return existingCollision.length > 0;
+    });
+
+    if (existing.slug && existing.slug !== newSlug) {
+      const { userSlugRedirects } = await import('@/db/schema');
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 90);
+
+      // Clean up any existing redirects matching the new slug to prevent circular redirects
+      await db.delete(userSlugRedirects).where(eq(userSlugRedirects.oldSlug, newSlug));
+
+      // Record redirect
+      await db.insert(userSlugRedirects).values({
+        id: `redirect-${userId}-${crypto.randomUUID().substring(0, 8)}`,
+        oldSlug: existing.slug,
+        userId,
+        expiresAt,
+      });
+    }
+  }
+
   // ── Update core user fields ──────────────────────────────────
   await db.update(users).set({
     name: updates.name ?? existing.name,
@@ -82,6 +115,7 @@ export async function updateUserProfile(userId: string, updates: Partial<Omit<Us
     reservedAliasAvatar: updates.reservedAliasAvatar !== undefined ? (updates.reservedAliasAvatar || null) : existing.reservedAliasAvatar,
     reputationScore: updates.reputationScore ?? existing.reputationScore,
     reputationStatus: updates.reputationStatus ?? existing.reputationStatus,
+    slug: newSlug,
   }).where(eq(users.id, userId));
 
   // ── Sync aliases table ───────────────────────────────────────

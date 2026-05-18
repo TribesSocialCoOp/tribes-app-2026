@@ -2,6 +2,7 @@
 "use client";
 
 import Link from "next/link";
+import { eventPath } from '@/lib/utils/paths';
 import { useParams, useSearchParams } from "next/navigation";
 import React, { useState, useEffect, Suspense, useCallback } from "react";
 import Image from "next/image";
@@ -174,7 +175,7 @@ function EventStreamContent() {
 
       <CardFooter className="flex flex-col sm:flex-row gap-2 p-3 border-t rounded-b-lg">
         <Button asChild className="w-full sm:flex-1" size="sm" variant="outline">
-          <Link href={`/events/${eventId}`}>
+          <Link href={eventPath(eventId)}>
             View Full Event Details
           </Link>
         </Button>

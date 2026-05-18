@@ -36,6 +36,33 @@ function sanitizeSlugSegment(segment: string): string {
 export function buildPostPath(postId: string, slug?: string | null, tribeSlug?: string | null): string {
   const safeSlug = slug ? sanitizeSlugSegment(slug) : null;
   const safeTribeSlug = tribeSlug ? sanitizeSlugSegment(tribeSlug) : null;
-  const base = safeTribeSlug ? `/t/${safeTribeSlug}/post/${postId}` : `/post/${postId}`;
-  return safeSlug ? `${base}/${safeSlug}` : base;
+
+  if (safeTribeSlug && safeSlug) {
+    return `/t/${safeTribeSlug}/${safeSlug}`;
+  }
+  if (safeSlug) {
+    return `/p/${safeSlug}`;
+  }
+  return `/post/${postId}`;
 }
+
+/**
+ * Reusable helper to generate a unique slug by checking candidate availability.
+ */
+export async function generateUniqueSlug(
+  baseSlug: string,
+  existsFn: (candidate: string) => Promise<boolean>,
+  maxAttempts = 20
+): Promise<string> {
+  const clean = baseSlug.trim() ? slugify(baseSlug) : 'untitled';
+  const finalBase = clean || 'untitled';
+  
+  let candidate = finalBase;
+  for (let i = 1; i <= maxAttempts; i++) {
+    if (!(await existsFn(candidate))) return candidate;
+    candidate = `${finalBase}-${i}`;
+  }
+  // Final fallback: append short random suffix
+  return `${finalBase}-${Date.now().toString(36).slice(-4)}`;
+}
+

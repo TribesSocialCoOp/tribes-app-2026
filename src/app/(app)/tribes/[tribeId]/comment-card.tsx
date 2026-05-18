@@ -12,16 +12,19 @@ import {
   ResponsiveMenuItem,
   ResponsiveMenuTrigger,
 } from "@/components/ui/responsive-menu";
-import { Smile, MoreVertical, MoreHorizontal, Flag, UserRoundX, Lock } from "lucide-react";
+import { Smile, MoreVertical, MoreHorizontal, Flag, UserRoundX, Lock, Pencil, Check, X, Loader2 } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
 import { cn } from '@/lib/utils';
 import { VIBE_EMOTICONS } from '@/lib/constants';
 import { useIsMobile } from "@/hooks/use-mobile";
 import EmojiPicker, { EmojiClickData, Theme, EmojiStyle } from 'emoji-picker-react';
-import { toggleVibe } from '@/lib/actions/content-actions';
+import { toggleVibe, editComment } from '@/lib/actions/content-actions';
+import { useToast } from '@/hooks/use-toast';
 import type { DiscussionComment } from '@/lib/types';
 import type { CommentContext } from './tribe-detail-context';
 import Link from 'next/link';
+import { profilePath } from '@/lib/utils/paths';
 
 interface CommentCardProps {
   comment: DiscussionComment;
@@ -39,6 +42,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   comment, postId, level = 0,
   onReportComment, onOpenReplyDialog, isLoggedIn, isMember, currentUserId, tribeId,
 }) => {
+  const { toast } = useToast();
   const isCurrentUserAuthor = comment.authorId === currentUserId;
   const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
   const [vibeCount, setVibeCount] = useState(comment.vibes || 0);
@@ -48,6 +52,11 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [showFullPicker, setShowFullPicker] = useState(false);
   const isMobile = useIsMobile();
+
+  // ── Edit state ──
+  const [isEditing, setIsEditing] = useState(false);
+  const [editContent, setEditContent] = useState(comment.content);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
 
   // ── Comment decryption ──
@@ -125,6 +134,22 @@ export const CommentCard: React.FC<CommentCardProps> = ({
     }
   };
 
+  const handleSaveEdit = async () => {
+    if (!editContent.trim()) return;
+    setIsSavingEdit(true);
+    try {
+      await editComment(comment.id, editContent.trim());
+      setDisplayContent(editContent.trim());
+      setIsEditing(false);
+      toast({ title: 'Comment updated' });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to save';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   // Progressive indentation: cap at ml-6 on mobile to preserve content width
   const INDENT_CLASSES = ["ml-0", "ml-3", "ml-5", "ml-6", "ml-6"] as const;
   const indentClass = INDENT_CLASSES[Math.min(level, INDENT_CLASSES.length - 1)];
@@ -139,7 +164,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
           <>
             <div className="hidden md:block shrink-0">
               {!comment.authorIsAlias ? (
-                <Link href={`/profile/${comment.authorId}`}>
+                <Link href={profilePath(comment.authorId, comment.authorSlug)}>
                   <UserAvatar 
                     user={{ name: comment.authorName, avatar: comment.authorAvatar }} 
                     className="h-6 w-6 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" 
@@ -159,7 +184,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
           </>
         ) : (
           !comment.authorIsAlias ? (
-            <Link href={`/profile/${comment.authorId}`}>
+            <Link href={profilePath(comment.authorId, comment.authorSlug)}>
               <UserAvatar 
                 user={{ name: comment.authorName, avatar: comment.authorAvatar }} 
                 className="h-8 w-8 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" 
@@ -180,7 +205,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
           <div className={cn("flex justify-between", isDeep ? "flex-col gap-0.5 md:flex-row md:items-center" : "items-center")}>
             <div className="flex items-center gap-1.5 min-w-0">
               {!comment.authorIsAlias ? (
-                <Link href={`/profile/${comment.authorId}`} className="hover:underline decoration-primary/30 underline-offset-2">
+                <Link href={profilePath(comment.authorId, comment.authorSlug)} className="hover:underline decoration-primary/30 underline-offset-2">
                   <p className="text-xs font-semibold truncate">{comment.authorName}</p>
                 </Link>
               ) : (
@@ -195,7 +220,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               {isDeep && (
                 <p className="text-[10px] text-muted-foreground whitespace-nowrap">{format(comment.timestamp, "MMM d, h:mm a")}</p>
               )}
-              {isLoggedIn && !isCurrentUserAuthor && (
+              {isLoggedIn && (
                 <ResponsiveMenu>
                   <ResponsiveMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-6 w-6 touch-target-44 text-muted-foreground">
@@ -203,15 +228,27 @@ export const CommentCard: React.FC<CommentCardProps> = ({
                     </Button>
                   </ResponsiveMenuTrigger>
                   <ResponsiveMenuContent align="end">
-                    <ResponsiveMenuItem onClick={() => onReportComment(comment)}>
-                      <Flag className="mr-2 h-4 w-4" /> Report
-                    </ResponsiveMenuItem>
-                    <ResponsiveMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={() => setIsBlockDialogOpen(true)}
-                    >
-                      <UserRoundX className="mr-2 h-4 w-4" /> Block User
-                    </ResponsiveMenuItem>
+                    {isCurrentUserAuthor && (
+                      <ResponsiveMenuItem onClick={() => {
+                        setEditContent(displayContent);
+                        setIsEditing(true);
+                      }}>
+                        <Pencil className="mr-2 h-4 w-4" /> Edit
+                      </ResponsiveMenuItem>
+                    )}
+                    {!isCurrentUserAuthor && (
+                      <>
+                        <ResponsiveMenuItem onClick={() => onReportComment(comment)}>
+                          <Flag className="mr-2 h-4 w-4" /> Report
+                        </ResponsiveMenuItem>
+                        <ResponsiveMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setIsBlockDialogOpen(true)}
+                        >
+                          <UserRoundX className="mr-2 h-4 w-4" /> Block User
+                        </ResponsiveMenuItem>
+                      </>
+                    )}
                   </ResponsiveMenuContent>
                 </ResponsiveMenu>
               )}
@@ -235,8 +272,31 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               <span className="text-xs">Decryption failed</span>
             </div>
           )}
-          {(!comment.isEncrypted || decryptionStatus === 'success') && (
-            <p className="text-sm whitespace-pre-line mt-1">{displayContent}</p>
+          {/* Content / Edit mode */}
+          {isEditing ? (
+            <div className="mt-1.5 space-y-2">
+              <Textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                className="min-h-[60px] text-sm resize-none"
+                autoFocus
+              />
+              <div className="flex items-center gap-2 justify-end">
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setIsEditing(false)} disabled={isSavingEdit}>
+                  <X className="mr-1 h-3 w-3" /> Cancel
+                </Button>
+                <Button size="sm" className="h-7 text-xs" onClick={handleSaveEdit} disabled={isSavingEdit || !editContent.trim()}>
+                  {isSavingEdit ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
+                  Save
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {(!comment.isEncrypted || decryptionStatus === 'success') && (
+                <p className="text-sm whitespace-pre-line mt-1">{displayContent}</p>
+              )}
+            </>
           )}
         </div>
       </div>
