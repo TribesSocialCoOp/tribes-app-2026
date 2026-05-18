@@ -25,8 +25,7 @@
 *.pem
 
 # Terraform — NEVER commit state or variable files containing secrets
-infra/terraform/terraform.tfstate
-infra/terraform/terraform.tfstate.backup
+infra/terraform/*.tfstate*
 infra/terraform/terraform.tfvars
 infra/terraform/.terraform/
 
