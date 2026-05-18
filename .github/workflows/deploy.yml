@@ -34,11 +34,19 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup SSH Agent
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.PROD_KEY }}
-          ssh-passphrase: ${{ secrets.PROD_KEY_PASSPHRASE }}
+      - name: Setup SSH Agent with Passphrase
+        env:
+          SSH_PASSPHRASE: ${{ secrets.PROD_KEY_PASSPHRASE }}
+          SSH_PRIVATE_KEY: ${{ secrets.PROD_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          eval $(ssh-agent -s)
+          printf '%s\n' "echo \"\$SSH_PASSPHRASE\"" > ~/.ssh_askpass
+          chmod +x ~/.ssh_askpass
+          printf '%s\n' "$SSH_PRIVATE_KEY" | DISPLAY=None SSH_ASKPASS=~/.ssh_askpass ssh-add -
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
+
 
       - name: Execute Deploy Script
         env:
