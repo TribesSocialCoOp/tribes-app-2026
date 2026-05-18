@@ -59,6 +59,11 @@ if [ ! -f "$KEYSTORE_PROPS" ]; then
 fi
 echo -e "${GREEN}✓${NC} keystore.properties found"
 
+# Resolve version details
+VERSION_NAME=$(node -p "require('./package.json').version")
+VERSION_CODE=$(git rev-list --count HEAD 2>/dev/null || echo "1")
+echo -e "${GREEN}✓${NC} Version: ${VERSION_NAME} (Build ${VERSION_CODE})"
+
 # ── Sync web assets ──────────────────────────────────────────
 
 echo ""
