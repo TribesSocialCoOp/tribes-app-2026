@@ -106,64 +106,68 @@ else
   ok "Image built: tribes-app:latest (${BUILD_ID})"
 
   # ── Step 3b: Crypto module integrity hash ────────────────────
-  log "Hashing crypto source files for integrity verification..."
-  CRYPTO_SRC="$LOCAL_DIR/src/lib/crypto"
   AUDIT_REPO="$LOCAL_DIR/scratch/tribes-encryption-audit"
-  INTEGRITY_FILE="$AUDIT_REPO/crypto-integrity.json"
-  # Sync current source files to the audit repo (keeps published code in sync)
-  log "Syncing crypto source to audit repo..."
-  for f in "$CRYPTO_SRC"/*.ts; do
-    NAME=$(basename "$f")
-    TARGET="$AUDIT_REPO/src/$NAME"
-    # Add copyright header if the source file doesn't have one
-    if head -1 "$f" | grep -q "Copyright"; then
-      cp "$f" "$TARGET"
-    else
-      echo '// Copyright (c) 2026 Tribes Social Co-Op. MIT License.' > "$TARGET"
-      echo '// https://github.com/TribesSocialCoOp/tribes-encryption-audit' >> "$TARGET"
-      echo '' >> "$TARGET"
-      cat "$f" >> "$TARGET"
-    fi
-  done
+  if [ -d "$AUDIT_REPO" ]; then
+    log "Hashing crypto source files for integrity verification..."
+    CRYPTO_SRC="$LOCAL_DIR/src/lib/crypto"
+    INTEGRITY_FILE="$AUDIT_REPO/crypto-integrity.json"
+    # Sync current source files to the audit repo (keeps published code in sync)
+    log "Syncing crypto source to audit repo..."
+    for f in "$CRYPTO_SRC"/*.ts; do
+      NAME=$(basename "$f")
+      TARGET="$AUDIT_REPO/src/$NAME"
+      # Add copyright header if the source file doesn't have one
+      if head -1 "$f" | grep -q "Copyright"; then
+        cp "$f" "$TARGET"
+      else
+        echo '// Copyright (c) 2026 Tribes Social Co-Op. MIT License.' > "$TARGET"
+        echo '// https://github.com/TribesSocialCoOp/tribes-encryption-audit' >> "$TARGET"
+        echo '' >> "$TARGET"
+        cat "$f" >> "$TARGET"
+      fi
+    done
 
-  # Build the JSON with source file hashes
-  INTEGRITY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  cat > "$INTEGRITY_FILE" <<INTEGRITY_EOF
+    # Build the JSON with source file hashes
+    INTEGRITY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    cat > "$INTEGRITY_FILE" <<INTEGRITY_EOF
 {
   "buildId": "$BUILD_ID",
   "timestamp": "$INTEGRITY_TIMESTAMP",
   "sources": {
 INTEGRITY_EOF
 
-  FIRST=true
-  for f in "$CRYPTO_SRC"/*.ts; do
-    NAME=$(basename "$f")
-    HASH=$(shasum -a 256 "$f" | awk '{print $1}')
-    if [ "$FIRST" = true ]; then
-      FIRST=false
-    else
-      echo "," >> "$INTEGRITY_FILE"
-    fi
-    printf '    "%s": "%s"' "$NAME" "$HASH" >> "$INTEGRITY_FILE"
-  done
+    FIRST=true
+    for f in "$CRYPTO_SRC"/*.ts; do
+      NAME=$(basename "$f")
+      HASH=$(shasum -a 256 "$f" | awk '{print $1}')
+      if [ "$FIRST" = true ]; then
+        FIRST=false
+      else
+        echo "," >> "$INTEGRITY_FILE"
+      fi
+      printf '    "%s": "%s"' "$NAME" "$HASH" >> "$INTEGRITY_FILE"
+    done
 
-  cat >> "$INTEGRITY_FILE" <<INTEGRITY_EOF
+    cat >> "$INTEGRITY_FILE" <<INTEGRITY_EOF
 
   }
 }
 INTEGRITY_EOF
 
-  # Auto-commit source files + hashes to audit repo
-  if [ -d "$AUDIT_REPO/.git" ]; then
-    cd "$AUDIT_REPO"
-    git add src/ crypto-integrity.json
-    if ! git diff --cached --quiet 2>/dev/null; then
-      git commit -m "integrity: source + hashes for build $BUILD_ID" -q
-      git push -q 2>/dev/null && ok "Crypto source + hashes pushed to audit repo" || warn "Audit repo push failed (run manually)"
-    else
-      ok "Crypto source + hashes unchanged"
+    # Auto-commit source files + hashes to audit repo
+    if [ -d "$AUDIT_REPO/.git" ]; then
+      cd "$AUDIT_REPO"
+      git add src/ crypto-integrity.json
+      if ! git diff --cached --quiet 2>/dev/null; then
+        git commit -m "integrity: source + hashes for build $BUILD_ID" -q
+        git push -q 2>/dev/null && ok "Crypto source + hashes pushed to audit repo" || warn "Audit repo push failed (run manually)"
+      else
+        ok "Crypto source + hashes unchanged"
+      fi
+      cd "$LOCAL_DIR"
     fi
-    cd "$LOCAL_DIR"
+  else
+    log "Audit repository not found at $AUDIT_REPO. Skipping crypto module integrity sync."
   fi
 fi
 
