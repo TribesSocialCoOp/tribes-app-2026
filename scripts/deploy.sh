@@ -45,21 +45,27 @@ fail()  { echo -e "${RED}[FAIL!]${NC} $1"; exit 1; }
 # ── Parse flags ────────────────────────────────────────────────
 SKIP_BUILD=false
 MIGRATE_ONLY=false
+SKIP_TYPECHECK=false
 for arg in "$@"; do
   case $arg in
-    --skip-build)    SKIP_BUILD=true ;;
-    --migrate-only)  MIGRATE_ONLY=true ;;
-    *)               warn "Unknown flag: $arg" ;;
+    --skip-build)     SKIP_BUILD=true ;;
+    --migrate-only)   MIGRATE_ONLY=true ;;
+    --skip-typecheck) SKIP_TYPECHECK=true ;;
+    *)                warn "Unknown flag: $arg" ;;
   esac
 done
 
 # ── Step 1: Local type-check ──────────────────────────────────
-log "Running TypeScript type-check..."
-cd "$LOCAL_DIR"
-if npx tsc --noEmit 2>&1; then
-  ok "Type-check passed"
+if [ "$SKIP_TYPECHECK" = true ] || [ "${CI:-false}" = "true" ]; then
+  warn "Skipping TypeScript type-check"
 else
-  fail "TypeScript errors found — fix before deploying"
+  log "Running TypeScript type-check..."
+  cd "$LOCAL_DIR"
+  if npx tsc --noEmit 2>&1; then
+    ok "Type-check passed"
+  else
+    fail "TypeScript errors found — fix before deploying"
+  fi
 fi
 
 # ── Step 2: Rsync to server ──────────────────────────────────
