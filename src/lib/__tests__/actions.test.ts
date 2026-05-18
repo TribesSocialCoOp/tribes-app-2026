@@ -207,7 +207,7 @@ describe('Hardcoded Values Regression', () => {
     const { execSync } = await import('child_process');
     const result = execSync(
       'grep -r "baseTribeMemberships" src/ --include="*.tsx" --include="*.ts" --exclude-dir="__tests__" || echo "CLEAN"',
-      { cwd: '/Users/dustmoo/Sites/tribes-app-2026', encoding: 'utf-8' }
+      { cwd: process.cwd(), encoding: 'utf-8' }
     );
     expect(result.trim()).toBe('CLEAN');
   });
@@ -216,7 +216,7 @@ describe('Hardcoded Values Regression', () => {
     const { execSync } = await import('child_process');
     const result = execSync(
       'grep -r "myCreatedTribeIds" src/ --include="*.tsx" --include="*.ts" --exclude-dir="__tests__" || echo "CLEAN"',
-      { cwd: '/Users/dustmoo/Sites/tribes-app-2026', encoding: 'utf-8' }
+      { cwd: process.cwd(), encoding: 'utf-8' }
     );
     expect(result.trim()).toBe('CLEAN');
   });
@@ -225,7 +225,7 @@ describe('Hardcoded Values Regression', () => {
     const { execSync } = await import('child_process');
     const result = execSync(
       'grep -r "MOCK_CURRENT_DATE" src/ --include="*.tsx" --include="*.ts" --exclude-dir="__tests__" || echo "CLEAN"',
-      { cwd: '/Users/dustmoo/Sites/tribes-app-2026', encoding: 'utf-8' }
+      { cwd: process.cwd(), encoding: 'utf-8' }
     );
     expect(result.trim()).toBe('CLEAN');
   });
@@ -236,7 +236,7 @@ describe('DRY Regression Guards', () => {
     const { execSync } = await import('child_process');
     const result = execSync(
       'grep -rl "function timeSince\\|const timeSince" src/ --include="*.tsx" --include="*.ts" --exclude-dir="__tests__" || echo "NONE"',
-      { cwd: '/Users/dustmoo/Sites/tribes-app-2026', encoding: 'utf-8' }
+      { cwd: process.cwd(), encoding: 'utf-8' }
     );
     const files = result.trim().split('\n').filter(f => f !== 'NONE');
     expect(files).toHaveLength(1);
@@ -247,7 +247,7 @@ describe('DRY Regression Guards', () => {
     const { execSync } = await import('child_process');
     const result = execSync(
       'grep -r "placehold.co" src/lib/services/ --include="*.ts" || echo "CLEAN"',
-      { cwd: '/Users/dustmoo/Sites/tribes-app-2026', encoding: 'utf-8' }
+      { cwd: process.cwd(), encoding: 'utf-8' }
     );
     expect(result.trim()).toBe('CLEAN');
   });
@@ -256,7 +256,7 @@ describe('DRY Regression Guards', () => {
     const { execSync } = await import('child_process');
     const result = execSync(
       'grep -r "(Simulated)" src/ --include="*.tsx" --include="*.ts" --exclude-dir="__tests__" || echo "CLEAN"',
-      { cwd: '/Users/dustmoo/Sites/tribes-app-2026', encoding: 'utf-8' }
+      { cwd: process.cwd(), encoding: 'utf-8' }
     );
     expect(result.trim()).toBe('CLEAN');
   });
@@ -265,14 +265,14 @@ describe('DRY Regression Guards', () => {
     const { execSync } = await import('child_process');
     const result = execSync(
       'grep -rl "VIBE_EMOTICONS" src/ --include="*.tsx" --include="*.ts" --exclude-dir="__tests__" || echo "NONE"',
-      { cwd: '/Users/dustmoo/Sites/tribes-app-2026', encoding: 'utf-8' }
+      { cwd: process.cwd(), encoding: 'utf-8' }
     );
     const files = result.trim().split('\n').filter(f => f !== 'NONE');
     // Should only appear in constants.ts (definition) and consumers (imports)
     const definitionFiles = [];
     for (const file of files) {
       const { execSync: exec } = await import('child_process');
-      const content = exec(`grep "VIBE_EMOTICONS" "${file}"`, { cwd: '/Users/dustmoo/Sites/tribes-app-2026', encoding: 'utf-8' });
+      const content = exec(`grep "VIBE_EMOTICONS" "${file}"`, { cwd: process.cwd(), encoding: 'utf-8' });
       // Check if file defines (not just imports) the constant
       if (content.includes('= {') || content.includes('= [') || content.includes(': Record')) {
         definitionFiles.push(file);
@@ -288,7 +288,7 @@ describe('Decomposition Regression Guards', () => {
     const { execSync } = await import('child_process');
     const result = execSync(
       'grep -rl "export const TribePostCard\\|export function TribePostCard" src/ --include="*.tsx" --include="*.ts" --exclude-dir="__tests__" || echo "NONE"',
-      { cwd: '/Users/dustmoo/Sites/tribes-app-2026', encoding: 'utf-8' }
+      { cwd: process.cwd(), encoding: 'utf-8' }
     );
     const files = result.trim().split('\n').filter(f => f !== 'NONE');
     expect(files).toHaveLength(1);
@@ -299,7 +299,7 @@ describe('Decomposition Regression Guards', () => {
     const { execSync } = await import('child_process');
     const result = execSync(
       'grep -rl "export const ConnectVibeIcon\\|const ConnectVibeIcon" src/ --include="*.tsx" --include="*.ts" --exclude-dir="__tests__" || echo "NONE"',
-      { cwd: '/Users/dustmoo/Sites/tribes-app-2026', encoding: 'utf-8' }
+      { cwd: process.cwd(), encoding: 'utf-8' }
     );
     const files = result.trim().split('\n').filter(f => f !== 'NONE');
     expect(files).toHaveLength(1);
