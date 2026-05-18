@@ -108,3 +108,8 @@ keys/
 # Apple Sign-In private key
 keys/*.p8
 .ios-build-floor
+
+# Local dev posts and associated draft assets
+docs/dev-post-*
+docs/post-*
+docs/images/
