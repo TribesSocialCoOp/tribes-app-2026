@@ -28,7 +28,7 @@ Common causes:
 
 ### What To Do
 
-![The amber banner shows which bonds need syncing and provides step-by-step instructions for recovery.](/Users/dustmoo/Sites/tribes-app-2026/docs/images/key-sync/banner-amber.png)
+![The amber banner shows which bonds need syncing and provides step-by-step instructions for recovery.](./images/key-sync/banner-amber.png)
 
 **Option 1: Restore from Vault Backup** (recommended)
 
@@ -38,7 +38,7 @@ If you've backed up your Key Vault (Settings > Key Vault), tap **"Restore with P
 
 If you never backed up your vault, the app will warn you to go to your other device and create a backup first. If you lost your passphrase or no longer have the other device, you can reset the affected bond keys. Tap **"Advanced: Reset keys"** on the banner to reveal the reset option.
 
-![The advanced reset option is tucked away to prevent accidental data loss. It warns you that past messages will become unreadable.](/Users/dustmoo/Sites/tribes-app-2026/docs/images/key-sync/banner-amber-advanced.png)
+![The advanced reset option is tucked away to prevent accidental data loss. It warns you that past messages will become unreadable.](./images/key-sync/banner-amber-advanced.png)
 
 What happens when you reset:
 - New encryption keys are generated for the affected bonds
@@ -58,7 +58,7 @@ The app is telling you: your keys are good here, but if you switch to another de
 
 ### What To Do
 
-![The blue banner prompts you to update your vault when your local keys are newer than your backup.](/Users/dustmoo/Sites/tribes-app-2026/docs/images/key-sync/banner-blue.png)
+![The blue banner prompts you to update your vault when your local keys are newer than your backup.](./images/key-sync/banner-blue.png)
 
 1. Go to **Settings > Key Vault**
 2. Enter your recovery passphrase
@@ -90,7 +90,7 @@ If you've recently reset keys: this is expected. New messages going forward will
 
 **Back up your Key Vault.** That's it. That's the whole thing.
 
-![The Key Vault section in Settings allows you to manage your passphrase and see the health of your local and cloud keys.](/Users/dustmoo/Sites/tribes-app-2026/docs/images/key-sync/vault-settings.png)
+![The Key Vault section in Settings allows you to manage your passphrase and see the health of your local and cloud keys.](./images/key-sync/vault-settings.png)
   
 1. Go to **Settings > Key Vault**
 2. Create a recovery passphrase (something you'll remember)

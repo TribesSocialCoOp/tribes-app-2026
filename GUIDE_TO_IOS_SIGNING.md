@@ -1,6 +1,6 @@
 # Tribes iOS — Signing & TestFlight Guide
 
-> Adapted from the [Hobbes macOS signing guide](file:///Users/dustmoo/Sites/cai-hobbes/GUIDE_TO_APPLE_SIGNING.md) for iOS Capacitor.
+> Adapted from the [Hobbes macOS signing guide](../cai-hobbes/GUIDE_TO_APPLE_SIGNING.md) for iOS Capacitor.
 
 ## TL;DR — Get on TestFlight
 

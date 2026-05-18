@@ -1,6 +1,6 @@
 # Tribes Android — Signing & Play Console Testing Guide
 
-> A companion guide to [GUIDE_TO_IOS_SIGNING.md](file:///Users/dustmoo/Sites/tribes-app-2026/GUIDE_TO_IOS_SIGNING.md) for Android Capacitor.
+> A companion guide to [GUIDE_TO_IOS_SIGNING.md](./GUIDE_TO_IOS_SIGNING.md) for Android Capacitor.
 
 ---
 

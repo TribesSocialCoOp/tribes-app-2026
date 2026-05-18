@@ -11,7 +11,7 @@ import { revalidatePath } from 'next/cache';
 
 /**
  * Helper to mask emails for privacy (PII protection).
- * E.g., "dustmoo@example.com" -> "d******@example.com"
+ * E.g., "user@example.com" -> "u******@example.com"
  */
 function maskEmail(email: string | null): string {
   if (!email) return 'No Email';
