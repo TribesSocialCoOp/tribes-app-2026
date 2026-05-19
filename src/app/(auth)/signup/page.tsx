@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AppLogo } from "@/components/icons/app-logo";
-import { Fingerprint, Loader2, Mail, Ticket, CheckCircle2, AlertTriangle, KeyRound, XCircle, User } from "lucide-react";
+import { Fingerprint, Loader2, Mail, Ticket, CheckCircle2, AlertTriangle, KeyRound, XCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { startRegistration } from "@simplewebauthn/browser";
 import { registerUserAction, finishRegistrationAction, registerWithPasswordAction } from "@/lib/auth-actions";
@@ -141,6 +141,28 @@ function SignupForm() {
     }
   }
 
+  async function handleSandboxInviteClick(code: string) {
+    setInviteCode(code);
+    setIsValidatingCode(true);
+    try {
+      const result = await validateInviteCode(code);
+      setIsInviteValidated(true);
+      setInvitePlanName(result.planName);
+      toast({
+        title: "Sandbox Code Validated!",
+        description: `Successfully validated invite code for ${result.planName} plan.`,
+      });
+    } catch (error: unknown) {
+      toast({
+        variant: "destructive",
+        title: "Sandbox Validation Failed",
+        description: error instanceof Error ? error.message : "This invite code is not valid.",
+      });
+    } finally {
+      setIsValidatingCode(false);
+    }
+  }
+
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     if (!name || !email) return;
@@ -191,7 +213,7 @@ function SignupForm() {
           return;
         }
 
-        // Initialize local E2E key in IndexedDB so they can start reading/writing encrypted posts immediately
+        // Initialize local E2E key in IndexedDB
         try {
           const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
           await getOrCreateJournalKey();
@@ -200,10 +222,9 @@ function SignupForm() {
           console.error('[auth] Failed to initialize local E2E key store:', cryptoErr);
         }
       } else {
-        // 1. Get registration options from server (with invite code validation)
+        // 1. Get registration options from server
         const result = await registerUserAction(name, email, inviteCode || undefined, turnstileToken ?? undefined);
 
-        // Surface any server-side errors (rate limit, duplicate email, bot check, etc.)
         if ('error' in result) {
           toast({ variant: 'destructive', title: 'Registration Failed', description: result.error });
           turnstileRef.current?.reset();
@@ -219,7 +240,7 @@ function SignupForm() {
           optionsJSON: options,
         });
 
-        // 3. Finish registration on server (auto-redeems invite code + creates user atomically)
+        // 3. Finish registration on server
         await finishRegistrationAction(userId, regResponse, name, email, validatedCode);
 
         // 4. Initialize E2E Vault (Phase 3: PRF)
@@ -228,22 +249,17 @@ function SignupForm() {
           const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
           const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
 
-          // Create the initial personal journal key (stored in IndexedDB)
           console.log('[auth] Initializing E2E journal key...');
           await getOrCreateJournalKey();
 
-          // Evaluate PRF output from registration
           // @ts-expect-error — PRF extension results type not yet in @simplewebauthn/browser types
           const rawPrf = regResponse.clientExtensionResults?.prf?.results?.first;
-          // Validate it is actually an ArrayBuffer of the expected size before use
           const prfOutput = rawPrf instanceof ArrayBuffer && rawPrf.byteLength >= 32 ? rawPrf : null;
 
           if (prfOutput) {
             console.log('[auth] PRF extension found, creating initial vault...');
             const wrappingKey = await derivePrfWrappingKey(prfOutput);
             const encryptedVault = await encryptVaultWithPrf(wrappingKey);
-            
-            // Efficiently convert ArrayBuffer to base64 via Buffer (O(n), not O(n^2))
             const base64Vault = Buffer.from(encryptedVault).toString('base64');
 
             await savePrfVaultAction(base64Vault, regResponse.id);
@@ -253,11 +269,10 @@ function SignupForm() {
           }
         } catch (cryptoErr) {
           console.error('[auth] E2E initialization failed:', cryptoErr);
-          // We don't block registration if vault creation fails, but it is a degraded state.
         }
       }
 
-      // Record TOS acceptance (user checked the checkbox before submit)
+      // Record TOS acceptance
       try {
         const { acceptTermsOfService } = await import('@/lib/actions/legal-actions');
         const { getLatestTosVersion } = await import('@/lib/actions/legal-actions');
@@ -274,29 +289,25 @@ function SignupForm() {
           : "Your passkey has been registered successfully.",
       });
 
-      // Redirect to returnTo (e.g. the tribe/bond invite) or default feed
       const returnTo = searchParams.get('returnTo');
       router.push(returnTo || "/your-comms");
     } catch (error: unknown) {
       console.error("Signup failed:", error);
 
-      // Handle user cancelling the passkey prompt gracefully
       const errObj = error instanceof Error ? error : null;
       if (errObj?.name === 'NotAllowedError' || errObj?.message?.includes('timed out or was not allowed')) {
         toast({
           title: "Registration Cancelled",
           description: "Passkey creation was cancelled. You can try again when you're ready.",
         });
-        return; // Don't show the generic error
+        return;
       }
 
-      // Sanitize error messages — never expose raw browser/server internals to users
       toast({
         variant: "destructive",
         title: "Registration Failed",
         description: "There was an error creating your account. Please try again.",
       });
-      // Reset Turnstile so the user gets a fresh token on retry
       turnstileRef.current?.reset();
       setTurnstileToken(null);
     } finally {
@@ -305,23 +316,23 @@ function SignupForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-2xl">
-        <CardHeader className="space-y-1 text-center">
-          <div className="flex justify-center mb-4">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground p-4">
+      <Card className="w-full max-w-md shadow-2xl border border-border/80 bg-card text-card-foreground">
+        <CardHeader className="space-y-2 text-center pt-8">
+          <div className="flex justify-center mb-4 text-primary">
             <AppLogo width={64} height={64} />
           </div>
-          <CardTitle className="text-3xl font-bold font-mono text-primary">Join Tribes</CardTitle>
+          <CardTitle className="text-2xl font-bold font-mono tracking-tight">Join Tribes</CardTitle>
           <CardDescription>Secure, local-first community identity</CardDescription>
         </CardHeader>
         <form onSubmit={handleSignup}>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 px-6 py-2">
             {/* Invite-Only Gate */}
             {INVITE_ONLY && (
-              <div className="space-y-2">
-                <Label htmlFor="inviteCode" className="flex items-center gap-1.5">
-                  <Ticket className="h-4 w-4" />
-                  Invite Code {isInviteValidated && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+              <div className="space-y-2 p-3 bg-muted/40 border border-border rounded-xl">
+                <Label htmlFor="inviteCode" className="flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">
+                  <Ticket className="h-3.5 w-3.5 text-primary" />
+                  Invite Code {isInviteValidated && <CheckCircle2 className="h-4 w-4 text-emerald-500 inline ml-1" />}
                 </Label>
                 {!isInviteValidated ? (
                   <div className="flex gap-2">
@@ -332,52 +343,33 @@ function SignupForm() {
                       value={inviteCode}
                       onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                       disabled={isValidatingCode}
-                      className="font-mono"
+                      className="font-mono h-10 bg-background border-input focus-visible:ring-primary rounded-xl"
                     />
                     <Button
                       type="button"
                       onClick={handleValidateInvite}
                       disabled={!inviteCode.trim() || isValidatingCode}
                       variant="secondary"
-                      className="shrink-0"
+                      className="shrink-0 h-10 px-4 bg-muted hover:bg-muted/80 text-foreground border border-border font-semibold rounded-xl"
                     >
                       {isValidatingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify'}
                     </Button>
                   </div>
                 ) : (
-                  <p className="text-sm text-green-600 font-medium">
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold tracking-wide font-mono">
                     ✓ Valid — {invitePlanName} access granted
                   </p>
                 )}
                 {!isInviteValidated && (
-                  <p className="text-xs text-muted-foreground">
-                    Tribes is currently invite-only. Enter your code to proceed.
+                  <p className="text-[10px] text-muted-foreground font-medium">
+                    Tribes is currently invite-only. Enter a code to proceed.
                   </p>
                 )}
               </div>
             )}
 
-            {isAuthMethodEnabled('password') && webAuthnSupported !== false && (
-              <div className="flex gap-2 p-1 bg-muted/50 rounded-lg border mb-4">
-                <button
-                  type="button"
-                  onClick={() => setSignupMethod('passkey')}
-                  className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${signupMethod === 'passkey' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Biometric Passkey
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSignupMethod('password')}
-                  className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${signupMethod === 'password' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-                >
-                  Password fallback
-                </button>
-              </div>
-            )}
-
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="name" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Full Name</Label>
               <Input 
                 id="name" 
                 type="text" 
@@ -386,12 +378,13 @@ function SignupForm() {
                 onChange={(e) => setName(e.target.value)}
                 required 
                 disabled={isLoading || !isInviteValidated}
+                className="h-11 bg-background border-input focus-visible:ring-primary rounded-xl"
               />
             </div>
 
             {signupMethod === 'password' && (
               <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Username</Label>
                 <Input 
                   id="username" 
                   type="text" 
@@ -400,13 +393,13 @@ function SignupForm() {
                   onChange={(e) => setUsername(e.target.value)}
                   required 
                   disabled={isLoading || !isInviteValidated}
-                  className="lowercase"
+                  className="lowercase h-11 bg-background border-input focus-visible:ring-primary rounded-xl"
                 />
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
+              <Label htmlFor="email" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Email Address</Label>
               <Input 
                 id="email" 
                 type="email" 
@@ -415,13 +408,14 @@ function SignupForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 required 
                 disabled={isLoading || !isInviteValidated}
+                className="h-11 bg-background border-input focus-visible:ring-primary rounded-xl"
               />
             </div>
 
             {signupMethod === 'password' && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Password</Label>
                   <Input 
                     id="password" 
                     type="password" 
@@ -429,10 +423,11 @@ function SignupForm() {
                     disabled={isLoading || !isInviteValidated}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    className="h-11 bg-background border-input focus-visible:ring-primary rounded-xl"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="confirm-password">Confirm Password</Label>
+                  <Label htmlFor="confirm-password" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Confirm Password</Label>
                   <Input 
                     id="confirm-password" 
                     type="password" 
@@ -440,17 +435,18 @@ function SignupForm() {
                     disabled={isLoading || !isInviteValidated}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="h-11 bg-background border-input focus-visible:ring-primary rounded-xl"
                   />
                 </div>
 
                 {/* Password strength checklist */}
-                <div className="p-4 bg-muted/40 rounded-xl border border-border/50 space-y-2 text-xs">
-                  <span className="font-semibold text-muted-foreground uppercase tracking-wider block mb-1">Complexity Requirements</span>
+                <div className="p-4 bg-muted/40 border border-border rounded-xl space-y-2 text-[11px] font-mono text-muted-foreground">
+                  <span className="font-bold text-muted-foreground uppercase tracking-widest text-[9px] block mb-1">Complexity Requirements</span>
                   <div className="flex items-center gap-2">
                     {password.length >= 12 ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                      <XCircle className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                     )}
                     <span className={password.length >= 12 ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground"}>
                       At least 12 characters
@@ -458,9 +454,9 @@ function SignupForm() {
                   </div>
                   <div className="flex items-center gap-2">
                     {/[A-Z]/.test(password) ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                      <XCircle className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                     )}
                     <span className={/[A-Z]/.test(password) ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground"}>
                       At least one uppercase letter
@@ -468,9 +464,9 @@ function SignupForm() {
                   </div>
                   <div className="flex items-center gap-2">
                     {/[a-z]/.test(password) ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                      <XCircle className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                     )}
                     <span className={/[a-z]/.test(password) ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground"}>
                       At least one lowercase letter
@@ -478,20 +474,20 @@ function SignupForm() {
                   </div>
                   <div className="flex items-center gap-2">
                     {(/[0-9]/.test(password) || /[!@#$%^&*(),.?":{}|<>]/.test(password)) ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                     ) : (
-                      <XCircle className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+                      <XCircle className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                     )}
                     <span className={(/[0-9]/.test(password) || /[!@#$%^&*(),.?":{}|<>]/.test(password)) ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-muted-foreground"}>
                       At least one number or symbol
                     </span>
                   </div>
                   {confirmPassword.length > 0 && (
-                    <div className="flex items-center gap-2 pt-1 border-t border-border/40 mt-1">
+                    <div className="flex items-center gap-2 pt-2 border-t border-border/40 mt-1 font-mono">
                       {password === confirmPassword ? (
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                       ) : (
-                        <XCircle className="h-4 w-4 text-destructive shrink-0" />
+                        <XCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
                       )}
                       <span className={password === confirmPassword ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-destructive font-medium"}>
                         {password === confirmPassword ? "Passwords match" : "Passwords do not match"}
@@ -501,13 +497,13 @@ function SignupForm() {
                 </div>
 
                 {/* E2E Informational Alert Callout */}
-                <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl text-xs space-y-1.5 leading-relaxed text-purple-600 dark:text-purple-400">
-                  <p className="font-bold flex items-center gap-1.5 text-purple-700 dark:text-purple-300">
-                    <AlertTriangle className="h-4 w-4 shrink-0 text-purple-600 dark:text-purple-400" />
-                    E2E Encryption Manual Backup
+                <div className="p-4 bg-muted/40 border border-border rounded-xl text-xs space-y-1.5 leading-relaxed text-muted-foreground">
+                  <p className="font-bold flex items-center gap-1.5 text-primary">
+                    <AlertTriangle className="h-4 w-4 shrink-0 text-primary" />
+                    Vault Backup Warning
                   </p>
-                  <p className="text-muted-foreground">
-                    Since you are registering with a username & password instead of a passkey, your encryption keys cannot sync automatically across devices. You <strong>must</strong> manually save your Recovery Phrase under <strong>Settings → Vault Backup</strong> after signing up to prevent losing access to your private messages and private tribes if you log in on a new device.
+                  <p className="text-[11px] leading-relaxed">
+                    With username & password registration, E2E encryption keys cannot sync automatically across devices. You <strong>must</strong> manually save your Recovery Phrase under <strong>Settings → Vault Backup</strong> after signing up.
                   </p>
                 </div>
               </>
@@ -522,47 +518,49 @@ function SignupForm() {
               className="mt-1"
             />
             
-            {/* Age Confirmation Checkbox (App Store compliance — COPPA / Guideline 1.3) */}
+            {/* Age Confirmation Checkbox */}
             <div className="flex items-start gap-3 pt-2">
               <Checkbox
                 id="age-confirm"
                 checked={ageConfirmed}
                 onCheckedChange={(checked) => setAgeConfirmed(checked === true)}
                 disabled={isLoading || !isInviteValidated}
+                className="mt-0.5 border-input bg-background data-[state=checked]:bg-primary data-[state=checked]:border-primary rounded-md"
               />
               <label
                 htmlFor="age-confirm"
-                className="text-sm leading-relaxed cursor-pointer text-muted-foreground"
+                className="text-xs leading-normal cursor-pointer text-muted-foreground select-none font-medium"
               >
                 I confirm that I am at least 13 years old.
               </label>
             </div>
 
             {/* TOS Agreement Checkbox */}
-            <div className="flex items-start gap-3 pt-2">
+            <div className="flex items-start gap-3 pt-1">
               <Checkbox
                 id="tos-signup-agree"
                 checked={tosAgreed}
                 onCheckedChange={(checked) => setTosAgreed(checked === true)}
                 disabled={isLoading || !isInviteValidated}
+                className="mt-0.5 border-input bg-background data-[state=checked]:bg-primary data-[state=checked]:border-primary rounded-md"
               />
               <label
                 htmlFor="tos-signup-agree"
-                className="text-sm leading-relaxed cursor-pointer text-muted-foreground"
+                className="text-xs leading-normal cursor-pointer text-muted-foreground select-none font-medium"
               >
                 I agree to the{" "}
-                <Link href="/terms" target="_blank" className="text-primary underline">Terms of Service</Link>
+                <Link href="/terms" target="_blank" className="text-primary hover:underline font-semibold transition-colors">Terms of Service</Link>
                 {" "}and{" "}
-                <Link href="/privacy" target="_blank" className="text-primary underline">Privacy Policy</Link>.
+                <Link href="/privacy" target="_blank" className="text-primary hover:underline font-semibold transition-colors">Privacy Policy</Link>.
               </label>
             </div>
 
             <div className="pt-4 space-y-3">
               {webAuthnSupported === false && signupMethod === 'passkey' && (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
+                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-600 dark:text-amber-400">
                   <p className="font-semibold mb-1">Passkeys Not Supported</p>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    Your browser or device does not support secure passkey registration. Please use the password fallback option.
+                  <p className="leading-relaxed text-muted-foreground">
+                    Your browser or device does not support secure passkey registration. Please use the password option below.
                   </p>
                 </div>
               )}
@@ -584,7 +582,7 @@ function SignupForm() {
                     !ageConfirmed || 
                     (INVITE_ONLY && !isInviteValidated)
                   }
-                  className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg"
+                  className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base shadow-sm rounded-xl"
                 >
                   {isLoading ? (
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -597,7 +595,7 @@ function SignupForm() {
                 <Button 
                   type="submit" 
                   disabled={isLoading || !name || !email || !tosAgreed || !ageConfirmed || (INVITE_ONLY && !isInviteValidated) || webAuthnSupported === false}
-                  className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg"
+                  className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base shadow-sm rounded-xl"
                 >
                   {isLoading ? (
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -608,105 +606,164 @@ function SignupForm() {
                 </Button>
               )}
               
-              <div className="relative flex items-center justify-center py-2">
-                <span className="absolute inset-x-0 h-px bg-muted" />
-                <span className="relative bg-background px-2 text-xs text-muted-foreground uppercase">
-                  Or use SSO fallback
+              {/* Subtle Theme-friendly Partition Line */}
+              <div className="relative flex items-center justify-center my-6">
+                <span className="absolute inset-x-0 h-px bg-border" />
+                <span className="relative bg-card px-3 text-[10px] uppercase tracking-wider text-muted-foreground font-bold font-mono">
+                  Or continue with
                 </span>
               </div>
 
-              <Button 
-                type="button" 
-                variant="outline" 
-                className="w-full h-11 border-primary/20 hover:bg-primary/5"
-                disabled={isLoading || !tosAgreed || !ageConfirmed || (INVITE_ONLY && !isInviteValidated)}
-                onClick={() => {
-                  const url = new URL('/api/auth/google', window.location.origin);
-                  if (inviteCode) url.searchParams.set('invite', inviteCode);
-                  window.location.href = url.toString();
-                }}
-              >
-                <Mail className="mr-2 h-4 w-4" />
-                Continue with Google
-              </Button>
-
-              <Button 
-                type="button" 
-                variant="outline" 
-                className="w-full h-11 bg-black text-white hover:bg-black/90 border-black"
-                disabled={isLoading || !tosAgreed || !ageConfirmed || (INVITE_ONLY && !isInviteValidated)}
-                onClick={async () => {
-                  const cap = (window as any).Capacitor;
-                  const isNativeIos = cap?.isNativePlatform?.() && cap?.getPlatform?.() === 'ios';
-
-                  if (isNativeIos) {
-                    try {
-                      const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
-                      const result = await SignInWithApple.authorize({
-                        clientId: 'app.tribes.web',
-                        redirectURI: 'https://tribes.app/api/auth/apple/callback',
-                        scopes: 'name email',
-                      });
-
-                      const res = await fetch('/api/auth/apple/native', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          identityToken: result.response.identityToken,
-                          givenName: result.response.givenName,
-                          familyName: result.response.familyName,
-                          email: result.response.email,
-                          inviteCode: inviteCode || undefined,
-                        }),
-                      });
-
-                      if (!res.ok) {
-                        const data = await res.json();
-                        throw new Error(data.error || 'Apple sign-in failed');
-                      }
-
-                      const returnTo = searchParams.get('returnTo');
-                      router.push(returnTo || '/your-comms');
-                    } catch (err: any) {
-                      if (err?.message?.includes('cancelled') || err?.code === '1001') return;
-                      console.error('[Apple Native] Error:', err);
-                      toast({
-                        variant: 'destructive',
-                        title: 'Sign Up Error',
-                        description: err?.message || 'Apple authentication failed. Please try again.',
-                      });
-                    }
-                  } else {
-                    const url = new URL('/api/auth/apple', window.location.origin);
+              {/* Side-by-Side Compact SSO buttons */}
+              <div className="grid grid-cols-2 gap-3">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="h-11 border-border bg-background hover:bg-accent text-foreground flex items-center justify-center gap-2 rounded-xl text-xs font-semibold"
+                  disabled={isLoading || !tosAgreed || !ageConfirmed || (INVITE_ONLY && !isInviteValidated)}
+                  onClick={() => {
+                    const url = new URL('/api/auth/google', window.location.origin);
                     if (inviteCode) url.searchParams.set('invite', inviteCode);
                     window.location.href = url.toString();
-                  }
-                }}
-              >
-                <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
-                </svg>
-                Continue with Apple
-              </Button>
+                  }}
+                >
+                  <Mail className="h-4 w-4 text-muted-foreground" />
+                  Google
+                </Button>
+
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="h-11 border-border bg-background hover:bg-accent text-foreground flex items-center justify-center gap-2 rounded-xl text-xs font-semibold"
+                  disabled={isLoading || !tosAgreed || !ageConfirmed || (INVITE_ONLY && !isInviteValidated)}
+                  onClick={async () => {
+                    const cap = (window as any).Capacitor;
+                    const isNativeIos = cap?.isNativePlatform?.() && cap?.getPlatform?.() === 'ios';
+
+                    if (isNativeIos) {
+                      try {
+                        const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
+                        const result = await SignInWithApple.authorize({
+                          clientId: 'app.tribes.web',
+                          redirectURI: 'https://tribes.app/api/auth/apple/callback',
+                          scopes: 'name email',
+                        });
+
+                        const res = await fetch('/api/auth/apple/native', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            identityToken: result.response.identityToken,
+                            givenName: result.response.givenName,
+                            familyName: result.response.familyName,
+                            email: result.response.email,
+                            inviteCode: inviteCode || undefined,
+                          }),
+                        });
+
+                        if (!res.ok) {
+                          const data = await res.json();
+                          throw new Error(data.error || 'Apple sign-in failed');
+                        }
+
+                        const returnTo = searchParams.get('returnTo');
+                        router.push(returnTo || '/your-comms');
+                      } catch (err: any) {
+                        if (err?.message?.includes('cancelled') || err?.code === '1001') return;
+                        console.error('[Apple Native] Error:', err);
+                        toast({
+                          variant: 'destructive',
+                          title: 'Sign Up Error',
+                          description: err?.message || 'Apple authentication failed. Please try again.',
+                        });
+                      }
+                    } else {
+                      const url = new URL('/api/auth/apple', window.location.origin);
+                      if (inviteCode) url.searchParams.set('invite', inviteCode);
+                      window.location.href = url.toString();
+                    }
+                  }}
+                >
+                  <svg className="h-4 w-4 fill-current text-foreground" viewBox="0 0 24 24">
+                    <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+                  </svg>
+                  Apple
+                </Button>
+              </div>
             </div>
           </CardContent>
         </form>
-        <CardFooter className="flex flex-col gap-4 border-t pt-6 bg-muted/30">
-          <p className="text-center text-sm text-muted-foreground">
+        <CardFooter className="flex flex-col gap-4 border-t border-border/40 pt-6 pb-8 bg-muted/20">
+          {/* State toggle link */}
+          {isAuthMethodEnabled('password') && webAuthnSupported !== false && (
+            <button
+              type="button"
+              onClick={() => setSignupMethod(signupMethod === 'passkey' ? 'password' : 'passkey')}
+              className="text-sm font-bold text-primary hover:text-primary/80 hover:underline transition-colors mt-1"
+            >
+              {signupMethod === 'passkey' ? "I prefer to use a password" : "I prefer to use a passkey"}
+            </button>
+          )}
+
+          <p className="text-center text-sm text-muted-foreground font-medium">
             Already have an account?{" "}
-            <Link href="/login" className="font-semibold text-primary hover:underline">
+            <Link href="/login" className="font-bold text-primary hover:text-primary/80 hover:underline transition-colors">
               Log In
             </Link>
           </p>
-          <p className="text-center text-xs text-muted-foreground">
-            <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>
+          <p className="text-center text-[10px] text-muted-foreground font-medium tracking-wide">
+            <Link href="/terms" className="underline hover:text-foreground transition-colors">Terms of Service</Link>
             {" · "}
-            <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>
+            <Link href="/privacy" className="underline hover:text-foreground transition-colors">Privacy Policy</Link>
             {" · "}
-            <Link href="/community-guidelines" className="underline hover:text-foreground">Guidelines</Link>
+            <Link href="/community-guidelines" className="underline hover:text-foreground transition-colors">Guidelines</Link>
           </p>
         </CardFooter>
       </Card>
+
+      {/* Dev Sandbox Widget for Seeded Invite Codes in local development */}
+      {process.env.NODE_ENV === "development" && INVITE_ONLY && (
+        <div className="w-full max-w-md mt-6 p-4 bg-muted/40 border border-dashed border-border rounded-xl space-y-3">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block text-center font-mono">
+            Dev Sandbox - Seeded Invite Codes
+          </span>
+          <div className="space-y-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleSandboxInviteClick('FOUNDING-ALPHA-001')}
+              disabled={isValidatingCode || isInviteValidated}
+              className="w-full h-9 bg-background hover:bg-accent font-mono text-[10px] tracking-wide rounded-lg flex items-center justify-between px-4 border border-border"
+            >
+              <span>🎫 founding-alpha-001</span>
+              <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded uppercase font-semibold">Co-Op Plan</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleSandboxInviteClick('FOUNDING-BETA-001')}
+              disabled={isValidatingCode || isInviteValidated}
+              className="w-full h-9 bg-background hover:bg-accent font-mono text-[10px] tracking-wide rounded-lg flex items-center justify-between px-4 border border-border"
+            >
+              <span>🎫 founding-beta-001</span>
+              <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded uppercase font-semibold">Co-Op Plan</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleSandboxInviteClick('INVITE-TSM-TEST')}
+              disabled={isValidatingCode || isInviteValidated}
+              className="w-full h-9 bg-background hover:bg-accent font-mono text-[10px] tracking-wide rounded-lg flex items-center justify-between px-4 border border-border"
+            >
+              <span>🎫 invite-tsm-test</span>
+              <span className="text-[9px] bg-primary/10 text-primary px-1.5 py-0.5 rounded uppercase font-semibold">Free Plan</span>
+            </Button>
+          </div>
+          <p className="text-[10px] text-muted-foreground font-medium text-center leading-normal">
+            Click any code to instantly auto-fill and auto-validate.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

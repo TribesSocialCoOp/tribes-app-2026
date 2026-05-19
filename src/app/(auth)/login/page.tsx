@@ -71,7 +71,6 @@ function LoginForm() {
         title: "Sign In Error",
         description,
       });
-      // Clear the error from the URL
       router.replace('/login', { scroll: false });
     }
   }, [searchParams, router, toast]);
@@ -79,12 +78,8 @@ function LoginForm() {
   async function handleLogin() {
     setIsLoading(true);
     try {
-      // 1. Get authentication options from server
       const options = await loginUserAction();
       
-      // 2. Inject the PRF extension client-side.
-      // The server cannot include this because the PRF salt must be a real
-      // ArrayBuffer/Uint8Array — Node Buffers don't survive JSON serialization.
       const { getPrfSaltBytes } = await import('@/lib/crypto');
       const prfSalt = await getPrfSaltBytes();
       const optionsWithPrf = {
@@ -97,38 +92,29 @@ function LoginForm() {
         },
       };
 
-      // 3. Start biometric authentication in browser
       const authResponse = await startAuthentication({
         optionsJSON: optionsWithPrf,
       });
 
-      // 4. Finish authentication on server
       await finishLoginAction(authResponse);
 
-      // 5. Handle E2E Key Recovery (Phase 3: PRF)
       try {
         const { hasAnyKeys, derivePrfWrappingKey, decryptAndRestoreVault } = await import('@/lib/crypto');
         const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
         
-        // If this is a fresh session (no keys in IndexedDB), try to restore
         if (!(await hasAnyKeys())) {
           console.log('[auth] Local keystore empty, attempting PRF recovery...');
           
-          // Extract PRF output from assertion
           // @ts-expect-error — PRF extension results type not yet in @simplewebauthn/browser types
           const rawPrf = authResponse.clientExtensionResults?.prf?.results?.first;
-          // Validate it is actually an ArrayBuffer of the expected size before use
           const prfOutput = rawPrf instanceof ArrayBuffer && rawPrf.byteLength >= 32 ? rawPrf : null;
 
           if (prfOutput) {
-            // Retrieve encrypted vault for this credential
             const vaultData = await getPrfVaultAction(authResponse.id);
             
             if (vaultData) {
               console.log('[auth] PRF vault found, decrypting...');
               const wrappingKey = await derivePrfWrappingKey(prfOutput);
-              
-              // Efficiently convert base64 to ArrayBuffer via Buffer (avoids O(n^2) string concat)
               const encryptedVault = Buffer.from(vaultData.encryptedVaultBase64, 'base64').buffer.slice(0);
               
               await decryptAndRestoreVault(wrappingKey, encryptedVault as ArrayBuffer);
@@ -154,29 +140,25 @@ function LoginForm() {
         description: "You have been logged in successfully.",
       });
 
-      // Redirect to returnTo (from bond invite, etc.) or default feed
       const returnTo = searchParams.get('callbackUrl') || searchParams.get('returnTo');
       router.push(returnTo || "/your-comms");
     } catch (error: unknown) {
       console.error("Login failed:", error);
 
-      // Handle user cancelling the passkey prompt gracefully
       const errObj = error instanceof Error ? error : null;
       if (errObj?.name === 'NotAllowedError' || errObj?.message?.includes('timed out or was not allowed')) {
         toast({
           title: "Sign In Cancelled",
           description: "Passkey authentication was cancelled. You can try again when you're ready.",
         });
-        return; // Don't show the generic error
+        return;
       }
 
-      // Sanitize error messages — never expose raw browser/server internals to users
       toast({
         variant: "destructive",
         title: "Login Failed",
         description: "Passkey authentication failed. Please try again.",
       });
-
     } finally {
       setIsLoading(false);
     }
@@ -204,7 +186,6 @@ function LoginForm() {
         return;
       }
 
-      // Initialize local E2E key in IndexedDB if not already present
       try {
         const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
         await getOrCreateJournalKey();
@@ -257,7 +238,6 @@ function LoginForm() {
         return;
       }
 
-      // Initialize local E2E key in IndexedDB if not already present
       try {
         const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
         await getOrCreateJournalKey();
@@ -308,189 +288,220 @@ function LoginForm() {
     }
   }
 
-  if (requiresTotp) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md shadow-2xl">
-          <CardHeader className="space-y-2 text-center">
-            <div className="flex justify-center mb-6">
-              <AppLogo width={72} height={72} />
-            </div>
-            <CardTitle className="text-3xl font-bold font-mono text-primary">Two-Factor Auth</CardTitle>
-            <CardDescription>Enter the 6-digit verification code from your authenticator app</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6 py-6">
-            <form onSubmit={handleTotpSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="totp-code">Verification Code</Label>
-                <Input
-                  id="totp-code"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={6}
-                  placeholder="000000"
-                  required
-                  disabled={isLoading}
-                  value={totpCode}
-                  onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
-                  className="h-12 text-center text-2xl tracking-[0.5em] font-mono bg-background/50 border-primary/20 focus-visible:ring-primary"
-                />
-              </div>
+  const renderBackgroundWrapper = (content: React.ReactNode) => (
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground p-4">
+      {content}
 
-              <Button
-                type="submit"
-                disabled={isLoading || totpCode.length !== 6}
-                className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg"
-              >
-                {isLoading ? (
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                ) : (
-                  <KeyRound className="mr-2 h-5 w-5" />
-                )}
-                Verify & Sign In
-              </Button>
-            </form>
-          </CardContent>
-          <CardFooter className="flex justify-center">
-            <button
-              onClick={() => {
-                setRequiresTotp(false);
-                setTotpChallengeToken(null);
-                setTotpCode("");
-              }}
-              className="text-xs text-muted-foreground hover:text-primary transition-colors font-semibold font-mono"
+      {/* Developer testing bypass options positioned cleanly below the card */}
+      {process.env.NODE_ENV === "development" && !requiresTotp && (
+        <div className="w-full max-w-md mt-6 p-4 bg-muted/40 border border-dashed border-border rounded-xl space-y-3">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest block text-center font-mono">
+            Automated Testing Sandbox
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => handleDevLogin('dustin' as any)}
+              className="bg-background hover:bg-accent font-mono text-[10px] h-9 tracking-wider rounded-lg border border-border"
+              disabled={isLoading}
             >
-              Cancel & Return to Login
-            </button>
-          </CardFooter>
-        </Card>
-      </div>
+              👑 Dustin (Founder)
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleDevLogin('admin')}
+              className="bg-background hover:bg-accent font-mono text-[10px] h-9 tracking-wider rounded-lg border border-border"
+              disabled={isLoading}
+            >
+              ⚠️ Test Admin
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleDevLogin('member')}
+              className="bg-background hover:bg-accent font-mono text-[10px] h-9 tracking-wider rounded-lg border border-border"
+              disabled={isLoading}
+            >
+              🔬 Test Member
+            </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => handleDevLogin('speaker')}
+              className="bg-background hover:bg-accent font-mono text-[10px] h-9 tracking-wider rounded-lg border border-border"
+              disabled={isLoading}
+            >
+              🗣️ Speaker Sam
+            </Button>
+          </div>
+          <Button 
+            variant="outline" 
+            onClick={() => handleDevLogin('free')}
+            className="w-full bg-background hover:bg-accent font-mono text-[10px] h-9 tracking-wider rounded-lg border border-border"
+            disabled={isLoading}
+          >
+            👤 Free Explorer User
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+
+  if (requiresTotp) {
+    return renderBackgroundWrapper(
+      <Card className="w-full max-w-md shadow-2xl border border-border/80 bg-card text-card-foreground">
+        <CardHeader className="space-y-2 text-center pt-8">
+          <div className="flex justify-center mb-4 text-primary">
+            <AppLogo width={64} height={64} />
+          </div>
+          <CardTitle className="text-2xl font-bold font-mono tracking-tight">Two-Factor Auth</CardTitle>
+          <CardDescription>Enter the 6-digit verification code from your authenticator app</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6 py-4 px-6">
+          <form onSubmit={handleTotpSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="totp-code" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Verification Code</Label>
+              <Input
+                id="totp-code"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                placeholder="000000"
+                required
+                disabled={isLoading}
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                className="h-12 text-center text-2xl tracking-[0.5em] font-mono bg-background border-input focus-visible:ring-primary rounded-xl"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              disabled={isLoading || totpCode.length !== 6}
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base shadow-sm rounded-xl"
+            >
+              {isLoading ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : (
+                <KeyRound className="mr-2 h-5 w-5" />
+              )}
+              Verify & Sign In
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="flex justify-center pb-8 pt-4 border-t border-border/40">
+          <button
+            onClick={() => {
+              setRequiresTotp(false);
+              setTotpChallengeToken(null);
+              setTotpCode("");
+            }}
+            className="text-xs text-primary hover:text-primary/80 hover:underline transition-colors font-semibold font-mono"
+          >
+            Cancel & Return to Login
+          </button>
+        </CardFooter>
+      </Card>
     );
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-2xl">
-        <CardHeader className="space-y-2 text-center">
-          <div className="flex justify-center mb-6">
-            <AppLogo width={72} height={72} />
-          </div>
-          <CardTitle className="text-3xl font-bold font-mono text-primary">Tribes Login</CardTitle>
-          <CardDescription>Authentication via biometric secure enclave</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6 py-6">
-          {isAuthMethodEnabled('password') && webAuthnSupported !== false && (
-            <div className="flex gap-2 p-1 bg-muted/50 rounded-lg border mb-4">
-              <button
-                type="button"
-                onClick={() => setLoginMethod('passkey')}
-                className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${loginMethod === 'passkey' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                Secure Passkey
-              </button>
-              <button
-                type="button"
-                onClick={() => setLoginMethod('password')}
-                className={`flex-1 py-2 text-sm font-semibold rounded-md transition-all ${loginMethod === 'password' ? 'bg-background shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                Password fallback
-              </button>
+  return renderBackgroundWrapper(
+    <Card className="w-full max-w-md shadow-2xl border border-border/80 bg-card text-card-foreground">
+      <CardHeader className="space-y-2 text-center pt-8">
+        <div className="flex justify-center mb-4 text-primary">
+          <AppLogo width={64} height={64} />
+        </div>
+        <CardTitle className="text-2xl font-bold font-mono tracking-tight">Tribes Login</CardTitle>
+        <CardDescription>
+          {loginMethod === 'passkey' ? "Authentication via biometric secure enclave" : "Sign in using username & password"}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6 py-4 px-6">
+        {loginMethod === 'password' ? (
+          <form onSubmit={handlePasswordLogin} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email-or-username" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Email or Username</Label>
+              <Input
+                id="email-or-username"
+                type="text"
+                placeholder="you@example.com or username"
+                required
+                disabled={isLoading}
+                value={emailOrUsername}
+                onChange={(e) => setEmailOrUsername(e.target.value)}
+                className="h-11 bg-background border-input focus-visible:ring-primary rounded-xl"
+              />
             </div>
-          )}
 
-          {loginMethod === 'password' ? (
-            <form onSubmit={handlePasswordLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email-or-username">Email or Username</Label>
-                <Input
-                  id="email-or-username"
-                  type="text"
-                  placeholder="you@example.com or username"
-                  required
-                  disabled={isLoading}
-                  value={emailOrUsername}
-                  onChange={(e) => setEmailOrUsername(e.target.value)}
-                  className="h-11 bg-background/50 border-primary/20 focus-visible:ring-primary"
-                />
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label htmlFor="password" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Password</Label>
+                <Link href="/forgot-password" className="text-xs font-semibold text-primary hover:text-primary/80 hover:underline">
+                  Forgot Password?
+                </Link>
               </div>
+              <Input
+                id="password"
+                type="password"
+                required
+                disabled={isLoading}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-11 bg-background border-input focus-visible:ring-primary rounded-xl"
+              />
+            </div>
 
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor="password">Password</Label>
-                  <Link href="/forgot-password" className="text-xs font-semibold text-primary hover:underline">
-                    Forgot Password?
-                  </Link>
-                </div>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  disabled={isLoading}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-11 bg-background/50 border-primary/20 focus-visible:ring-primary"
-                />
-              </div>
+            {/* Turnstile Widget */}
+            <div className="flex justify-center py-1">
+              <TurnstileWidget
+                ref={turnstileRef}
+                onVerified={setTurnstileToken}
+                onExpired={() => setTurnstileToken(null)}
+              />
+            </div>
 
-              {/* Turnstile Widget */}
-              <div className="flex justify-center py-2">
-                <TurnstileWidget
-                  ref={turnstileRef}
-                  onVerified={setTurnstileToken}
-                  onExpired={() => setTurnstileToken(null)}
-                />
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isLoading || !emailOrUsername.trim() || !password}
-                className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-lg"
-              >
-                {isLoading ? (
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                ) : (
-                  <KeyRound className="mr-2 h-5 w-5" />
-                )}
-                Sign In
-              </Button>
-            </form>
-          ) : (
-            <div className="space-y-4">
-              {webAuthnSupported === false && (
-                <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-sm text-amber-600 dark:text-amber-400">
-                  <p className="font-semibold mb-1">Passkeys Not Supported</p>
-                  <p className="text-xs leading-relaxed text-muted-foreground">
-                    Your browser or device does not support secure passkeys. Please use the password fallback option.
-                  </p>
-                </div>
+            <Button
+              type="submit"
+              disabled={isLoading || !emailOrUsername.trim() || !password}
+              className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base shadow-sm rounded-xl"
+            >
+              {isLoading ? (
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              ) : (
+                <KeyRound className="mr-2 h-5 w-5" />
               )}
-
-              <Button 
-                onClick={handleLogin}
-                disabled={isLoading || webAuthnSupported === false}
-                className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xl group transition-all"
-              >
-                {isLoading ? (
-                  <Loader2 className="mr-3 h-6 w-6 animate-spin" />
-                ) : (
-                  <Fingerprint className="mr-3 h-6 w-6 group-hover:scale-110 transition-transform" />
-                )}
-                Sign in with Passkey
-              </Button>
-            </div>
-          )}
-          
-          <div className="relative flex items-center justify-center">
-            <span className="absolute inset-x-0 h-px bg-muted" />
-            <span className="relative bg-background px-4 text-xs text-muted-foreground uppercase tracking-widest">
-              Emergency Fallback
-            </span>
+              Sign In
+            </Button>
+          </form>
+        ) : (
+          <div className="space-y-4 py-2">
+            <Button 
+              onClick={handleLogin}
+              disabled={isLoading || webAuthnSupported === false}
+              className="w-full h-14 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold text-base shadow-sm group transition-all rounded-xl"
+            >
+              {isLoading ? (
+                <Loader2 className="mr-3 h-6 w-6 animate-spin" />
+              ) : (
+                <Fingerprint className="mr-3 h-6 w-6 group-hover:scale-105 transition-transform" />
+              )}
+              Sign in with Passkey
+            </Button>
           </div>
+        )}
+        
+        {/* Subtle Theme-friendly Partition Line */}
+        <div className="relative flex items-center justify-center my-6">
+          <span className="absolute inset-x-0 h-px bg-border" />
+          <span className="relative bg-card px-3 text-[10px] uppercase tracking-wider text-muted-foreground font-bold font-mono">
+            Or continue with
+          </span>
+        </div>
 
+        {/* Side-by-Side SSO Options */}
+        <div className="grid grid-cols-2 gap-3">
           <Button 
             variant="outline" 
-            className="w-full h-12 border-primary/20 hover:bg-primary/5 flex items-center justify-center gap-2"
+            className="h-11 border-border bg-background hover:bg-accent text-foreground flex items-center justify-center gap-2 rounded-xl text-xs font-semibold"
             disabled={isLoading}
             onClick={() => {
               const url = new URL('/api/auth/google', window.location.origin);
@@ -499,16 +510,15 @@ function LoginForm() {
               window.location.href = url.toString();
             }}
           >
-            <Mail className="h-5 w-5" />
-            Continue with Google
+            <Mail className="h-4 w-4 text-muted-foreground" />
+            Google
           </Button>
 
           <Button 
             variant="outline" 
-            className="w-full h-12 bg-black text-white hover:bg-black/90 border-black flex items-center justify-center gap-2"
+            className="h-11 border-border bg-background hover:bg-accent text-foreground flex items-center justify-center gap-2 rounded-xl text-xs font-semibold"
             disabled={isLoading}
             onClick={async () => {
-              // Detect native iOS → use native Apple Sign-In sheet
               const cap = (window as any).Capacitor;
               const isNativeIos = cap?.isNativePlatform?.() && cap?.getPlatform?.() === 'ios';
 
@@ -521,7 +531,6 @@ function LoginForm() {
                     scopes: 'name email',
                   });
 
-                  // POST the identity token to our native verification endpoint
                   const res = await fetch('/api/auth/apple/native', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -539,7 +548,6 @@ function LoginForm() {
                     throw new Error(data.error || 'Apple sign-in failed');
                   }
 
-                  // Session cookie is set via the response — navigate to the app
                   const returnTo = searchParams.get('callbackUrl') || searchParams.get('returnTo');
                   router.push(returnTo || '/your-comms');
                 } catch (err: any) {
@@ -552,7 +560,6 @@ function LoginForm() {
                   });
                 }
               } else {
-                // Web flow — standard OAuth redirect
                 const url = new URL('/api/auth/apple', window.location.origin);
                 const invite = searchParams.get('invite');
                 if (invite) url.searchParams.set('invite', invite);
@@ -560,81 +567,46 @@ function LoginForm() {
               }
             }}
           >
-            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+            <svg className="h-4 w-4 fill-current text-foreground" viewBox="0 0 24 24">
               <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
             </svg>
-            Continue with Apple
+            Apple
           </Button>
+        </div>
+      </CardContent>
+      <CardFooter className="flex flex-col gap-4 border-t border-border/40 pt-6 pb-8 bg-muted/20">
+        {/* Accessible theme-compliant state toggle */}
+        {isAuthMethodEnabled('password') && webAuthnSupported !== false && (
+          <button
+            type="button"
+            onClick={() => setLoginMethod(loginMethod === 'passkey' ? 'password' : 'passkey')}
+            className="text-sm font-bold text-primary hover:text-primary/80 hover:underline transition-colors mt-1"
+          >
+            {loginMethod === 'passkey' ? "I use a password" : "I use a passkey"}
+          </button>
+        )}
 
-          {process.env.NODE_ENV === "development" && (
-            <div className="pt-4 mt-4 border-t border-dashed border-primary/20 space-y-2">
-              <span className="text-xs text-muted-foreground uppercase tracking-widest block text-center mb-2">Automated Testing</span>
-              <Button 
-                variant="secondary" 
-                onClick={() => handleDevLogin('dustin' as any)}
-                className="w-full bg-indigo-500/10 text-indigo-600 hover:bg-indigo-500/20 border border-indigo-500/30 font-mono tracking-wider text-xs h-10"
-                disabled={isLoading}
-              >
-                🛠️ Login as Dustin (Founder)
-              </Button>
-              <Button 
-                variant="secondary" 
-                onClick={() => handleDevLogin('admin')}
-                className="w-full bg-orange-500/10 text-orange-600 hover:bg-orange-500/20 border border-orange-500/30 font-mono tracking-wider text-xs h-10"
-                disabled={isLoading}
-              >
-                ⚠️ Login as Test Admin
-              </Button>
-              <Button 
-                variant="secondary" 
-                onClick={() => handleDevLogin('member')}
-                className="w-full bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 border border-blue-500/30 font-mono tracking-wider text-xs h-10"
-                disabled={isLoading}
-              >
-                🔬 Login as Test Member
-              </Button>
-              <Button 
-                variant="secondary" 
-                onClick={() => handleDevLogin('speaker')}
-                className="w-full bg-purple-500/10 text-purple-600 hover:bg-purple-500/20 border border-purple-500/30 font-mono tracking-wider text-xs h-10"
-                disabled={isLoading}
-              >
-                🗣️ Login as Speaker
-              </Button>
-              <Button 
-                variant="secondary" 
-                onClick={() => handleDevLogin('free')}
-                className="w-full bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border border-emerald-500/30 font-mono tracking-wider text-xs h-10"
-                disabled={isLoading}
-              >
-                👤 Login as Free User
-              </Button>
-            </div>
-          )}
-        </CardContent>
-        <CardFooter className="flex flex-col gap-4 border-t pt-8 bg-muted/30">
-          <p className="text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
-            <Link href={(() => {
-              const parts: string[] = [];
-              const invite = searchParams.get('invite');
-              const returnTo = searchParams.get('returnTo');
-              if (invite) parts.push(`invite=${encodeURIComponent(invite)}`);
-              if (returnTo) parts.push(`returnTo=${encodeURIComponent(returnTo)}`);
-              return parts.length ? `/signup?${parts.join('&')}` : '/signup';
-            })()} className="font-semibold text-primary hover:underline">
-              Sign Up
-            </Link>
-          </p>
-          <p className="text-center text-xs text-muted-foreground">
-            By signing in, you agree to our{" "}
-            <Link href="/terms" className="underline hover:text-foreground">Terms of Service</Link>
-            {" "}and{" "}
-            <Link href="/privacy" className="underline hover:text-foreground">Privacy Policy</Link>.
-          </p>
-        </CardFooter>
-      </Card>
-    </div>
+        <p className="text-center text-sm text-muted-foreground font-medium">
+          Don&apos;t have an account?{" "}
+          <Link href={(() => {
+            const parts: string[] = [];
+            const invite = searchParams.get('invite');
+            const returnTo = searchParams.get('returnTo');
+            if (invite) parts.push(`invite=${encodeURIComponent(invite)}`);
+            if (returnTo) parts.push(`returnTo=${encodeURIComponent(returnTo)}`);
+            return parts.length ? `/signup?${parts.join('&')}` : '/signup';
+          })()} className="font-bold text-primary hover:text-primary/80 hover:underline transition-colors">
+            Sign Up
+          </Link>
+        </p>
+        <p className="text-center text-[10px] text-muted-foreground font-medium tracking-wide">
+          By signing in, you agree to our{" "}
+          <Link href="/terms" className="underline hover:text-foreground transition-colors">Terms of Service</Link>
+          {" "}and{" "}
+          <Link href="/privacy" className="underline hover:text-foreground transition-colors">Privacy Policy</Link>.
+        </p>
+      </CardFooter>
+    </Card>
   );
 }
 
