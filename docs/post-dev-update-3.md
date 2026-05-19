@@ -1,37 +1,38 @@
-# Dev Update: Ternary Governance UX is Live!
+# Dev Update: Three-Way Voting and Governance Polish
 
-We've just pushed a major update to **Co-Op Governance** to fully support ternary (3-option) voting frameworks (such as platform-wide NSFW policy proposals). 
-
-Here is what's new and how it works:
+Quick one. We launched governance voting yesterday and immediately started iterating on it based on how real proposals actually look.
 
 ---
 
-### 🗳️ Ternary Governance (Support, Revise, Oppose)
+### 🗳️ You Can Now Vote "Revise"
 
-Rather than forcing complex policy drafts into a raw Binary (Yes/No) box, proposals can now declare a three-option framework:
-1. **Support/Adopt** (Green segment)
-2. **Revise/Send Back** (Amber segment)
-3. **Oppose/Reject** (Red segment)
+The initial voting UI was binary: yes or no. That works for simple stuff, but the NSFW policy draft isn't simple. Voting "No" when you actually mean "I like the direction but the wording needs work" loses signal.
 
-This ensures active community members don't have to vote "No" just because they want a minor change. They can vote "Revise" to return the proposal to its authors with feedback.
+So proposals now support three options:
 
----
+- **Support** -- you're in, ship it
+- **Revise** -- send it back to the authors with feedback
+- **Oppose** -- hard no
 
-### 📊 Three-Segment Stacked Progress Bars
-
-The quick-glance progress bar on both the proposal feed and detail cards now features a multi-color stacked bar showing the exact breakdown of votes in real-time. 
-
-* The segment sizes scale perfectly according to absolute voting ratios, keeping all options transparent at a glance without conflating revision requests with total opposition.
+This showed up immediately in the NSFW proposal, which now has all three options live. If you haven't voted yet, go weigh in: [Governance](/voting).
 
 ---
 
-### 📱 Responsive Detail Layout & Clean Badges
+### 📊 The Progress Bars Got Smarter
 
-We've removed the fixed `max-w-2xl` boundaries on the proposal details page. The page now spans the **full responsive fluid container size** of your regular feed posts, making it look natural on wide screens and mobile viewports alike.
+The voting bars on the proposal list and detail page now show all three segments stacked together -- green, amber, red -- so you can see the full breakdown at a glance without opening the proposal. Previously the bars only understood two options. Now they scale to three.
 
-Additionally, we removed cramped Badge pills from the option headers. "Your Vote" and "Leading" indicators now sit elegantly on a dedicated row below the title in clear, color-themed text.
+---
 
-Here is a shot of the updated interface in dark mode showing a close vote:
+### 📱 Layout and Readability Fixes
+
+Two things that were bugging me:
+
+1. **The proposal detail page was too narrow.** It had a fixed max-width that didn't match the rest of the platform. If you looked at a proposal and then went back to your feed, it felt like a different app. Fixed. The detail page now uses the same fluid layout as your posts.
+
+2. **The vote badges were cramped.** "Your vote" and "Leading" were crammed inline next to the option label and it looked cluttered, especially on mobile. Those indicators now sit on their own line below the label in matching colors. Much cleaner.
+
+Here's what the updated interface looks like with a close vote in dark mode:
 
 ![Ternary Governance Results UI](/docs/images/ternary-governance-results.png)
 
@@ -39,15 +40,15 @@ Here is a shot of the updated interface in dark mode showing a close vote:
 
 ### 🔧 Under the Hood
 
-* **Extended Keyword Matching:** Added automatic detection support for common policy terms like `allow` (Support) and `restrict` (Oppose) so that the ternary parser hydrates custom actions seamlessly.
-* **Stable Docker Rollouts:** Deployed cleanly using standard CI builds and zero-downtime blue/green Docker container swaps.
+- Extended the keyword matching so proposals using terms like "allow" or "restrict" in their options get picked up automatically by the three-way detector.
+- Clean deploy via the standard CI pipeline. No incidents.
 
 ---
 
 ### What's Next
 
-* Community-wide voting on the official NSFW content policy draft is officially open.
-* Mobile notification triggers for close votes.
-* Inline image grid updates.
+- The NSFW content policy proposal is officially open for voting. We want founding members weighing in.
+- Mobile notification triggers for close votes.
+- Continued image and media polish.
 
-Go cast your vote on the active proposals and let us know what you think!
+As always, bugs and ideas go right here. We're building this together.

@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { isAuthMethodEnabled } from "@/lib/auth/auth-config";
 import { HoneypotField } from "@/components/ui/captcha-challenge";
 import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/turnstile-widget";
+import { isNative, isAndroid } from "@/lib/capacitor/platform";
 
 const INVITE_ONLY = process.env.NEXT_PUBLIC_INVITE_ONLY === 'true';
 
@@ -50,6 +51,12 @@ function SignupForm() {
   }, [webAuthnSupported]);
 
   useEffect(() => {
+    // Android WebAuthn is shimmed by CapacitorPasskey — always supported
+    if (isAndroid) {
+      setWebAuthnSupported(true);
+      return;
+    }
+
     const isSupported = typeof window !== 'undefined'
       && !!window.PublicKeyCredential
       && typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function';
@@ -316,14 +323,14 @@ function SignupForm() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground p-4">
+    <div className="flex min-h-screen w-full flex-col items-center justify-start sm:justify-center bg-background text-foreground px-4 py-6 sm:py-8 overflow-y-auto">
       <Card className="w-full max-w-md shadow-2xl border border-border/80 bg-card text-card-foreground">
-        <CardHeader className="space-y-2 text-center pt-8">
-          <div className="flex justify-center mb-4 text-primary">
-            <AppLogo width={64} height={64} />
+        <CardHeader className="space-y-1.5 text-center pt-5 sm:pt-8 px-5 sm:px-6">
+          <div className="flex justify-center mb-2 sm:mb-4 text-primary">
+            <AppLogo width={48} height={48} className="sm:w-16 sm:h-16" />
           </div>
-          <CardTitle className="text-2xl font-bold font-mono tracking-tight">Join Tribes</CardTitle>
-          <CardDescription>Secure, local-first community identity</CardDescription>
+          <CardTitle className="text-xl sm:text-2xl font-bold font-mono tracking-tight">Join Tribes</CardTitle>
+          <CardDescription className="text-xs sm:text-sm">Secure, local-first community identity</CardDescription>
         </CardHeader>
         <form onSubmit={handleSignup}>
           <CardContent className="space-y-4 px-6 py-2">
@@ -511,12 +518,14 @@ function SignupForm() {
 
             {/* Honeypot + Turnstile bot protection */}
             <HoneypotField />
-            <TurnstileWidget
-              ref={turnstileRef}
-              onVerified={handleTurnstileVerified}
-              onExpired={handleTurnstileExpired}
-              className="mt-1"
-            />
+            {!isNative && (
+              <TurnstileWidget
+                ref={turnstileRef}
+                onVerified={handleTurnstileVerified}
+                onExpired={handleTurnstileExpired}
+                className="mt-1"
+              />
+            )}
             
             {/* Age Confirmation Checkbox */}
             <div className="flex items-start gap-3 pt-2">
@@ -693,7 +702,7 @@ function SignupForm() {
             </div>
           </CardContent>
         </form>
-        <CardFooter className="flex flex-col gap-4 border-t border-border/40 pt-6 pb-8 bg-muted/20">
+        <CardFooter className="flex flex-col gap-3 border-t border-border/40 pt-4 pb-6 sm:pt-6 sm:pb-8 bg-muted/20 px-5 sm:px-6">
           {/* State toggle link */}
           {isAuthMethodEnabled('password') && webAuthnSupported !== false && (
             <button
@@ -718,6 +727,9 @@ function SignupForm() {
             {" · "}
             <Link href="/community-guidelines" className="underline hover:text-foreground transition-colors">Guidelines</Link>
           </p>
+
+          {/* Bottom safe area spacer for native Android/iOS system navigation bar */}
+          <div className="h-[env(safe-area-inset-bottom,16px)]" />
         </CardFooter>
       </Card>
 

@@ -7,3 +7,7 @@ export const platform = (() => {
   const cap = (window as any).Capacitor;
   return cap?.getPlatform?.() ?? 'web';
 })() as 'web' | 'ios' | 'android';
+
+/** Convenience flags for platform-specific branching */
+export const isAndroid = platform === 'android';
+export const isIos = platform === 'ios';

@@ -45,7 +45,7 @@ export function UserNav() {
         <div className="px-3 py-2">
           <p className="text-sm font-medium leading-none">{displayName}</p>
           <p className="text-xs leading-none text-muted-foreground mt-1">
-            {displayEmail}
+            {displayEmail || "Not signed in"}
           </p>
         </div>
         <ResponsiveMenuSeparator />

@@ -97,7 +97,7 @@ export function PullToRefresh({ children }: PullToRefreshProps) {
       {/* Pull Indicator */}
       <div 
         className={cn(
-          "w-full flex items-center justify-center overflow-hidden transition-[height] duration-200 ease-out shrink-0",
+          "w-full flex items-center justify-center overflow-hidden transition-[height] duration-200 ease-out shrink-0 bg-background",
           isRefreshing && "transition-[height] duration-300"
         )}
         style={{ 

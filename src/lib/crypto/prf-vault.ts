@@ -115,6 +115,14 @@ export async function isPrfSupported(): Promise<boolean> {
  */
 export async function getPrfSaltBytes(): Promise<Uint8Array> {
   const label = new TextEncoder().encode(PRF_SALT);
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    console.warn('[prf] crypto.subtle is not available (insecure context or unsupported environment)');
+    const fallback = new Uint8Array(32);
+    for (let i = 0; i < label.length; i++) {
+      fallback[i % 32] ^= label[i];
+    }
+    return fallback;
+  }
   const hash = await crypto.subtle.digest('SHA-256', label);
   return new Uint8Array(hash);
 }

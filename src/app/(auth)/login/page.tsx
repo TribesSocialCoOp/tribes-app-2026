@@ -14,6 +14,7 @@ import { loginUserAction, finishLoginAction, loginWithPasswordAction, verifyTotp
 import { useToast } from "@/hooks/use-toast";
 import { isAuthMethodEnabled } from "@/lib/auth/auth-config";
 import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/turnstile-widget";
+import { isNative, isAndroid } from "@/lib/capacitor/platform";
 
 function LoginForm() {
   const [isLoading, setIsLoading] = useState(false);
@@ -29,6 +30,12 @@ function LoginForm() {
   const turnstileRef = useRef<TurnstileWidgetRef | null>(null);
 
   useEffect(() => {
+    // Android WebAuthn is shimmed by CapacitorPasskey — always supported
+    if (isAndroid) {
+      setWebAuthnSupported(true);
+      return;
+    }
+
     const isSupported = typeof window !== 'undefined'
       && !!window.PublicKeyCredential
       && typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function';
@@ -289,7 +296,7 @@ function LoginForm() {
   }
 
   const renderBackgroundWrapper = (content: React.ReactNode) => (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground p-4">
+    <div className="flex min-h-screen w-full flex-col items-center justify-start sm:justify-center bg-background text-foreground px-4 py-6 sm:py-8 overflow-y-auto">
       {content}
 
       {/* Developer testing bypass options positioned cleanly below the card */}
@@ -406,16 +413,16 @@ function LoginForm() {
 
   return renderBackgroundWrapper(
     <Card className="w-full max-w-md shadow-2xl border border-border/80 bg-card text-card-foreground">
-      <CardHeader className="space-y-2 text-center pt-8">
-        <div className="flex justify-center mb-4 text-primary">
-          <AppLogo width={64} height={64} />
+      <CardHeader className="space-y-1.5 text-center pt-5 sm:pt-8 px-5 sm:px-6">
+        <div className="flex justify-center mb-2 sm:mb-4 text-primary">
+          <AppLogo width={48} height={48} className="sm:w-16 sm:h-16" />
         </div>
-        <CardTitle className="text-2xl font-bold font-mono tracking-tight">Tribes Login</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-xl sm:text-2xl font-bold font-mono tracking-tight">Tribes Login</CardTitle>
+        <CardDescription className="text-xs sm:text-sm">
           {loginMethod === 'passkey' ? "Authentication via biometric secure enclave" : "Sign in using username & password"}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-6 py-4 px-6">
+      <CardContent className="space-y-4 py-3 px-5 sm:py-4 sm:px-6">
         {loginMethod === 'password' ? (
           <form onSubmit={handlePasswordLogin} className="space-y-4">
             <div className="space-y-2">
@@ -451,13 +458,15 @@ function LoginForm() {
             </div>
 
             {/* Turnstile Widget */}
-            <div className="flex justify-center py-1">
-              <TurnstileWidget
-                ref={turnstileRef}
-                onVerified={setTurnstileToken}
-                onExpired={() => setTurnstileToken(null)}
-              />
-            </div>
+            {!isNative && (
+              <div className="flex justify-center py-1">
+                <TurnstileWidget
+                  ref={turnstileRef}
+                  onVerified={setTurnstileToken}
+                  onExpired={() => setTurnstileToken(null)}
+                />
+              </div>
+            )}
 
             <Button
               type="submit"
@@ -574,7 +583,7 @@ function LoginForm() {
           </Button>
         </div>
       </CardContent>
-      <CardFooter className="flex flex-col gap-4 border-t border-border/40 pt-6 pb-8 bg-muted/20">
+      <CardFooter className="flex flex-col gap-3 border-t border-border/40 pt-4 pb-6 sm:pt-6 sm:pb-8 bg-muted/20 px-5 sm:px-6">
         {/* Accessible theme-compliant state toggle */}
         {isAuthMethodEnabled('password') && webAuthnSupported !== false && (
           <button
@@ -605,6 +614,9 @@ function LoginForm() {
           {" "}and{" "}
           <Link href="/privacy" className="underline hover:text-foreground transition-colors">Privacy Policy</Link>.
         </p>
+
+        {/* Bottom safe area spacer for native Android/iOS system navigation bar */}
+        <div className="h-[env(safe-area-inset-bottom,16px)]" />
       </CardFooter>
     </Card>
   );

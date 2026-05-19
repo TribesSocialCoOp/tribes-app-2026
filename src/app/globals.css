@@ -132,6 +132,7 @@ body.capacitor-native {
   width: 100%;
   height: 100%;
   overflow: hidden;
+  padding-top: env(safe-area-inset-top);
 }
 
 /*

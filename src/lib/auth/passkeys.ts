@@ -14,6 +14,15 @@ import { cookies } from 'next/headers';
 const RP_ID = process.env.WEBAUTHN_RP_ID || 'localhost';
 const RP_NAME = process.env.WEBAUTHN_RP_NAME || 'Tribes.app';
 const ORIGIN = process.env.WEBAUTHN_ORIGIN || 'http://localhost:9002';
+const ANDROID_ORIGIN = process.env.WEBAUTHN_ANDROID_ORIGIN || '';
+
+function getExpectedOrigins(): string[] {
+  const origins = [ORIGIN];
+  if (ANDROID_ORIGIN) {
+    origins.push(ANDROID_ORIGIN);
+  }
+  return origins;
+}
 
 // -------------------------------------------------------------------------
 // REGISTRATION
@@ -78,7 +87,7 @@ export async function finishRegistration(
   const verification = await verifyRegistrationResponse({
     response: body,
     expectedChallenge: challenge,
-    expectedOrigin: ORIGIN,
+    expectedOrigin: getExpectedOrigins(),
     expectedRPID: RP_ID,
   });
 
@@ -176,7 +185,7 @@ export async function finishAuthentication(body: AuthenticationResponseJSON) {
   const verification = await verifyAuthenticationResponse({
     response: body,
     expectedChallenge: challenge,
-    expectedOrigin: ORIGIN,
+    expectedOrigin: getExpectedOrigins(),
     expectedRPID: RP_ID,
     credential: {
       id: dbCredential.id,

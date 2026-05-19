@@ -114,6 +114,7 @@ docs/post-*
 docs/images/
 
 # Local IDE and environment metadata
+.idea/
 .idx/
 .vscode/
 .modified

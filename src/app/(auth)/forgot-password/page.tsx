@@ -12,6 +12,7 @@ import { Loader2, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { requestPasswordResetAction } from "@/lib/auth-actions";
 import { useToast } from "@/hooks/use-toast";
 import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/turnstile-widget";
+import { isNative } from "@/lib/capacitor/platform";
 
 function ForgotPasswordForm() {
   const [emailOrUsername, setEmailOrUsername] = useState("");
@@ -125,14 +126,16 @@ function ForgotPasswordForm() {
             </div>
 
             {/* Turnstile Widget */}
-            <div className="flex justify-center py-2">
-              <TurnstileWidget
-                ref={turnstileRef}
-                onVerified={setTurnstileToken}
-                onError={() => setTurnstileToken(null)}
-                onExpired={() => setTurnstileToken(null)}
-              />
-            </div>
+            {!isNative && (
+              <div className="flex justify-center py-2">
+                <TurnstileWidget
+                  ref={turnstileRef}
+                  onVerified={setTurnstileToken}
+                  onError={() => setTurnstileToken(null)}
+                  onExpired={() => setTurnstileToken(null)}
+                />
+              </div>
+            )}
 
             <Button
               type="submit"

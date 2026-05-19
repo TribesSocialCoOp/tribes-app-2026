@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Rss, Tent, SquarePen, Link2, User, ShieldAlert } from 'lucide-react';
+import { Rss, Tent, SquarePen, Link2, User, ShieldAlert, LogIn } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
 
@@ -20,10 +20,13 @@ export function MobileTabBar() {
     composeHref = `/tribes/${id}?compose=true`;
   }
 
+  const isLoggedIn = !!role;
   const tabs = [
     { href: '/your-comms', icon: Rss, label: 'Feed' },
     { href: '/tribes', icon: Tent, label: 'Tribes' },
-    { href: composeHref, icon: SquarePen, label: 'Post', isCompose: true },
+    isLoggedIn
+      ? { href: composeHref, icon: SquarePen, label: 'Post', isCompose: true }
+      : { href: '/login', icon: LogIn, label: 'Login', isCompose: true },
     { href: '/bonds', icon: Link2, label: 'Bonds' },
     { href: '/my-wall', icon: User, label: 'Wall' },
   ];
@@ -40,18 +43,23 @@ export function MobileTabBar() {
             <Link
               key={tab.href}
               href={tab.href}
+              aria-label={tab.label}
+              aria-current={isActive ? "page" : undefined}
               className={cn(
                 "flex flex-col items-center justify-center gap-0.5 flex-1 py-1 rounded-lg transition-colors relative min-h-[44px]",
                 tab.isCompose ? "mt-[-20px]" : (isActive ? "text-primary" : "text-muted-foreground hover:text-foreground")
               )}
             >
               {tab.isCompose ? (
-                 <div className="bg-primary text-primary-foreground h-12 w-12 flex items-center justify-center rounded-full shadow-lg ring-4 ring-background">
-                    <tab.icon className="h-6 w-6 ml-0.5" />
-                 </div>
+                 <>
+                   <div className="bg-primary text-primary-foreground h-12 w-12 flex items-center justify-center rounded-full shadow-lg ring-4 ring-background">
+                      <tab.icon className="h-6 w-6 ml-0.5" aria-hidden="true" />
+                   </div>
+                   <span className="sr-only">{tab.label}</span>
+                 </>
               ) : (
                 <>
-                  <tab.icon className={cn("h-5 w-5", isActive && "stroke-[2.5px]")} />
+                  <tab.icon className={cn("h-5 w-5", isActive && "stroke-[2.5px]")} aria-hidden="true" />
                   <span className="text-[10px] font-medium leading-none">{tab.label}</span>
                   {isActive && (
                     <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-primary rounded-full" />

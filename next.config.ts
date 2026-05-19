@@ -111,6 +111,13 @@ const nextConfig: NextConfig = {
   output: 'standalone',   // Required for Docker multi-stage build (.next/standalone/)
   // SECURITY: Suppress X-Powered-By: Next.js header to reduce framework fingerprinting.
   poweredByHeader: false,
+  // Dev origins for Capacitor live-reload: read from CAPACITOR_DEV_HOST env var.
+  // Set CAPACITOR_DEV_HOST to your LAN IP (e.g. 192.168.1.42) in .env.local.
+  allowedDevOrigins: [
+    ...(process.env.CAPACITOR_DEV_HOST ? [process.env.CAPACITOR_DEV_HOST] : []),
+    '10.0.2.2',
+    'localhost',
+  ],
   // Expose the build ID to the client bundle for version mismatch detection
   env: {
     NEXT_PUBLIC_BUILD_ID: BUILD_ID,
@@ -125,6 +132,23 @@ const nextConfig: NextConfig = {
       // so this should never be hit. But if something slips through, fail with a
       // clear 413 rather than a cryptic "Body exceeded 1 MB" trace.
       bodySizeLimit: '20mb',
+      // Allow Capacitor WebView origins to call Server Actions during local dev.
+      // Without this, Android/iOS WebViews get 403 CSRF errors because their
+      // Origin header (the dev machine's LAN IP) doesn't match the Host header.
+      ...(process.env.NODE_ENV !== 'production' ? {
+        allowedOrigins: [
+          'localhost:9002',
+          'http://localhost:9002',
+          // Android emulator's host-loopback alias
+          '10.0.2.2:9002',
+          'http://10.0.2.2:9002',
+          // Developer's LAN IP for Capacitor live-reload (set CAPACITOR_DEV_HOST in .env.local)
+          ...(process.env.CAPACITOR_DEV_HOST ? [
+            `${process.env.CAPACITOR_DEV_HOST}:9002`,
+            `http://${process.env.CAPACITOR_DEV_HOST}:9002`,
+          ] : []),
+        ],
+      } : {}),
     },
   },
   // Next.js 16 defaults to Turbopack; this empty config acknowledges we

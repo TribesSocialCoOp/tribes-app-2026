@@ -15,8 +15,11 @@ import { SplashScreen } from '@capacitor/splash-screen';
  */
 const INTERNAL_HOSTS = new Set(['tribes.app', 'www.tribes.app']);
 
+import { useUser } from '@/hooks/use-user';
+
 export function NativeInitializer() {
   const router = useRouter();
+  const { role, isLoading } = useUser();
 
   // ── Global internal-link interceptor ───────────────────────────────────────
   // Catches clicks on ANY <a> tag pointing to tribes.app and routes them
@@ -71,8 +74,32 @@ export function NativeInitializer() {
     // 1. Initialize deep links
     initDeepLinks(router);
 
-    // 2. Sync status bar (assuming dark theme by default, or could detect)
-    syncStatusBarStyle(true);
+    // 1b. Initialize WebAuthn Passkey auto-shim (Option B) for Android
+    const cap = (window as any).Capacitor;
+    if (cap?.getPlatform?.() === 'android') {
+      import('@capgo/capacitor-passkey')
+        .then(async ({ CapacitorPasskey }) => {
+          console.log('[passkey] Initializing WebAuthn auto-shim for Android...');
+          await CapacitorPasskey.autoShimWebAuthn();
+        })
+        .catch(err => {
+          console.error('[passkey] Failed to load/init CapacitorPasskey plugin:', err);
+        });
+    }
+
+    // 2. Sync status bar with current theme and listen for changes
+    const updateStatusBar = () => {
+      const isDark = document.documentElement.classList.contains('dark');
+      syncStatusBarStyle(isDark);
+    };
+    updateStatusBar();
+
+    const themeObserver = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.attributeName === 'class') updateStatusBar();
+      }
+    });
+    themeObserver.observe(document.documentElement, { attributes: true });
 
     // 3. Hide splash screen once the app shell has rendered (not a 404).
     //    The (app) layout sets data-app-ready on the main container.
@@ -100,6 +127,16 @@ export function NativeInitializer() {
 
     // 4. Add native class to body for CSS targeting
     document.body.classList.add('capacitor-native');
+
+    // 4b. Add platform-specific class for platform-targeted CSS
+    //     Android needs separate status bar inset handling (edge-to-edge enforced on Android 15+)
+    //     iOS uses native contentInset: 'always' so doesn't need CSS padding
+    const platform = cap?.getPlatform?.() || 'web';
+    if (platform === 'android') {
+      document.body.classList.add('capacitor-android');
+    } else if (platform === 'ios') {
+      document.body.classList.add('capacitor-ios');
+    }
 
     // 5. Wire up keyboard events to set a CSS variable for keyboard height.
     //    The Capacitor `resize: 'body'` mode only resizes document.body, but
@@ -143,8 +180,22 @@ export function NativeInitializer() {
       clearInterval(pollInterval);
       keyboardCleanup?.();
       window.removeEventListener('statusTap', handleStatusTap);
+      themeObserver.disconnect();
     };
   }, [router]);
+
+  // Redirect unauthenticated native users to /login on startup
+  useEffect(() => {
+    if (!isNative || isLoading) return;
+
+    if (!role) {
+      const path = window.location.pathname;
+      if (path === '/your-comms') {
+        console.log('[native] Unauthenticated user on main view, redirecting to /login');
+        router.replace('/login');
+      }
+    }
+  }, [role, isLoading, router]);
 
   return null;
 }
