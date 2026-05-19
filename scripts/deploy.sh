@@ -21,14 +21,6 @@
 
 set -euo pipefail
 
-# Setup SSH Multiplexing (ControlMaster) to reuse a single TCP channel for all subsequent commands.
-# This prevents opening dozens of separate TCP connections, avoiding Hetzner firewall rate limits,
-# connection exhaustion, and port blocking, while dramatically speeding up the deployment.
-mkdir -p ~/.ssh/sockets
-ssh() {
-  command ssh -o StrictHostKeyChecking=no -o ControlMaster=auto -o ControlPath=~/.ssh/sockets/%r@%h:%p -o ControlPersist=10m "$@"
-}
-
 # ── Configuration ──────────────────────────────────────────────
 REMOTE_HOST="root@5.78.189.222"
 REMOTE_DIR="/opt/tribes"
@@ -91,7 +83,7 @@ rsync -avz --delete \
   --exclude='*.png' \
   --exclude='.active-color' \
   --exclude='.backfill-slugs-done' \
-  -e "ssh -o StrictHostKeyChecking=no -o ControlMaster=auto -o ControlPath=~/.ssh/sockets/%r@%h:%p -o ControlPersist=10m" \
+  -e "ssh -o StrictHostKeyChecking=no" \
   "$LOCAL_DIR/" "$REMOTE_HOST:$REMOTE_DIR/" \
   | tail -5
 ok "Files synced"

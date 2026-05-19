@@ -59,11 +59,6 @@ if [ ! -f "$KEYSTORE_PROPS" ]; then
 fi
 echo -e "${GREEN}✓${NC} keystore.properties found"
 
-# Resolve version details
-VERSION_NAME=$(node -p "require('./package.json').version")
-VERSION_CODE=$(git rev-list --count HEAD 2>/dev/null || echo "1")
-echo -e "${GREEN}✓${NC} Version: ${VERSION_NAME} (Build ${VERSION_CODE})"
-
 # ── Sync web assets ──────────────────────────────────────────
 
 echo ""
@@ -78,14 +73,14 @@ echo ""
 if [ "${1:-}" = "--apk" ]; then
     echo -e "${YELLOW}Building release APK...${NC}"
     cd "$ANDROID_DIR"
-    ./gradlew assembleRelease -PversionCode=$VERSION_CODE -PversionName=$VERSION_NAME
+    ./gradlew assembleRelease
     APK_PATH="$ANDROID_DIR/app/build/outputs/apk/release/app-release.apk"
     echo ""
     echo -e "${GREEN}✓ APK built:${NC} $APK_PATH"
 else
     echo -e "${YELLOW}Building release AAB (for Play Store)...${NC}"
     cd "$ANDROID_DIR"
-    ./gradlew bundleRelease -PversionCode=$VERSION_CODE -PversionName=$VERSION_NAME
+    ./gradlew bundleRelease
     AAB_PATH="$ANDROID_DIR/app/build/outputs/bundle/release/app-release.aab"
     echo ""
     echo -e "${GREEN}✓ AAB built:${NC} $AAB_PATH"
