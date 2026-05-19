@@ -179,7 +179,7 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
   const showTernaryUI = isTernaryVote && supportOpt && opposeOpt && reviseOpt;
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-3 md:space-y-6 min-w-0">
       <div className="flex items-center mt-2">
         <Button variant="outline" size="sm" onClick={() => router.push('/voting')}>
           <ArrowLeft className="mr-2 h-4 w-4" /> All Proposals
@@ -489,21 +489,25 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
                   ? 'border-green-500/50 bg-green-50/50 dark:bg-green-900/10 ring-1 ring-green-500/20'
                   : 'border-border'
               }`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <ThumbsUp className="h-5 w-5 text-green-500" />
-                    <span className="font-semibold text-sm">{supportOpt!.label}</span>
-                    {proposal.userVoteOptionId === supportOpt!.id && (
-                      <Badge variant="outline" className="text-[10px] border-green-300 text-green-700 dark:text-green-300">Your vote</Badge>
-                    )}
-                    {supportOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
-                      <Badge className="text-[10px] bg-green-600 text-white">Leading</Badge>
-                    )}
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ThumbsUp className="h-5 w-5 text-green-500 shrink-0" />
+                    <span className="font-semibold text-sm truncate">{supportOpt!.label}</span>
                   </div>
-                  <span className="text-sm font-mono font-bold text-green-700 dark:text-green-300">
+                  <span className="text-sm font-mono font-bold text-green-700 dark:text-green-300 shrink-0 ml-3">
                     {supportOpt!.percentage}% <span className="text-xs text-muted-foreground">({supportOpt!.voteCount})</span>
                   </span>
                 </div>
+                {(proposal.userVoteOptionId === supportOpt!.id || (supportOpt!.id === winningOption?.id && proposal.voteCount > 0)) && (
+                  <div className="flex items-center gap-1.5 ml-7 mb-1">
+                    {proposal.userVoteOptionId === supportOpt!.id && (
+                      <span className="text-[10px] font-medium text-green-600 dark:text-green-400">✓ Your vote</span>
+                    )}
+                    {supportOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
+                      <span className="text-[10px] font-semibold text-green-600 dark:text-green-400">· Leading</span>
+                    )}
+                  </div>
+                )}
                 <div className="h-3 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-700 ease-out"
@@ -518,21 +522,25 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
                   ? 'border-amber-500/50 bg-amber-50/50 dark:bg-amber-900/10 ring-1 ring-amber-500/20'
                   : 'border-border'
               }`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <RotateCcw className="h-5 w-5 text-amber-500" />
-                    <span className="font-semibold text-sm">{reviseOpt!.label}</span>
-                    {proposal.userVoteOptionId === reviseOpt!.id && (
-                      <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-300">Your vote</Badge>
-                    )}
-                    {reviseOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
-                      <Badge className="text-[10px] bg-amber-600 text-white">Leading</Badge>
-                    )}
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <RotateCcw className="h-5 w-5 text-amber-500 shrink-0" />
+                    <span className="font-semibold text-sm truncate">{reviseOpt!.label}</span>
                   </div>
-                  <span className="text-sm font-mono font-bold text-amber-700 dark:text-amber-300">
+                  <span className="text-sm font-mono font-bold text-amber-700 dark:text-amber-300 shrink-0 ml-3">
                     {reviseOpt!.percentage}% <span className="text-xs text-muted-foreground">({reviseOpt!.voteCount})</span>
                   </span>
                 </div>
+                {(proposal.userVoteOptionId === reviseOpt!.id || (reviseOpt!.id === winningOption?.id && proposal.voteCount > 0)) && (
+                  <div className="flex items-center gap-1.5 ml-7 mb-1">
+                    {proposal.userVoteOptionId === reviseOpt!.id && (
+                      <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">✓ Your vote</span>
+                    )}
+                    {reviseOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
+                      <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">· Leading</span>
+                    )}
+                  </div>
+                )}
                 <div className="h-3 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-700 ease-out"
@@ -547,21 +555,25 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
                   ? 'border-red-500/50 bg-red-50/50 dark:bg-red-900/10 ring-1 ring-red-500/20'
                   : 'border-border'
               }`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <ThumbsDown className="h-5 w-5 text-red-400" />
-                    <span className="font-semibold text-sm">{opposeOpt!.label}</span>
-                    {proposal.userVoteOptionId === opposeOpt!.id && (
-                      <Badge variant="outline" className="text-[10px] border-red-300 text-red-700 dark:text-red-300">Your vote</Badge>
-                    )}
-                    {opposeOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
-                      <Badge className="text-[10px] bg-red-600 text-white">Leading</Badge>
-                    )}
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ThumbsDown className="h-5 w-5 text-red-400 shrink-0" />
+                    <span className="font-semibold text-sm truncate">{opposeOpt!.label}</span>
                   </div>
-                  <span className="text-sm font-mono font-bold text-red-700 dark:text-red-300">
+                  <span className="text-sm font-mono font-bold text-red-700 dark:text-red-300 shrink-0 ml-3">
                     {opposeOpt!.percentage}% <span className="text-xs text-muted-foreground">({opposeOpt!.voteCount})</span>
                   </span>
                 </div>
+                {(proposal.userVoteOptionId === opposeOpt!.id || (opposeOpt!.id === winningOption?.id && proposal.voteCount > 0)) && (
+                  <div className="flex items-center gap-1.5 ml-7 mb-1">
+                    {proposal.userVoteOptionId === opposeOpt!.id && (
+                      <span className="text-[10px] font-medium text-red-600 dark:text-red-400">✓ Your vote</span>
+                    )}
+                    {opposeOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
+                      <span className="text-[10px] font-semibold text-red-600 dark:text-red-400">· Leading</span>
+                    )}
+                  </div>
+                )}
                 <div className="h-3 bg-muted rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-red-400 to-rose-500 rounded-full transition-all duration-700 ease-out"
