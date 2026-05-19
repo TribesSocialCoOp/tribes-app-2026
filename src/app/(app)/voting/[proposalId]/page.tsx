@@ -68,7 +68,7 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
   const isAdmin = role === 'Admin';
   const isFree = role === 'Human_Free';
   const isEarned = subSource === 'earned';
-  const canVote = !isFree && !isEarned; // Only paid/founding can vote
+  const canVote = isAdmin || (!isFree && !isEarned); // Admins + paid/founding can vote
   const isCreator = proposal?.createdBy === user?.id;
 
   const loadProposal = useCallback(async () => {
