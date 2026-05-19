@@ -3,8 +3,8 @@ import { test, expect } from '@playwright/test';
 test.describe('ComposeBox Stability', () => {
   test.beforeEach(async ({ page }: { page: any }) => {
     // Navigate to login and use dev bypass
-    await page.goto('http://localhost:3000/login');
-    await page.click('button:has-text("Dev Login (dustin)")');
+    await page.goto('http://localhost:9002/login');
+    await page.click('button:has-text("Dustin")');
     await page.waitForURL('**/your-comms');
   });
 
