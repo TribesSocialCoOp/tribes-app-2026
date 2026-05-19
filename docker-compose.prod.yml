@@ -3,7 +3,7 @@ services:
   # Two identical app services gated by Docker Compose profiles.
   # Only one runs at a time; deploy.sh orchestrates the swap.
   app-blue:
-    image: tribes-app:latest
+    image: tribes-app:blue
     container_name: tribes-app-blue
     restart: unless-stopped
     env_file: .env.production
@@ -29,7 +29,7 @@ services:
     profiles: ["blue"]
 
   app-green:
-    image: tribes-app:latest
+    image: tribes-app:green
     container_name: tribes-app-green
     restart: unless-stopped
     env_file: .env.production
