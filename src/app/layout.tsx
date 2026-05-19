@@ -56,6 +56,11 @@ export default function RootLayout({
       <head>
         {/* Prevent FOUC: apply dark mode class before React hydrates */}
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('tribes-theme');var d=t==='dark'||(t!=='light'&&matchMedia('(prefers-color-scheme:dark)').matches);if(d)document.documentElement.classList.add('dark')}catch(e){}})()` }} />
+        {/* Capacitor platform classes — must run synchronously before first CSS paint
+            so that platform-specific rules (e.g. Android safe-area inset) apply immediately.
+            Sets classes on <html> (not <body>) because <body> doesn't exist yet in <head>.
+            The native-initializer useEffect also sets body classes for JS consumers (idempotent). */}
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var C=window.Capacitor;if(!C||!C.isNativePlatform||!C.isNativePlatform())return;var h=document.documentElement;h.classList.add('capacitor-native');var p=C.getPlatform&&C.getPlatform()||'web';if(p==='android')h.classList.add('capacitor-android');else if(p==='ios')h.classList.add('capacitor-ios')}catch(e){}})()` }} />
       </head>
       <body className={`${oxanium.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}>
         {children}

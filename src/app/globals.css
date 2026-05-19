@@ -118,13 +118,13 @@ body {
 }
 
 /* Capacitor Native Polish */
-body.capacitor-native {
+html.capacitor-native body {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   user-select: none;
 }
 
-body.capacitor-native {
+html.capacitor-native body {
   /* Prevent the native webview from rubber-banding/bouncing and pulling away from the notch */
   overscroll-behavior: none;
   /* Lock the body to the viewport so only the <main> container scrolls */
@@ -137,7 +137,7 @@ body.capacitor-native {
 /* Android needs explicit safe-area padding because adjustMarginsForEdgeToEdge
    doesn't automatically inset the WebView content.
    iOS handles this natively via WKWebView contentInset: 'always'. */
-body.capacitor-android {
+html.capacitor-android body {
   padding-top: env(safe-area-inset-top);
 }
 
@@ -154,19 +154,19 @@ body.capacitor-android {
  *
  * This CSS safety net ensures those runtime mutations are neutralized inside Capacitor.
  */
-body.capacitor-native {
+html.capacitor-native body {
   pointer-events: auto !important;
 }
 
-body.capacitor-native[data-scroll-locked] {
+html.capacitor-native body[data-scroll-locked] {
   overflow: hidden !important;
   margin-right: 0 !important;
 }
 
-.capacitor-native input,
-.capacitor-native textarea,
-.capacitor-native [contenteditable="true"],
-.capacitor-native .prose {
+html.capacitor-native input,
+html.capacitor-native textarea,
+html.capacitor-native [contenteditable="true"],
+html.capacitor-native .prose {
   -webkit-user-select: text;
   user-select: text !important;
 }
@@ -185,7 +185,7 @@ body.capacitor-native[data-scroll-locked] {
 }
 
 /* Extra room above the fixed tab bar so content isn't hidden behind it */
-.capacitor-native main {
+html.capacitor-native main {
   padding-bottom: 5rem;
 }
 
