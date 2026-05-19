@@ -1,4 +1,4 @@
-# Dev Update: Ternary Governance UX & Admin Voting is Live!
+# Dev Update: Ternary Governance UX is Live!
 
 We've just pushed a major update to **Co-Op Governance** to fully support ternary (3-option) voting frameworks (such as platform-wide NSFW policy proposals). 
 
@@ -34,14 +34,6 @@ Additionally, we removed cramped Badge pills from the option headers. "Your Vote
 Here is a shot of the updated interface in dark mode showing a close vote:
 
 ![Ternary Governance Results UI](/docs/images/ternary-governance-results.png)
-
----
-
-### 🔑 Admin Override & Seamless Voting
-
-To ensure frictionless testing and platform moderation, **Admins** can now vote on any proposal directly, bypassing standard paid co-op subscription locks:
-* **Client-side UI checks** now automatically hydrate the voting cards for active platform admins.
-* **Server action constraints** in `castVote` securely bypass the `'coop_voting'` subscription feature check and `'earned'` source exclusions.
 
 ---
 
