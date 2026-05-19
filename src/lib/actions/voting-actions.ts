@@ -141,21 +141,31 @@ export async function castVote(proposalId: string, optionId: string): Promise<vo
 
   // Feature gate: require coop_voting feature from a PAID subscription
   // Earned memberships do NOT grant voting rights — you must pay to govern.
-  const { hasFeature } = await import('@/lib/services/subscription-guard');
-  if (!(await hasFeature(userId, 'coop_voting'))) {
-    throw new Error('Voting requires a paid Co-Op membership. Upgrade your plan to participate.');
+  // Admins always bypass this check.
+  const { db } = await import('@/db');
+  const { subscriptions, users: usersTable } = await import('@/db/schema');
+  const { eq, and } = await import('drizzle-orm');
+
+  const [currentUser] = await db.select({ role: usersTable.role })
+    .from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  const isAdmin = currentUser?.role === 'Admin';
+
+  if (!isAdmin) {
+    const { hasFeature } = await import('@/lib/services/subscription-guard');
+    if (!(await hasFeature(userId, 'coop_voting'))) {
+      throw new Error('Voting requires a paid Co-Op membership. Upgrade your plan to participate.');
+    }
   }
 
-  // Verify subscription source is 'paid' or 'founding' (not 'earned')
-  const { db } = await import('@/db');
-  const { subscriptions, users } = await import('@/db/schema');
-  const { eq, and } = await import('drizzle-orm');
-  const [sub] = await db.select({ source: subscriptions.source })
-    .from(subscriptions)
-    .where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, 'active')))
-    .limit(1);
-  if (sub?.source === 'earned') {
-    throw new Error('Earned memberships do not include voting rights. Upgrade to a paid plan to participate in governance.');
+  // Verify subscription source is 'paid' or 'founding' (not 'earned') — admins skip this too
+  if (!isAdmin) {
+    const [sub] = await db.select({ source: subscriptions.source })
+      .from(subscriptions)
+      .where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, 'active')))
+      .limit(1);
+    if (sub?.source === 'earned') {
+      throw new Error('Earned memberships do not include voting rights. Upgrade to a paid plan to participate in governance.');
+    }
   }
 
   // ── Future requirements (re-enable once platform matures) ──

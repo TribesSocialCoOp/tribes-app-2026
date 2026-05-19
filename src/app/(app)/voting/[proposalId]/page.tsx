@@ -12,7 +12,7 @@ import {
   ArrowLeft, Vote, Clock, Users, CheckCircle2, XCircle,
   Loader2, Lock, Sparkles, AlertTriangle,
   Shield, Crown, ThumbsUp, ThumbsDown, Scale, Landmark,
-  Gavel, Globe,
+  Gavel, Globe, RotateCcw,
 } from "lucide-react";
 import { useUser } from "@/hooks/use-user";
 import { useToast } from "@/hooks/use-toast";
@@ -68,7 +68,7 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
   const isAdmin = role === 'Admin';
   const isFree = role === 'Human_Free';
   const isEarned = subSource === 'earned';
-  const canVote = !isFree && !isEarned; // Only paid/founding can vote
+  const canVote = isAdmin || (!isFree && !isEarned); // Admins + paid/founding can vote
   const isCreator = proposal?.createdBy === user?.id;
 
   const loadProposal = useCallback(async () => {
@@ -158,21 +158,28 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
   const showResults = hasVoted || !isActive || isExpired;
   const winningOption = [...proposal.options].sort((a, b) => b.voteCount - a.voteCount)[0];
 
-  // Detect binary up/down vote structure
+  // Detect binary up/down or ternary up/down/revise vote structure
   const isBinaryVote = proposal.options.length === 2;
+  const isTernaryVote = proposal.options.length === 3;
   const supportOpt = proposal.options.find(o =>
     o.label.toLowerCase().includes('support') || o.label.toLowerCase().includes('yes') ||
-    o.label.toLowerCase().includes('adopt') || o.label.toLowerCase().includes('approve')
+    o.label.toLowerCase().includes('adopt') || o.label.toLowerCase().includes('approve') ||
+    o.label.toLowerCase().includes('allow')
   );
   const opposeOpt = proposal.options.find(o =>
     o.label.toLowerCase().includes('oppose') || o.label.toLowerCase().includes('no') ||
     o.label.toLowerCase().includes('reject') || o.label.toLowerCase().includes('ban') ||
-    o.label.toLowerCase().includes('send back')
+    o.label.toLowerCase().includes('restrict')
+  );
+  const reviseOpt = proposal.options.find(o =>
+    o.label.toLowerCase().includes('revise') || o.label.toLowerCase().includes('revision') ||
+    o.label.toLowerCase().includes('send back') || o.label.toLowerCase().includes('discussion')
   );
   const showBinaryUI = isBinaryVote && supportOpt && opposeOpt;
+  const showTernaryUI = isTernaryVote && supportOpt && opposeOpt && reviseOpt;
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-3 md:space-y-6 min-w-0">
       <div className="flex items-center mt-2">
         <Button variant="outline" size="sm" onClick={() => router.push('/voting')}>
           <ArrowLeft className="mr-2 h-4 w-4" /> All Proposals
@@ -322,6 +329,71 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
             </div>
           ) : null}
 
+          {/* ── Ternary Up/Down/Revise Vote UI ── */}
+          {showTernaryUI && !showResults && isActive ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* SUPPORT */}
+              <button
+                className={`group relative flex flex-col items-center justify-center rounded-xl border-2 p-6 transition-all duration-200 ${
+                  hasVoted || !canVote
+                    ? 'opacity-60 cursor-not-allowed border-muted'
+                    : 'border-green-200 dark:border-green-900/30 hover:border-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer active:scale-[0.98]'
+                } ${voting === supportOpt!.id ? 'animate-pulse border-green-500' : ''}`}
+                onClick={() => { if (canVote && !hasVoted && !voting) handleVote(supportOpt!.id); }}
+                disabled={!!voting || hasVoted || !canVote}
+              >
+                {voting === supportOpt!.id ? (
+                  <Loader2 className="h-10 w-10 animate-spin text-green-500 mb-2" />
+                ) : (
+                  <ThumbsUp className={`h-10 w-10 mb-2 transition-transform ${
+                    canVote && !hasVoted ? 'text-green-500 group-hover:scale-110' : 'text-muted-foreground'
+                  }`} />
+                )}
+                <span className="font-semibold text-sm text-center">{supportOpt!.label}</span>
+              </button>
+
+              {/* REVISE / SEND BACK */}
+              <button
+                className={`group relative flex flex-col items-center justify-center rounded-xl border-2 p-6 transition-all duration-200 ${
+                  hasVoted || !canVote
+                    ? 'opacity-60 cursor-not-allowed border-muted'
+                    : 'border-amber-200 dark:border-amber-900/30 hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 cursor-pointer active:scale-[0.98]'
+                } ${voting === reviseOpt!.id ? 'animate-pulse border-amber-500' : ''}`}
+                onClick={() => { if (canVote && !hasVoted && !voting) handleVote(reviseOpt!.id); }}
+                disabled={!!voting || hasVoted || !canVote}
+              >
+                {voting === reviseOpt!.id ? (
+                  <Loader2 className="h-10 w-10 animate-spin text-amber-500 mb-2" />
+                ) : (
+                  <RotateCcw className={`h-10 w-10 mb-2 transition-transform ${
+                    canVote && !hasVoted ? 'text-amber-500 group-hover:scale-110' : 'text-muted-foreground'
+                  }`} />
+                )}
+                <span className="font-semibold text-sm text-center">{reviseOpt!.label}</span>
+              </button>
+
+              {/* OPPOSE */}
+              <button
+                className={`group relative flex flex-col items-center justify-center rounded-xl border-2 p-6 transition-all duration-200 ${
+                  hasVoted || !canVote
+                    ? 'opacity-60 cursor-not-allowed border-muted'
+                    : 'border-red-200 dark:border-red-800 hover:border-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 cursor-pointer active:scale-[0.98]'
+                } ${voting === opposeOpt!.id ? 'animate-pulse border-red-500' : ''}`}
+                onClick={() => { if (canVote && !hasVoted && !voting) handleVote(opposeOpt!.id); }}
+                disabled={!!voting || hasVoted || !canVote}
+              >
+                {voting === opposeOpt!.id ? (
+                  <Loader2 className="h-10 w-10 animate-spin text-red-500 mb-2" />
+                ) : (
+                  <ThumbsDown className={`h-10 w-10 mb-2 transition-transform ${
+                    canVote && !hasVoted ? 'text-red-400 group-hover:scale-110' : 'text-muted-foreground'
+                  }`} />
+                )}
+                <span className="font-semibold text-sm text-center">{opposeOpt!.label}</span>
+              </button>
+            </div>
+          ) : null}
+
           {/* ── Binary Results View ── */}
           {showBinaryUI && showResults ? (
             <div className="space-y-4">
@@ -408,8 +480,112 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
             </div>
           ) : null}
 
-          {/* ── Multi-option fallback (not binary) ── */}
-          {!showBinaryUI && proposal.options.map(opt => {
+          {/* ── Ternary Results View ── */}
+          {showTernaryUI && showResults ? (
+            <div className="space-y-4">
+              {/* Support bar */}
+              <div className={`rounded-lg border p-4 transition-all ${
+                proposal.userVoteOptionId === supportOpt!.id
+                  ? 'border-green-500/50 bg-green-50/50 dark:bg-green-900/10 ring-1 ring-green-500/20'
+                  : 'border-border'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ThumbsUp className="h-5 w-5 text-green-500 shrink-0" />
+                    <span className="font-semibold text-sm truncate">{supportOpt!.label}</span>
+                  </div>
+                  <span className="text-sm font-mono font-bold text-green-700 dark:text-green-300 shrink-0 ml-3">
+                    {supportOpt!.percentage}% <span className="text-xs text-muted-foreground">({supportOpt!.voteCount})</span>
+                  </span>
+                </div>
+                {(proposal.userVoteOptionId === supportOpt!.id || (supportOpt!.id === winningOption?.id && proposal.voteCount > 0)) && (
+                  <div className="flex items-center gap-1.5 ml-7 mb-1">
+                    {proposal.userVoteOptionId === supportOpt!.id && (
+                      <span className="text-[10px] font-medium text-green-600 dark:text-green-400">✓ Your vote</span>
+                    )}
+                    {supportOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
+                      <span className="text-[10px] font-semibold text-green-600 dark:text-green-400">· Leading</span>
+                    )}
+                  </div>
+                )}
+                <div className="h-3 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${supportOpt!.percentage}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Revise bar */}
+              <div className={`rounded-lg border p-4 transition-all ${
+                proposal.userVoteOptionId === reviseOpt!.id
+                  ? 'border-amber-500/50 bg-amber-50/50 dark:bg-amber-900/10 ring-1 ring-amber-500/20'
+                  : 'border-border'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <RotateCcw className="h-5 w-5 text-amber-500 shrink-0" />
+                    <span className="font-semibold text-sm truncate">{reviseOpt!.label}</span>
+                  </div>
+                  <span className="text-sm font-mono font-bold text-amber-700 dark:text-amber-300 shrink-0 ml-3">
+                    {reviseOpt!.percentage}% <span className="text-xs text-muted-foreground">({reviseOpt!.voteCount})</span>
+                  </span>
+                </div>
+                {(proposal.userVoteOptionId === reviseOpt!.id || (reviseOpt!.id === winningOption?.id && proposal.voteCount > 0)) && (
+                  <div className="flex items-center gap-1.5 ml-7 mb-1">
+                    {proposal.userVoteOptionId === reviseOpt!.id && (
+                      <span className="text-[10px] font-medium text-amber-600 dark:text-amber-400">✓ Your vote</span>
+                    )}
+                    {reviseOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
+                      <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">· Leading</span>
+                    )}
+                  </div>
+                )}
+                <div className="h-3 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-400 to-amber-500 rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${reviseOpt!.percentage}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Oppose bar */}
+              <div className={`rounded-lg border p-4 transition-all ${
+                proposal.userVoteOptionId === opposeOpt!.id
+                  ? 'border-red-500/50 bg-red-50/50 dark:bg-red-900/10 ring-1 ring-red-500/20'
+                  : 'border-border'
+              }`}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ThumbsDown className="h-5 w-5 text-red-400 shrink-0" />
+                    <span className="font-semibold text-sm truncate">{opposeOpt!.label}</span>
+                  </div>
+                  <span className="text-sm font-mono font-bold text-red-700 dark:text-red-300 shrink-0 ml-3">
+                    {opposeOpt!.percentage}% <span className="text-xs text-muted-foreground">({opposeOpt!.voteCount})</span>
+                  </span>
+                </div>
+                {(proposal.userVoteOptionId === opposeOpt!.id || (opposeOpt!.id === winningOption?.id && proposal.voteCount > 0)) && (
+                  <div className="flex items-center gap-1.5 ml-7 mb-1">
+                    {proposal.userVoteOptionId === opposeOpt!.id && (
+                      <span className="text-[10px] font-medium text-red-600 dark:text-red-400">✓ Your vote</span>
+                    )}
+                    {opposeOpt!.id === winningOption?.id && proposal.voteCount > 0 && (
+                      <span className="text-[10px] font-semibold text-red-600 dark:text-red-400">· Leading</span>
+                    )}
+                  </div>
+                )}
+                <div className="h-3 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-red-400 to-rose-500 rounded-full transition-all duration-700 ease-out"
+                    style={{ width: `${opposeOpt!.percentage}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* ── Multi-option fallback (not binary or ternary) ── */}
+          {!showBinaryUI && !showTernaryUI && proposal.options.map(opt => {
             const isUserChoice = opt.id === proposal.userVoteOptionId;
             const isWinner = showResults && opt.id === winningOption?.id && proposal.voteCount > 0;
             const isVotingThis = voting === opt.id;

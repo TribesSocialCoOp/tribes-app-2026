@@ -18,7 +18,7 @@ import {
   Vote, Plus, Clock, Users, CheckCircle2, XCircle,
   ArrowRight, Sparkles, Lock, Loader2, Trash2,
   Shield, Crown, Scale, AlertTriangle, Landmark, Globe,
-  ThumbsUp, ThumbsDown, Gavel,
+  ThumbsUp, ThumbsDown, Gavel, RotateCcw,
 } from "lucide-react";
 import { useUser } from "@/hooks/use-user";
 import { useToast } from "@/hooks/use-toast";
@@ -305,11 +305,19 @@ function VotingContent() {
             const hasVoted = !!p.userVoteOptionId;
 
             // Calculate "support" vs "oppose" for the quick-glance bar
-            const supportOpt = p.options.find(o => o.label.toLowerCase().includes('support') || o.label.toLowerCase().includes('yes') || o.label.toLowerCase().includes('adopt') || o.label.toLowerCase().includes('approve'));
-            const opposeOpt = p.options.find(o => o.label.toLowerCase().includes('oppose') || o.label.toLowerCase().includes('no') || o.label.toLowerCase().includes('reject') || o.label.toLowerCase().includes('ban'));
+            const supportOpt = p.options.find(o => o.label.toLowerCase().includes('support') || o.label.toLowerCase().includes('yes') || o.label.toLowerCase().includes('adopt') || o.label.toLowerCase().includes('approve') || o.label.toLowerCase().includes('allow'));
+            const opposeOpt = p.options.find(o => o.label.toLowerCase().includes('oppose') || o.label.toLowerCase().includes('no') || o.label.toLowerCase().includes('reject') || o.label.toLowerCase().includes('ban') || o.label.toLowerCase().includes('restrict'));
+            const reviseOpt = p.options.find(o => o.label.toLowerCase().includes('revise') || o.label.toLowerCase().includes('revision') || o.label.toLowerCase().includes('send back') || o.label.toLowerCase().includes('discussion'));
+
+            const hasThreeOptions = p.options.length === 3 && !!supportOpt && !!opposeOpt && !!reviseOpt;
+
             const supportCount = supportOpt?.voteCount ?? 0;
             const opposeCount = opposeOpt?.voteCount ?? 0;
+            const reviseCount = reviseOpt?.voteCount ?? 0;
+
             const supportPct = p.voteCount > 0 ? Math.round((supportCount / p.voteCount) * 100) : 50;
+            const revisePct = p.voteCount > 0 ? Math.round((reviseCount / p.voteCount) * 100) : 0;
+            const opposePct = p.voteCount > 0 ? Math.round((opposeCount / p.voteCount) * 100) : 50;
 
             return (
               <Card key={p.id} className="shadow-md hover:shadow-lg transition-all cursor-pointer group border-l-4 border-l-transparent hover:border-l-primary"
@@ -350,18 +358,42 @@ function VotingContent() {
 
                       {/* Quick-glance vote bar (for proposals with votes) */}
                       {p.voteCount > 0 && supportOpt && opposeOpt && (
-                        <div className="mt-3 space-y-1">
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                            <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3 text-green-500" /> {supportCount}</span>
-                            <span className="flex items-center gap-1">{opposeCount} <ThumbsDown className="h-3 w-3 text-red-400" /></span>
+                        hasThreeOptions ? (
+                          <div className="mt-3 space-y-1">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3 text-green-500" /> {supportCount}</span>
+                              <span className="flex items-center gap-1.5"><RotateCcw className="h-3 w-3 text-amber-500" /> {reviseCount}</span>
+                              <span className="flex items-center gap-1">{opposeCount} <ThumbsDown className="h-3 w-3 text-red-400" /></span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden flex">
+                              <div
+                                className="h-full bg-green-500 transition-all duration-500"
+                                style={{ width: `${supportPct}%` }}
+                              />
+                              <div
+                                className="h-full bg-amber-500 transition-all duration-500"
+                                style={{ width: `${revisePct}%` }}
+                              />
+                              <div
+                                className="h-full bg-red-500 transition-all duration-500"
+                                style={{ width: `${opposePct}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="h-1.5 w-full bg-red-100 dark:bg-red-900/30 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-green-500 rounded-full transition-all duration-500"
-                              style={{ width: `${supportPct}%` }}
-                            />
+                        ) : (
+                          <div className="mt-3 space-y-1">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span className="flex items-center gap-1"><ThumbsUp className="h-3 w-3 text-green-500" /> {supportCount}</span>
+                              <span className="flex items-center gap-1">{opposeCount} <ThumbsDown className="h-3 w-3 text-red-400" /></span>
+                            </div>
+                            <div className="h-1.5 w-full bg-red-100 dark:bg-red-900/30 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-green-500 rounded-full transition-all duration-500"
+                                style={{ width: `${supportPct}%` }}
+                              />
+                            </div>
                           </div>
-                        </div>
+                        )
                       )}
 
                       {/* Meta */}
