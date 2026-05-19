@@ -67,7 +67,7 @@ async function loginWithPassword(page: import('@playwright/test').Page) {
   await page.goto('/login');
   await page.waitForSelector('text=Tribes Login', { timeout: 15000 });
 
-  const passwordTab = page.locator('button:has-text("Password fallback")');
+  const passwordTab = page.locator('button:has-text("I use a password")');
   if (await passwordTab.isVisible({ timeout: 3000 }).catch(() => false)) {
     await passwordTab.click();
   }
