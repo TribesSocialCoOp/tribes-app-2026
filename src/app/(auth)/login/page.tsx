@@ -440,12 +440,7 @@ function LoginForm() {
             </div>
 
             <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Label htmlFor="password" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Password</Label>
-                <Link href="/forgot-password" className="text-xs font-semibold text-primary hover:text-primary/80 hover:underline">
-                  Forgot Password?
-                </Link>
-              </div>
+              <Label htmlFor="password" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Password</Label>
               <Input
                 id="password"
                 type="password"
@@ -455,6 +450,11 @@ function LoginForm() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="h-11 bg-background border-input focus-visible:ring-primary rounded-xl"
               />
+              <div className="flex justify-end">
+                <Link href="/forgot-password" className="text-xs font-semibold text-primary hover:text-primary/80 hover:underline py-1">
+                  Forgot Password?
+                </Link>
+              </div>
             </div>
 
             {/* Turnstile Widget */}
