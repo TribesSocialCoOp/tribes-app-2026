@@ -16,7 +16,7 @@ import { buildUrl } from '@/lib/url';
  */
 
 // Routes that don't require authentication
-const publicRoutes = ['/login', '/signup', '/', '/terms', '/privacy', '/cookies', '/community-guidelines'];
+const publicRoutes = ['/login', '/signup', '/forgot-password', '/reset-password', '/recover', '/', '/terms', '/privacy', '/cookies', '/community-guidelines'];
 
 function isPublicRoute(pathname: string): boolean {
   // Exact match public routes

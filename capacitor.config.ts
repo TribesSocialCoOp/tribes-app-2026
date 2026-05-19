@@ -1,12 +1,18 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 import { KeyboardResize } from '@capacitor/keyboard';
 
+// When running `npx cap run android --live-reload`, Capacitor sets this env var.
+// Fall back to production URL for release builds.
+const isLiveReload = !!process.env.CAPACITOR_ANDROID_LIVERELOAD_URL || !!process.env.CAPACITOR_IOS_LIVERELOAD_URL;
+
 const config: CapacitorConfig = {
   appId: 'app.tribes.android',
   appName: 'Tribes',
   webDir: 'out',
   server: {
-    url: 'https://tribes.app',
+    // Live-reload: let Capacitor CLI inject the URL automatically.
+    // Production: point the WebView at the live site.
+    ...(isLiveReload ? {} : { url: 'https://tribes.app' }),
     errorPath: 'error.html',
   },
   ios: {
@@ -14,7 +20,7 @@ const config: CapacitorConfig = {
     allowsLinkPreview: false,
   },
   android: {
-    allowMixedContent: false,
+    allowMixedContent: isLiveReload, // Allow http for local dev, block in production
     backgroundColor: '#0a0a0a',
     // Edge-to-edge inset handling for Android 15+ (runtime-supported, types lag behind)
     adjustMarginsForEdgeToEdge: 'force',
@@ -40,3 +46,4 @@ const config: CapacitorConfig = {
 };
 
 export default config;
+
