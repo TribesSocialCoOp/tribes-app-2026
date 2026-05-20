@@ -74,6 +74,47 @@ jobs:
         run: npm run typecheck
 
   # ──────────────────────────────────────────────────────────────
+  # 2b. Migration Drift Check
+  #     Ensures every schema.ts change has a corresponding
+  #     drizzle migration SQL file committed. Runs `drizzle-kit
+  #     generate` and fails if it produces new SQL — meaning the
+  #     developer forgot to generate + commit the migration.
+  # ──────────────────────────────────────────────────────────────
+  migration-drift:
+    name: Migration Drift Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Check for uncommitted migrations
+        run: |
+          npx drizzle-kit generate 2>&1
+          # If drizzle-kit generated new SQL files, they'll appear as untracked
+          NEW_FILES=$(git ls-files --others --exclude-standard 'drizzle/*.sql')
+          CHANGED_FILES=$(git diff --name-only 'drizzle/')
+          if [ -n "$NEW_FILES" ] || [ -n "$CHANGED_FILES" ]; then
+            echo "::error::Migration drift detected! Schema changes exist without a committed migration."
+            echo ""
+            echo "New migration files that should have been committed:"
+            echo "$NEW_FILES"
+            echo "$CHANGED_FILES"
+            echo ""
+            echo "Fix: run 'npx drizzle-kit generate' locally and commit the resulting SQL file."
+            exit 1
+          fi
+          echo "✅ No migration drift — schema.ts and drizzle/ are in sync."
+
+  # ──────────────────────────────────────────────────────────────
   # 3. Build Verification
   #    Ensures a production Next.js build succeeds before any
   #    changes reach the server. Next.js 16 runs ESLint internally
@@ -83,7 +124,7 @@ jobs:
   build:
     name: Production Build
     runs-on: ubuntu-latest
-    needs: [audit, typecheck]
+    needs: [audit, typecheck, migration-drift]
     env:
       # ── Stub env vars for CI build ──────────────────────────────────────────
       # Next.js collects static page data at build time, which imports modules
