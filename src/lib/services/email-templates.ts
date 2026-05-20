@@ -399,3 +399,143 @@ export function tribePostEmail(
 
   return { subject, html, text };
 }
+
+// ============================================================
+// 8. NCII CONFIRMATION EMAIL
+// ============================================================
+
+export function nciiReportConfirmationEmail(opts: {
+  trackingNumber: string;
+  requesterName: string;
+  contentType: string;
+  contentDescription: string;
+  slaDeadline: Date;
+  requesterEmail?: string;
+}): { subject: string; html: string; text: string } {
+  const safeName = escapeHtml(opts.requesterName);
+  const safeTrackingNumber = escapeHtml(opts.trackingNumber);
+  const safeContentType = escapeHtml(opts.contentType);
+  const safeDescription = escapeHtml(opts.contentDescription);
+  const deadlineStr = opts.slaDeadline.toLocaleString();
+  const subject = `NCII Takedown Request Received [${safeTrackingNumber}] — Tribes`;
+
+  const html = emailLayout({
+    content: `
+    <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">NCII Takedown Request</h1>
+    <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
+      Dear <strong>${safeName}</strong>,
+    </p>
+    <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
+      We have received your request under the TAKE IT DOWN Act. Our moderation team is investigating it with immediate priority.
+    </p>
+    <div style="margin:16px 0;padding:16px;background-color:#f4f4f5;border-radius:8px;">
+      <p style="margin:0 0 8px;font-size:15px;color:#18181b;"><strong>Tracking Details:</strong></p>
+      <ul style="margin:0;padding-left:20px;font-size:14px;color:#3f3f46;line-height:1.6;">
+        <li><strong>Tracking Number:</strong> ${safeTrackingNumber}</li>
+        <li><strong>Content Type:</strong> ${safeContentType}</li>
+        <li><strong>Description:</strong> ${safeDescription}</li>
+        <li><strong>SLA Deadline:</strong> ${deadlineStr} (within 48 hours)</li>
+      </ul>
+    </div>
+    <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
+      You can track the status of this request at any time on our status page.
+    </p>
+    ${ctaButton('Check Request Status', `/ncii-status?tracking=${opts.trackingNumber}&email=${encodeURIComponent(opts.requesterEmail || '')}`, false)}
+  `,
+    preheader: `NCII Takedown Request Received [${opts.trackingNumber}]`,
+  });
+
+  const text = `Dear ${opts.requesterName},\n\nWe have received your NCII takedown request.\nTracking Number: ${opts.trackingNumber}\nContent Type: ${opts.contentType}\nSLA Deadline: ${deadlineStr}\n\nTrack status at tribes.app/ncii-status`;
+
+  return { subject, html, text };
+}
+
+// ============================================================
+// 9. NCII STATUS UPDATE EMAIL
+// ============================================================
+
+export function nciiReportStatusUpdateEmail(opts: {
+  trackingNumber: string;
+  status: string;
+  actionTaken: string;
+  actionNotes?: string | null;
+}): { subject: string; html: string; text: string } {
+  const safeTrackingNumber = escapeHtml(opts.trackingNumber);
+  const safeStatus = escapeHtml(opts.status);
+  const safeNotes = opts.actionNotes ? escapeHtml(opts.actionNotes) : '';
+  const subject = `NCII Takedown Request Status Update [${safeTrackingNumber}] — Tribes`;
+
+  let actionText = '';
+  if (opts.actionTaken === 'content_removed') {
+    actionText = 'The reported content has been successfully removed from Tribes.app. We have also stored a digital fingerprint (perceptual hash) of the imagery to prevent it from being re-uploaded in the future.';
+  } else if (opts.actionTaken === 'content_not_found') {
+    actionText = 'We could not locate the content described in your report on our platform. Please ensure the location/URLs provided are correct.';
+  } else if (opts.actionTaken === 'insufficient_info') {
+    actionText = 'We require further clarification or details to process your request. Please check the status page and review any notes from our team.';
+  } else {
+    actionText = 'Our moderation team reviewed the request and determined that it does not meet the criteria for non-consensual intimate imagery.';
+  }
+
+  const html = emailLayout({
+    content: `
+    <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#18181b;">Status Update</h1>
+    <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
+      There has been an update regarding your TAKE IT DOWN Act request.
+    </p>
+    <div style="margin:16px 0;padding:16px;background-color:#eff6ff;border-radius:8px;">
+      <p style="margin:0 0 8px;font-size:15px;color:#18181b;"><strong>Current Status:</strong> <span style="text-transform:uppercase;font-weight:700;color:#2563eb;">${safeStatus}</span></p>
+      <p style="margin:8px 0 0;font-size:14px;color:#3f3f46;line-height:1.6;">
+        ${actionText}
+      </p>
+      ${safeNotes ? `<p style="margin:12px 0 0;font-size:13px;color:#4b5563;font-style:italic;"><strong>Reviewer Notes:</strong> "${safeNotes}"</p>` : ''}
+    </div>
+    <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
+      For further details or to communicate with our team, please visit the request status page.
+    </p>
+  `,
+    preheader: `NCII Takedown Request Status Update [${opts.trackingNumber}]`,
+  });
+
+  const text = `NCII Takedown Request Status Update\nTracking Number: ${opts.trackingNumber}\nStatus: ${opts.status}\n\n${actionText}\n${safeNotes ? `Notes: ${safeNotes}` : ''}`;
+
+  return { subject, html, text };
+}
+
+// ============================================================
+// 10. NCII ADMIN ALERT EMAIL
+// ============================================================
+
+export function nciiReportAdminAlertEmail(opts: {
+  trackingNumber: string;
+  contentType: string;
+  slaDeadline: Date;
+  reportId: string;
+}): { subject: string; html: string; text: string } {
+  const safeTrackingNumber = escapeHtml(opts.trackingNumber);
+  const safeContentType = escapeHtml(opts.contentType);
+  const deadlineStr = opts.slaDeadline.toLocaleString();
+  const subject = `⚠️ URGENT: New NCII Report [${safeTrackingNumber}] — SLA Active`;
+
+  const html = emailLayout({
+    content: `
+    <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#e11d48;">🚨 Urgent NCII Takedown Request</h1>
+    <p style="margin:0 0 16px;font-size:16px;color:#3f3f46;line-height:1.6;">
+      A new takedown request has been submitted under the TAKE IT DOWN Act. This requires immediate review and resolution within 48 hours to remain in legal compliance.
+    </p>
+    <div style="margin:16px 0;padding:16px;background-color:#fff1f2;border-radius:8px;border:1px solid #fecdd3;">
+      <p style="margin:0 0 8px;font-size:15px;color:#9f1239;"><strong>SLA Deadline details:</strong></p>
+      <ul style="margin:0;padding-left:20px;font-size:14px;color:#4c0519;line-height:1.6;">
+        <li><strong>Tracking Number:</strong> ${safeTrackingNumber}</li>
+        <li><strong>Content Type:</strong> ${safeContentType}</li>
+        <li><strong>SLA Deadline:</strong> <strong>${deadlineStr}</strong></li>
+      </ul>
+    </div>
+    ${ctaButton('Open Admin Dashboard', '/admin/ncii-reports', false)}
+  `,
+    preheader: `Urgent NCII Takedown Request [${opts.trackingNumber}] SLA Active`,
+  });
+
+  const text = `🚨 URGENT NCII Takedown Request [${opts.trackingNumber}]\nContent Type: ${opts.contentType}\nSLA Deadline: ${deadlineStr}\n\nResolve at: tribes.app/admin/ncii-reports`;
+
+  return { subject, html, text };
+}

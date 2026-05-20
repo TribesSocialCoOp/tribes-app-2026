@@ -17,6 +17,7 @@ export function PlatformFooter() {
           <Link href="/privacy" className="touch-target-44 hover:text-foreground transition-colors">Privacy</Link>
           <Link href="/community-guidelines" className="touch-target-44 hover:text-foreground transition-colors">Guidelines</Link>
           <Link href="/cookies" className="touch-target-44 hover:text-foreground transition-colors">Cookies</Link>
+          <Link href="/report-ncii" className="touch-target-44 font-semibold hover:text-foreground transition-colors">Report NCII</Link>
           
           {isAdmin && (
             <Link 

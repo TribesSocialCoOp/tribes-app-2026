@@ -682,6 +682,10 @@ function SettingsContent() {
             <ScrollText className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
             <span className="text-sm font-medium">Cookie Policy</span>
           </Link>
+          <Link href="/report-ncii" className="group flex items-center gap-2 p-3 rounded-md border hover:border-primary/40 hover:bg-primary/5 transition-colors col-span-1 sm:col-span-2">
+            <ScrollText className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+            <span className="text-sm font-semibold text-foreground">Report NCII Secure Portal</span>
+          </Link>
         </CardContent>
       </Card>
 

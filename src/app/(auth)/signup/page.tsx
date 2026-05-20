@@ -51,8 +51,8 @@ function SignupForm() {
   }, [webAuthnSupported]);
 
   useEffect(() => {
-    // Android WebAuthn is shimmed by CapacitorPasskey — always supported
-    if (isAndroid) {
+    // Android & iOS native WebAuthn is shimmed by CapacitorPasskey — always supported
+    if (isNative) {
       setWebAuthnSupported(true);
       return;
     }

@@ -100,7 +100,21 @@ class RateLimiter {
    * @throws Error if rate limit exceeded
    */
   async check(key: string): Promise<RateLimitResult> {
-    const fullKey = `${this.prefix}:${key}`;
+    let finalKey = key;
+    if (process.env.NODE_ENV !== 'production') {
+      try {
+        const { headers } = await import('next/headers');
+        const headersList = await headers();
+        const testSession = headersList.get('x-e2e-test-session');
+        if (testSession) {
+          finalKey = `${testSession}:${key}`;
+        }
+      } catch (e) {
+        // next/headers might not be available in non-request/non-next contexts
+      }
+    }
+
+    const fullKey = `${this.prefix}:${finalKey}`;
     const result = await this.backend.check(fullKey, this.windowMs, this.maxRequests);
 
     if (!result.allowed) {
@@ -284,4 +298,22 @@ export const signupSubnetLimiter = new RateLimiter({
   prefix: 'signup_subnet',
   windowMs: 24 * 60 * 60 * 1000,  // 24 hours
   maxRequests: 8,
+});
+
+export const nciiReportLimiter = new RateLimiter({
+  prefix: 'ncii_report',
+  windowMs: 60 * 60 * 1000,   // 1 hour
+  maxRequests: 3,              // 3 reports per IP per hour
+});
+
+export const nciiStatusLimiter = new RateLimiter({
+  prefix: 'ncii_status',
+  windowMs: 60 * 60 * 1000,   // 1 hour
+  maxRequests: 10,             // 10 lookups per IP per hour
+});
+
+export const nciiAdminKeysLimiter = new RateLimiter({
+  prefix: 'ncii_admin_keys',
+  windowMs: 60 * 60 * 1000,   // 1 hour
+  maxRequests: 10,             // 10 lookups per IP per hour
 });
