@@ -19,7 +19,8 @@ const ANDROID_ORIGIN = process.env.WEBAUTHN_ANDROID_ORIGIN || '';
 function getExpectedOrigins(): string[] {
   const origins = [ORIGIN];
   if (ANDROID_ORIGIN) {
-    origins.push(ANDROID_ORIGIN);
+    const androidOrigins = ANDROID_ORIGIN.split(',').map(o => o.trim()).filter(Boolean);
+    origins.push(...androidOrigins);
   }
   return origins;
 }
