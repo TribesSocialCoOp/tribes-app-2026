@@ -49,7 +49,7 @@ export default function CommunityGuidelinesPage() {
       <h3>2.3 Harmful Behavior</h3>
       <ul>
         <li><strong>Self-harm promotion:</strong> Content that promotes, glorifies, or provides instructions for self-harm or suicide.</li>
-        <li><strong>Non-consensual intimate imagery:</strong> Sharing intimate images of a person without their consent (&quot;revenge porn&quot;).</li>
+        <li><strong>Non-consensual intimate imagery (NCII):</strong> Sharing intimate images or videos of a person without their consent ("revenge porn"), including digitally altered or AI-generated synthetic depictions ("deepfakes"). We maintain a zero-tolerance policy. If you or someone you represent is depicted, submit an urgent request through our secure <a href="/report-ncii">NCII Reporting Portal</a>.</li>
         <li><strong>Misinformation:</strong> Deliberately spreading false information that could cause significant real-world harm (e.g., dangerous health misinformation).</li>
       </ul>
 
@@ -129,12 +129,19 @@ export default function CommunityGuidelinesPage() {
         appeals within 5 business days.
       </p>
 
-      <h2>5. Reporting</h2>
+      <h2>5. Reporting &amp; Safety Compliance</h2>
       <p>
         If you see content or behavior that violates these guidelines, please report it using
         the in-app reporting feature (available on all posts and user profiles). Reports are
         reviewed by our moderation team. For urgent safety concerns (imminent threats, CSAM),
         contact <strong>safety@tribes.app</strong> directly.
+      </p>
+      <p>
+        <strong>Non-Consensual Intimate Imagery (NCII) / Take It Down Act Compliance:</strong>
+        If you or someone you represent has had intimate content (including authentic or AI-generated/deepfake imagery) shared on Tribes without consent, please file an expedited report via our secure <a href="/report-ncii" className="text-red-500 font-semibold hover:underline">NCII Reporting Portal</a>.
+      </p>
+      <p>
+        In compliance with federal obligations, we pledge a strict <strong className="text-foreground font-semibold">48-hour evaluation and removal SLA</strong> for NCII reports. Verified content will be immediately taken down, and its perceptual hash (PDQ) will be added to our secure database to block future upload attempts globally.
       </p>
       <p>
         All reports are confidential. We do not disclose the identity of reporters to the

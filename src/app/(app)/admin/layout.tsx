@@ -10,6 +10,7 @@ import { AuthGuard } from "@/components/providers/auth-guard";
 
 const adminNavItems = [
   { href: "/admin/mod-queue", icon: ShieldAlert, label: "Mod Queue" },
+  { href: "/admin/ncii-reports", icon: ShieldAlert, label: "NCII Reports" },
   { href: "/admin/users", icon: Users, label: "User Management" },
   { href: "/admin/invite-codes", icon: Ticket, label: "Invite Codes" },
   { href: "/admin/mailbox", icon: Inbox, label: "Admin Mailbox" },
