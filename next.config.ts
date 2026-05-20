@@ -134,9 +134,11 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Dev origins for Capacitor live-reload: read from CAPACITOR_DEV_HOST env var.
   // Also dynamically resolves all active local IPs to prevent connectivity blocks.
+  // NOTE: Next.js only uses allowedDevOrigins in dev, but we guard explicitly
+  // to avoid running os.networkInterfaces() during production Docker builds.
   allowedDevOrigins: [
     ...(process.env.CAPACITOR_DEV_HOST ? [process.env.CAPACITOR_DEV_HOST] : []),
-    ...getLocalIPs(),
+    ...(process.env.NODE_ENV !== 'production' ? getLocalIPs() : []),
     '10.0.2.2',
     'localhost',
   ],

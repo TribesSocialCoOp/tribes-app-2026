@@ -326,6 +326,17 @@ async function seed() {
     { id: 'cb2', userId: 'user2', targetId: 'user1', targetName: 'Alice Wonderland', targetType: 'user', bondType: 'person' },
     { id: 'cb3', userId: 'user3', targetId: 'user1', targetName: 'Alice Wonderland', targetType: 'user', bondType: 'person' },
     { id: 'cb4', userId: 'user1', targetId: '1', targetName: 'AI Innovators', targetType: 'tribe', bondType: 'tribe' },
+    // Sandbox mutual bonds
+    { id: 'sb1', userId: 'dustin', targetId: 'test-service-member', targetName: 'TSM', targetType: 'user', bondType: 'person' },
+    { id: 'sb2', userId: 'test-service-member', targetId: 'dustin', targetName: 'Dustin Moore', targetType: 'user', bondType: 'person' },
+    { id: 'sb3', userId: 'dustin', targetId: 'user2', targetName: 'Bob Builder', targetType: 'user', bondType: 'person' },
+    { id: 'sb4', userId: 'user2', targetId: 'dustin', targetName: 'Dustin Moore', targetType: 'user', bondType: 'person' },
+    { id: 'sb5', userId: 'test-service-member', targetId: 'user2', targetName: 'Bob Builder', targetType: 'user', bondType: 'person' },
+    { id: 'sb6', userId: 'user2', targetId: 'test-service-member', targetName: 'TSM', targetType: 'user', bondType: 'person' },
+    { id: 'sb7', userId: 'test-speaker-user', targetId: 'user2', targetName: 'Bob Builder', targetType: 'user', bondType: 'person' },
+    { id: 'sb8', userId: 'user2', targetId: 'test-speaker-user', targetName: 'Speaker Sam', targetType: 'user', bondType: 'person' },
+    { id: 'sb9', userId: 'test-free-user', targetId: 'user2', targetName: 'Bob Builder', targetType: 'user', bondType: 'person' },
+    { id: 'sb10', userId: 'user2', targetId: 'test-free-user', targetName: 'Free Explorer', targetType: 'user', bondType: 'person' },
   ];
   for (const cb of crossBonds) {
     await db.insert(schema.bonds).values({

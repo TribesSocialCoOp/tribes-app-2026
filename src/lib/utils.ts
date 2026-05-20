@@ -36,3 +36,57 @@ export function formatDate(date: Date): string {
   if (!date || !(date instanceof Date) || isNaN(date.getTime())) return "N/A";
   return date.toLocaleDateString();
 }
+
+/**
+ * Safely cleans a URL extracted from formatted markdown or text,
+ * stripping trailing formatting, punctuation, and unmatched parentheses/brackets/braces.
+ */
+export function cleanUrl(rawUrl: string): string {
+  let url = rawUrl;
+
+  while (true) {
+    const lastChar = url.slice(-1);
+    if (!lastChar) break;
+
+    // Trim trailing formatting or punctuation characters that shouldn't end a URL
+    if (['*', '_', '~', '`', '"', "'", '.', ',', ';', ':', '!', '?'].includes(lastChar)) {
+      url = url.slice(0, -1);
+      continue;
+    }
+
+    // Handle closing parentheses - strip if unmatched
+    if (lastChar === ')') {
+      const openCount = (url.match(/\(/g) || []).length;
+      const closeCount = (url.match(/\)/g) || []).length;
+      if (closeCount > openCount) {
+        url = url.slice(0, -1);
+        continue;
+      }
+    }
+
+    // Handle closing square brackets - strip if unmatched
+    if (lastChar === ']') {
+      const openCount = (url.match(/\[/g) || []).length;
+      const closeCount = (url.match(/\]/g) || []).length;
+      if (closeCount > openCount) {
+        url = url.slice(0, -1);
+        continue;
+      }
+    }
+
+    // Handle closing curly braces - strip if unmatched
+    if (lastChar === '}') {
+      const openCount = (url.match(/\{/g) || []).length;
+      const closeCount = (url.match(/\}/g) || []).length;
+      if (closeCount > openCount) {
+        url = url.slice(0, -1);
+        continue;
+      }
+    }
+
+    break;
+  }
+
+  return url;
+}
+

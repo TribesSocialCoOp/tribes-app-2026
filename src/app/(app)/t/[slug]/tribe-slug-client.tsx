@@ -20,7 +20,7 @@ function TribeDetailContent() {
   }
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-6 pb-0">
       <TribeAdminDashboard />
       <TribeHeroBanner />
       <TribeFeedSection />

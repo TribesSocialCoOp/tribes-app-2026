@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { createRingPost, type CreateRingPostPayload } from '@/lib/actions/content-actions';
 import type { Ring, LinkPreviewData } from '@/lib/types';
 import { ImagePlus, Send, Loader2, X, Lock, Globe, Link2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, cleanUrl } from '@/lib/utils';
 import { useActionError } from '@/hooks/use-action-error';
 import { uploadFile } from '@/lib/upload';
 import { useKeySync } from '@/components/providers/key-sync-provider';
@@ -149,7 +149,7 @@ export function ComposeBox({
     }
 
     const match = content.match(URL_REGEX);
-    const detectedUrl = match?.[0] ?? null;
+    const detectedUrl = match ? cleanUrl(match[0]) : null;
 
     // URL was removed from content — clear preview
     if (!detectedUrl && lastUnfurledUrl.current) {

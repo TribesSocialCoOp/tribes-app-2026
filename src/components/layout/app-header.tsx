@@ -1,6 +1,6 @@
-
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { UserNav } from "@/components/layout/user-nav";
 // AppLogo and Link are no longer needed here as the logo is only in the sidebar.
@@ -11,9 +11,38 @@ import { cn } from "@/lib/utils";
 
 export function AppHeader() {
   // const { isMobile } = useSidebar(); // No longer needed to conditionally render trigger
+  const [hidden, setHidden] = useState(false);
+  const lastScrollTop = useRef(0);
+  const THRESHOLD = 10; // Scroll difference threshold to trigger hide/show
+
+  useEffect(() => {
+    const main = document.querySelector("main[data-app-ready]");
+    if (!main) return;
+
+    const handleScroll = () => {
+      const st = main.scrollTop;
+      const delta = st - lastScrollTop.current;
+
+      if (st <= 0) {
+        setHidden(false); // Always show at the top
+      } else if (delta > THRESHOLD) {
+        setHidden(true); // Scrolling down → hide header
+        lastScrollTop.current = st;
+      } else if (delta < -THRESHOLD) {
+        setHidden(false); // Scrolling up → show header
+        lastScrollTop.current = st;
+      }
+    };
+
+    main.addEventListener("scroll", handleScroll, { passive: true });
+    return () => main.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
-    <header className="app-header z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0">
+    <header className={cn(
+      "app-header sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex-shrink-0 transition-transform duration-300 ease-in-out will-change-transform",
+      hidden && "-translate-y-full md:translate-y-0"
+    )}>
       <div className="flex h-16 w-full items-center justify-between px-4 sm:px-8"> {/* Changed: Removed 'container', added 'w-full' implicitly by parent or explicitly if needed */}
         <div className="flex items-center">
           {/* Always show SidebarTrigger for a consistent collapse/expand control */}
