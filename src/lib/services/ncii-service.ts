@@ -342,7 +342,7 @@ async function hashAndStorePostImages(
   const urlsToHash = new Set<string>();
   if (post.imageUrl) urlsToHash.add(post.imageUrl);
   if (post.imageUrls && Array.isArray(post.imageUrls)) {
-    post.imageUrls.forEach((url) => {
+    post.imageUrls.forEach((url: string) => {
       if (typeof url === 'string') urlsToHash.add(url);
     });
   }
