@@ -1,4 +1,25 @@
 import type { NextConfig } from 'next';
+import os from 'os';
+
+// Get all non-internal local IPv4 addresses to automate allowed origins in dev
+function getLocalIPs(): string[] {
+  const ips: string[] = [];
+  try {
+    const interfaces = os.networkInterfaces();
+    for (const devName in interfaces) {
+      const iface = interfaces[devName];
+      if (!iface) continue;
+      for (const alias of iface) {
+        if (alias.family === 'IPv4' && !alias.internal) {
+          ips.push(alias.address);
+        }
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return ips;
+}
 
 // ============================================================
 // Environment-driven image host patterns (replaces hardcoded IPs)
@@ -112,9 +133,10 @@ const nextConfig: NextConfig = {
   // SECURITY: Suppress X-Powered-By: Next.js header to reduce framework fingerprinting.
   poweredByHeader: false,
   // Dev origins for Capacitor live-reload: read from CAPACITOR_DEV_HOST env var.
-  // Set CAPACITOR_DEV_HOST to your LAN IP (e.g. 192.168.1.42) in .env.local.
+  // Also dynamically resolves all active local IPs to prevent connectivity blocks.
   allowedDevOrigins: [
     ...(process.env.CAPACITOR_DEV_HOST ? [process.env.CAPACITOR_DEV_HOST] : []),
+    ...getLocalIPs(),
     '10.0.2.2',
     'localhost',
   ],
@@ -147,6 +169,11 @@ const nextConfig: NextConfig = {
             `${process.env.CAPACITOR_DEV_HOST}:9002`,
             `http://${process.env.CAPACITOR_DEV_HOST}:9002`,
           ] : []),
+          // Dynamically resolved local network IPs for hot-reloading & mobile testing
+          ...getLocalIPs().flatMap(ip => [
+            `${ip}:9002`,
+            `http://${ip}:9002`,
+          ]),
         ],
       } : {}),
     },

@@ -49,15 +49,20 @@ export default function NotFound() {
   };
 
   useEffect(() => {
-    setIsOffline(!navigator.onLine);
+    const isDev = process.env.NODE_ENV === 'development';
+    setIsOffline(isDev ? false : !navigator.onLine);
 
     const handleOnline = () => {
+      if (isDev) return;
       setIsOffline(false);
       // Auto-retry when connection comes back
       sessionStorage.setItem('tribes_404_retry_state', JSON.stringify({ count: 0, timestamp: Date.now() }));
       setRetryCount(0);
     };
-    const handleOffline = () => setIsOffline(true);
+    const handleOffline = () => {
+      if (isDev) return;
+      setIsOffline(true);
+    };
     
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
