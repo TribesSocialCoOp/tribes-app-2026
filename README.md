@@ -1,4 +1,4 @@
-# 🌌 Tribes.app — The Privacy-First Social Hub
+# 🌌 Tribes.app — The Privacy-First Social Co-Op
 
 [![Release](https://img.shields.io/badge/version-1.0.1-blue.svg)](https://github.com/dustmoo/tribes-app-2026/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
