@@ -1959,3 +1959,71 @@ export async function getPostForOg(postId: string): Promise<{
     postSlug: row.postSlug,
   };
 }
+
+// ======== NCII COMPLIANCE ACTIONS ========
+
+/**
+ * Fetch all NCII reports for admin review, sorted by SLA deadline.
+ * Global admin only.
+ */
+export async function getActiveNciiReportsAction() {
+  const { requireAdmin } = await import('./shared');
+  await requireAdmin();
+
+  const { getActiveNciiReports } = await import('@/lib/services/ncii-service');
+  return await getActiveNciiReports();
+}
+
+/**
+ * Resolve an NCII report with administrative action.
+ * Global admin only.
+ */
+export async function resolveNciiReportAction(
+  reportId: string,
+  action: 'content_removed' | 'content_not_found' | 'insufficient_info' | 'not_ncii',
+  actionNotes?: string
+) {
+  const { requireAdmin } = await import('./shared');
+  const adminId = await requireAdmin();
+
+  const { resolveNciiReport } = await import('@/lib/services/ncii-service');
+  await resolveNciiReport(reportId, adminId, action, actionNotes);
+}
+
+/**
+ * Server action: Fuzzy search usernames/names for NCII admin assistance.
+ * Global admin only.
+ */
+export async function fuzzySearchUsername(query: string) {
+  const { requireAdmin } = await import('./shared');
+  await requireAdmin();
+
+  const trimmed = query.trim();
+  if (!trimmed || trimmed.length < 2) return [];
+  // Cap length to prevent oversized LIKE patterns
+  if (trimmed.length > 100) return [];
+
+  const { db } = await import('@/db');
+  const { users } = await import('@/db/schema');
+  const { or, ilike } = await import('drizzle-orm');
+
+  // Escape SQL LIKE wildcards to prevent wildcard injection
+  // (e.g., input "%" matching every user in the database)
+  const escaped = trimmed.replace(/[%_]/g, '\\$&');
+
+  return await db.select({
+    id: users.id,
+    username: users.username,
+    name: users.name,
+    avatar: users.avatar,
+    slug: users.slug,
+  })
+    .from(users)
+    .where(or(
+      ilike(users.username, `%${escaped}%`),
+      ilike(users.name, `%${escaped}%`)
+    ))
+    .limit(10);
+}
+
+

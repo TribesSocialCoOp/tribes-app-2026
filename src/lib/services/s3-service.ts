@@ -8,6 +8,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { scanForCSAM, reportToNCMEC } from './csam-service';
+import { scanForNciiBlocklist } from './ncii-service';
 import { s3Logger } from '@/lib/logger';
 
 // ============================================================
@@ -144,6 +145,16 @@ export async function uploadImage(
     const scanResult = await scanForCSAM(buffer, file.name);
     if (scanResult.isMatch) {
       await reportToNCMEC(scanResult, { filename: file.name });
+      throw new Error('Upload rejected: content policy violation');
+    }
+
+    // ── NCII blocklist scan ──────────────────────────────────
+    const nciiScanResult = await scanForNciiBlocklist(buffer, file.name);
+    if (nciiScanResult.isBlocked) {
+      s3Logger.warn(
+        { filename: file.name, matchedHash: nciiScanResult.matchedHash },
+        'Upload rejected: matched NCII perceptual hash blocklist'
+      );
       throw new Error('Upload rejected: content policy violation');
     }
   } else {

@@ -507,6 +507,80 @@ export const reports = pgTable('reports', {
   reportedAt: timestamp('reported_at', { withTimezone: true }),
 });
 
+export const nciiReports = pgTable('ncii_reports', {
+  id: text('id').primaryKey(),                    // UUID
+  trackingNumber: text('tracking_number').notNull().unique(), // Human-readable: 'NCII-2026-00001'
+  
+  // Requester info (may not be a platform user)
+  requesterName: text('requester_name').notNull(),
+  requesterEmail: text('requester_email').notNull(),
+  requesterSignature: text('requester_signature').notNull(), // Electronic signature (typed name attestation)
+  isDepictedPerson: boolean('is_depicted_person').default(true), // vs authorized representative
+  
+  // Content identification
+  contentDescription: text('content_description').notNull(),
+  contentUrls: text('content_urls'),              // JSON array of URLs/locations on platform
+  posterUsername: text('poster_username'),         // Username of who posted it
+  searchTerms: text('search_terms'),              // Search terms that surface the content
+  contentType: text('content_type').notNull(),    // 'authentic_ncii' | 'deepfake' | 'minor'
+  
+  // Linked platform content (if identified)
+  linkedPostIds: text('linked_post_ids'),         // JSON array of post IDs matched
+  
+  // Non-consent attestation
+  nonConsentStatement: boolean('non_consent_statement').notNull(), // Checkbox attestation
+  
+  // Status & SLA
+  status: text('status').notNull().default('pending'),  // 'pending' | 'in_review' | 'removed' | 'rejected' | 'requires_info'
+  slaDeadline: timestamp('sla_deadline', { withTimezone: true }).notNull(), // reportedAt + 48h
+  
+  // Action tracking
+  reviewedBy: text('reviewed_by').references(() => users.id),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  actionTaken: text('action_taken'),              // 'content_removed' | 'content_not_found' | 'insufficient_info' | 'not_ncii'
+  actionNotes: text('action_notes'),
+  
+  // Hash storage (for re-upload prevention)
+  pdqHashesStored: boolean('pdq_hashes_stored').default(false),
+  
+  // Envelope encryption columns
+  encryptedPayload: text('encrypted_payload'),   // Base64 AES-256-GCM ciphertext of PII fields
+  encryptionIv: text('encryption_iv'),           // Base64 IV for the AES key
+  
+  // Timestamps
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+  updatedAt: timestamp('updated_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_ncii_reports_tracking').on(table.trackingNumber),
+  index('idx_ncii_reports_status').on(table.status, table.slaDeadline),
+  index('idx_ncii_reports_email').on(table.requesterEmail),
+]);
+
+export const nciiHashBlocklist = pgTable('ncii_hash_blocklist', {
+  id: text('id').primaryKey(),
+  pdqHash: text('pdq_hash').notNull(),            // 64-char hex PDQ hash
+  sourceReportId: text('source_report_id').references(() => nciiReports.id),
+  sourcePostId: text('source_post_id'),           // Original post that was removed
+  addedBy: text('added_by').references(() => users.id), // Admin who added it
+  addedAt: timestamp('added_at', { withTimezone: true }).default(sql`NOW()`),
+  status: text('status').notNull().default('confirmed'), // 'auto_blocked' | 'confirmed'
+}, (table) => [
+  index('idx_ncii_blocklist_hash').on(table.pdqHash),
+]);
+
+export const nciiReportKeyGrants = pgTable('ncii_report_key_grants', {
+  id: text('id').primaryKey(),
+  reportId: text('report_id').notNull().references(() => nciiReports.id, { onDelete: 'cascade' }),
+  adminId: text('admin_id').notNull().references(() => users.id),
+  wrappedKey: text('wrapped_key').notNull(),   // Base64: AES key encrypted with admin's RSA public key
+  wrapIv: text('wrap_iv').notNull(),           // Base64: IV for the RSA wrapping
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+}, (table) => [
+  index('idx_ncii_key_grants_report').on(table.reportId),
+  index('idx_ncii_key_grants_admin').on(table.adminId),
+]);
+
+
 // ============================================================
 // PERSONAL SPACE
 // ============================================================

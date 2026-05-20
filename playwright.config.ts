@@ -1,4 +1,7 @@
 import { defineConfig } from '@playwright/test';
+import crypto from 'crypto';
+
+const sessionID = crypto.randomUUID();
 
 export default defineConfig({
   testDir: './tests',
@@ -12,6 +15,9 @@ export default defineConfig({
     baseURL: 'http://localhost:9002',
     trace: 'on-first-retry',
     headless: true,
+    extraHTTPHeaders: {
+      'x-e2e-test-session': sessionID,
+    },
   },
   // Don't auto-start the dev server — assume it's already running
   webServer: {

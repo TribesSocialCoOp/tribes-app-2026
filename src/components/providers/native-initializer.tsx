@@ -74,12 +74,13 @@ export function NativeInitializer() {
     // 1. Initialize deep links
     initDeepLinks(router);
 
-    // 1b. Initialize WebAuthn Passkey auto-shim (Option B) for Android
+    // 1b. Initialize WebAuthn Passkey auto-shim (Option B) for Android & iOS
     const cap = (window as any).Capacitor;
-    if (cap?.getPlatform?.() === 'android') {
+    const platformName = cap?.getPlatform?.();
+    if (platformName === 'android' || platformName === 'ios') {
       import('@capgo/capacitor-passkey')
         .then(async ({ CapacitorPasskey }) => {
-          console.log('[passkey] Initializing WebAuthn auto-shim for Android...');
+          console.log(`[passkey] Initializing WebAuthn auto-shim for ${platformName}...`);
           await CapacitorPasskey.autoShimWebAuthn();
         })
         .catch(err => {

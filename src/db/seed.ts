@@ -85,6 +85,7 @@ async function seed() {
     reputationScore: mockUserProfile.reputationScore,
     reputationStatus: mockUserProfile.reputationStatus,
     emailVerified: true,
+    tosAcceptedVersion: '1.1.0',
     createdAt: mockUserProfile.accountCreatedAt,
   });
   // @ts-ignore -- awaited by async wrapper
@@ -138,6 +139,7 @@ async function seed() {
       role: u.role,
       emailVerified: true,
       reputationStatus: 'Active',
+      tosAcceptedVersion: '1.1.0',
       createdAt: new Date(),
     });
   }
