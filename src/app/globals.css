@@ -184,9 +184,17 @@ html.capacitor-native .prose {
   height: env(safe-area-inset-top);
 }
 
-/* Extra room above the fixed tab bar so content isn't hidden behind it */
-html.capacitor-native main {
+/* Extra room above the fixed tab bar so content isn't hidden behind it.
+   Android: needs explicit safe-area-inset-bottom because its WebView doesn't
+   auto-inset for the system navigation bar (buttons or gesture pill).
+   iOS: WKWebView contentInset:'always' already handles the home indicator,
+   so we only need the tab-bar clearance (5rem) without doubling up. */
+html.capacitor-android main {
   padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+}
+
+html.capacitor-ios main {
+  padding-bottom: 5rem;
 }
 
 /* Touch targets — Apple HIG 44px minimum, mobile only */
