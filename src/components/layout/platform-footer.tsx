@@ -2,15 +2,27 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useUser } from "@/hooks/use-user";
 import { ShieldAlert } from "lucide-react";
 
+// Routes where the footer adds no value and hurts the UX
+const HIDE_FOOTER_PATTERNS = [
+  /^\/bonds\/[^/]+$/, // Bond chat pages (/bonds/[bondId])
+];
+
 export function PlatformFooter() {
   const { role } = useUser();
+  const pathname = usePathname();
   const isAdmin = role === 'Admin' || role === 'System';
 
+  // Hide footer on specific pages where it hurts the UX (e.g. chat)
+  if (HIDE_FOOTER_PATTERNS.some(pattern => pattern.test(pathname))) {
+    return null;
+  }
+
   return (
-    <footer className="w-full pt-10 pb-32 md:pb-10 px-4 md:px-8 border-t bg-muted/20 mt-auto">
+    <footer className="w-full pt-6 pb-[calc(0.5rem+env(safe-area-inset-bottom))] md:pt-10 md:pb-10 px-4 md:px-8 border-t bg-muted/20 mt-auto">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="flex flex-wrap items-center justify-center md:justify-start gap-x-6 gap-y-3 text-sm text-muted-foreground">
           <Link href="/terms" className="touch-target-44 hover:text-foreground transition-colors">Terms</Link>

@@ -343,7 +343,7 @@ function BondChatContent() {
   }
 
   return (
-    <div className="flex flex-col flex-1 max-w-2xl mx-auto -mb-24 md:-mb-8 min-h-0">
+    <div className="flex flex-col flex-1 max-w-2xl mx-auto min-h-0">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b bg-background/95 backdrop-blur-sm">
         <Button variant="ghost" size="icon" onClick={() => router.push('/bonds')}>

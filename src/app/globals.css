@@ -186,7 +186,7 @@ html.capacitor-native .prose {
 
 /* Extra room above the fixed tab bar so content isn't hidden behind it */
 html.capacitor-native main {
-  padding-bottom: 5rem;
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
 }
 
 /* Touch targets — Apple HIG 44px minimum, mobile only */

@@ -38,7 +38,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <main data-app-ready className="flex-1 overflow-y-auto overflow-x-hidden bg-background flex flex-col">
               <AppHeader />
               <PullToRefresh>
-                <div className="flex-1 px-2 pt-3 pb-28 sm:p-6 lg:p-8 md:pb-8">
+                <div className="flex-1 px-2 pt-3 pb-4 sm:p-6 lg:p-8 md:pb-8">
                   <EmailVerificationBanner />
                   <KeySyncBanner />
                   {children}
