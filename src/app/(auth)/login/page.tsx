@@ -30,8 +30,8 @@ function LoginForm() {
   const turnstileRef = useRef<TurnstileWidgetRef | null>(null);
 
   useEffect(() => {
-    // Android WebAuthn is shimmed by CapacitorPasskey — always supported
-    if (isAndroid) {
+    // Android & iOS native WebAuthn is shimmed by CapacitorPasskey — always supported
+    if (isNative) {
       setWebAuthnSupported(true);
       return;
     }
@@ -89,12 +89,19 @@ function LoginForm() {
       
       const { getPrfSaltBytes } = await import('@/lib/crypto');
       const prfSalt = await getPrfSaltBytes();
+      
+      // Convert Uint8Array to base64url string so @simplewebauthn/browser can safely parse it
+      const prfSaltBase64url = btoa(String.fromCharCode(...Array.from(prfSalt)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+
       const optionsWithPrf = {
         ...options,
         extensions: {
           ...options.extensions,
           prf: {
-            eval: { first: prfSalt },
+            eval: { first: prfSaltBase64url },
           },
         },
       };
