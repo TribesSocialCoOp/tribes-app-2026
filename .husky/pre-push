@@ -1,0 +1,2 @@
+echo "🔍 Running TypeScript strict check before push..."
+npm run typecheck
