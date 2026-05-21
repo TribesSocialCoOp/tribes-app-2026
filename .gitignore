@@ -106,6 +106,10 @@ keys/
 
 # Apple Sign-In private key
 keys/*.p8
+
+# Firebase / FCM config (contains API keys)
+**/google-services.json
+**/GoogleService-Info.plist
 .ios-build-floor
 
 # Local dev posts and associated draft assets

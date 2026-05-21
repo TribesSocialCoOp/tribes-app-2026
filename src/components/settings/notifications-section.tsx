@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Bell, BellRing, Loader2, Smartphone } from "lucide-react";
 import { usePushNotifications } from '@/hooks/use-push-notifications';
+import { isNative } from '@/lib/capacitor/platform';
 
 
 export interface NotifPrefsState {
@@ -78,11 +79,13 @@ export function NotificationsSection({ notifPrefs, setNotifPrefs, isSaving, onSa
           <div className="flex items-center justify-between gap-3 p-3 rounded-md border border-primary/30 bg-primary/5">
             <div className="min-w-0 flex-1">
               <Label className="font-semibold flex items-center gap-2">
-                <Smartphone className="h-4 w-4" /> Browser Push Notifications
+                <Smartphone className="h-4 w-4" /> {isNative ? "App Push Notifications" : "Browser Push Notifications"}
               </Label>
               <p className="text-xs text-muted-foreground mt-1">
                 {permission === 'denied'
-                  ? 'Notifications are blocked by your browser. Update your browser settings to enable.'
+                  ? (isNative
+                      ? 'Notifications are blocked by your device settings. Update your system settings to enable.'
+                      : 'Notifications are blocked by your browser. Update your browser settings to enable.')
                   : isSubscribed
                     ? 'You will receive push notifications for activity on Tribes.'
                     : 'Enable push notifications to stay updated even when the app is in the background.'

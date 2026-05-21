@@ -749,6 +749,7 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   endpoint: text('endpoint').notNull(),
   keysP256dh: text('keys_p256dh'),
   keysAuth: text('keys_auth'),
+  platform: text('platform').default('web'),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
 });
 

@@ -1,15 +1,16 @@
 "use client";
 
 /**
- * @fileoverview Push notification hook with dev simulator.
+ * @fileoverview Push notification hook with dev simulator and native Capacitor support.
  *
- * DEV mode: Uses browser Notification API directly — no Service Worker needed.
- * PROD mode: Registers Service Worker + VAPID subscription.
- *
- * Pattern: Same as Garage S3 — simulate locally, swap transport for prod.
+ * Web DEV mode: Uses toast alerts.
+ * Web PROD mode: Registers Service Worker + VAPID subscription.
+ * Native (iOS/Android) mode: Registers via native APNs/FCM and sends token to server.
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useToast } from '@/hooks/use-toast';
+import { isNative, platform } from '@/lib/capacitor/platform';
 
 type PushPermission = 'default' | 'granted' | 'denied';
 
@@ -17,6 +18,7 @@ const IS_DEV = process.env.NODE_ENV === 'development';
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 
 export function usePushNotifications() {
+  const { toast } = useToast();
   const [permission, setPermission] = useState<PushPermission>('default');
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
@@ -25,6 +27,18 @@ export function usePushNotifications() {
   // Check support and current permission on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
+
+    if (isNative) {
+      setIsSupported(true);
+      import('@capacitor/push-notifications').then(({ PushNotifications }) => {
+        PushNotifications.checkPermissions().then((status) => {
+          const perm = status.receive === 'granted' ? 'granted' : (status.receive === 'denied' ? 'denied' : 'default');
+          setPermission(perm);
+          setIsSubscribed(status.receive === 'granted');
+        });
+      });
+      return;
+    }
 
     const supported = 'Notification' in window;
     setIsSupported(supported);
@@ -36,9 +50,22 @@ export function usePushNotifications() {
   }, []);
 
   /**
-   * Request notification permission from the browser.
+   * Request notification permission from the browser or OS.
    */
   const requestPermission = useCallback(async (): Promise<PushPermission> => {
+    if (isNative) {
+      try {
+        const { PushNotifications } = await import('@capacitor/push-notifications');
+        const permStatus = await PushNotifications.requestPermissions();
+        const perm = permStatus.receive === 'granted' ? 'granted' : (permStatus.receive === 'denied' ? 'denied' : 'default');
+        setPermission(perm);
+        return perm;
+      } catch (err) {
+        console.error('[push] Request permission native error:', err);
+        return 'denied';
+      }
+    }
+
     if (!isSupported) return 'denied';
 
     const result = await Notification.requestPermission();
@@ -49,12 +76,73 @@ export function usePushNotifications() {
 
   /**
    * Subscribe to push notifications.
-   * DEV: Just requests permission and saves state.
-   * PROD: Registers SW, creates VAPID subscription, sends to server.
+   * Native: Requests native OS permissions, registers with APNs/FCM, sends token.
+   * Web DEV: Simulates subscription, sends placeholder to server.
+   * Web PROD: Registers SW, creates VAPID subscription, sends to server.
    */
   const subscribe = useCallback(async (): Promise<boolean> => {
     setIsLoading(true);
     try {
+      if (isNative) {
+        const { PushNotifications } = await import('@capacitor/push-notifications');
+        const perm = await requestPermission();
+        if (perm !== 'granted') {
+          setIsSubscribed(false);
+          return false;
+        }
+
+        return new Promise<boolean>(async (resolve) => {
+          let tokenListener: any;
+          let errorListener: any;
+
+          const cleanup = () => {
+            if (tokenListener) tokenListener.remove();
+            if (errorListener) errorListener.remove();
+          };
+
+          try {
+            tokenListener = await PushNotifications.addListener('registration', async (token) => {
+              cleanup();
+              const truncated = token.value.length > 12 ? token.value.slice(0, 8) + '…' + token.value.slice(-4) : token.value;
+              console.log('[push] Native registration successful, token:', truncated);
+              try {
+                const { registerPushSubscriptionAction } = await import('@/lib/actions/content-actions');
+                await registerPushSubscriptionAction({
+                  endpoint: token.value,
+                  platform: platform
+                });
+                setIsSubscribed(true);
+                toast({
+                  title: 'Notifications Enabled! 🎉',
+                  description: 'You will now receive native push notifications on this device.',
+                });
+                resolve(true);
+              } catch (err) {
+                console.error('[push] Failed to save native token to server:', err);
+                resolve(false);
+              }
+            });
+
+            errorListener = await PushNotifications.addListener('registrationError', (err) => {
+              cleanup();
+              console.error('[push] Native registration error event:', err);
+              toast({
+                title: 'Registration Failed',
+                description: 'Could not register for push notifications.',
+                variant: 'destructive',
+              });
+              resolve(false);
+            });
+
+            await PushNotifications.register();
+          } catch (err) {
+            cleanup();
+            console.error('[push] Native register exception:', err);
+            resolve(false);
+          }
+        });
+      }
+
       const perm = await requestPermission();
       if (perm !== 'granted') {
         setIsSubscribed(false);
@@ -62,20 +150,17 @@ export function usePushNotifications() {
       }
 
       if (IS_DEV) {
-        // Dev mode: just save permission state — no SW registration
+        // Dev mode: just save permission state
         setIsSubscribed(true);
 
-        // Show a test notification to confirm it works
-        showLocalNotification(
-          'Notifications Enabled! 🎉',
-          'You will now receive local notifications from Tribes in dev mode.',
-          '/'
-        );
+        toast({
+          title: 'Notifications Enabled! 🎉',
+          description: 'You will now receive local notifications in dev mode.',
+        });
 
-        // Save subscription to server (endpoint = 'local-dev')
         try {
           const { registerPushSubscriptionAction } = await import('@/lib/actions/content-actions');
-          await registerPushSubscriptionAction({ endpoint: 'local-dev-simulator' });
+          await registerPushSubscriptionAction({ endpoint: 'local-dev-simulator', platform: 'web' });
         } catch {
           // Best effort
         }
@@ -101,6 +186,7 @@ export function usePushNotifications() {
             p256dh: arrayBufferToBase64(subscription.getKey('p256dh')),
             auth: arrayBufferToBase64(subscription.getKey('auth')),
           },
+          platform: 'web'
         });
 
         setIsSubscribed(true);
@@ -114,7 +200,7 @@ export function usePushNotifications() {
     } finally {
       setIsLoading(false);
     }
-  }, [requestPermission]);
+  }, [requestPermission, toast]);
 
   /**
    * Unsubscribe from push notifications.
@@ -127,9 +213,19 @@ export function usePushNotifications() {
       // Remove from server
       try {
         const { removePushSubscriptionAction } = await import('@/lib/actions/content-actions');
-        await removePushSubscriptionAction();
+        await removePushSubscriptionAction(platform);
       } catch {
         // Best effort
+      }
+
+      if (isNative) {
+        try {
+          const { PushNotifications } = await import('@capacitor/push-notifications');
+          await PushNotifications.removeAllListeners();
+        } catch (err) {
+          console.error('[push] Unsubscribe native error:', err);
+        }
+        return;
       }
 
       // Prod: Unregister SW subscription
@@ -152,45 +248,7 @@ export function usePushNotifications() {
     isLoading,
     subscribe,
     unsubscribe,
-    showLocalNotification,
   };
-}
-
-// ─── Dev Simulator ───────────────────────────────────────────────────────────
-
-/**
- * Show a local browser notification (dev simulator).
- * Uses the browser Notification API directly — no Service Worker needed.
- */
-export function showLocalNotification(
-  title: string,
-  body: string,
-  url?: string,
-): void {
-  if (typeof window === 'undefined' || !('Notification' in window)) return;
-  if (Notification.permission !== 'granted') return;
-
-  try {
-    const notification = new Notification(title, {
-      body,
-      icon: '/icon-192x192.png',
-      tag: `tribes-${Date.now()}`,
-    });
-
-    if (url) {
-      notification.onclick = () => {
-        window.focus();
-        window.location.href = url;
-        notification.close();
-      };
-    }
-
-    // Auto-close after 5 seconds
-    setTimeout(() => notification.close(), 5000);
-  } catch {
-    // Fallback: some browsers don't support Notification constructor
-    console.log(`[notification] ${title}: ${body}`);
-  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
