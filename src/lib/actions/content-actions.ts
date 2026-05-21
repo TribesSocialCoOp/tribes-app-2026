@@ -1877,19 +1877,35 @@ export async function createStoryComment(storyId: string, content: string, paren
 }
 
 // ======== PUSH NOTIFICATIONS ========
+import { z } from 'zod';
+
+const pushSubscriptionSchema = z.object({
+  endpoint: z.string().url().max(2048).or(z.literal('local-dev-simulator')).or(z.string().min(1).max(512)), // Allows URL (web) or raw token (native)
+  keys: z.object({
+    p256dh: z.string().max(512).optional(),
+    auth: z.string().max(512).optional(),
+  }).optional(),
+  platform: z.enum(['web', 'ios', 'android']).optional(),
+});
+
 export async function registerPushSubscriptionAction(subscription: {
   endpoint: string;
   keys?: { p256dh?: string; auth?: string };
+  platform?: 'web' | 'ios' | 'android';
 }) {
   const userId = await requireAuth();
+  
+  // Validate input
+  const parsed = pushSubscriptionSchema.parse(subscription);
+
   const { registerPushSubscription: fn } = await import('@/lib/services/push-service');
-  return fn(userId, subscription);
+  return fn(userId, parsed);
 }
 
-export async function removePushSubscriptionAction() {
+export async function removePushSubscriptionAction(platform?: 'web' | 'ios' | 'android') {
   const userId = await requireAuth();
   const { removePushSubscription: fn } = await import('@/lib/services/push-service');
-  return fn(userId);
+  return fn(userId, platform);
 }
 
 export async function hasPushSubscription() {

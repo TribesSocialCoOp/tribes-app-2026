@@ -6,7 +6,7 @@ import { Slot } from "@radix-ui/react-slot"
 import { VariantProps, cva } from "class-variance-authority"
 import { PanelLeft, Menu } from "lucide-react"
 
-import { useIsMobile as useActualIsMobile } from "@/hooks/use-mobile" // Renamed to avoid conflict if used directly
+import { useIsMobile as useActualIsMobile, MOBILE_MEDIA_QUERY } from "@/hooks/use-mobile" // Renamed to avoid conflict if used directly
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -25,7 +25,6 @@ const SIDEBAR_WIDTH = "16rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
-const MOBILE_BREAKPOINT = 768 // Keep this consistent with use-mobile hook
 
 type SidebarContextValue = {
   state: "expanded" | "collapsed" // Desktop sidebar state string
@@ -114,7 +113,7 @@ const SidebarProvider = React.forwardRef<
     // Effect for client-side only logic (isMobile, cookie)
     React.useEffect(() => {
       // Determine isMobile
-      const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
+      const mql = window.matchMedia(MOBILE_MEDIA_QUERY);
       const handleResize = () => setIsMobileClient(mql.matches);
       mql.addEventListener("change", handleResize);
       handleResize(); // Initial check

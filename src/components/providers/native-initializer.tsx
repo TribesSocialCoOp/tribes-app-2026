@@ -179,10 +179,59 @@ export function NativeInitializer() {
     };
     window.addEventListener('statusTap', handleStatusTap);
 
+    // 7. Setup native push notification lifecycle listeners
+    let pushCleanup: (() => void) | null = null;
+    import('@capacitor/push-notifications').then(async ({ PushNotifications }) => {
+      // Listen for foreground notifications
+      const receivedHandle = await PushNotifications.addListener('pushNotificationReceived', async (notification) => {
+        console.log('[push] Foreground notification received:', notification);
+        
+        // Haptic feedback
+        try {
+          const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
+          await Haptics.impact({ style: ImpactStyle.Medium });
+        } catch {
+          // ignore
+        }
+
+        // Show standard in-app toast
+        const { toast } = await import('@/hooks/use-toast');
+        toast({
+          title: notification.title || 'New Notification',
+          description: notification.body || '',
+        });
+      });
+
+      // Listen for background notification actions (tap)
+      const actionHandle = await PushNotifications.addListener('pushNotificationActionPerformed', async (action) => {
+        console.log('[push] Notification action performed:', action);
+        
+        // Extract redirect URL (e.g. data.url or action.notification.data.url)
+        const data = action.notification?.data;
+        const redirectUrl = data?.url || data?.link || data?.redirect;
+        
+        if (redirectUrl) {
+          console.log('[push] Navigating to push action URL:', redirectUrl);
+          router.push(redirectUrl);
+        } else {
+          console.log('[push] Navigating to notifications screen /your-comms');
+          router.push('/your-comms');
+        }
+      });
+
+      pushCleanup = () => {
+        receivedHandle.remove();
+        actionHandle.remove();
+      };
+    }).catch(err => {
+      console.error('[push] Failed to load/init PushNotifications plugin:', err);
+    });
+
     return () => {
       clearTimeout(timer);
       clearInterval(pollInterval);
       keyboardCleanup?.();
+      pushCleanup?.();
       window.removeEventListener('statusTap', handleStatusTap);
       themeObserver.disconnect();
     };

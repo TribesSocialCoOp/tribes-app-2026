@@ -28,6 +28,13 @@ export default {
     'bg-violet-100',  'dark:bg-violet-950',
   ],
   theme: {
+    screens: {
+      sm: '640px',
+      md: { raw: '(min-width: 768px) and (min-height: 500px)' },
+      lg: '1024px',
+      xl: '1280px',
+      '2xl': '1536px',
+    },
   	extend: {
       fontFamily: {
         sans: ['var(--font-oxanium)', 'ui-sans-serif', 'system-ui'],

@@ -5,7 +5,7 @@ import { moodsData as allMoods } from '@/lib/moods-data';
 import type { CommunicationItem, Ring } from '@/lib/types';
 import type { ActivityItem } from '@/lib/services/notification-service';
 import { getUnifiedFeedAction, getActivityFeed, markActivityViewed, markSingleActivityRead } from '@/lib/actions/content-actions';
-import { showLocalNotification } from '@/hooks/use-push-notifications';
+import { useToast } from '@/hooks/use-toast';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -101,6 +101,7 @@ export function useIntercom() {
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 export function IntercomProvider({ children }: { children: React.ReactNode }) {
+  const { toast } = useToast();
   const [state, dispatch] = useReducer(reducer, {
     isLoading: true,
     feedItems: [],
@@ -202,11 +203,10 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
       if (unreadCount > prevActivityCountRef.current && prevActivityCountRef.current > 0) {
         const newest = items.find((a: ActivityItem) => !a.read);
         if (newest) {
-          showLocalNotification(
-            'New Activity',
-            newest.description || 'You have new activity on Tribes.app',
-            '/your-comms'
-          );
+          toast({
+            title: 'New Activity',
+            description: newest.description || 'You have new activity on Tribes.app',
+          });
         }
       }
       prevActivityCountRef.current = unreadCount;

@@ -12,6 +12,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import type { WallStyles } from '@/app/(app)/my-wall/page';
 
+import { useIsMobile } from '@/hooks/use-mobile';
+
 interface CustomizeWallSheetProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -54,6 +56,7 @@ export function CustomizeWallSheet({
   onSave,
 }: CustomizeWallSheetProps) {
   const [styles, setStyles] = useState<WallStyles>(currentStyles);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     if (isOpen) {
@@ -67,15 +70,22 @@ export function CustomizeWallSheet({
 
   return (
     <Sheet open={isOpen} onOpenChange={onOpenChange}>
-      <SheetContent>
-        <SheetHeader>
+      <SheetContent
+        side={isMobile ? "bottom" : "right"}
+        className={cn(
+          "flex flex-col gap-4 bg-background p-6 shadow-lg transition ease-in-out duration-300",
+          isMobile ? "h-auto max-h-[90vh] rounded-t-[20px] border-t" : "h-full w-[400px] sm:w-[540px]"
+        )}
+        style={isMobile ? { maxHeight: 'calc(90vh - var(--keyboard-height, 0px))' } : undefined}
+      >
+        <SheetHeader className={cn(isMobile ? "text-left" : "")}>
           <SheetTitle>Customize Your Wall</SheetTitle>
           <SheetDescription>
             Change the appearance and layout of your personal wall.
           </SheetDescription>
         </SheetHeader>
-        <ScrollArea className="h-[calc(100%-8rem)] pr-4">
-            <div className="py-4 space-y-8">
+        <ScrollArea className={cn(isMobile ? "flex-1 overflow-y-auto min-h-0 pr-2" : "h-[calc(100%-8rem)] pr-4")}>
+            <div className="py-2 space-y-6">
                 <fieldset>
                     <legend className="text-sm font-semibold text-foreground mb-2">Background Color</legend>
                     <RadioGroup
@@ -121,9 +131,9 @@ export function CustomizeWallSheet({
                 </fieldset>
             </div>
         </ScrollArea>
-        <SheetFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave}>Save Changes</Button>
+        <SheetFooter className={cn(isMobile ? "flex-row gap-2 justify-end pt-2 border-t mt-auto" : "")}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className={cn(isMobile ? "flex-1" : "")}>Cancel</Button>
+          <Button onClick={handleSave} className={cn(isMobile ? "flex-1" : "")}>Save Changes</Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>
