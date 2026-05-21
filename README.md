@@ -2,7 +2,7 @@
 
 [![Release](https://img.shields.io/badge/version-1.0.5-blue.svg)](https://github.com/dustmoo/tribes-app-2026/releases)
 [![CI](https://github.com/dustmoo/tribes-app-2026/actions/workflows/ci.yml/badge.svg)](https://github.com/dustmoo/tribes-app-2026/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: BSL 1.1](https://img.shields.io/badge/License-BSL_1.1-blue.svg)](LICENSE)
 
 Welcome to **Tribes.app**, a modern, beautiful, and open-source social communication platform built with a deep commitment to **End-to-End Encryption (E2EE)** and a state-of-the-art **Concentric Rings UX** design. 
 
