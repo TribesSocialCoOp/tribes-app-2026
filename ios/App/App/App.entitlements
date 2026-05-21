@@ -4,8 +4,8 @@
 <dict>
 	<key>com.apple.developer.associated-domains</key>
 	<array>
-		<string>webcredentials:tribes.app</string>
 		<string>applinks:tribes.app</string>
+		<string>webcredentials:tribes.app</string>
 	</array>
 	<key>com.apple.developer.nfc.readersession.formats</key>
 	<array>

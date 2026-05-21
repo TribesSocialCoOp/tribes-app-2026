@@ -21,6 +21,7 @@ let package = Package(
         .package(name: "CapacitorSplashScreen", path: "../../../node_modules/@capacitor/splash-screen"),
         .package(name: "CapacitorStatusBar", path: "../../../node_modules/@capacitor/status-bar"),
         .package(name: "CapgoCapacitorNfc", path: "../../../node_modules/@capgo/capacitor-nfc"),
+        .package(name: "CapgoCapacitorPasskey", path: "../../../node_modules/@capgo/capacitor-passkey"),
         .package(name: "SquareetlabsCapacitorNearbyMultipeer", path: "../../../node_modules/@squareetlabs/capacitor-nearby-multipeer")
     ],
     targets: [
@@ -38,6 +39,7 @@ let package = Package(
                 .product(name: "CapacitorSplashScreen", package: "CapacitorSplashScreen"),
                 .product(name: "CapacitorStatusBar", package: "CapacitorStatusBar"),
                 .product(name: "CapgoCapacitorNfc", package: "CapgoCapacitorNfc"),
+                .product(name: "CapgoCapacitorPasskey", package: "CapgoCapacitorPasskey"),
                 .product(name: "SquareetlabsCapacitorNearbyMultipeer", package: "SquareetlabsCapacitorNearbyMultipeer")
             ]
         )
