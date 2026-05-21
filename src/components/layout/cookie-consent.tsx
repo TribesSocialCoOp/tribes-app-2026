@@ -230,7 +230,7 @@ function ConsentBanner({
   onManage: () => void;
 }) {
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 p-3 sm:p-4 animate-in slide-in-from-bottom-4 duration-300">
+    <div className="fixed bottom-0 left-0 right-0 z-50 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:p-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom,0px))] animate-in slide-in-from-bottom-4 duration-300">
       <div className="max-w-4xl mx-auto bg-background/95 backdrop-blur-md border border-border rounded-xl shadow-2xl p-4 sm:p-5">
         <div className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
           <div className="flex items-start gap-3 flex-1 min-w-0">
