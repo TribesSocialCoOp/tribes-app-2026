@@ -420,7 +420,7 @@ export default function TribesPage() {
       <div className="space-y-8">
         <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
           <div className="flex flex-col md:flex-row md:items-baseline md:gap-3">
-            <h1 className="text-2xl sm:text-4xl font-bold tracking-normal text-foreground font-mono">{isLoggedIn ? 'Your Tribes' : 'Explore Tribes'}</h1>
+            <h1 className="text-2xl sm:text-4xl font-bold tracking-normal text-foreground font-mono">Explore Tribes</h1>
             <p className="text-lg text-muted-foreground mt-1 md:mt-0">
               {isLoggedIn ? 'Manage your existing tribes or discover new ones to join.' : 'Discover public communities and find your people.'}
             </p>

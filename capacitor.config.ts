@@ -16,7 +16,7 @@ const config: CapacitorConfig = {
     errorPath: 'error.html',
   },
   ios: {
-    contentInset: 'always',
+    contentInset: 'never',
     allowsLinkPreview: false,
   },
   android: {

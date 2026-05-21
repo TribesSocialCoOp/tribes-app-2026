@@ -126,16 +126,19 @@ export function NativeInitializer() {
       hideSplash();
     }, 5000);
 
-    // 4. Add native class to body for CSS targeting
+    // 4. Add native class to html and body for CSS targeting
+    document.documentElement.classList.add('capacitor-native');
     document.body.classList.add('capacitor-native');
 
     // 4b. Add platform-specific class for platform-targeted CSS
     //     Android needs separate status bar inset handling (edge-to-edge enforced on Android 15+)
-    //     iOS uses native contentInset: 'always' so doesn't need CSS padding
+    //     iOS uses contentInset: 'never' + viewport-fit:cover for edge-to-edge
     const platform = cap?.getPlatform?.() || 'web';
     if (platform === 'android') {
+      document.documentElement.classList.add('capacitor-android');
       document.body.classList.add('capacitor-android');
     } else if (platform === 'ios') {
+      document.documentElement.classList.add('capacitor-ios');
       document.body.classList.add('capacitor-ios');
     }
 
