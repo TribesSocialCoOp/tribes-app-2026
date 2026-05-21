@@ -130,7 +130,7 @@ npm run seed
 ```bash
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) to interact with the application.
+Open [http://localhost:9002](http://localhost:9002) to interact with the application.
 
 ---
 
