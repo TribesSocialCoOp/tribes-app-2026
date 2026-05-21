@@ -197,6 +197,15 @@ html.capacitor-ios main {
   padding-bottom: 5rem;
 }
 
+/* On iOS Capacitor, env(safe-area-inset-bottom) ≈ 34px for the home indicator.
+   The PlatformFooter sits inside <main> and adds its own safe-area padding,
+   but that's redundant here — main's padding-bottom already clears the fixed
+   tab bar, and the tab bar's own pb-safe handles the home indicator.
+   Override to a compact value so the footer doesn't double-up. */
+html.capacitor-ios footer {
+  padding-bottom: 0.5rem !important;
+}
+
 /* Touch targets — Apple HIG 44px minimum, mobile only */
 .touch-target-44 {
   min-width: 44px;
