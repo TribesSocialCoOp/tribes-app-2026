@@ -92,7 +92,7 @@ export function VersionGuard({ children }: { children: React.ReactNode }) {
             zIndex: 9999,
             background: "linear-gradient(135deg, hsl(260, 70%, 50%), hsl(200, 80%, 45%))",
             color: "white",
-            padding: "10px 16px",
+            padding: "calc(10px + env(safe-area-inset-top, 0px)) 16px 10px",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -141,13 +141,13 @@ export function VersionGuard({ children }: { children: React.ReactNode }) {
               to   { transform: translateY(0);     opacity: 1; }
             }
             .version-guard-banner + * {
-              padding-top: 44px;
+              padding-top: calc(44px + env(safe-area-inset-top, 0px));
             }
           `}</style>
         </div>
       )}
       {/* Push content down when banner is visible */}
-      {updateAvailable && <div style={{ height: "44px", flexShrink: 0 }} />}
+      {updateAvailable && <div style={{ height: "calc(44px + env(safe-area-inset-top, 0px))", flexShrink: 0 }} />}
       {children}
     </>
   );
