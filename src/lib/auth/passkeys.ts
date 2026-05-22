@@ -173,43 +173,83 @@ export async function startAuthentication() {
 
 export async function finishAuthentication(body: AuthenticationResponseJSON) {
   const challenge = (await cookies()).get('webauthn_challenge')?.value;
-  if (!challenge) throw new Error('Challenge not found');
+  if (!challenge) {
+    // This is always logged — it's a real error, not diagnostic data
+    console.error('[passkey-auth] Challenge cookie not found. Cookies may have been blocked or expired.');
+    throw new Error('Challenge not found');
+  }
 
-  // We need to find the credential to get the public key
+  // Gate verbose diagnostic logging to a specific credential prefix set via env var.
+  // This ensures we never accidentally log data about other users' passkey attempts.
   const credentialId = body.id;
+  const debugPrefix = process.env.PASSKEY_DEBUG_CREDENTIAL_PREFIX;
+  const isDebugTarget = !!debugPrefix && credentialId.startsWith(debugPrefix);
+
+  if (isDebugTarget) {
+    console.log('[passkey-debug] Looking up credential:', credentialId.substring(0, 16) + '...');
+  }
+
   const dbCredential = await db.query.credentials.findFirst({
     where: eq(credentials.id, credentialId),
   });
 
-  if (!dbCredential) throw new Error('Credential not found');
-
-  const verification = await verifyAuthenticationResponse({
-    response: body,
-    expectedChallenge: challenge,
-    expectedOrigin: getExpectedOrigins(),
-    expectedRPID: RP_ID,
-    credential: {
-      id: dbCredential.id,
-      publicKey: new Uint8Array(dbCredential.publicKey as Buffer),
-      counter: dbCredential.counter ?? 0,
-    },
-  });
-
-  const { verified, authenticationInfo } = verification;
-
-  if (verified && authenticationInfo) {
-    const { newCounter } = authenticationInfo;
-
-    // Update counter
-    await db.update(credentials)
-      .set({ counter: newCounter })
-      .where(eq(credentials.id, dbCredential.id));
-
-    // Create session
-    await createSession(dbCredential.userId);
-
-    return { success: true, userId: dbCredential.userId };
+  if (!dbCredential) {
+    if (isDebugTarget) {
+      console.error('[passkey-debug] Credential not found in DB. ID from client:', credentialId);
+    }
+    throw new Error('Credential not found');
   }
 
-  throw new Error('Authentication verification failed');
+  if (isDebugTarget) {
+    console.log('[passkey-debug] Credential found for user:', dbCredential.userId.substring(0, 8) + '...');
+    const expectedOrigins = getExpectedOrigins();
+    console.log('[passkey-debug] Expected origins:', expectedOrigins);
+    console.log('[passkey-debug] Expected RP_ID:', RP_ID);
+    console.log('[passkey-debug] Counter in DB:', dbCredential.counter);
+  }
+
+  const expectedOrigins = getExpectedOrigins();
+
+  try {
+    const verification = await verifyAuthenticationResponse({
+      response: body,
+      expectedChallenge: challenge,
+      expectedOrigin: expectedOrigins,
+      expectedRPID: RP_ID,
+      credential: {
+        id: dbCredential.id,
+        publicKey: new Uint8Array(dbCredential.publicKey as Buffer),
+        counter: dbCredential.counter ?? 0,
+      },
+    });
+
+    const { verified, authenticationInfo } = verification;
+
+    if (verified && authenticationInfo) {
+      const { newCounter } = authenticationInfo;
+
+      // Update counter
+      await db.update(credentials)
+        .set({ counter: newCounter })
+        .where(eq(credentials.id, dbCredential.id));
+
+      // Create session
+      await createSession(dbCredential.userId);
+
+      if (isDebugTarget) {
+        console.log('[passkey-debug] Login successful, counter updated:', dbCredential.counter, '->', newCounter);
+      }
+      return { success: true, userId: dbCredential.userId };
+    }
+
+    if (isDebugTarget) {
+      console.error('[passkey-debug] Verification returned verified=false');
+    }
+    throw new Error('Authentication verification failed');
+  } catch (verifyError) {
+    if (isDebugTarget) {
+      console.error('[passkey-debug] verifyAuthenticationResponse threw:', verifyError);
+    }
+    throw verifyError;
+  }
 }
