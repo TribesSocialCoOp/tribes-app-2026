@@ -23,6 +23,15 @@ test.describe('NCII Take It Down Act Compliance E2E Flows', () => {
     await expect(page.locator('label:has-text("I swear under penalty of perjury")')).toBeVisible();
 
     // Try submitting without filling required fields
+    // Wait for the ALTCHA PoW widget to solve first — otherwise the form gates on
+    // altchaPayload and returns early with a toast instead of running Zod validation
+    await page.waitForFunction(() => {
+      const widget = document.querySelector('altcha-widget');
+      if (!widget) return true;
+      const input = widget.querySelector('input[type="hidden"]') as HTMLInputElement | null;
+      return input && input.value.length > 0;
+    }, { timeout: 15000 });
+
     const submitBtn = page.locator('button[type="submit"]');
     await submitBtn.click();
 

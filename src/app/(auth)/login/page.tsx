@@ -13,7 +13,7 @@ import { startAuthentication } from "@simplewebauthn/browser";
 import { loginUserAction, finishLoginAction, loginWithPasswordAction, verifyTotpAndLoginAction } from "@/lib/auth-actions";
 import { useToast } from "@/hooks/use-toast";
 import { isAuthMethodEnabled } from "@/lib/auth/auth-config";
-import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/turnstile-widget";
+import { AltchaWidget, type AltchaWidgetRef } from "@/components/altcha-widget";
 import { isNative, isAndroid } from "@/lib/capacitor/platform";
 
 function LoginForm() {
@@ -26,8 +26,8 @@ function LoginForm() {
   const [emailOrUsername, setEmailOrUsername] = useState("");
   const [password, setPassword] = useState("");
   const [webAuthnSupported, setWebAuthnSupported] = useState<boolean | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const turnstileRef = useRef<TurnstileWidgetRef | null>(null);
+  const [altchaPayload, setAltchaPayload] = useState<string | null>(null);
+  const altchaRef = useRef<AltchaWidgetRef | null>(null);
 
   useEffect(() => {
     // Android & iOS native WebAuthn is shimmed by CapacitorPasskey — always supported
@@ -231,7 +231,12 @@ function LoginForm() {
 
     setIsLoading(true);
     try {
-      const result = await loginWithPasswordAction(emailOrUsername, password, turnstileToken || undefined);
+      const result = await loginWithPasswordAction(
+        emailOrUsername,
+        password,
+        undefined,
+        altchaPayload ?? undefined
+      );
 
       if ('error' in result) {
         toast({
@@ -239,8 +244,8 @@ function LoginForm() {
           title: "Login Failed",
           description: result.error,
         });
-        turnstileRef.current?.reset();
-        setTurnstileToken(null);
+        altchaRef.current?.reset();
+        setAltchaPayload(null);
         setIsLoading(false);
         return;
       }
@@ -272,8 +277,8 @@ function LoginForm() {
         title: "Error",
         description: err?.message || "An unexpected error occurred.",
       });
-      turnstileRef.current?.reset();
-      setTurnstileToken(null);
+      altchaRef.current?.reset();
+      setAltchaPayload(null);
     } finally {
       setIsLoading(false);
     }
@@ -464,13 +469,13 @@ function LoginForm() {
               </div>
             </div>
 
-            {/* Turnstile Widget */}
+            {/* ALTCHA Widget */}
             {!isNative && (
-              <div className="flex justify-center py-1">
-                <TurnstileWidget
-                  ref={turnstileRef}
-                  onVerified={setTurnstileToken}
-                  onExpired={() => setTurnstileToken(null)}
+              <div className="w-full py-1">
+                <AltchaWidget
+                  ref={altchaRef}
+                  onVerified={setAltchaPayload}
+                  onExpired={() => setAltchaPayload(null)}
                 />
               </div>
             )}

@@ -33,10 +33,12 @@ interface TurnstileResponse {
  * Validates a Turnstile challenge token server-side.
  * Throws if the token is invalid or missing.
  *
+ * @deprecated — ALTCHA is now the primary challenge. This function will be removed in a future release.
  * @param token - The `cf-turnstile-response` value from the client form submission
  * @param remoteIp - Optional: the client's IP address for additional Cloudflare context
  */
 export async function validateTurnstileToken(token: string | null | undefined, remoteIp?: string): Promise<void> {
+  console.warn('[turnstile] DEPRECATED — ALTCHA is now the primary challenge. This function will be removed in a future release.');
   const secretKey = process.env.TURNSTILE_SECRET_KEY;
 
   if (!secretKey) {

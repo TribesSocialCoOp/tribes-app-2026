@@ -11,15 +11,15 @@ import { AppLogo } from "@/components/icons/app-logo";
 import { Loader2, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { requestPasswordResetAction } from "@/lib/auth-actions";
 import { useToast } from "@/hooks/use-toast";
-import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/turnstile-widget";
+import { AltchaWidget, type AltchaWidgetRef } from "@/components/altcha-widget";
 import { isNative } from "@/lib/capacitor/platform";
 
 function ForgotPasswordForm() {
   const [emailOrUsername, setEmailOrUsername] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const turnstileRef = useRef<TurnstileWidgetRef | null>(null);
+  const [altchaPayload, setAltchaPayload] = useState<string | null>(null);
+  const altchaRef = useRef<AltchaWidgetRef | null>(null);
   const { toast } = useToast();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -28,15 +28,19 @@ function ForgotPasswordForm() {
 
     setIsLoading(true);
     try {
-      const res = await requestPasswordResetAction(emailOrUsername, turnstileToken || undefined);
+      const res = await requestPasswordResetAction(
+        emailOrUsername,
+        undefined,
+        altchaPayload ?? undefined
+      );
       if ("error" in res) {
         toast({
           variant: "destructive",
           title: "Reset Request Failed",
           description: res.error,
         });
-        // Reset turnstile on failure
-        turnstileRef.current?.reset();
+        // Reset ALTCHA on failure
+        altchaRef.current?.reset();
       } else {
         setIsSubmitted(true);
       }
@@ -46,7 +50,7 @@ function ForgotPasswordForm() {
         title: "Error",
         description: err?.message || "An unexpected error occurred.",
       });
-      turnstileRef.current?.reset();
+      altchaRef.current?.reset();
     } finally {
       setIsLoading(false);
     }
@@ -125,14 +129,14 @@ function ForgotPasswordForm() {
               />
             </div>
 
-            {/* Turnstile Widget */}
+            {/* ALTCHA Widget */}
             {!isNative && (
               <div className="flex justify-center py-2">
-                <TurnstileWidget
-                  ref={turnstileRef}
-                  onVerified={setTurnstileToken}
-                  onError={() => setTurnstileToken(null)}
-                  onExpired={() => setTurnstileToken(null)}
+                <AltchaWidget
+                  ref={altchaRef}
+                  onVerified={setAltchaPayload}
+                  onError={() => setAltchaPayload(null)}
+                  onExpired={() => setAltchaPayload(null)}
                 />
               </div>
             )}

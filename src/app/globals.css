@@ -207,3 +207,19 @@ html.capacitor-native main {
     min-height: unset;
   }
 }
+
+/* Custom styling overrides for ALTCHA widget to blend seamlessly with the Tribes design system.
+   Variable names sourced from altcha v3: node_modules/altcha/dist/external/altcha.css */
+altcha-widget {
+  --altcha-color-base: hsl(var(--card));
+  --altcha-color-base-content: hsl(var(--foreground));
+  --altcha-color-neutral: hsl(var(--border));
+  --altcha-color-neutral-content: hsl(var(--foreground));
+  --altcha-checkbox-border-color: hsl(var(--border));
+  --altcha-color-primary: hsl(var(--primary));
+  --altcha-color-primary-content: hsl(var(--primary-foreground));
+  --altcha-color-success: hsl(165 50% 40%);
+  --altcha-color-success-content: #fff;
+  --altcha-border-radius: var(--radius);
+  --altcha-max-width: 100%;
+}

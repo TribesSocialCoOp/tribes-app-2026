@@ -16,7 +16,7 @@ import { validateInviteCode } from '@/lib/actions/profile-actions';
 import { useToast } from "@/hooks/use-toast";
 import { isAuthMethodEnabled } from "@/lib/auth/auth-config";
 import { HoneypotField } from "@/components/ui/captcha-challenge";
-import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/turnstile-widget";
+import { AltchaWidget, type AltchaWidgetRef } from "@/components/altcha-widget";
 import { isNative, isAndroid } from "@/lib/capacitor/platform";
 
 const INVITE_ONLY = process.env.NEXT_PUBLIC_INVITE_ONLY === 'true';
@@ -29,8 +29,8 @@ function SignupForm() {
   const [invitePlanName, setInvitePlanName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isValidatingCode, setIsValidatingCode] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const turnstileRef = useRef<TurnstileWidgetRef | null>(null);
+  const [altchaPayload, setAltchaPayload] = useState<string | null>(null);
+  const altchaRef = useRef<AltchaWidgetRef | null>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
@@ -118,12 +118,12 @@ function SignupForm() {
     }
   }, [searchParams, isInviteValidated, autoValidateAttempted, toast]);
 
-  const handleTurnstileVerified = useCallback((token: string) => {
-    setTurnstileToken(token);
+  const handleAltchaVerified = useCallback((payload: string) => {
+    setAltchaPayload(payload);
   }, []);
 
-  const handleTurnstileExpired = useCallback(() => {
-    setTurnstileToken(null);
+  const handleAltchaExpired = useCallback(() => {
+    setAltchaPayload(null);
   }, []);
 
   async function handleValidateInvite() {
@@ -209,13 +209,14 @@ function SignupForm() {
           username,
           password,
           inviteCode || undefined,
-          turnstileToken ?? undefined
+          undefined,
+          altchaPayload ?? undefined
         );
 
         if ('error' in result) {
           toast({ variant: 'destructive', title: 'Registration Failed', description: result.error });
-          turnstileRef.current?.reset();
-          setTurnstileToken(null);
+          altchaRef.current?.reset();
+          setAltchaPayload(null);
           setIsLoading(false);
           return;
         }
@@ -230,12 +231,18 @@ function SignupForm() {
         }
       } else {
         // 1. Get registration options from server
-        const result = await registerUserAction(name, email, inviteCode || undefined, turnstileToken ?? undefined);
+        const result = await registerUserAction(
+          name,
+          email,
+          inviteCode || undefined,
+          undefined,
+          altchaPayload ?? undefined
+        );
 
         if ('error' in result) {
           toast({ variant: 'destructive', title: 'Registration Failed', description: result.error });
-          turnstileRef.current?.reset();
-          setTurnstileToken(null);
+          altchaRef.current?.reset();
+          setAltchaPayload(null);
           setIsLoading(false);
           return;
         }
@@ -315,8 +322,8 @@ function SignupForm() {
         title: "Registration Failed",
         description: "There was an error creating your account. Please try again.",
       });
-      turnstileRef.current?.reset();
-      setTurnstileToken(null);
+      altchaRef.current?.reset();
+      setAltchaPayload(null);
     } finally {
       setIsLoading(false);
     }
@@ -516,13 +523,13 @@ function SignupForm() {
               </>
             )}
 
-            {/* Honeypot + Turnstile bot protection */}
+            {/* Honeypot + ALTCHA bot protection */}
             <HoneypotField />
             {!isNative && (
-              <TurnstileWidget
-                ref={turnstileRef}
-                onVerified={handleTurnstileVerified}
-                onExpired={handleTurnstileExpired}
+              <AltchaWidget
+                ref={altchaRef}
+                onVerified={handleAltchaVerified}
+                onExpired={handleAltchaExpired}
                 className="mt-1"
               />
             )}

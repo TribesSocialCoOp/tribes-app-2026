@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { TurnstileWidget, type TurnstileWidgetRef } from '@/components/turnstile-widget';
+import { AltchaWidget, type AltchaWidgetRef } from '@/components/altcha-widget';
 import { useToast } from '@/hooks/use-toast';
 import { toBase64 } from '@/lib/crypto/encoding';
 
@@ -51,10 +51,10 @@ type FormValues = z.infer<typeof submitSchema>;
 export default function ReportNciiPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [altchaPayload, setAltchaPayload] = useState<string | null>(null);
   const [trackingNumber, setTrackingNumber] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const turnstileRef = useRef<TurnstileWidgetRef | null>(null);
+  const altchaRef = useRef<AltchaWidgetRef | null>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(submitSchema),
@@ -73,11 +73,11 @@ export default function ReportNciiPage() {
   });
 
   async function onSubmit(values: FormValues) {
-    if (!turnstileToken) {
+    if (!altchaPayload) {
       toast({
         variant: 'destructive',
         title: 'Security Verification Required',
-        description: 'Please complete the Cloudflare security check before submitting.',
+        description: 'Please complete the bot prevention check before submitting.',
       });
       return;
     }
@@ -172,7 +172,7 @@ export default function ReportNciiPage() {
           searchTerms: values.searchTerms,
           nonConsentStatement: values.nonConsentStatement,
           isDepictedPerson: values.isDepictedPerson,
-          turnstileToken,
+          altchaPayload,
         };
       } else {
         // Plaintext fallback (legacy / no Web Crypto or no admins)
@@ -188,7 +188,7 @@ export default function ReportNciiPage() {
           posterUsername: values.posterUsername,
           searchTerms: values.searchTerms,
           nonConsentStatement: values.nonConsentStatement,
-          turnstileToken,
+          altchaPayload,
         };
       }
 
@@ -219,9 +219,9 @@ export default function ReportNciiPage() {
         title: 'Submission Failed',
         description: error.message || 'An error occurred during submission. Please try again.',
       });
-      // Reset Turnstile on error
-      turnstileRef.current?.reset();
-      setTurnstileToken(null);
+      // Reset ALTCHA on error
+      altchaRef.current?.reset();
+      setAltchaPayload(null);
     } finally {
       setIsLoading(false);
     }
@@ -536,11 +536,11 @@ export default function ReportNciiPage() {
                   <AlertCircle className="h-3.5 w-3.5 text-muted-foreground" />
                   Bot Prevention Check
                 </p>
-                <TurnstileWidget
-                  ref={turnstileRef}
-                  onVerified={setTurnstileToken}
-                  onExpired={() => setTurnstileToken(null)}
-                  onError={() => setTurnstileToken(null)}
+                <AltchaWidget
+                  ref={altchaRef}
+                  onVerified={setAltchaPayload}
+                  onExpired={() => setAltchaPayload(null)}
+                  onError={() => setAltchaPayload(null)}
                   className="mx-auto"
                 />
               </div>

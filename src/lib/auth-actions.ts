@@ -17,7 +17,7 @@ import { loginLimiter, signupLimiter, signupSubnetLimiter, passwordLoginLimiter,
 import bcrypt from 'bcryptjs';
 import { isAuthMethodEnabled } from '@/lib/auth/auth-config';
 
-export async function registerUserAction(name: string, email: string, inviteCode?: string, turnstileToken?: string): Promise<
+export async function registerUserAction(name: string, email: string, inviteCode?: string, turnstileToken?: string, altchaPayload?: string): Promise<
   { options: Awaited<ReturnType<typeof startRegistration>>; userId: string; inviteCode?: string } |
   { error: string }
 > {
@@ -31,9 +31,19 @@ export async function registerUserAction(name: string, email: string, inviteCode
   const subnet = getSubnet(ip);
   await signupSubnetLimiter.check(subnet);
 
-  // Cloudflare Turnstile bot challenge
-  const { validateTurnstileToken } = await import('@/lib/services/turnstile-service');
-  await validateTurnstileToken(turnstileToken, ip);
+  // Bot challenge validation (ALTCHA primary, Turnstile fallback)
+  if (altchaPayload) {
+    const { verifyAltchaPayload } = await import('@/lib/services/altcha-service');
+    const isBotChallengeValid = await verifyAltchaPayload(altchaPayload);
+    if (!isBotChallengeValid) {
+      throw new Error('Bot check failed. Please refresh the page and try again.');
+    }
+  } else if (turnstileToken) {
+    const { validateTurnstileToken } = await import('@/lib/services/turnstile-service');
+    await validateTurnstileToken(turnstileToken, ip);
+  } else {
+    console.warn('[auth-actions] No bot check token provided. Subnet/IP rate limits still active.');
+  }
 
   // Server-side invite code enforcement
   const inviteOnly = process.env.NEXT_PUBLIC_INVITE_ONLY === 'true';
@@ -235,7 +245,8 @@ export async function registerWithPasswordAction(
   username: string,
   password: string,
   inviteCode?: string,
-  turnstileToken?: string
+  turnstileToken?: string,
+  altchaPayload?: string
 ): Promise<{ success: boolean } | { error: string }> {
   try {
     if (!isAuthMethodEnabled('password')) {
@@ -270,9 +281,19 @@ export async function registerWithPasswordAction(
     const subnet = getSubnet(ip);
     await signupSubnetLimiter.check(subnet);
 
-    // Turnstile bot challenge validation
-    const { validateTurnstileToken } = await import('@/lib/services/turnstile-service');
-    await validateTurnstileToken(turnstileToken, ip);
+    // Bot challenge validation (ALTCHA primary, Turnstile fallback)
+    if (altchaPayload) {
+      const { verifyAltchaPayload } = await import('@/lib/services/altcha-service');
+      const isBotChallengeValid = await verifyAltchaPayload(altchaPayload);
+      if (!isBotChallengeValid) {
+        throw new Error('Bot check failed. Please refresh the page and try again.');
+      }
+    } else if (turnstileToken) {
+      const { validateTurnstileToken } = await import('@/lib/services/turnstile-service');
+      await validateTurnstileToken(turnstileToken, ip);
+    } else {
+      console.warn('[auth-actions] No bot check token provided. Subnet/IP rate limits still active.');
+    }
 
     // Invite code validation
     const inviteOnly = process.env.NEXT_PUBLIC_INVITE_ONLY === 'true';
@@ -367,7 +388,8 @@ export async function registerWithPasswordAction(
 export async function loginWithPasswordAction(
   emailOrUsername: string,
   password: string,
-  turnstileToken?: string
+  turnstileToken?: string,
+  altchaPayload?: string
 ): Promise<{ success: boolean; requiresTotp?: false } | { error: string } | { requiresTotp: true; challengeToken: string }> {
   try {
     if (!isAuthMethodEnabled('password')) {
@@ -379,8 +401,14 @@ export async function loginWithPasswordAction(
     const ip = getClientIp(headersList);
     await passwordLoginLimiter.check(ip);
 
-    // Validate Turnstile token if passed
-    if (turnstileToken) {
+    // Bot challenge validation if passed
+    if (altchaPayload) {
+      const { verifyAltchaPayload } = await import('@/lib/services/altcha-service');
+      const isBotChallengeValid = await verifyAltchaPayload(altchaPayload);
+      if (!isBotChallengeValid) {
+        throw new Error('Bot check failed. Please refresh the page and try again.');
+      }
+    } else if (turnstileToken) {
       const { validateTurnstileToken } = await import('@/lib/services/turnstile-service');
       await validateTurnstileToken(turnstileToken, ip);
     }
@@ -473,7 +501,8 @@ export async function verifyTotpAndLoginAction(
 
 export async function requestPasswordResetAction(
   emailOrUsername: string,
-  turnstileToken?: string
+  turnstileToken?: string,
+  altchaPayload?: string
 ): Promise<{ success: boolean } | { error: string }> {
   try {
     if (!isAuthMethodEnabled('password')) {
@@ -483,8 +512,14 @@ export async function requestPasswordResetAction(
     const headersList = await headers();
     const ip = getClientIp(headersList);
 
-    // Validate Turnstile token if passed
-    if (turnstileToken) {
+    // Bot challenge validation if passed
+    if (altchaPayload) {
+      const { verifyAltchaPayload } = await import('@/lib/services/altcha-service');
+      const isBotChallengeValid = await verifyAltchaPayload(altchaPayload);
+      if (!isBotChallengeValid) {
+        throw new Error('Bot check failed. Please refresh the page and try again.');
+      }
+    } else if (turnstileToken) {
       const { validateTurnstileToken } = await import('@/lib/services/turnstile-service');
       await validateTurnstileToken(turnstileToken, ip);
     }

@@ -64,6 +64,9 @@ async function teardownTotpUser() {
 
 /** Navigate to password login and fill credentials. Avoids networkidle (HMR keeps websocket alive). */
 async function loginWithPassword(page: import('@playwright/test').Page) {
+  page.on('console', msg => console.log(`[PAGE CONSOLE] ${msg.type()}: ${msg.text()}`));
+  page.on('pageerror', err => console.error(`[PAGE UNHANDLED ERROR] ${err.message}`));
+
   await page.goto('/login');
   await page.waitForSelector('text=Tribes Login', { timeout: 15000 });
 
@@ -74,7 +77,31 @@ async function loginWithPassword(page: import('@playwright/test').Page) {
 
   await page.locator('#email-or-username').fill(TEST_USERNAME);
   await page.locator('#password').fill(TEST_PASSWORD);
+  
+  // Wait for the ALTCHA widget to finish solving the PoW challenge before submitting.
+  // The widget takes ~500ms-1s to fetch + solve (cost=20000). We poll for the hidden
+  // input to be populated rather than using a fixed timeout.
+  await page.waitForFunction(() => {
+    const widget = document.querySelector('altcha-widget');
+    if (!widget) return true; // No widget = native app, proceed
+    const input = widget.querySelector('input[type="hidden"]') as HTMLInputElement | null;
+    return input && input.value.length > 0;
+  }, { timeout: 15000 });
+  
+  // Make sure the scratch directory exists and save screenshot
+  await page.screenshot({ path: 'scratch/login-before-submit.png' });
+
   await page.locator('button[type="submit"]').click();
+  
+  await page.waitForTimeout(2000);
+  await page.screenshot({ path: 'scratch/login-after-submit.png' });
+
+  // Log toast if visible
+  const toast = page.locator('[role="status"]').first();
+  if (await toast.isVisible().catch(() => false)) {
+    const text = await toast.textContent().catch(() => '');
+    console.log(`[PAGE TOAST]: ${text}`);
+  }
 }
 
 /** Submit a TOTP code and wait for the toast response */

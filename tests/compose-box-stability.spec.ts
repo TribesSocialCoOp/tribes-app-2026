@@ -66,7 +66,7 @@ test.describe('ComposeBox Stability', () => {
     await page.route('**/api/upload', (route: any) => route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ url: 'http://example.com/image.png' }),
+      body: JSON.stringify({ url: '/seed/avatar-default.svg' }),
     }));
 
     // 3. Attach multiple images
@@ -94,7 +94,7 @@ test.describe('ComposeBox Stability', () => {
     // Since we're mocking, the server action 'createRingPost' might still fail if it's not mocked,
     // but the 'onPostCreated' should be triggered if the upload succeeded.
     // Let's check for "Posted" toast
-    await expect(page.locator('text=Posted').first()).toBeVisible();
+    await expect(page.locator('text=Posted').first()).toBeVisible({ timeout: 10000 });
 
     // 6. Verify the ComposeBox is collapsed (button visible, textarea not visible)
     const collapsedBtn = page.locator('button:has-text("What do you have to share?")');

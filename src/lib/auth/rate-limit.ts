@@ -119,9 +119,22 @@ class RateLimiter {
 
     if (!result.allowed) {
       const retryAfterSec = Math.ceil((result.resetAt - Date.now()) / 1000);
-      throw new Error(
-        `Rate limit exceeded. Try again in ${retryAfterSec} seconds.`
-      );
+      let friendlyTime = `${retryAfterSec} seconds`;
+      if (retryAfterSec > 120) {
+        friendlyTime = `${Math.ceil(retryAfterSec / 60)} minutes`;
+      } else if (retryAfterSec > 60) {
+        friendlyTime = '2 minutes';
+      }
+
+      if (this.prefix === 'signup') {
+        throw new Error(
+          `Too many signup attempts. Rate limit exceeded. Try again in ${friendlyTime}.`
+        );
+      } else {
+        throw new Error(
+          `Rate limit exceeded. Try again in ${friendlyTime}.`
+        );
+      }
     }
 
     return result;
@@ -213,7 +226,7 @@ export const totpChallengeLimiter = new RateLimiter({
 export const signupLimiter = new RateLimiter({
   prefix: 'signup',
   windowMs: 60 * 60 * 1000,  // 1 hour
-  maxRequests: 3,
+  maxRequests: 5,
 });
 
 // Content surfaces — keyed by userId

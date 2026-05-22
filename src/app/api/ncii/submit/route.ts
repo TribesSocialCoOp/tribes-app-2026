@@ -27,7 +27,8 @@ const submitSchema = z.discriminatedUnion('encrypted', [
       errorMap: () => ({ message: 'You must affirm the statement of non-consent' }),
     }),
     isDepictedPerson: z.boolean(),
-    turnstileToken: z.string().min(1, 'Security verification is required'),
+    turnstileToken: z.string().optional(),
+    altchaPayload: z.string().optional(),
   }),
   // Plaintext fallback (legacy / no Web Crypto)
   z.object({
@@ -44,7 +45,8 @@ const submitSchema = z.discriminatedUnion('encrypted', [
     nonConsentStatement: z.literal(true, {
       errorMap: () => ({ message: 'You must affirm the statement of non-consent' }),
     }),
-    turnstileToken: z.string().min(1, 'Security verification is required'),
+    turnstileToken: z.string().optional(),
+    altchaPayload: z.string().optional(),
   }),
 ]).refine(
   (data) => {
@@ -78,11 +80,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: firstError, details: parsed.error.format() }, { status: 400 });
     }
 
-    const { turnstileToken, ...payload } = parsed.data;
+    const { turnstileToken, altchaPayload, ...payload } = parsed.data;
 
-    // 3. CAPTCHA verification
+    // 3. CAPTCHA verification (ALTCHA primary, Turnstile fallback)
     try {
-      await validateTurnstileToken(turnstileToken, ip);
+      if (altchaPayload) {
+        const { verifyAltchaPayload } = await import('@/lib/services/altcha-service');
+        const isValid = await verifyAltchaPayload(altchaPayload);
+        if (!isValid) {
+          throw new Error('Bot check failed. Please refresh the page and try again.');
+        }
+      } else if (turnstileToken) {
+        await validateTurnstileToken(turnstileToken, ip);
+      } else {
+        console.warn('[ncii/submit] No bot check token provided. Subnet/IP rate limits still active.');
+      }
     } catch (captchaErr: any) {
       return NextResponse.json({ error: captchaErr.message }, { status: 400 });
     }
