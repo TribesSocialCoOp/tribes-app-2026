@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useUser } from "@/hooks/use-user";
+import { useKeySync } from "@/components/providers/key-sync-provider";
 
 // ============================================================
 // PASSPHRASE ENTROPY VALIDATION
@@ -67,6 +68,7 @@ function getStrengthScore(pass: string): number {
 export const VaultBackupSection: React.FC = () => {
   const { toast } = useToast();
   const { user } = useUser();
+  const { triggerSync } = useKeySync();
 
   // State
   const [hasBackup, setHasBackup] = useState(false);
@@ -94,6 +96,7 @@ export const VaultBackupSection: React.FC = () => {
   const [showRestorePassword, setShowRestorePassword] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreResult, setRestoreResult] = useState<{ restored: number; total: number } | null>(null);
+  const [isSyncingAfterRestore, setIsSyncingAfterRestore] = useState(false);
 
   // Refs for mobile keyboard scroll-into-view
   const backupFormRef = useRef<HTMLDivElement>(null);
@@ -248,6 +251,31 @@ export const VaultBackupSection: React.FC = () => {
         title: result.imported > 0 ? 'Keys restored' : 'Keys already up to date',
         description,
       });
+
+      // Trigger immediate key sync to unwrap tribe key grants
+      // (tribe group keys aren't in the backup — they're recovered
+      // by the sync provider using the restored identity RSA key)
+      if (result.imported > 0) {
+        setIsSyncingAfterRestore(true);
+        try {
+          triggerSync();
+          // Listen for sync completion
+          await new Promise<void>((resolve) => {
+            const handler = () => {
+              window.removeEventListener('tribes:key-sync-complete', handler);
+              resolve();
+            };
+            window.addEventListener('tribes:key-sync-complete', handler);
+            // Safety timeout — don't hang forever
+            setTimeout(() => {
+              window.removeEventListener('tribes:key-sync-complete', handler);
+              resolve();
+            }, 15_000);
+          });
+        } finally {
+          setIsSyncingAfterRestore(false);
+        }
+      }
     } catch (err: unknown) {
       const message = (err instanceof Error) ? err.message : 'An error occurred';
       if (message.includes('Invalid passphrase') || message.includes('Invalid password')) {
@@ -325,6 +353,27 @@ export const VaultBackupSection: React.FC = () => {
           ? `${result.imported} bond key${result.imported !== 1 ? 's' : ''} restored from your passkey vault.`
           : 'All keys are already on this device.',
       });
+
+      // Trigger immediate key sync to unwrap tribe key grants
+      if (result.imported > 0) {
+        setIsSyncingAfterRestore(true);
+        try {
+          triggerSync();
+          await new Promise<void>((resolve) => {
+            const handler = () => {
+              window.removeEventListener('tribes:key-sync-complete', handler);
+              resolve();
+            };
+            window.addEventListener('tribes:key-sync-complete', handler);
+            setTimeout(() => {
+              window.removeEventListener('tribes:key-sync-complete', handler);
+              resolve();
+            }, 15_000);
+          });
+        } finally {
+          setIsSyncingAfterRestore(false);
+        }
+      }
     } catch (err: unknown) {
       const message = (err instanceof Error) ? err.message : 'Passkey restore failed';
       if (!message.includes('cancelled') && !message.includes('AbortError')) {
@@ -403,8 +452,23 @@ export const VaultBackupSection: React.FC = () => {
           </div>
         )}
 
+        {/* Syncing tribe keys after restore */}
+        {isSyncingAfterRestore && (
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-blue-300 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-700">
+            <Loader2 className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0 animate-spin" />
+            <div>
+              <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                Syncing tribe encryption keys…
+              </p>
+              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                Recovering tribe group keys from server. This may take a few seconds.
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Restore result */}
-        {restoreResult && (
+        {restoreResult && !isSyncingAfterRestore && (
           <div className="flex items-start gap-3 p-3 rounded-lg border border-green-300 bg-green-50 dark:bg-green-950/30 dark:border-green-700">
             <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5 shrink-0" />
             <div>
@@ -412,7 +476,7 @@ export const VaultBackupSection: React.FC = () => {
                 Restored {restoreResult.restored} bond key{restoreResult.restored !== 1 ? 's' : ''}
               </p>
               <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                Your encrypted conversations should now be accessible on this device.
+                All encryption keys synced — your encrypted content should now be accessible.
               </p>
             </div>
           </div>
