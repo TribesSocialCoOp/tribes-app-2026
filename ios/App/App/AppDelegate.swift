@@ -10,11 +10,19 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
 
-        // Clear WebKit WebView cache on start to prevent stale Server Action / ISR pages
-        let websiteDataTypes = NSSet(array: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache])
-        let dateFrom = Date(timeIntervalSince1970: 0)
-        WKWebsiteDataStore.default().removeData(ofTypes: websiteDataTypes as! Set<String>, modifiedSince: dateFrom) {
-            // WebView cache cleared successfully
+        // Version-gated WebKit cache clear (clears cache ONLY once per app version upgrade)
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
+        let lastClearedVersion = UserDefaults.standard.string(forKey: "lastClearedCacheVersion")
+
+        if lastClearedVersion != currentVersion {
+            let websiteDataTypes = NSSet(array: [WKWebsiteDataTypeDiskCache, WKWebsiteDataTypeMemoryCache])
+            let dateFrom = Date(timeIntervalSince1970: 0)
+            WKWebsiteDataStore.default().removeData(ofTypes: websiteDataTypes as! Set<String>, modifiedSince: dateFrom) {
+                UserDefaults.standard.set(currentVersion, forKey: "lastClearedCacheVersion")
+                print("[iOS App] Upgraded to \(currentVersion). Cleared WebView cache successfully.")
+            }
+        } else {
+            print("[iOS App] Launching version \(currentVersion). Preserving WebView cache for fast cold-starts.")
         }
 
         // Enable native iOS edge-swipe to go back
