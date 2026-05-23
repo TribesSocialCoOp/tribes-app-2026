@@ -117,11 +117,38 @@ function LoginForm() {
         },
       };
 
-      const authResponse = await startAuthentication({
-        optionsJSON: optionsWithPrf,
-      });
+      let authResponse;
 
-      await finishLoginAction(authResponse);
+      if (isNative) {
+        // On native iOS/Android, bypass @simplewebauthn/browser entirely.
+        // The Capacitor shim returns a plain JS object from navigator.credentials.get(),
+        // but @simplewebauthn/browser calls credential.getClientExtensionResults() which
+        // only exists on real PublicKeyCredential instances → TypeError on WKWebView.
+        // CapacitorPasskey.getCredential() returns a JSON-safe object directly.
+        const { CapacitorPasskey } = await import('@capgo/capacitor-passkey');
+        authResponse = await CapacitorPasskey.getCredential({
+          publicKey: {
+            challenge: optionsWithPrf.challenge,
+            rpId: optionsWithPrf.rpId,
+            timeout: optionsWithPrf.timeout,
+            allowCredentials: optionsWithPrf.allowCredentials?.map((c: any) => ({
+              id: c.id,
+              type: c.type || 'public-key',
+              transports: c.transports,
+            })),
+            userVerification: optionsWithPrf.userVerification,
+            extensions: optionsWithPrf.extensions,
+          },
+        });
+      } else {
+        // On web, use the standard @simplewebauthn/browser which handles
+        // ArrayBuffer ↔ base64url conversion and calls getClientExtensionResults()
+        authResponse = await startAuthentication({
+          optionsJSON: optionsWithPrf,
+        });
+      }
+
+      await finishLoginAction(authResponse as any);
 
       try {
         const { hasAnyKeys, derivePrfWrappingKey, decryptAndRestoreVault } = await import('@/lib/crypto');
