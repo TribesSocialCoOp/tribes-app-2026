@@ -179,10 +179,32 @@ function LoginForm() {
         return;
       }
 
+      const errMsg = errObj?.message || '';
+
+      // Surface rate-limit and other server-side errors clearly to the user
+      if (errMsg.includes('Rate limit') || errMsg.includes('rate limit')) {
+        toast({
+          variant: "destructive",
+          title: "Too Many Attempts",
+          description: errMsg,
+        });
+        return;
+      }
+
+      // Surface server action version mismatch (stale deployment)
+      if (errMsg.includes('Server Action') || errMsg.includes('older or newer deployment')) {
+        toast({
+          variant: "destructive",
+          title: "App Update Required",
+          description: "The app is out of date. Please close and reopen the app to get the latest version.",
+        });
+        return;
+      }
+
       toast({
         variant: "destructive",
         title: "Login Failed",
-        description: "Passkey authentication failed. Please try again.",
+        description: errMsg || "Passkey authentication failed. Please try again.",
       });
     } finally {
       setIsLoading(false);

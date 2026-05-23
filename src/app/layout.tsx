@@ -3,6 +3,7 @@ import { Oxanium, Geist_Mono } from 'next/font/google'; // Changed Geist to Oxan
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { CookieConsent } from "@/components/layout/cookie-consent";
+import { PasskeyShimInitializer } from "@/components/providers/passkey-shim-initializer";
 
 // Configure Oxanium font
 const oxanium = Oxanium({
@@ -63,6 +64,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: `(function(){try{var C=window.Capacitor;if(!C||!C.isNativePlatform||!C.isNativePlatform())return;var h=document.documentElement;h.classList.add('capacitor-native');var p=C.getPlatform&&C.getPlatform()||'web';if(p==='android')h.classList.add('capacitor-android');else if(p==='ios')h.classList.add('capacitor-ios')}catch(e){}})()` }} />
       </head>
       <body className={`${oxanium.variable} ${geistMono.variable} font-sans antialiased flex flex-col min-h-screen`}>
+        <PasskeyShimInitializer />
         {children}
         <Toaster />
         <CookieConsent />

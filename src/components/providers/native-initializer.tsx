@@ -74,19 +74,9 @@ export function NativeInitializer() {
     // 1. Initialize deep links
     initDeepLinks(router);
 
-    // 1b. Initialize WebAuthn Passkey auto-shim (Option B) for Android & iOS
-    const cap = (window as any).Capacitor;
-    const platformName = cap?.getPlatform?.();
-    if (platformName === 'android' || platformName === 'ios') {
-      import('@capgo/capacitor-passkey')
-        .then(async ({ CapacitorPasskey }) => {
-          console.log(`[passkey] Initializing WebAuthn auto-shim for ${platformName}...`);
-          await CapacitorPasskey.autoShimWebAuthn();
-        })
-        .catch(err => {
-          console.error('[passkey] Failed to load/init CapacitorPasskey plugin:', err);
-        });
-    }
+    // NOTE: WebAuthn passkey shim initialization has been moved to
+    // PasskeyShimInitializer in the root layout so it's available on
+    // the login page (auth layout) before the user authenticates.
 
     // 2. Sync status bar with current theme and listen for changes
     const updateStatusBar = () => {
@@ -133,7 +123,7 @@ export function NativeInitializer() {
     // 4b. Add platform-specific class for platform-targeted CSS
     //     Android needs separate status bar inset handling (edge-to-edge enforced on Android 15+)
     //     iOS uses contentInset: 'never' + viewport-fit:cover for edge-to-edge
-    const platform = cap?.getPlatform?.() || 'web';
+    const platform = (window as any).Capacitor?.getPlatform?.() || 'web';
     if (platform === 'android') {
       document.documentElement.classList.add('capacitor-android');
       document.body.classList.add('capacitor-android');

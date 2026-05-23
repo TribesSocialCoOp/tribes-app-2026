@@ -208,7 +208,7 @@ const defaultBackend: RateLimitBackend = process.env.VALKEY_URL
 export const loginLimiter = new RateLimiter({
   prefix: 'login',
   windowMs: 15 * 60 * 1000,  // 15 minutes
-  maxRequests: 10,
+  maxRequests: 30,            // Passkey login isn't brute-forceable (requires biometric)
 });
 
 export const passwordLoginLimiter = new RateLimiter({
