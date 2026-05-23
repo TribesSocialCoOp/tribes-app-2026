@@ -127,6 +127,11 @@ function LoginForm() {
         // CapacitorPasskey.getCredential() returns a JSON-safe object directly.
         const { CapacitorPasskey } = await import('@capgo/capacitor-passkey');
         authResponse = await CapacitorPasskey.getCredential({
+          // mediation MUST be present — the plugin uses 'mediation' in options
+          // to distinguish auth from registration in createNativeRequest().
+          // Without it, the plugin falls into the registration branch and
+          // crashes on options.publicKey.rp.id (which doesn't exist for auth).
+          mediation: 'optional',
           publicKey: {
             challenge: optionsWithPrf.challenge,
             rpId: optionsWithPrf.rpId,

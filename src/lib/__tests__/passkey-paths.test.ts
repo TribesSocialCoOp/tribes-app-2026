@@ -126,6 +126,22 @@ describe('Login page — native vs web passkey paths', () => {
     expect(codeCallLines, 'No code should call .getClientExtensionResults()').toHaveLength(0);
   });
 
+  // ── Critical: mediation field required ─────────────────
+
+  it('native getCredential call includes mediation field (prevents rp.id crash)', () => {
+    // The plugin's createNativeRequest() uses 'mediation' in options to distinguish
+    // authentication from registration. Without mediation, it falls into the
+    // registration branch and crashes trying to access options.publicKey.rp.id
+    // which doesn't exist for authentication requests.
+    const lines = handleLoginBody.split('\n');
+    const getCredLine = lines.findIndex(l => l.includes('CapacitorPasskey.getCredential('));
+    expect(getCredLine).toBeGreaterThan(-1);
+
+    // Look for mediation field within the next 10 lines after getCredential
+    const getCredBlock = lines.slice(getCredLine, getCredLine + 10).join('\n');
+    expect(getCredBlock, 'mediation must be set in getCredential options').toContain('mediation:');
+  });
+
   // ── Both paths feed finishLoginAction ─────────────────
 
   it('both paths feed into the same finishLoginAction call', () => {
