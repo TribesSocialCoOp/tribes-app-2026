@@ -90,12 +90,29 @@ function LoginForm() {
       const { getPrfSaltBytes } = await import('@/lib/crypto');
       const prfSalt = await getPrfSaltBytes();
 
+      // Convert Uint8Array to base64url string so it can survive Capacitor's JSON bridge
+      const prfSaltBase64url = btoa(String.fromCharCode(...Array.from(prfSalt)))
+        .replace(/\+/g, '-')
+        .replace(/\//g, '_')
+        .replace(/=/g, '');
+
       const optionsWithPrf = {
         ...options,
         extensions: {
           ...options.extensions,
           prf: {
-            eval: { first: prfSalt as any },
+            eval: {
+              /**
+               * ⚠️ DUAL-PLATFORM COMPATIBILITY CONSTRAINT:
+               * - Capacitor Native Bridge: iOS/Android native shims require a pure, JSON-serializable
+               *   base64url string (`prfSaltBase64url`) because WebAuthn is shimmed over a native bridge
+               *   that throws an exception when serializing raw binary/Uint8Arrays.
+               * - Web Browsers (Safari / Chrome): Strict standard WebAuthn requires a raw binary
+               *   Uint8Array (BufferSource) for `eval.first` and instantly throws a `TypeError: Type error`
+               *   if a string is passed.
+               */
+              first: isNative ? prfSaltBase64url : (prfSalt as any),
+            },
           },
         },
       };
