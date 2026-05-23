@@ -31,7 +31,6 @@ export interface AltchaWidgetRef {
 export const AltchaWidget = forwardRef<AltchaWidgetRef, AltchaWidgetProps>(
   function AltchaWidget({ onVerified, onError, onExpired, className }, ref) {
     const [mounted, setMounted] = useState(false);
-    const [isBrave, setIsBrave] = useState(false);
     const widgetRef = useRef<any>(null);
 
     useImperativeHandle(ref, () => ({
@@ -44,11 +43,6 @@ export const AltchaWidget = forwardRef<AltchaWidgetRef, AltchaWidgetProps>(
 
     useEffect(() => {
       setMounted(true);
-      // Brave exposes navigator.brave.isBrave() — detect it so we can
-      // disable Web Worker PoW (Brave Shield's fingerprinting protection blocks it)
-      (navigator as any).brave?.isBrave?.().then((result: boolean) => {
-        if (result) setIsBrave(true);
-      }).catch(() => {});
     }, []);
 
     // Web Crypto API (crypto.subtle) is disabled in insecure HTTP contexts (e.g. local network IP)
@@ -135,7 +129,7 @@ export const AltchaWidget = forwardRef<AltchaWidgetRef, AltchaWidgetProps>(
           auto="onload"
           hidelogo="true"
           hidelink="true"
-          {...(isBrave ? { workerize: 'false' } : {})}
+          workerize="false"
           class="w-full block"
         />
       </div>
