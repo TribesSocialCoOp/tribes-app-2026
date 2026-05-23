@@ -249,13 +249,41 @@ function SignupForm() {
 
         const { options, userId, inviteCode: validatedCode } = result;
 
-        // 2. Start biometric registration in browser
-        const regResponse = await startRegistration({
-          optionsJSON: options,
-        });
+        // 2. Start biometric registration
+        let regResponse;
+
+        if (isNative) {
+          // On native iOS/Android, bypass @simplewebauthn/browser entirely.
+          // startRegistration() calls credential.getClientExtensionResults() which
+          // fails on shimmed objects → "Can only call on instances of PublicKeyCredential"
+          // CapacitorPasskey.createCredential() returns a JSON-safe object directly.
+          const { CapacitorPasskey } = await import('@capgo/capacitor-passkey');
+          regResponse = await CapacitorPasskey.createCredential({
+            publicKey: {
+              challenge: options.challenge,
+              rp: options.rp,
+              user: options.user,
+              pubKeyCredParams: options.pubKeyCredParams,
+              timeout: options.timeout,
+              excludeCredentials: options.excludeCredentials?.map((c: any) => ({
+                id: c.id,
+                type: c.type || 'public-key',
+                transports: c.transports,
+              })),
+              authenticatorSelection: options.authenticatorSelection,
+              attestation: options.attestation,
+              extensions: options.extensions as Record<string, unknown> | undefined,
+            },
+          });
+        } else {
+          // On web, use the standard @simplewebauthn/browser
+          regResponse = await startRegistration({
+            optionsJSON: options,
+          });
+        }
 
         // 3. Finish registration on server
-        await finishRegistrationAction(userId, regResponse, name, email, validatedCode);
+        await finishRegistrationAction(userId, regResponse as any, name, email, validatedCode);
 
         // 4. Initialize E2E Vault (Phase 3: PRF)
         try {
