@@ -281,6 +281,17 @@ describe('DRY Regression Guards', () => {
     expect(definitionFiles).toHaveLength(1);
     expect(definitionFiles[0]).toContain('constants.ts');
   });
+
+  it('no unconditional base64url string PRF salt evaluation exists (prevent Safari TypeError)', async () => {
+    const { execSync } = await import('child_process');
+    // Verifies that 'first: prfSaltBase64url' is never used unconditionally.
+    // Platform-aware branching with 'first: isNative ? prfSaltBase64url : ...' is required.
+    const result = execSync(
+      'grep -rn "first: prfSaltBase64url" src/ --include="*.tsx" --include="*.ts" --exclude-dir="__tests__" || echo "CLEAN"',
+      { cwd: process.cwd(), encoding: 'utf-8' }
+    );
+    expect(result.trim()).toBe('CLEAN');
+  });
 });
 
 describe('Decomposition Regression Guards', () => {
