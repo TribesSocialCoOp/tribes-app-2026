@@ -346,28 +346,35 @@ export async function registerWithPasswordAction(
         role: 'Human_Free',
         createdAt: new Date(),
       });
+    });
 
-      // Invite code redemption
-      if (inviteCode) {
+    // Invite code redemption — MUST run AFTER the user transaction commits.
+    // redeemInviteCode opens its own db.transaction() which needs the user row
+    // to already exist (FK constraint on subscriptions.user_id → users.id).
+    if (inviteCode) {
+      try {
         const { redeemInviteCode } = await import('@/lib/services/invite-service');
         await redeemInviteCode(userId, inviteCode);
-      }
-
-      // Join welcome tribe direct
-      try {
-        const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
-        const { tribes: tribesTable } = await import('@/db/schema');
-        const [welcomeTribe] = await tx.select({ id: tribesTable.id })
-          .from(tribesTable)
-          .where(eq(tribesTable.slug, 'welcome-to-tribes'))
-          .limit(1);
-        if (welcomeTribe) {
-          await joinTribeDirectly(userId, welcomeTribe.id);
-        }
       } catch (e) {
-        console.warn('[auth] Auto-join welcome tribe failed:', e);
+        // Don't fail registration if redemption fails (user already created)
+        console.warn('[auth] Invite code redemption failed:', e);
       }
-    });
+    }
+
+    // Auto-join welcome tribe (non-critical, don't block registration)
+    try {
+      const { joinTribeDirectly } = await import('@/lib/services/tribe-service');
+      const { tribes: tribesTable } = await import('@/db/schema');
+      const [welcomeTribe] = await db.select({ id: tribesTable.id })
+        .from(tribesTable)
+        .where(eq(tribesTable.slug, 'welcome-to-tribes'))
+        .limit(1);
+      if (welcomeTribe) {
+        await joinTribeDirectly(userId, welcomeTribe.id);
+      }
+    } catch (e) {
+      console.warn('[auth] Auto-join welcome tribe failed:', e);
+    }
 
     // Set up session
     const sessionAuth = await import('@/lib/auth/session');
@@ -380,7 +387,18 @@ export async function registerWithPasswordAction(
 
     return { success: true };
   } catch (e) {
-    const message = e instanceof Error ? e.message : 'An unexpected error occurred. Please try again.';
+    // SECURITY: Never leak raw SQL queries or internal details to users.
+    // Drizzle/node-postgres includes the full query + params in error messages.
+    const rawMessage = e instanceof Error ? e.message : '';
+    let message: string;
+    if (rawMessage.includes('Failed query') || rawMessage.includes('violates') || rawMessage.includes('duplicate key')) {
+      console.error('[auth] Registration DB error (sanitized for client):', rawMessage);
+      message = 'Registration failed due to a server error. Please try again.';
+    } else if (rawMessage.includes('Rate limit')) {
+      message = rawMessage; // Rate limit messages are safe to show
+    } else {
+      message = rawMessage || 'An unexpected error occurred. Please try again.';
+    }
     return { error: message };
   }
 }
