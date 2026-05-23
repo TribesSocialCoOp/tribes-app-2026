@@ -263,6 +263,107 @@ describe('Signup Flow — Invite Redemption & Welcome Tribe Join', () => {
   });
 
   // ────────────────────────────────────────────────────────────────
+  // PASSWORD FLOW — STRUCTURAL REGRESSION TESTS
+  // ────────────────────────────────────────────────────────────────
+  // Bug: redeemInviteCode was called INSIDE db.transaction() in
+  // registerWithPasswordAction. redeemInviteCode opens its OWN
+  // db.transaction(), which can't see the uncommitted user row from
+  // the outer transaction → FK violation → registration fails.
+  //
+  // These tests verify the fix by checking source structure.
+
+  describe('Password — registerWithPasswordAction structure', () => {
+    it('redeemInviteCode is NOT called inside db.transaction() block', () => {
+      const { readFileSync } = require('fs');
+      const source = readFileSync('src/lib/auth-actions.ts', 'utf-8');
+      const lines = source.split('\n');
+
+      // Find the registerWithPasswordAction function
+      const fnStart = lines.findIndex((l: string) => l.includes('export async function registerWithPasswordAction'));
+      expect(fnStart, 'registerWithPasswordAction not found').toBeGreaterThan(-1);
+
+      // Find the next export function (end of registerWithPasswordAction)
+      const fnEnd = lines.findIndex((l: string, i: number) =>
+        i > fnStart + 5 && /^export (async )?function /.test(l.trim())
+      );
+      const fnBody = lines.slice(fnStart, fnEnd > -1 ? fnEnd : undefined);
+
+      // Find db.transaction block boundaries within this function
+      const txStartIdx = fnBody.findIndex((l: string) => l.includes('db.transaction('));
+      expect(txStartIdx, 'db.transaction not found in registerWithPasswordAction').toBeGreaterThan(-1);
+
+      // Find the closing of the transaction block — track brace depth
+      let braceDepth = 0;
+      let txEndIdx = -1;
+      for (let i = txStartIdx; i < fnBody.length; i++) {
+        for (const ch of fnBody[i]!) {
+          if (ch === '{') braceDepth++;
+          if (ch === '}') braceDepth--;
+        }
+        if (braceDepth === 0 && i > txStartIdx) {
+          txEndIdx = i;
+          break;
+        }
+      }
+      expect(txEndIdx, 'Could not find end of db.transaction block').toBeGreaterThan(txStartIdx);
+
+      // Extract the transaction body
+      const txBody = fnBody.slice(txStartIdx, txEndIdx + 1).join('\n');
+
+      // redeemInviteCode must NOT appear inside the transaction body
+      expect(
+        txBody,
+        'redeemInviteCode must NOT be called inside db.transaction() — causes FK violation'
+      ).not.toContain('redeemInviteCode');
+
+      // joinTribeDirectly should also not be inside the transaction
+      // (it may call other services with their own DB operations)
+      expect(
+        txBody,
+        'joinTribeDirectly must NOT be called inside db.transaction()'
+      ).not.toContain('joinTribeDirectly');
+    });
+
+    it('redeemInviteCode is called AFTER db.transaction() closes', () => {
+      const { readFileSync } = require('fs');
+      const source = readFileSync('src/lib/auth-actions.ts', 'utf-8');
+      const lines = source.split('\n');
+
+      // Find the registerWithPasswordAction function
+      const fnStart = lines.findIndex((l: string) => l.includes('export async function registerWithPasswordAction'));
+      const fnBody = lines.slice(fnStart);
+
+      // Find the transaction close and the redeemInviteCode call
+      const txLine = fnBody.findIndex((l: string) => l.includes('db.transaction('));
+      const redeemLine = fnBody.findIndex((l: string) => l.includes('redeemInviteCode'));
+
+      expect(txLine, 'db.transaction not found').toBeGreaterThan(-1);
+      expect(redeemLine, 'redeemInviteCode not found').toBeGreaterThan(-1);
+      expect(
+        redeemLine,
+        'redeemInviteCode must appear AFTER db.transaction() call'
+      ).toBeGreaterThan(txLine);
+    });
+
+    it('error messages do not leak raw SQL', () => {
+      const { readFileSync } = require('fs');
+      const source = readFileSync('src/lib/auth-actions.ts', 'utf-8');
+      const lines = source.split('\n');
+
+      // Find the catch block in registerWithPasswordAction
+      const fnStart = lines.findIndex((l: string) => l.includes('export async function registerWithPasswordAction'));
+      const fnEnd = lines.findIndex((l: string, i: number) =>
+        i > fnStart + 5 && /^export (async )?function /.test(l.trim())
+      );
+      const fnBody = lines.slice(fnStart, fnEnd > -1 ? fnEnd : undefined).join('\n');
+
+      // Must contain SQL sanitization logic
+      expect(fnBody).toContain('Failed query');
+      expect(fnBody).toContain('sanitized');
+    });
+  });
+
+
   // OAUTH FLOW STRUCTURE TESTS
   // ────────────────────────────────────────────────────────────────
   // The OAuth callbacks are Next.js route handlers (GET/POST) that
