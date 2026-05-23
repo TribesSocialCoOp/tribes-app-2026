@@ -9,38 +9,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
 
-        // ── AGGRESSIVE CACHE CLEAR ──────────────────────────────────
-        // The Capacitor WebView loads from https://tribes.app (remote server).
-        // Server deploys change Next.js server action IDs, but iOS caches
-        // the old JS bundles across app restarts, reinstalls, and even
-        // TestFlight updates. We MUST clear ALL cache layers BEFORE the
-        // WebView starts loading.
-        //
-        // 1. URLCache (synchronous) — the HTTP response cache that iOS uses
-        //    for all network requests. This is the primary culprit.
-        URLCache.shared.removeAllCachedResponses()
-
-        // 2. Clear cookies for tribes.app domain to prevent stale session issues
-        if let cookies = HTTPCookieStorage.shared.cookies {
-            for cookie in cookies {
-                if cookie.domain.contains("tribes.app") {
-                    HTTPCookieStorage.shared.deleteCookie(cookie)
-                }
-            }
-        }
-
-        // 3. WKWebsiteDataStore (async) — comprehensive clear of ALL data types.
-        //    This catches disk cache, fetch cache, offline app cache, etc.
-        //    Even though this is async, step 1 above already cleared the HTTP cache
-        //    synchronously, so the WebView will fetch fresh content.
-        let allDataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
-        let epoch = Date(timeIntervalSince1970: 0)
-        WKWebsiteDataStore.default().removeData(ofTypes: allDataTypes, modifiedSince: epoch) {
-            print("[iOS App] Cleared all WKWebsiteDataStore data")
-        }
-
-        print("[iOS App] URLCache cleared synchronously. WebView will fetch fresh content.")
-
         // Enable native iOS edge-swipe to go back
         DispatchQueue.main.async {
             if let rootVC = self.window?.rootViewController as? CAPBridgeViewController {
