@@ -212,7 +212,7 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
           title: 'Tribe Join Request',
           description: `${applicant?.name ?? 'Someone'} wants to join ${tribe?.name ?? 'your tribe'}`,
           timestamp: p.requestedAt ?? new Date(),
-          actionUrl: `/tribes/${membership.tribeId}/manage-members`,
+          actionUrl: `/tribes/${membership.tribeId}/manage-members?from=activity`,
           read: false,
         });
       }

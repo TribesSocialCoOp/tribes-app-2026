@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { format } from 'date-fns';
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
@@ -17,6 +16,7 @@ import {
 } from "@/components/ui/responsive-menu";
 import { Smile, MoreVertical, MoreHorizontal, Flag, UserRoundX, Pencil, Check, X, Send, Loader2, Lock } from "lucide-react";
 import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
+import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { cn } from '@/lib/utils';
 import { VIBE_EMOTICONS } from '@/lib/constants';
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -138,6 +138,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
+  const [isReplyDialogOpen, setIsReplyDialogOpen] = useState(false);
 
   // ── Block ──
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
@@ -173,40 +174,79 @@ export const CommentCard: React.FC<CommentCardProps> = ({
     }
   };
 
+  /** Scroll a newly created reply into view and briefly highlight it */
+  const scrollToAndHighlight = useCallback((commentId: string) => {
+    // Wait for the DOM to update after onCommentAdded() refreshes comments
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const el = document.getElementById(`comment-bubble-${commentId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-2', 'ring-primary/60');
+          setTimeout(() => el.classList.remove('ring-2', 'ring-primary/60'), 2000);
+        }
+      }, 300); // small delay for comment list to re-render
+    });
+  }, []);
+
+  const sendReply = useCallback(async (content: string) => {
+    // Encrypt reply for private tribes
+    let encPayload: { ciphertextBase64: string; iv: string } | undefined;
+    if (!isPublic && tribeId) {
+      const { getTribeKey } = await import('@/lib/crypto/key-store');
+      const cachedTribeKey = await getTribeKey(tribeId);
+      if (!cachedTribeKey) {
+        throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
+      }
+      const { encryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
+      const { toBase64 } = await import('@/lib/crypto/encoding');
+      const encrypted = await encryptWithTribeKey(content.trim(), cachedTribeKey.key);
+      encPayload = {
+        ciphertextBase64: toBase64(encrypted.ciphertext),
+        iv: encrypted.iv,
+      };
+    }
+
+    const result = await createComment(postId, content.trim(), comment.id, encPayload);
+    if (result && typeof result === 'object' && 'serverError' in result) {
+      throw new Error(result.serverError as string);
+    }
+    return result;
+  }, [isPublic, tribeId, postId, comment.id]);
+
   const handleSendReply = async () => {
     if (!replyText.trim()) return;
     setIsSendingReply(true);
     try {
-      // Encrypt reply for private tribes
-      let encPayload: { ciphertextBase64: string; iv: string } | undefined;
-      if (!isPublic && tribeId) {
-        const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(tribeId);
-        if (!cachedTribeKey) {
-          throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
-        }
-        const { encryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
-        const { toBase64 } = await import('@/lib/crypto/encoding');
-        const encrypted = await encryptWithTribeKey(replyText.trim(), cachedTribeKey.key);
-        encPayload = {
-          ciphertextBase64: toBase64(encrypted.ciphertext),
-          iv: encrypted.iv,
-        };
-      }
-
-      const result = await createComment(postId, replyText.trim(), comment.id, encPayload);
-      if (result && typeof result === 'object' && 'serverError' in result) {
-        throw new Error(result.serverError as string);
-      }
+      const result = await sendReply(replyText);
       toast({ title: 'Reply sent' });
       setReplyText('');
       setShowReply(false);
       onCommentAdded();
+      if (result && typeof result === 'object' && 'id' in result) {
+        scrollToAndHighlight(result.id as string);
+      }
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Failed to send reply';
       toast({ title: 'Error', description: msg, variant: 'destructive' });
     } finally {
       setIsSendingReply(false);
+    }
+  };
+
+  /** Handle reply from the mobile CommentDialog modal */
+  const handleDialogReply = async (content: string) => {
+    try {
+      const result = await sendReply(content);
+      toast({ title: 'Reply sent' });
+      setIsReplyDialogOpen(false);
+      onCommentAdded();
+      if (result && typeof result === 'object' && 'id' in result) {
+        scrollToAndHighlight(result.id as string);
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Failed to send reply';
+      toast({ title: 'Error', description: msg, variant: 'destructive' });
     }
   };
 
@@ -484,7 +524,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowReply(!showReply)}
+              onClick={() => isMobile ? setIsReplyDialogOpen(true) : setShowReply(!showReply)}
               className="px-1 text-muted-foreground hover:text-primary h-6 text-xs"
             >
               Reply
@@ -498,15 +538,21 @@ export const CommentCard: React.FC<CommentCardProps> = ({
         )}
       </div>
 
-      {/* ── Inline reply to this comment ── */}
+      {/* ── Inline reply to this comment (desktop only) ── */}
       {showReply && (
         <div className={cn("mt-2 flex gap-2", isDeep ? "ml-1 md:ml-9" : "ml-11")}>
-          <Input
+          <Textarea
             placeholder={`Reply to ${comment.authorName}...`}
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendReply()}
-            className="text-sm h-8"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendReply();
+              }
+            }}
+            className="text-sm min-h-[36px] resize-none"
+            rows={2}
             autoFocus
           />
           <Button
@@ -514,12 +560,21 @@ export const CommentCard: React.FC<CommentCardProps> = ({
             variant="ghost"
             disabled={!replyText.trim() || isSendingReply}
             onClick={handleSendReply}
-            className="shrink-0 h-8 w-8"
+            className="shrink-0 h-8 w-8 self-end"
           >
             {isSendingReply ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
           </Button>
         </div>
       )}
+
+      {/* ── Reply dialog (mobile only) ── */}
+      <CommentDialog
+        isOpen={isReplyDialogOpen}
+        onOpenChange={setIsReplyDialogOpen}
+        onConfirmComment={handleDialogReply}
+        postTitle={undefined}
+        parentAuthorName={comment.authorName}
+      />
 
       {/* ── Nested replies ── */}
       {comment.replies && comment.replies.length > 0 && (

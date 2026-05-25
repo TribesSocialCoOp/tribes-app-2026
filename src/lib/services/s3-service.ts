@@ -9,6 +9,7 @@ import {
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { scanForCSAM, reportToNCMEC } from './csam-service';
 import { scanForNciiBlocklist } from './ncii-service';
+import { isSvgFile } from '@/lib/svg-sanitizer';
 import { s3Logger } from '@/lib/logger';
 
 // ============================================================
@@ -140,8 +141,11 @@ export async function uploadImage(
   const bytes = await file.arrayBuffer();
   const buffer = Buffer.from(bytes);
 
-  // ── CSAM scan — only for public/distributed content ──────
-  if (SCAN_CONTEXTS.has(context)) {
+  // ── CSAM scan — only for public/distributed raster content ──────
+  // SVGs are vector graphics — PDQ perceptual hashing requires raster pixel data.
+  const isSvg = isSvgFile(file);
+
+  if (SCAN_CONTEXTS.has(context) && !isSvg) {
     const scanResult = await scanForCSAM(buffer, file.name);
     if (scanResult.isMatch) {
       await reportToNCMEC(scanResult, { filename: file.name });
@@ -159,8 +163,8 @@ export async function uploadImage(
     }
   } else {
     s3Logger.debug(
-      { context, filename: file.name },
-      'CSAM scan skipped (exempt context)'
+      { context, filename: file.name, isSvg },
+      isSvg ? 'CSAM scan skipped (SVG — not rasterizable)' : 'CSAM scan skipped (exempt context)'
     );
   }
 
