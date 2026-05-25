@@ -76,7 +76,7 @@ export function CustomizeWallSheet({
           "flex flex-col gap-4 bg-background p-6 shadow-lg transition ease-in-out duration-300",
           isMobile ? "h-auto max-h-[90vh] rounded-t-[20px] border-t" : "h-full w-[400px] sm:w-[540px]"
         )}
-        style={isMobile ? { maxHeight: 'calc(90vh - var(--keyboard-height, 0px))' } : undefined}
+        style={isMobile ? { maxHeight: '90vh' } : undefined}
       >
         <SheetHeader className={cn(isMobile ? "text-left" : "")}>
           <SheetTitle>Customize Your Wall</SheetTitle>

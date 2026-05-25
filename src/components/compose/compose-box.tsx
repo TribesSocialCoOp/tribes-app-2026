@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useTransition, useEffect } from 'react';
+import React, { useState, useRef, useTransition, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
@@ -67,13 +67,20 @@ export function ComposeBox({
   const pathname = usePathname();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  /** Focus the textarea and scroll the compose card into view after the keyboard opens */
+  const focusAndScroll = useCallback(() => {
+    textareaRef.current?.focus();
+    setTimeout(() => {
+      cardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 300);
+  }, []);
 
   useEffect(() => {
     if (searchParams?.get('compose') === 'true') {
       setIsExpanded(true);
-      setTimeout(() => {
-        textareaRef.current?.focus();
-      }, 50);
+      setTimeout(() => focusAndScroll(), 50);
 
       // Clean up the URL parameter
       const params = new URLSearchParams(searchParams.toString());
@@ -467,7 +474,7 @@ export function ComposeBox({
   };
 
   return (
-    <Card className={cn("overflow-hidden border-none shadow-sm bg-card/50 backdrop-blur-sm", className)}>
+    <Card ref={cardRef} className={cn("overflow-hidden border-none shadow-sm bg-card/50 backdrop-blur-sm", className)}>
       <CardContent className="p-3 sm:p-4">
         <div className="flex gap-3 sm:gap-4">
           <div className="flex flex-col items-center gap-1">
@@ -539,7 +546,7 @@ export function ComposeBox({
               <button
                 onClick={() => {
                   setIsExpanded(true);
-                  setTimeout(() => textareaRef.current?.focus(), 50);
+                  setTimeout(() => focusAndScroll(), 50);
                 }}
                 className="w-full text-left text-sm text-muted-foreground bg-muted/40 hover:bg-muted/60 rounded-lg px-3 py-2.5 transition-colors"
               >

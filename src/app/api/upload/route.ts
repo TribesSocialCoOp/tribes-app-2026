@@ -28,9 +28,7 @@ import { eq } from 'drizzle-orm';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ALLOWED_TYPES = [
   'image/jpeg', 'image/png', 'image/webp', 'image/gif',
-  // 'image/svg+xml' — REMOVED: SVGs can embed <script> tags and event handlers.
-  // If served from the same origin this is a stored XSS vector. Use raster formats only.
-  // If SVG uploads are needed in future, implement server-side sanitization first.
+  'image/svg+xml', // NOT sanitized server-side (jsdom breaks SVG casing); safe via <img> rendering + CSP (script-src 'none') on media.tribes.app
   'application/octet-stream', // Encrypted files (E2E bond attachments)
 ];
 
@@ -132,6 +130,11 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      // Note: SVGs are NOT sanitized server-side because DOMPurify in Node.js (jsdom)
+      // lowercases SVG element names (e.g. feDropShadow → fedropshadow) which breaks rendering.
+      // SVGs are safe when rendered as <img> tags (scripts/event handlers don't execute)
+      // and are served from a separate S3 origin, preventing same-origin XSS.
+
       // Upload to S3 (routes to public or private bucket based on context)
       const result = await uploadImage(file, folder, context, userId);
 

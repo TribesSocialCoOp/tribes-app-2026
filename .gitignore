@@ -122,3 +122,15 @@ docs/images/
 .idx/
 .vscode/
 .modified
+
+# Dev/test scripts — contain credentials, raw SQL, seed data
+scripts/dump-posts.ts
+scripts/set-dev-passwords.ts
+scripts/seed-*.ts
+
+# Test assets
+public/test-*.svg
+
+# ws-relay build artifacts
+ws-relay/node_modules/
+ws-relay/package-lock.json

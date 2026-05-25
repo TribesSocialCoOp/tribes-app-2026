@@ -12,6 +12,8 @@
  * produce HEIC files, so this always works where it matters.
  */
 
+import { isSvgFile } from '@/lib/svg-sanitizer';
+
 /** Max dimension in pixels — covers 2× retina for ~400pt feed cards */
 const MAX_DIMENSION = 1600;
 /** Target max file size in MB */
@@ -19,7 +21,10 @@ const MAX_SIZE_MB = 1.5;
 /** JPEG quality — visually indistinguishable from 0.95 at 1600px */
 const INITIAL_QUALITY = 0.82;
 /** Types that can skip normalization if already small enough */
-const WEB_SAFE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const WEB_SAFE_TYPES = new Set([
+  'image/jpeg', 'image/jpg',  // Android sometimes reports image/jpg
+  'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+]);
 /** Size threshold — files under this skip compression entirely */
 const PASSTHROUGH_SIZE = MAX_SIZE_MB * 1024 * 1024;
 
@@ -38,6 +43,11 @@ export async function normalizeImage(file: File): Promise<File> {
     return file;
   }
 
+  // SVGs are vectors — never compress/rasterize them
+  if (isSvgFile(file)) {
+    return file;
+  }
+
   try {
     let fileToCompress = file;
     const isHeic = file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic');
@@ -53,13 +63,18 @@ export async function normalizeImage(file: File): Promise<File> {
       fileToCompress = new File([blobArray[0]], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' });
     }
 
+    // Capacitor WebViews (especially Android) have flaky Web Worker support.
+    // Detect and fall back to main-thread compression.
+    const isCapacitor = typeof navigator !== 'undefined' &&
+      /CapacitorApp|Android.*wv/i.test(navigator.userAgent);
+
     const imageCompression = (await import('browser-image-compression')).default;
 
     const compressed = await imageCompression(fileToCompress, {
       maxSizeMB: MAX_SIZE_MB,
       maxWidthOrHeight: MAX_DIMENSION,
       fileType: 'image/jpeg',
-      useWebWorker: true,
+      useWebWorker: !isCapacitor,  // Disable Web Worker in Capacitor WebViews
       initialQuality: INITIAL_QUALITY,
       // Preserve EXIF orientation but strip other metadata (GPS, etc.)
       preserveExif: false,

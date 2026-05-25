@@ -192,6 +192,14 @@ html.capacitor-native main {
   padding-bottom: calc(5rem + env(safe-area-inset-bottom));
 }
 
+/* Android: adjustMarginsForEdgeToEdge:'force' already pushes the WebView content
+   above the keyboard (treating it as a system inset). The sheet's
+   bottom:var(--keyboard-height) would double-count the offset, so we zero it
+   on Android. iOS needs the variable because WKWebView truly doesn't resize. */
+html.capacitor-android {
+  --keyboard-height: 0px !important;
+}
+
 /* Touch targets — Apple HIG 44px minimum, mobile only */
 .touch-target-44 {
   min-width: 44px;

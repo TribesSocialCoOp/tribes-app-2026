@@ -207,7 +207,12 @@ function ManageMembersContent() {
         title: "Member Approved",
         description: `${pendingMember.name} has been added to the tribe.`,
       });
-      reloadData();
+      // Reload all lists (members + pending) in one shot
+      await reloadData();
+      // If from activity and no more pending, auto-return
+      if (from === 'activity' && pendingMembers.length === 0) {
+        setTimeout(() => router.push('/your-comms'), 600);
+      }
     } catch (err) {
       handleError(err, 'Failed to approve member');
     }
@@ -221,7 +226,12 @@ function ManageMembersContent() {
         description: `The request from ${memberName} has been denied.`,
         variant: 'destructive'
       });
-      reloadData();
+      // Reload all lists in one shot
+      await reloadData();
+      // If from activity and no more pending, auto-return
+      if (from === 'activity' && pendingMembers.length === 0) {
+        setTimeout(() => router.push('/your-comms'), 600);
+      }
     } catch (err) {
       handleError(err, 'Failed to deny request');
     }
@@ -337,21 +347,24 @@ function ManageMembersContent() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-2">
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => from === 'activity' ? router.push('/your-comms') : router.push(`/t/${tribe?.slug || tribeId}`)}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          {from === 'activity' ? 'Back to Activity' : `Back to ${tribe.name}`}
+        </Button>
         {from === 'activity' && (
-          <Button variant="outline" size="sm" onClick={() => router.push('/your-comms')}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Activity
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => router.push(`/t/${tribe?.slug || tribeId}`)}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            Go to {tribe.name}
           </Button>
         )}
-        <Button 
-          variant={from === 'activity' ? "ghost" : "outline"} 
-          size="sm" 
-          onClick={() => router.push(`/t/${tribe?.slug || tribeId}`)}
-          className={cn(from === 'activity' && "text-muted-foreground hover:text-foreground")}
-        >
-          {from !== 'activity' && <ArrowLeft className="mr-2 h-4 w-4" />}
-          Back to {tribe.name}
-        </Button>
       </div>
 
       {tribe.joinMechanism === 'approval' && pendingMembers.length > 0 && (
