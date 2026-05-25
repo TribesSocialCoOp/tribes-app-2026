@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTribeIdFromParams } from '@/hooks/use-tribe-id';
 import { Button } from '@/components/ui/button';
@@ -47,8 +47,13 @@ export default function ManageMembersPage() {
 
 function ManageMembersContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const from = searchParams.get('from');
+  // Read origin from sessionStorage (set by activity tab) — adblocker-proof alternative to ?from= query params
+  const [from] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    const origin = sessionStorage.getItem('manage-members-origin');
+    if (origin) sessionStorage.removeItem('manage-members-origin');
+    return origin;
+  });
   const { tribeId } = useTribeIdFromParams();
   const { toast } = useToast();
   const { role } = useUser();

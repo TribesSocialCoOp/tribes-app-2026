@@ -27,10 +27,10 @@ const ActivityItemCard: React.FC<ActivityItemCardProps> = ({ item, icon, badgeSl
     // Small delay to let the fire-and-forget server call dispatch
     await new Promise(resolve => setTimeout(resolve, 50));
     
-    let url = item.actionUrl || '/bonds';
+    const url = item.actionUrl || '/bonds';
+    // Use sessionStorage instead of query params — Android adblockers strip ?from= as tracking
     if (item.type === 'tribe_join_request') {
-      const separator = url.includes('?') ? '&' : '?';
-      url = `${url}${separator}from=activity`;
+      sessionStorage.setItem('manage-members-origin', 'activity');
     }
     
     router.push(url);
