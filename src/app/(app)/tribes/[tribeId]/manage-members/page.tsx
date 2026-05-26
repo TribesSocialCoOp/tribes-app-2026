@@ -48,12 +48,15 @@ export default function ManageMembersPage() {
 function ManageMembersContent() {
   const router = useRouter();
   // Read origin from sessionStorage (set by activity tab) — adblocker-proof alternative to ?from= query params
-  const [from] = useState(() => {
-    if (typeof window === 'undefined') return null;
+  // Must use useEffect, not useState initializer — SSR renders client components first, and
+  // React hydration preserves the server's initial state (null) without re-running the initializer.
+  const [from, setFrom] = useState<string | null>(null);
+  useEffect(() => {
     const origin = sessionStorage.getItem('manage-members-origin');
-    if (origin) sessionStorage.removeItem('manage-members-origin');
-    return origin;
-  });
+    if (origin) {
+      setFrom(origin);
+    }
+  }, []);
   const { tribeId } = useTribeIdFromParams();
   const { toast } = useToast();
   const { role } = useUser();
@@ -86,7 +89,7 @@ function ManageMembersContent() {
   const [hasAccess, setHasAccess] = useState<boolean | undefined>(undefined);
 
   const reloadData = useCallback(async () => {
-    if (!tribeId) return;
+    if (!tribeId) return { pendingCount: 0 };
     setIsDataLoading(true);
     const [tribeData, membersData, memberCount, pendingData] = await Promise.all([
       getTribeById(tribeId),
@@ -99,6 +102,7 @@ function ManageMembersContent() {
     setMembersTotalCount(memberCount);
     setPendingMembers(pendingData);
     setIsDataLoading(false);
+    return { pendingCount: pendingData.length };
   }, [tribeId, membersPage]);
 
   useEffect(() => {
@@ -213,9 +217,10 @@ function ManageMembersContent() {
         description: `${pendingMember.name} has been added to the tribe.`,
       });
       // Reload all lists (members + pending) in one shot
-      await reloadData();
+      const reloadResult = await reloadData();
       // If from activity and no more pending, auto-return
-      if (from === 'activity' && pendingMembers.length === 0) {
+      if (from === 'activity' && reloadResult?.pendingCount === 0) {
+        sessionStorage.removeItem('manage-members-origin');
         setTimeout(() => router.push('/your-comms'), 600);
       }
     } catch (err) {
@@ -232,9 +237,10 @@ function ManageMembersContent() {
         variant: 'destructive'
       });
       // Reload all lists in one shot
-      await reloadData();
+      const reloadResult = await reloadData();
       // If from activity and no more pending, auto-return
-      if (from === 'activity' && pendingMembers.length === 0) {
+      if (from === 'activity' && reloadResult?.pendingCount === 0) {
+        sessionStorage.removeItem('manage-members-origin');
         setTimeout(() => router.push('/your-comms'), 600);
       }
     } catch (err) {
@@ -355,7 +361,14 @@ function ManageMembersContent() {
         <Button 
           variant="outline" 
           size="sm" 
-          onClick={() => from === 'activity' ? router.push('/your-comms') : router.push(`/t/${tribe?.slug || tribeId}`)}
+          onClick={() => {
+            if (from === 'activity') {
+              sessionStorage.removeItem('manage-members-origin');
+              router.push('/your-comms');
+            } else {
+              router.push(`/t/${tribe?.slug || tribeId}`);
+            }
+          }}
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           {from === 'activity' ? 'Back to Activity' : `Back to ${tribe.name}`}

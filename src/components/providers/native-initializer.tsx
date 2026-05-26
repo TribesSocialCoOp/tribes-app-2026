@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useCallback, useRef } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { isNative } from '@/lib/capacitor/platform';
 import { initDeepLinks } from '@/lib/capacitor/deep-links';
 import { syncStatusBarStyle } from '@/lib/capacitor/status-bar';
+import { App } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 
 /**
@@ -19,7 +20,76 @@ import { useUser } from '@/hooks/use-user';
 
 export function NativeInitializer() {
   const router = useRouter();
+  const pathname = usePathname();
   const { role, isLoading } = useUser();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+
+  // ── Android hardware back button (independent of isNative module const) ────
+  // This must be OUTSIDE the isNative-gated effect below because the isNative
+  // module constant can evaluate to false during SSR/hydration (the Capacitor
+  // bridge isn't ready when the module is first imported). Instead, we detect
+  // Capacitor at runtime inside useEffect when the DOM is guaranteed available.
+  useEffect(() => {
+    const cap = (window as any).Capacitor;
+    if (!cap?.isNativePlatform?.() || cap?.getPlatform?.() !== 'android') return;
+
+    // console.log('[native] Registering Android backButton listener');
+    const handler = App.addListener('backButton', () => {
+      const currentPath = pathnameRef.current;
+      // console.log('[native] backButton pressed, pathname:', currentPath);
+
+      // Capacitor WebView history.length is always 1 — pushState entries
+      // are lost when the native proxy intercepts page loads. We can't use
+      // router.back() or history.back(). Instead, map each screen to its
+      // logical parent explicitly (like a native navigation stack).
+      // We use window.location.assign() (not router.push) because Next.js
+      // soft navigation doesn't always take effect in a WebView.
+
+      // Root screens → exit the app
+      if (currentPath === '/your-comms' || currentPath === '/') {
+        // console.log('[native] At root, exiting app');
+        App.exitApp();
+        return;
+      }
+
+      // Context-aware: if the user arrived from Activity, go back there
+      if (currentPath.includes('/manage-members')) {
+        const origin = sessionStorage.getItem('manage-members-origin');
+        if (origin === 'activity') {
+          sessionStorage.removeItem('manage-members-origin');
+          // console.log('[native] manage-members from activity, navigating to /your-comms');
+          window.location.assign('/your-comms');
+          return;
+        }
+      }
+
+      // Tribe sub-pages → go back to tribe detail
+      // e.g. /tribes/1/manage-members → /tribes/1, /t/slug/settings → /t/slug
+      const tribeSubPageMatch = currentPath.match(/^(\/(?:tribes\/[^/]+|t\/[^/]+))\/.+$/);
+      if (tribeSubPageMatch) {
+        // console.log('[native] tribe sub-page, navigating to:', tribeSubPageMatch[1]);
+        window.location.assign(tribeSubPageMatch[1]);
+        return;
+      }
+
+      // Tribe detail pages → go to tribes list
+      if (currentPath.match(/^\/(?:tribes\/[^/]+|t\/[^/]+)$/)) {
+        // console.log('[native] tribe detail, navigating to /tribes');
+        window.location.assign('/tribes');
+        return;
+      }
+
+      // Everything else → go to home (Activity)
+      // console.log('[native] fallback, navigating to /your-comms');
+      window.location.assign('/your-comms');
+    });
+
+    return () => {
+      handler.then(h => h.remove());
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- router is not used; we use window.location.assign()
+  }, []);
 
   // ── Global internal-link interceptor ───────────────────────────────────────
   // Catches clicks on ANY <a> tag pointing to tribes.app and routes them
@@ -73,6 +143,9 @@ export function NativeInitializer() {
 
     // 1. Initialize deep links
     initDeepLinks(router);
+
+    // NOTE: Android back button handling has been moved to its own useEffect
+    // above, independent of the isNative module constant, to avoid timing issues.
 
     // NOTE: WebAuthn passkey shim initialization has been moved to
     // PasskeyShimInitializer in the root layout so it's available on
@@ -198,15 +271,19 @@ export function NativeInitializer() {
         
         // Extract redirect URL (e.g. data.url or action.notification.data.url)
         const data = action.notification?.data;
-        const redirectUrl = data?.url || data?.link || data?.redirect;
+        const rawUrl = data?.url || data?.link || data?.redirect;
         
-        if (redirectUrl) {
-          console.log('[push] Navigating to push action URL:', redirectUrl);
-          router.push(redirectUrl);
-        } else {
-          console.log('[push] Navigating to notifications screen /your-comms');
-          router.push('/your-comms');
-        }
+        // Validate the redirect is a known Tribes app path — prevents open
+        // redirect if a crafted push payload contains an external URL.
+        // Covers all route groups: (app), (auth), (legal), (onboarding)
+        const SAFE_PATH_RE = /^\/(?:your-comms|bonds?|tribes?|t\/|u\/|e\/|p\/|events?|settings|login|signup|forgot-password|recover|reset-password|account-recovery|admin|billing|creator-analytics|dashboard|discover|invite|moods?|my-wall|our-story|post|profile|search|vote|voting|family|event|terms|privacy|cookies|community-guidelines|report-ncii|ncii-status|create-tribe)/;
+        const redirectUrl =
+          typeof rawUrl === 'string' && rawUrl.startsWith('/') && SAFE_PATH_RE.test(rawUrl)
+            ? rawUrl
+            : '/your-comms';
+        
+        console.log('[push] Navigating to push action URL:', redirectUrl);
+        router.push(redirectUrl);
       });
 
       pushCleanup = () => {

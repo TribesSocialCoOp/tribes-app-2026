@@ -1,7 +1,8 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useCloseOnKeyboardHide } from '@/hooks/use-close-on-keyboard-hide';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,8 @@ export function CommentDialog({
   parentAuthorName
 }: CommentDialogProps) {
   const [content, setContent] = useState("");
+  const handleClose = useCallback(() => onOpenChange(false), [onOpenChange]);
+  useCloseOnKeyboardHide(isOpen, handleClose);
 
   useEffect(() => {
     if (!isOpen) {
