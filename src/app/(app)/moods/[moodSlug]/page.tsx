@@ -202,6 +202,7 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
               <VibePicker
                 vibeCount={currentVibesCount}
                 recentVibes={currentRecentVibes}
+                vibeDetails={post.vibeDetails}
                 hasVibed={currentUserHasVibed}
                 onVibeSelect={handleVibeSelection}
               />

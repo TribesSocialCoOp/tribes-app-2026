@@ -1,12 +1,19 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { format } from 'date-fns';
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { Label } from "@/components/ui/label";
+import {
+  ResponsiveDialog,
+  ResponsiveDialogHeader,
+  ResponsiveDialogTitle,
+  ResponsiveDialogDescription,
+  ResponsiveDialogFooter,
+} from "@/components/ui/responsive-dialog";
+
 import {
   ResponsiveMenu,
   ResponsiveMenuContent,
@@ -14,24 +21,29 @@ import {
   ResponsiveMenuSeparator,
   ResponsiveMenuTrigger,
 } from "@/components/ui/responsive-menu";
-import { Smile, MoreVertical, MoreHorizontal, Flag, UserRoundX, Pencil, Check, X, Send, Loader2, Lock } from "lucide-react";
+
+import { Smile, MoreVertical, Flag, UserRoundX, Pencil, Check, X, Send, Loader2, Lock, Trash2 } from "lucide-react";
 import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { cn } from '@/lib/utils';
-import { VIBE_EMOTICONS } from '@/lib/constants';
 import { useIsMobile } from "@/hooks/use-mobile";
-import EmojiPicker, { EmojiClickData, Theme, EmojiStyle } from 'emoji-picker-react';
-import { toggleVibe, createComment, editComment, reportComment } from '@/lib/actions/content-actions';
+import { toggleVibe, createComment, editComment, reportComment, deleteOwnComment } from '@/lib/actions/content-actions';
 import { useToast } from '@/hooks/use-toast';
 import type { DiscussionComment } from '@/lib/types';
 import Link from 'next/link';
+import { MentionAutocomplete } from '../compose/mention-autocomplete';
+import { useMentionAutocomplete } from '@/hooks/use-mention-autocomplete';
+import { MarkdownContent } from '@/components/ui/markdown-content';
 import { profilePath } from '@/lib/utils/paths';
+import { VibePicker } from '@/components/ui/vibe-picker';
+
 
 interface CommentCardProps {
   comment: DiscussionComment;
   postId: string;
   level?: number;
   currentUserId?: string | null;
+  postAuthorId?: string;
   onCommentAdded: () => void; // callback to reload comments after reply
   tribeId?: string; // needed for comment decryption + encryption of replies
   isPublic?: boolean; // tribe public flag — false means comments should be encrypted
@@ -42,20 +54,23 @@ interface CommentCardProps {
  * Supports: vibes, reply-to-comment, edit own comment, report, block.
  */
 export const CommentCard: React.FC<CommentCardProps> = ({
-  comment, postId, level = 0, currentUserId, onCommentAdded, tribeId, isPublic = true,
+  comment, postId, level = 0, currentUserId, postAuthorId, onCommentAdded, tribeId, isPublic = true,
 }) => {
   const { toast } = useToast();
   const isOwnComment = comment.authorId === currentUserId;
-  const emoticons = VIBE_EMOTICONS;
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [showFullPicker, setShowFullPicker] = useState(false);
   const isMobile = useIsMobile();
-  const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
+
+  const isPostAuthor = !!(currentUserId && postAuthorId && currentUserId === postAuthorId);
+  // Comment author or post author can see who reacted (tooltip/drawer)
+  const canSeeReactors = isOwnComment || isPostAuthor;
 
   // ── Vibes ──
-  const [selectedVibe, setSelectedVibe] = useState<string | null>(null);
+  // Only use the user's known emoji from vibeDetails (available when viewer is
+  // the comment author or the post author). Otherwise fall back to null.
+  const userVibe = comment.vibeDetails?.find(v => v.userId === currentUserId)?.emoji ?? null;
+  const [selectedVibe, setSelectedVibe] = useState<string | null>(userVibe);
   const [vibeCount, setVibeCount] = useState(comment.vibes || 0);
+  const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string; count: number }[]>(comment.recentVibes || []);
 
   // ── Edit ──
   const [isEditing, setIsEditing] = useState(false);
@@ -143,18 +158,58 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   // ── Block ──
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
 
+  // ── Deletion ──
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeletingComment, setIsDeletingComment] = useState(false);
+
+  // ── Mentions Autocomplete ──
+  const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const { mentionQuery, mentionRef, checkMention, handleSelectMention, handleMentionKeyDown } =
+    useMentionAutocomplete(replyTextareaRef, replyText, setReplyText);
+
+  const handleDeleteComment = async () => {
+    setIsDeletingComment(true);
+    try {
+      await deleteOwnComment(comment.id);
+      toast({
+        title: "Comment deleted",
+        description: "Your comment has been deleted successfully.",
+      });
+      setIsDeleteDialogOpen(false);
+      if (onCommentAdded) {
+        onCommentAdded();
+      }
+    } catch (err: any) {
+      toast({
+        title: "Error deleting comment",
+        description: err.message || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeletingComment(false);
+    }
+  };
+
   const handleVibeSelection = async (vibe: string) => {
     const wasSelected = selectedVibe === vibe;
     const prevCount = vibeCount;
+    const prevRecent = localRecentVibes;
+
     setSelectedVibe(wasSelected ? null : vibe);
     setVibeCount(wasSelected ? prevCount - 1 : prevCount + 1);
+
     try {
       const result = await toggleVibe(comment.id, 'comment', vibe);
       setSelectedVibe(result.vibed ? vibe : null);
       setVibeCount(result.newCount ?? vibeCount);
+      if (result.recentVibes) {
+        setLocalRecentVibes(result.recentVibes);
+      }
     } catch {
       setSelectedVibe(wasSelected ? vibe : null);
       setVibeCount(prevCount);
+      setLocalRecentVibes(prevRecent);
     }
   };
 
@@ -345,6 +400,12 @@ export const CommentCard: React.FC<CommentCardProps> = ({
                         }}>
                           <Pencil className="mr-2 h-4 w-4" /> Edit
                          </ResponsiveMenuItem>
+                        <ResponsiveMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => setIsDeleteDialogOpen(true)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        </ResponsiveMenuItem>
                         <ResponsiveMenuSeparator />
                       </>
                     )}
@@ -367,49 +428,27 @@ export const CommentCard: React.FC<CommentCardProps> = ({
             </div>
           </div>
 
-          {/* Content / Edit mode */}
-          {isEditing ? (
-            <div className="mt-1.5 space-y-2">
-              <Textarea
-                value={editContent}
-                onChange={(e) => setEditContent(e.target.value)}
-                className="min-h-[60px] text-sm resize-none"
-                autoFocus
-              />
-              <div className="flex items-center gap-2 justify-end">
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setIsEditing(false)} disabled={isSavingEdit}>
-                  <X className="mr-1 h-3 w-3" /> Cancel
-                </Button>
-                <Button size="sm" className="h-7 text-xs" onClick={handleSaveEdit} disabled={isSavingEdit || !editContent.trim()}>
-                  {isSavingEdit ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
-                  Save
-                </Button>
-              </div>
+          {/* Content (edit mode is now a dialog) */}
+          {comment.isEncrypted && decryptionStatus === 'decrypting' && (
+            <div className="space-y-1.5 animate-pulse mt-1">
+              <div className="h-3 bg-muted/60 rounded w-full"></div>
+              <div className="h-3 bg-muted/60 rounded w-4/6"></div>
             </div>
-          ) : (
-            <>
-            {comment.isEncrypted && decryptionStatus === 'decrypting' && (
-              <div className="space-y-1.5 animate-pulse mt-1">
-                <div className="h-3 bg-muted/60 rounded w-full"></div>
-                <div className="h-3 bg-muted/60 rounded w-4/6"></div>
-              </div>
-            )}
-            {comment.isEncrypted && decryptionStatus === 'missing_key' && (
-              <div className="flex items-center gap-1.5 mt-1 text-muted-foreground">
-                <Lock className="h-3 w-3" />
-                <span className="text-xs">Waiting for encryption keys</span>
-              </div>
-            )}
-            {comment.isEncrypted && decryptionStatus === 'failed' && (
-              <div className="flex items-center gap-1.5 mt-1 text-destructive">
-                <Lock className="h-3 w-3" />
-                <span className="text-xs">Decryption failed</span>
-              </div>
-            )}
-            {(!comment.isEncrypted || decryptionStatus === 'success') && (
-              <p className="text-sm whitespace-pre-line mt-1 text-foreground">{displayContent}</p>
-            )}
-            </>
+          )}
+          {comment.isEncrypted && decryptionStatus === 'missing_key' && (
+            <div className="flex items-center gap-1.5 mt-1 text-muted-foreground">
+              <Lock className="h-3 w-3" />
+              <span className="text-xs">Waiting for encryption keys</span>
+            </div>
+          )}
+          {comment.isEncrypted && decryptionStatus === 'failed' && (
+            <div className="flex items-center gap-1.5 mt-1 text-destructive">
+              <Lock className="h-3 w-3" />
+              <span className="text-xs">Decryption failed</span>
+            </div>
+          )}
+          {(!comment.isEncrypted || decryptionStatus === 'success') && (
+            <MarkdownContent content={displayContent} className="mt-1 [&_p]:mb-0 text-sm" />
           )}
         </div>
       </div>
@@ -418,108 +457,14 @@ export const CommentCard: React.FC<CommentCardProps> = ({
       <div className={cn("flex items-center space-x-2 text-xs mt-1", isDeep ? "ml-1 md:ml-9" : "ml-11")}>
         {currentUserId ? (
           <>
-            <Popover open={popoverOpen} onOpenChange={(isOpen) => {
-              setPopoverOpen(isOpen);
-              if (!isOpen) setShowFullPicker(false);
-            }}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "px-1 text-muted-foreground hover:text-primary h-6 text-xs transition-colors",
-                    selectedVibe && "bg-primary/10 text-primary hover:bg-primary/20 rounded-full px-2"
-                  )}
-                >
-                  {selectedVibe ? (
-                    <span className="text-base mr-1">{selectedVibe}</span>
-                  ) : (
-                    <Smile className="mr-1 h-3.5 w-3.5" />
-                  )}
-                  {vibeCount}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent
-                className="w-auto p-2"
-                side="top"
-                align="start"
-                onOpenAutoFocus={(e) => e.preventDefault()}
-              >
-                {showFullPicker && !isMobile ? (
-                  <EmojiPicker
-                    onEmojiClick={(emojiData: EmojiClickData) => {
-                      handleVibeSelection(emojiData.emoji);
-                      setPopoverOpen(false);
-                      setShowFullPicker(false);
-                    }}
-                    theme={isDark ? Theme.DARK : Theme.LIGHT}
-                    emojiStyle={EmojiStyle.NATIVE}
-                    height={350}
-                    width={320}
-                    searchPlaceholder="Search emoji..."
-                    previewConfig={{ showPreview: false }}
-                    lazyLoadEmojis
-                    autoFocusSearch={true}
-                  />
-                ) : (
-                  <div className="flex space-x-1 justify-center py-2">
-                    {emoticons.map((emo) => (
-                      <Button
-                        key={emo}
-                        variant="ghost"
-                        size="icon"
-                        className="text-xl p-1.5 h-auto w-auto rounded-md hover:bg-accent"
-                        onClick={() => {
-                          handleVibeSelection(emo);
-                          setPopoverOpen(false);
-                        }}
-                      >
-                        {emo}
-                      </Button>
-                    ))}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-sm p-1.5 h-auto w-auto rounded-md hover:bg-accent text-muted-foreground"
-                      onClick={() => {
-                        if (isMobile) {
-                          setPopoverOpen(false);
-                          setDrawerOpen(true);
-                        } else {
-                          setShowFullPicker(true);
-                        }
-                      }}
-                      aria-label="More emoji"
-                    >
-                      <MoreHorizontal className="h-5 w-5" />
-                    </Button>
-                  </div>
-                )}
-              </PopoverContent>
-            </Popover>
-
-            {/* Full emoji picker drawer (mobile only) */}
-            <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
-              <DrawerContent className="px-0 pb-safe">
-                <DrawerTitle className="sr-only">Choose an emoji</DrawerTitle>
-                <div className="flex justify-center w-full px-2 py-3">
-                  <EmojiPicker
-                    onEmojiClick={(emojiData: EmojiClickData) => {
-                      handleVibeSelection(emojiData.emoji);
-                      setDrawerOpen(false);
-                    }}
-                    theme={isDark ? Theme.DARK : Theme.LIGHT}
-                    emojiStyle={EmojiStyle.NATIVE}
-                    height={420}
-                    width="100%"
-                    searchPlaceholder="Search emoji..."
-                    previewConfig={{ showPreview: false }}
-                    lazyLoadEmojis
-                    autoFocusSearch={false}
-                  />
-                </div>
-              </DrawerContent>
-            </Drawer>
+            <VibePicker
+              vibeCount={vibeCount}
+              recentVibes={localRecentVibes}
+              vibeDetails={comment.vibeDetails}
+              hasVibed={!!selectedVibe}
+              isAuthor={canSeeReactors}
+              onVibeSelect={handleVibeSelection}
+            />
 
             <Button
               variant="ghost"
@@ -532,7 +477,20 @@ export const CommentCard: React.FC<CommentCardProps> = ({
           </>
         ) : (
           <Button variant="ghost" size="sm" className="px-1 text-muted-foreground h-6 text-xs pointer-events-none">
-            <Smile className="mr-1 h-3.5 w-3.5" />
+            {localRecentVibes.length > 0 ? (
+              <div className="flex -space-x-1.5 mr-1">
+                {localRecentVibes.map((rv, i) => (
+                  <span
+                    key={i}
+                    className="text-base z-10 bg-background rounded-full leading-none p-[1px] shadow-sm relative"
+                  >
+                    {rv.emoji}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <Smile className="mr-1 h-3.5 w-3.5" />
+            )}
             {vibeCount}
           </Button>
         )}
@@ -541,20 +499,30 @@ export const CommentCard: React.FC<CommentCardProps> = ({
       {/* ── Inline reply to this comment (desktop only) ── */}
       {showReply && (
         <div className={cn("mt-2 flex gap-2", isDeep ? "ml-1 md:ml-9" : "ml-11")}>
-          <Textarea
-            placeholder={`Reply to ${comment.authorName}...`}
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendReply();
-              }
-            }}
-            className="text-sm min-h-[36px] resize-none"
-            rows={2}
-            autoFocus
-          />
+          <div className="relative flex-1">
+            <Textarea
+              ref={replyTextareaRef}
+              placeholder={`Reply to ${comment.authorName}...`}
+              value={replyText}
+              onChange={(e) => {
+                setReplyText(e.target.value);
+                checkMention(e.target.value, e.target.selectionStart);
+              }}
+              onKeyDown={handleMentionKeyDown}
+              onSelect={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                checkMention(target.value, target.selectionStart);
+              }}
+              className="text-sm min-h-[36px] resize-none w-full"
+              rows={2}
+              autoFocus
+            />
+            <MentionAutocomplete
+              ref={mentionRef}
+              query={mentionQuery}
+              onSelect={handleSelectMention}
+            />
+          </div>
           <Button
             size="icon"
             variant="ghost"
@@ -591,6 +559,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               postId={postId}
               level={level + 1}
               currentUserId={currentUserId}
+              postAuthorId={postAuthorId}
               onCommentAdded={onCommentAdded}
               tribeId={tribeId}
               isPublic={isPublic}
@@ -618,6 +587,47 @@ export const CommentCard: React.FC<CommentCardProps> = ({
           }
         }}
       />
+
+      {/* ── Comment deletion dialog ── */}
+      <ConfirmActionDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Comment?"
+        description="This will permanently delete this comment and all its replies. This action cannot be undone."
+        confirmText={isDeletingComment ? "Deleting..." : "Delete"}
+        destructive={true}
+        onConfirm={handleDeleteComment}
+      />
+
+      {/* ── Edit comment dialog ── */}
+      <ResponsiveDialog open={isEditing} onOpenChange={setIsEditing}>
+        <ResponsiveDialogHeader>
+          <ResponsiveDialogTitle className="flex items-center">
+            <Pencil className="mr-2 h-5 w-5 text-primary" /> Edit Comment
+          </ResponsiveDialogTitle>
+          <ResponsiveDialogDescription>
+            Update your comment below.
+          </ResponsiveDialogDescription>
+        </ResponsiveDialogHeader>
+        <div className="py-4">
+          <Label htmlFor={`edit-comment-${comment.id}`} className="sr-only">Comment</Label>
+          <Textarea
+            id={`edit-comment-${comment.id}`}
+            value={editContent}
+            onChange={(e) => setEditContent(e.target.value)}
+            className="min-h-[120px] w-full resize-none"
+          />
+        </div>
+        <ResponsiveDialogFooter className="pt-2">
+          <Button variant="outline" onClick={() => setIsEditing(false)} disabled={isSavingEdit}>
+            Cancel
+          </Button>
+          <Button onClick={handleSaveEdit} disabled={isSavingEdit || !editContent.trim()}>
+            {isSavingEdit ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+            Save
+          </Button>
+        </ResponsiveDialogFooter>
+      </ResponsiveDialog>
     </div>
   );
 };

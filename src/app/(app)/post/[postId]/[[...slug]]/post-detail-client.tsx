@@ -599,7 +599,9 @@ export function PostDetailClient({
           <VibePicker
             vibeCount={vibeCount}
             recentVibes={currentRecentVibes}
+            vibeDetails={post.vibeDetails}
             hasVibed={currentUserHasVibed}
+            isAuthor={isOwnPost}
             onVibeSelect={handleVibeSelection}
           />
 
@@ -709,6 +711,7 @@ export function PostDetailClient({
                 comment={comment}
                 postId={post.id}
                 currentUserId={user?.id}
+                postAuthorId={post.authorId}
                 onCommentAdded={loadComments}
                 tribeId={post.tribeId || tribeId || undefined}
                 isPublic={isPublic}

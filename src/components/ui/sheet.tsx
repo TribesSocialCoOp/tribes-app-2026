@@ -62,6 +62,9 @@ const SheetContent = React.forwardRef<
     <SheetPrimitive.Content
       ref={ref}
       className={cn(sheetVariants({ side }), className)}
+      // Prevent Radix from calling scrollIntoView on the first focusable
+      // element — this causes the underlying page to jump in mobile WebViews.
+      onOpenAutoFocus={(e) => e.preventDefault()}
       {...props}
     >
       {children}

@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import DOMPurify from 'isomorphic-dompurify';
 import { cn } from '@/lib/utils';
 import type { Ring } from '@/lib/types';
+import Link from 'next/link';
 
 const MAX_CHART_LENGTH = 10_000; // ~10 KB — generous for any reasonable diagram
 
@@ -20,6 +21,13 @@ const INLINE_SCHEME = 'https://tribes-inline.internal/';
  */
 function preprocessInlineImages(content: string): string {
   return content.replace(IMG_REF_REGEX, '![inline-image-$1](https://tribes-inline.internal/$1)');
+}
+
+/**
+ * Pre-process post content: replace @alias mentions with markdown links [alias](/u/alias)
+ */
+function preprocessMentions(content: string): string {
+  return content.replace(/(^|\s)@([a-zA-Z0-9_-]{2,30})/g, '$1[@$2](/u/$2)');
 }
 
 /**
@@ -147,11 +155,15 @@ export function MarkdownContent({
   tribeId,
   onImageClick,
 }: MarkdownContentProps) {
-  // Pre-process [img:N] tokens into markdown image syntax
-  const processedContent = useMemo(
-    () => (imageUrls?.length ? preprocessInlineImages(content) : content),
-    [content, imageUrls?.length],
-  );
+  // Pre-process [img:N] tokens and @mentions into markdown syntax
+  const processedContent = useMemo(() => {
+    let result = content;
+    if (imageUrls?.length) {
+      result = preprocessInlineImages(result);
+    }
+    result = preprocessMentions(result);
+    return result;
+  }, [content, imageUrls?.length]);
 
   // Build components with image context bound in
   const components = useMemo(() => {
@@ -284,11 +296,24 @@ const markdownComponents = {
   // Paragraphs
   p: ({ children }: any) => <p className="text-sm text-foreground leading-relaxed mb-2 last:mb-0">{children}</p>,
   // Links
-  a: ({ href, children }: any) => (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-      {children}
-    </a>
-  ),
+  a: ({ href, children }: any) => {
+    const isMention = href?.startsWith('/u/');
+    if (isMention) {
+      return (
+        <Link
+          href={href ?? '#'}
+          className="inline-flex items-center font-semibold text-primary bg-primary/10 rounded px-1.5 py-0.5 text-xs hover:bg-primary/20 transition-colors no-underline"
+        >
+          {children}
+        </Link>
+      );
+    }
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+        {children}
+      </a>
+    );
+  },
   // Lists
   ul: ({ children }: any) => <ul className="list-disc pl-5 mb-2 space-y-0.5 text-sm text-foreground">{children}</ul>,
   ol: ({ children }: any) => <ol className="list-decimal pl-5 mb-2 space-y-0.5 text-sm text-foreground">{children}</ol>,

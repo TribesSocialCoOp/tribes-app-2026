@@ -1,12 +1,14 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useCloseOnKeyboardHide } from '@/hooks/use-close-on-keyboard-hide';
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { MessageSquareText, Send } from 'lucide-react';
+import { MentionAutocomplete } from '../compose/mention-autocomplete';
+import { useMentionAutocomplete } from '@/hooks/use-mention-autocomplete';
 import {
   ResponsiveDialog, ResponsiveDialogHeader, ResponsiveDialogTitle,
   ResponsiveDialogDescription, ResponsiveDialogFooter
@@ -28,14 +30,20 @@ export function CommentDialog({
   parentAuthorName
 }: CommentDialogProps) {
   const [content, setContent] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const { mentionQuery, mentionRef, checkMention, handleSelectMention, handleMentionKeyDown, resetMention } =
+    useMentionAutocomplete(textareaRef, content, setContent);
+
   const handleClose = useCallback(() => onOpenChange(false), [onOpenChange]);
   useCloseOnKeyboardHide(isOpen, handleClose);
 
   useEffect(() => {
     if (!isOpen) {
       setContent("");
+      resetMention();
     }
-  }, [isOpen]);
+  }, [isOpen, resetMention]);
 
   const handleConfirm = () => {
     onConfirmComment(content);
@@ -59,14 +67,30 @@ export function CommentDialog({
       <div className="py-4 space-y-4">
         <div>
           <Label htmlFor="comment-content" className="sr-only">Comment</Label>
-          <Textarea
-            id="comment-content"
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="What are your thoughts?"
-            className="mt-1 min-h-[120px]"
-            autoFocus
-          />
+          <div className="relative">
+            <Textarea
+              id="comment-content"
+              ref={textareaRef}
+              value={content}
+              onChange={(e) => {
+                setContent(e.target.value);
+                checkMention(e.target.value, e.target.selectionStart);
+              }}
+              onKeyDown={handleMentionKeyDown}
+              onSelect={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                checkMention(target.value, target.selectionStart);
+              }}
+              placeholder="What are your thoughts?"
+              className="mt-1 min-h-[120px] w-full"
+              autoFocus
+            />
+            <MentionAutocomplete
+              ref={mentionRef}
+              query={mentionQuery}
+              onSelect={handleSelectMention}
+            />
+          </div>
         </div>
       </div>
 

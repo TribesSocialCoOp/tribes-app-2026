@@ -429,7 +429,9 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
           <VibePicker
             vibeCount={vibeCount}
             recentVibes={currentRecentVibes}
+            vibeDetails={item.vibeDetails}
             hasVibed={currentUserHasVibed}
+            isAuthor={isOwnPost}
             onVibeSelect={handleVibeSelection}
           />
         )}
@@ -524,6 +526,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
               comment={comment} 
               postId={item.id} 
               currentUserId={user?.id}
+              postAuthorId={item.authorId}
               onCommentAdded={loadComments}
               tribeId={item.tribeId}
               isPublic={!item.isEncrypted}

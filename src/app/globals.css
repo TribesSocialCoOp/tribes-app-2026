@@ -143,24 +143,46 @@ html.capacitor-native body {
 
 /*
  * Radix UI modal components (Dialog, DropdownMenu, Popover) mutate body styles
- * at runtime: they set `pointer-events: none` and `overflow: hidden` via
- * DismissableLayer, and add `data-scroll-locked` + margin-right via
- * react-remove-scroll-bar.
+ * at runtime via react-remove-scroll-bar. It injects a <style> tag with rules
+ * for body[data-scroll-locked] that include:
+ *   - overflow: hidden !important
+ *   - overscroll-behavior: contain
+ *   - position: relative !important   ← THIS IS THE CRITICAL ONE
+ *   - padding-left/top/right: Xpx (scrollbar gap compensation)
+ *   - margin-left/top: 0; margin-right: Xpx !important
+ *   - --removed-body-scroll-bar-size: Xpx
  *
- * In a Capacitor WKWebView, our body is already `position: fixed; overflow: hidden`,
- * so these mutations are redundant AND harmful:
- *  - pointer-events:none on body disables ALL touch in the entire webview
- *  - margin-right/overflow changes cause layout jumps (no scrollbar to compensate for)
+ * In a Capacitor WebView, body is already `position: fixed; overflow: hidden`,
+ * so ALL of these mutations are redundant AND harmful:
+ *   - `position: relative` flips body from fixed→relative, causing a FULL
+ *     layout recalculation that resets <main>.scrollTop to 0
+ *   - pointer-events:none on body (from DismissableLayer) disables all touch
+ *   - padding/margin changes cause layout shifts (no scrollbar to compensate)
  *
- * This CSS safety net ensures those runtime mutations are neutralized inside Capacitor.
+ * We must override EVERY property with !important to ensure the computed values
+ * never change when the attribute is added. If computed values stay identical,
+ * no layout recalculation occurs and scrollTop is preserved.
  */
 html.capacitor-native body {
   pointer-events: auto !important;
 }
 
 html.capacitor-native body[data-scroll-locked] {
+  /* Keep body exactly as it was before the lock */
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
   overflow: hidden !important;
-  margin-right: 0 !important;
+  overscroll-behavior: none !important;
+  /* Zero out all gap compensation — no scrollbar in Capacitor */
+  margin: 0 !important;
+  padding-right: 0 !important;
+  padding-left: 0 !important;
+  /* Preserve safe-area top padding from our own Capacitor rules */
+  padding-top: env(safe-area-inset-top) !important;
 }
 
 html.capacitor-native input,
@@ -190,6 +212,12 @@ html.capacitor-native .prose {
    - iOS: contentInset:'never' + viewport-fit:cover → env() exposed for home indicator */
 html.capacitor-native main {
   padding-bottom: calc(5rem + env(safe-area-inset-bottom));
+  /* Isolate main from ancestor layout recalculations.
+     When react-remove-scroll modifies body styles (or Portals are inserted),
+     the browser may recalculate layout and reset scrollTop on child containers.
+     contain:layout tells the browser that this element's internal layout is
+     independent of its ancestors — preventing scroll position resets. */
+  contain: layout style;
 }
 
 /* Android: adjustMarginsForEdgeToEdge:'force' already pushes the WebView content

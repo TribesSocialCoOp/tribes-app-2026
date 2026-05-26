@@ -14,6 +14,7 @@ import { VersionGuard } from "@/components/providers/version-guard";
 
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { NativeInitializer } from "@/components/providers/native-initializer";
+import { OverlayScrollGuard } from "@/components/providers/overlay-scroll-guard";
 import { PullToRefresh } from "@/components/layout/pull-to-refresh";
 import { useTheme } from "@/hooks/use-theme";
 import React from "react";
@@ -28,6 +29,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <VersionGuard>
     <UserProvider>
       <NativeInitializer />
+      <OverlayScrollGuard />
       <TosAcceptanceGate>
         <KeySyncProvider>
           <WebSocketProvider>

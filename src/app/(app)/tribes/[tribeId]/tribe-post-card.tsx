@@ -58,7 +58,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
     handleOpenRepostDialog, handleOpenReportCommentDialog,
     handleOpenCommentDialog, handleDeletePost,
     handleTogglePinPost, handleOpenModRemoveDialog, handleAdminDeletePost,
-    handleOpenEditPostDialog, memberRoleMap,
+    handleOpenEditPostDialog, memberRoleMap, syncAllData,
   } = useTribeDetail();
 
   const router = useRouter();
@@ -591,8 +591,10 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                   onOpenReplyDialog={handleOpenCommentDialog}
                   isLoggedIn={isLoggedIn}
                   isMember={isMember}
-                  currentUserId={isCurrentUserAuthor ? post.authorId : undefined}
+                  currentUserId={currentUserId ?? undefined}
+                  postAuthorId={post.authorId}
                   tribeId={tribeId}
+                  onCommentAdded={syncAllData}
                 />
               ))}
             </div>
@@ -603,7 +605,9 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
             <VibePicker
               vibeCount={currentVibesCount}
               recentVibes={currentRecentVibes}
+              vibeDetails={post.vibeDetails}
               hasVibed={currentUserHasVibed}
+              isAuthor={isCurrentUserAuthor}
               onVibeSelect={handleVibeSelection}
               disabled={post.isRemoved}
             />

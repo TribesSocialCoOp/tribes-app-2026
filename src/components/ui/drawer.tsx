@@ -8,12 +8,21 @@ import { cn } from "@/lib/utils"
 const Drawer = ({
   shouldScaleBackground = false,
   ...props
-}: React.ComponentProps<typeof DrawerPrimitive.Root>) => (
-  <DrawerPrimitive.Root
-    shouldScaleBackground={shouldScaleBackground}
-    {...props}
-  />
-)
+}: React.ComponentProps<typeof DrawerPrimitive.Root>) => {
+  // In Capacitor, body is already position:fixed + overflow:hidden,
+  // so Vaul's body style mutations are redundant and cause scroll resets.
+  const isCapacitor = typeof document !== 'undefined' &&
+    document.documentElement.classList.contains('capacitor-native');
+
+  return (
+    <DrawerPrimitive.Root
+      shouldScaleBackground={shouldScaleBackground}
+      noBodyStyles={isCapacitor || props.noBodyStyles}
+      preventScrollRestoration={isCapacitor || props.preventScrollRestoration}
+      {...props}
+    />
+  );
+}
 Drawer.displayName = "Drawer"
 
 const DrawerTrigger = DrawerPrimitive.Trigger

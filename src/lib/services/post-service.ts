@@ -24,28 +24,127 @@ async function batchFetchLiveAvatarInfo(userIds: string[]): Promise<Map<string, 
   return new Map(rows.map(r => [r.id, { avatar: r.avatar, name: r.name, slug: r.slug }]));
 }
 
-function buildCommentTree(allComments: (typeof comments.$inferSelect)[], parentId: string | null, slugMap?: Map<string, string | null>): DiscussionComment[] {
+/**
+ * Shared helper: aggregate emoji vibes into a ranked top-N list.
+ * Eliminates the repeated Map→sort→slice pattern used in 6+ call sites.
+ */
+export function computeRecentVibes(vibeList: { emoji: string }[], topN = 3): { emoji: string; count: number }[] {
+  const emojiCounts = new Map<string, number>();
+  for (const v of vibeList) {
+    emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
+  }
+  return Array.from(emojiCounts.entries())
+    .map(([emoji, count]) => ({ emoji, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, topN);
+}
+
+interface CommentVibeEnrichment {
+  recentVibes: { emoji: string; count: number }[];
+  vibeDetails?: { emoji: string; userName: string; userId: string }[];
+  hasVibed: boolean;
+}
+
+async function getCommentVibeEnrichmentMap(
+  commentIds: string[],
+  viewerUserId?: string,
+  postAuthorLookup?: string | Map<string, string>,
+  commentAuthorMap?: Map<string, string>
+): Promise<Map<string, CommentVibeEnrichment>> {
+  const map = new Map<string, CommentVibeEnrichment>();
+  if (commentIds.length === 0) return map;
+
+  // Fetch all vibes for these comments, joining users table to get reactor names
+  const vibeRows = await db.select({
+    id: vibes.id,
+    userId: vibes.userId,
+    targetId: vibes.targetId,
+    emoji: vibes.emoji,
+    userName: users.name,
+  })
+  .from(vibes)
+  .leftJoin(users, eq(vibes.userId, users.id))
+  .where(and(inArray(vibes.targetId, commentIds), eq(vibes.targetType, 'comment')));
+
+  // Group vibes by commentId
+  const vibesByComment = new Map<string, typeof vibeRows>();
+  for (const v of vibeRows) {
+    if (!vibesByComment.has(v.targetId)) vibesByComment.set(v.targetId, []);
+    vibesByComment.get(v.targetId)!.push(v);
+  }
+
+  for (const cid of commentIds) {
+    const cVibes = vibesByComment.get(cid) ?? [];
+    const hasVibed = viewerUserId ? cVibes.some(v => v.userId === viewerUserId) : false;
+
+
+
+    const recentVibes = computeRecentVibes(cVibes);
+
+    // Resolve postAuthorId for this comment
+    let postAuthorId: string | undefined;
+    if (typeof postAuthorLookup === 'string') {
+      postAuthorId = postAuthorLookup;
+    } else if (postAuthorLookup instanceof Map) {
+      postAuthorId = postAuthorLookup.get(cid);
+    }
+
+    const isPostAuthor = viewerUserId && postAuthorId && viewerUserId === postAuthorId;
+    const isCommentAuthor = viewerUserId && commentAuthorMap?.get(cid) === viewerUserId;
+    const canSeeReactors = isPostAuthor || isCommentAuthor;
+
+    let vibeDetails: CommentVibeEnrichment['vibeDetails'] = undefined;
+    if (canSeeReactors) {
+      vibeDetails = cVibes.map(v => ({
+        emoji: v.emoji,
+        userId: v.userId,
+        userName: v.userName ?? 'Someone',
+      }));
+    }
+
+    map.set(cid, {
+      recentVibes,
+      hasVibed,
+      vibeDetails,
+    });
+  }
+
+  return map;
+}
+
+function buildCommentTree(
+  allComments: (typeof comments.$inferSelect)[],
+  parentId: string | null,
+  slugMap?: Map<string, string | null>,
+  enrichmentMap?: Map<string, CommentVibeEnrichment>
+): DiscussionComment[] {
   return allComments
     .filter(c => c.parentCommentId === parentId)
-    .map(c => ({
-      id: c.id,
-      authorId: c.authorId,
-      authorSlug: slugMap?.get(c.authorId) ?? undefined,
-      authorName: c.authorName,
-      authorAvatar: c.authorAvatar ?? undefined,
-      authorAvatarFallback: c.authorAvatarFallback,
-      dataAiHintAvatar: c.dataAiHintAvatar ?? undefined,
-      content: c.content,
-      vibes: c.vibeCount ?? 0,
-      timestamp: c.createdAt ?? new Date(),
-      replies: buildCommentTree(allComments, c.id, slugMap),
-      // E2E encryption fields
-      isEncrypted: c.isEncrypted ?? false,
-      ciphertextBase64: c.ciphertext
-        ? Buffer.from(c.ciphertext as Buffer).toString('base64')
-        : undefined,
-      encryptionIv: c.encryptionIv ?? undefined,
-    }));
+    .map(c => {
+      const enrichment = enrichmentMap?.get(c.id);
+      return {
+        id: c.id,
+        authorId: c.authorId,
+        authorSlug: slugMap?.get(c.authorId) ?? undefined,
+        authorName: c.authorName,
+        authorAvatar: c.authorAvatar ?? undefined,
+        authorAvatarFallback: c.authorAvatarFallback,
+        dataAiHintAvatar: c.dataAiHintAvatar ?? undefined,
+        content: c.content,
+        vibes: c.vibeCount ?? 0,
+        recentVibes: enrichment?.recentVibes,
+        vibeDetails: enrichment?.vibeDetails,
+        hasVibed: enrichment?.hasVibed,
+        timestamp: c.createdAt ?? new Date(),
+        replies: buildCommentTree(allComments, c.id, slugMap, enrichmentMap),
+        // E2E encryption fields
+        isEncrypted: c.isEncrypted ?? false,
+        ciphertextBase64: c.ciphertext
+          ? Buffer.from(c.ciphertext as Buffer).toString('base64')
+          : undefined,
+        encryptionIv: c.encryptionIv ?? undefined,
+      };
+    });
 }
 
 
@@ -99,10 +198,19 @@ export async function getPostsForTribe(
   }
 
   const allVibes = postIds.length > 0
-    ? await db.select().from(vibes).where(and(inArray(vibes.targetId, postIds), eq(vibes.targetType, 'post')))
+    ? await db.select({
+        id: vibes.id,
+        userId: vibes.userId,
+        targetId: vibes.targetId,
+        emoji: vibes.emoji,
+        userName: users.name,
+      })
+      .from(vibes)
+      .leftJoin(users, eq(vibes.userId, users.id))
+      .where(and(inArray(vibes.targetId, postIds), eq(vibes.targetType, 'post')))
     : [];
 
-  const vibesByPost = new Map<string, (typeof vibes.$inferSelect)[]>();
+  const vibesByPost = new Map<string, typeof allVibes>();
   for (const v of allVibes) {
     if (!vibesByPost.has(v.targetId)) vibesByPost.set(v.targetId, []);
     vibesByPost.get(v.targetId)!.push(v);
@@ -128,26 +236,38 @@ export async function getPostsForTribe(
     .where(and(eq(tribeMembers.tribeId, tribeId), inArray(tribeMembers.userId, authorIds)));
   const aliasMap = new Map(memberAliasRows.map(r => [r.userId, r.joinedAsAlias]));
 
+  // Batch-fetch comment vibe enrichment for all comments in the feed
+  const commentIds = allComments.map(c => c.id);
+  const commentIdToPostAuthorId = new Map<string, string>();
+  const postIdToAuthorId = new Map(rows.map(r => [r.id, r.authorId]));
+  for (const c of allComments) {
+    const authorId = postIdToAuthorId.get(c.postId);
+    if (authorId) {
+      commentIdToPostAuthorId.set(c.id, authorId);
+    }
+  }
+  // Map commentId → commentAuthorId so comment authors can also see who reacted
+  const commentIdToCommentAuthorId = new Map(allComments.map(c => [c.id, c.authorId]));
+  const commentEnrichmentMap = await getCommentVibeEnrichmentMap(commentIds, viewerUserId, commentIdToPostAuthorId, commentIdToCommentAuthorId);
+
   const items = rows.map((row) => {
     const commentRows = commentsByPost.get(row.id) ?? [];
     // Also filter out comments from blocked users
     const filteredComments = blockedIds.length > 0
       ? commentRows.filter(c => !blockedIds.includes(c.authorId))
       : commentRows;
-    const commentsData = buildCommentTree(filteredComments, null, slugMap);
+    const commentsData = buildCommentTree(filteredComments, null, slugMap, commentEnrichmentMap);
     
     const postVibes = vibesByPost.get(row.id) ?? [];
     const hasVibed = viewerUserId ? postVibes.some(v => v.userId === viewerUserId) : false;
     
-    // Group and sort emojis
-    const emojiCounts = new Map<string, number>();
-    for (const v of postVibes) {
-      emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
-    }
-    const recentVibes = Array.from(emojiCounts.entries())
-      .map(([emoji, count]) => ({ emoji, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
+    const recentVibes = computeRecentVibes(postVibes);
+
+    // Post author gets vibeDetails (who reacted)
+    const isViewerPostAuthor = viewerUserId && viewerUserId === row.authorId;
+    const vibeDetails = isViewerPostAuthor
+      ? postVibes.map(v => ({ emoji: v.emoji, userId: v.userId, userName: v.userName ?? 'Someone' }))
+      : undefined;
 
     // A post is an alias post only when the author explicitly joined the tribe
     // under an alias AND the stored authorName matches that alias.
@@ -160,6 +280,7 @@ export async function getPostsForTribe(
     const post = rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined, liveAvatar, isAliasPost, liveName);
     post.authorSlug = info?.slug ?? undefined;
     post.recentVibes = recentVibes;
+    post.vibeDetails = vibeDetails;
     post.hasVibed = hasVibed;
     return post;
   });
@@ -237,10 +358,19 @@ export async function getMoodStreamPosts(
   const promoterMap = new Map(allPromoters.map(u => [u.id, u.name]));
 
   const allVibes = postIds.length > 0
-    ? await db.select().from(vibes).where(and(inArray(vibes.targetId, postIds), eq(vibes.targetType, 'post')))
+    ? await db.select({
+        id: vibes.id,
+        userId: vibes.userId,
+        targetId: vibes.targetId,
+        emoji: vibes.emoji,
+        userName: users.name,
+      })
+      .from(vibes)
+      .leftJoin(users, eq(vibes.userId, users.id))
+      .where(and(inArray(vibes.targetId, postIds), eq(vibes.targetType, 'post')))
     : [];
 
-  const vibesByPost = new Map<string, (typeof vibes.$inferSelect)[]>();
+  const vibesByPost = new Map<string, typeof allVibes>();
   for (const v of allVibes) {
     if (!vibesByPost.has(v.targetId)) vibesByPost.set(v.targetId, []);
     vibesByPost.get(v.targetId)!.push(v);
@@ -293,14 +423,13 @@ export async function getMoodStreamPosts(
     const postVibes = vibesByPost.get(postRow.id) ?? [];
     const hasVibed = viewerUserId ? postVibes.some(v => v.userId === viewerUserId) : false;
     
-    const emojiCounts = new Map<string, number>();
-    for (const v of postVibes) {
-      emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
-    }
-    const recentVibes = Array.from(emojiCounts.entries())
-      .map(([emoji, count]) => ({ emoji, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
+    const recentVibes = computeRecentVibes(postVibes);
+
+    // Post author gets vibeDetails (who reacted)
+    const isViewerPostAuthor = viewerUserId && viewerUserId === postRow.authorId;
+    const vibeDetails = isViewerPostAuthor
+      ? postVibes.map(v => ({ emoji: v.emoji, userId: v.userId, userName: v.userName ?? 'Someone' }))
+      : undefined;
 
     return {
       id: postRow.id,
@@ -319,6 +448,7 @@ export async function getMoodStreamPosts(
       dataAiHintImage: postRow.dataAiHintImage ?? undefined,
       vibes: postRow.vibeCount ?? 0,
       recentVibes,
+      vibeDetails,
       hasVibed,
       comments: postRow.commentCount ?? 0,
       moodTags: tags,
@@ -615,15 +745,8 @@ export async function toggleVibe(
         ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
         : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
 
-      const postVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
-      const emojiCounts = new Map<string, number>();
-      for (const v of postVibes) {
-        emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
-      }
-      const recentVibes = Array.from(emojiCounts.entries())
-        .map(([emoji, count]) => ({ emoji, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 3);
+      const targetVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
+      const recentVibes = computeRecentVibes(targetVibes);
 
       return { vibed: false, newCount, recentVibes };
     } else {
@@ -639,15 +762,8 @@ export async function toggleVibe(
         ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
         : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
 
-      const postVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
-      const emojiCounts = new Map<string, number>();
-      for (const v of postVibes) {
-        emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
-      }
-      const recentVibes = Array.from(emojiCounts.entries())
-        .map(([emoji, count]) => ({ emoji, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 3);
+      const targetVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
+      const recentVibes = computeRecentVibes(targetVibes);
 
       return { vibed: true, newCount, recentVibes };
     }
@@ -678,15 +794,8 @@ export async function toggleVibe(
       ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
       : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
 
-    const postVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
-    const emojiCounts = new Map<string, number>();
-    for (const v of postVibes) {
-      emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
-    }
-    const recentVibes = Array.from(emojiCounts.entries())
-      .map(([emoji, count]) => ({ emoji, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
+    const targetVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
+    const recentVibes = computeRecentVibes(targetVibes);
 
     // Auto-refresh: vibing keeps your tribe bond alive (fire-and-forget)
     if (targetType === 'post') {
@@ -734,7 +843,11 @@ export async function toggleVibe(
 /**
  * Get all comments for a post (threaded).
  */
-export async function getCommentsForPost(postId: string): Promise<DiscussionComment[]> {
+export async function getCommentsForPost(
+  postId: string,
+  viewerUserId?: string,
+  postAuthorId?: string
+): Promise<DiscussionComment[]> {
   const allComments = await db.select().from(comments)
     .where(eq(comments.postId, postId))
     .orderBy(comments.createdAt);
@@ -746,7 +859,13 @@ export async function getCommentsForPost(postId: string): Promise<DiscussionComm
     : [];
   const slugMap = new Map<string, string | null>(slugRows.map(r => [r.id, r.slug]));
 
-  return buildCommentTree(allComments, null, slugMap);
+  // Batch-fetch comments vibe enrichment
+  const commentIds = allComments.map(c => c.id);
+  // Map commentId → commentAuthorId so comment authors can also see who reacted
+  const commentAuthorMap = new Map(allComments.map(c => [c.id, c.authorId]));
+  const enrichmentMap = await getCommentVibeEnrichmentMap(commentIds, viewerUserId, postAuthorId, commentAuthorMap);
+
+  return buildCommentTree(allComments, null, slugMap, enrichmentMap);
 }
 
 /**

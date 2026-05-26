@@ -13,6 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import { createRingPost, type CreateRingPostPayload } from '@/lib/actions/content-actions';
 import type { Ring, LinkPreviewData } from '@/lib/types';
 import { ImagePlus, Send, Loader2, X, Lock, Globe, Link2 } from 'lucide-react';
+import { MentionAutocomplete } from './mention-autocomplete';
+import { useMentionAutocomplete } from '@/hooks/use-mention-autocomplete';
 import { cn, cleanUrl } from '@/lib/utils';
 import { useActionError } from '@/hooks/use-action-error';
 import { uploadFile } from '@/lib/upload';
@@ -69,6 +71,7 @@ export function ComposeBox({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
 
+
   /** Focus the textarea and scroll the compose card into view after the keyboard opens */
   const focusAndScroll = useCallback(() => {
     textareaRef.current?.focus();
@@ -106,6 +109,9 @@ export function ComposeBox({
 
   // Content state
   const [content, setContent] = useState('');
+
+  const { mentionQuery, mentionRef, checkMention, handleSelectMention, handleMentionKeyDown } =
+    useMentionAutocomplete(textareaRef, content, setContent);
   const [moodTag, setMoodTag] = useState<string | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -555,22 +561,37 @@ export function ComposeBox({
             ) : (
               /* Expanded state — full compose form */
               <div className="space-y-2.5">
-                <Textarea
-                  ref={textareaRef}
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder={
-                    ring === 'journal'
-                      ? 'Write in your journal...'
-                      : ring === 'inner_circle'
-                        ? 'Share with your Inner Circle...'
-                        : ring === 'my_people'
-                          ? 'Share with your People...'
-                          : 'Share with your Tribes...'
-                  }
-                  className="min-h-[80px] text-sm border-0 p-0 resize-none focus-visible:ring-0 shadow-none bg-transparent"
-                  autoFocus
-                />
+                <div className="relative">
+                  <Textarea
+                    ref={textareaRef}
+                    value={content}
+                    onChange={(e) => {
+                      setContent(e.target.value);
+                      checkMention(e.target.value, e.target.selectionStart);
+                    }}
+                    onKeyDown={handleMentionKeyDown}
+                    onSelect={(e) => {
+                      const target = e.target as HTMLTextAreaElement;
+                      checkMention(target.value, target.selectionStart);
+                    }}
+                    placeholder={
+                      ring === 'journal'
+                        ? 'Write in your journal...'
+                        : ring === 'inner_circle'
+                          ? 'Share with your Inner Circle...'
+                          : ring === 'my_people'
+                            ? 'Share with your People...'
+                            : 'Share with your Tribes...'
+                    }
+                    className="min-h-[80px] text-sm border-0 p-0 resize-none focus-visible:ring-0 shadow-none bg-transparent w-full"
+                    autoFocus
+                  />
+                  <MentionAutocomplete
+                    ref={mentionRef}
+                    query={mentionQuery}
+                    onSelect={handleSelectMention}
+                  />
+                </div>
 
                 {/* Image previews */}
                 {previewUrls.length > 0 && (

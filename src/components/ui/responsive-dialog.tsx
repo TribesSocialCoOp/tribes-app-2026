@@ -15,6 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from '@/lib/utils';
 
+
 /**
  * ResponsiveDialog — renders as a Dialog on desktop and a bottom Sheet on mobile.
  * Eliminates the duplicated Sheet/Dialog aliasing boilerplate across all 10 dialog components.

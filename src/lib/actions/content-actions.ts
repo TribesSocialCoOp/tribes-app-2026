@@ -264,18 +264,27 @@ export async function getPostById(postId: string): Promise<{
   }
   const commentsData = buildTree(null);
 
-  // Fetch vibes
-  const allVibes = await db.select().from(vibes)
-    .where(and(eq(vibes.targetId, postId), eq(vibes.targetType, 'post')));
+  // Fetch vibes (join with users to get reactor names)
+  const allVibes = await db.select({
+    id: vibes.id,
+    userId: vibes.userId,
+    targetId: vibes.targetId,
+    emoji: vibes.emoji,
+    userName: users.name,
+  })
+  .from(vibes)
+  .leftJoin(users, eq(vibes.userId, users.id))
+  .where(and(eq(vibes.targetId, postId), eq(vibes.targetType, 'post')));
+
   const hasVibed = userId ? allVibes.some(v => v.userId === userId) : false;
-  const emojiCounts = new Map<string, number>();
-  for (const v of allVibes) {
-    emojiCounts.set(v.emoji, (emojiCounts.get(v.emoji) ?? 0) + 1);
-  }
-  const recentVibes = Array.from(emojiCounts.entries())
-    .map(([emoji, count]) => ({ emoji, count }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 3);
+  const { computeRecentVibes } = await import('@/lib/services/post-service');
+  const recentVibes = computeRecentVibes(allVibes);
+
+  // Post author gets vibeDetails (who reacted)
+  const isViewerPostAuthor = userId && userId === row.authorId;
+  const vibeDetails = isViewerPostAuthor
+    ? allVibes.map(v => ({ emoji: v.emoji, userId: v.userId, userName: v.userName ?? 'Someone' }))
+    : undefined;
 
   // Fetch author info for live name/avatar syncing
   const [authorUser] = await db.select({ name: users.name, slug: users.slug, avatar: users.avatar })
@@ -295,6 +304,7 @@ export async function getPostById(postId: string): Promise<{
   const liveName = isAliasPost ? null : (authorUser?.name ?? null);
   const post = rowToTribePost(row, commentsData.length > 0 ? commentsData : undefined, liveAvatar, isAliasPost, liveName);
   post.recentVibes = recentVibes;
+  post.vibeDetails = vibeDetails;
   post.hasVibed = hasVibed;
   post.authorSlug = authorUser?.slug ?? undefined;
 
@@ -1282,6 +1292,14 @@ export const createComment = withPublicErrors(async (
   const comment = await fn(postId, userId, content.trim(), parentCommentId, encryption);
   // Fire-and-forget contribution tracking (comment type, not post)
   trackContribution(userId, 'comment', comment.id, `Commented on post ${postId}`);
+
+  // Fire-and-forget: process @mentions in the comment (skip encrypted comments)
+  if (!encryptionPayload) {
+    import('@/lib/services/mention-service').then(({ processMentions }) =>
+      processMentions(content.trim(), userId, 'comment', comment.id)
+    ).catch(() => {});
+  }
+
   return comment;
 });
 
@@ -1336,6 +1354,11 @@ export async function editComment(commentId: string, newContent: string): Promis
   await db.update(comments)
     .set({ content: newContent.trim() })
     .where(eq(comments.id, commentId));
+
+  // Fire-and-forget: re-process @mentions for edited content
+  import('@/lib/services/mention-service').then(({ processMentions }) =>
+    processMentions(newContent.trim(), userId, 'comment', commentId)
+  ).catch(() => {});
 }
 
 export async function getCommentsForPost(postId: string) {
@@ -1345,7 +1368,7 @@ export async function getCommentsForPost(postId: string) {
   const { db } = await import('@/db');
   const { posts } = await import('@/db/schema');
   const { eq } = await import('drizzle-orm');
-  const [post] = await db.select({ tribeId: posts.tribeId }).from(posts).where(eq(posts.id, postId)).limit(1);
+  const [post] = await db.select({ tribeId: posts.tribeId, authorId: posts.authorId }).from(posts).where(eq(posts.id, postId)).limit(1);
   if (post) {
     if (post.tribeId) {
       const { getTribeById: fetchTribe } = await import('@/lib/data-access/tribes');
@@ -1355,7 +1378,7 @@ export async function getCommentsForPost(postId: string) {
   }
 
   const { getCommentsForPost: fn } = await import('@/lib/services/post-service');
-  return fn(postId);
+  return fn(postId, userId ?? undefined, post?.authorId ?? undefined);
 }
 
 // ======== MODERATION SERVICE ========
@@ -2041,5 +2064,166 @@ export async function fuzzySearchUsername(query: string) {
     ))
     .limit(10);
 }
+
+/**
+ * Allows a comment author to delete their own comment, cascading down to all replies, reactions, and decrementing the post comment count.
+ */
+export async function deleteOwnComment(commentId: string): Promise<void> {
+  const userId = await requireAuth();
+  const { db } = await import('@/db');
+  const { comments, vibes, mentions, posts } = await import('@/db/schema');
+  const { eq, inArray, and, sql } = await import('drizzle-orm');
+
+  // Verify the comment exists and author is userId
+  const [comment] = await db
+    .select({
+      id: comments.id,
+      authorId: comments.authorId,
+      postId: comments.postId,
+    })
+    .from(comments)
+    .where(eq(comments.id, commentId))
+    .limit(1);
+
+  if (!comment) throw new Error('Comment not found.');
+  if (comment.authorId !== userId) {
+    throw new Error('You can only delete your own comments.');
+  }
+
+  // Find all comments for this post to build an in-memory subtree
+  const postComments = await db
+    .select({ id: comments.id, parentCommentId: comments.parentCommentId })
+    .from(comments)
+    .where(eq(comments.postId, comment.postId));
+
+  // Build child map
+  const childMap: Record<string, string[]> = {};
+  for (const c of postComments) {
+    if (c.parentCommentId) {
+      if (!childMap[c.parentCommentId]) {
+        childMap[c.parentCommentId] = [];
+      }
+      childMap[c.parentCommentId].push(c.id);
+    }
+  }
+
+  // Collect the comment's subtree IDs using BFS
+  const allDeletedIds: string[] = [];
+  const queue = [commentId];
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    allDeletedIds.push(currentId);
+    const children = childMap[currentId];
+    if (children) {
+      queue.push(...children);
+    }
+  }
+
+  // All deletes in a single transaction — if any step fails, everything rolls back
+  // so we never leave orphaned vibes/mentions rows as garbage.
+  await db.transaction(async (tx) => {
+    // 1. Delete associated vibes (reactions)
+    if (allDeletedIds.length > 0) {
+      await tx.delete(vibes).where(inArray(vibes.targetId, allDeletedIds));
+    }
+
+    // 2. Delete associated mentions
+    if (allDeletedIds.length > 0) {
+      await tx
+        .delete(mentions)
+        .where(
+          and(
+            eq(mentions.sourceType, 'comment'),
+            inArray(mentions.sourceId, allDeletedIds)
+          )
+        );
+    }
+
+    // 3. Delete comments themselves
+    if (allDeletedIds.length > 0) {
+      await tx.delete(comments).where(inArray(comments.id, allDeletedIds));
+    }
+
+    // 4. Decrement post's commentCount
+    await tx
+      .update(posts)
+      .set({
+        commentCount: sql`GREATEST(${posts.commentCount} - ${allDeletedIds.length}, 0)`,
+      })
+      .where(eq(posts.id, comment.postId));
+  });
+}
+
+/**
+ * Searches for users to @mention by matching reservedAlias, name, or alias in userAliases.
+ */
+export async function searchMentionableUsers(query: string): Promise<Array<{
+  id: string;
+  name: string;
+  alias: string;
+  avatar?: string;
+}>> {
+  const userId = await requireAuth();
+  if (!query || query.trim().length < 1) return [];
+
+  const escaped = query.trim().replace(/[%_\\]/g, '\\$&');
+  const pattern = `%${escaped}%`;
+
+  const { db } = await import('@/db');
+  const { users, userAliases, blockedUsers } = await import('@/db/schema');
+  const { sql, and, or, ilike, ne, eq } = await import('drizzle-orm');
+
+  const blockedIdsSql = sql`(
+    SELECT ${blockedUsers.blockedUserId} FROM ${blockedUsers} WHERE ${blockedUsers.userId} = ${userId}
+    UNION
+    SELECT ${blockedUsers.userId} FROM ${blockedUsers} WHERE ${blockedUsers.blockedUserId} = ${userId}
+  )`;
+
+  // Select matching users with left join to userAliases
+  const matches = await db.select({
+    id: users.id,
+    name: users.name,
+    reservedAlias: users.reservedAlias,
+    reservedAliasAvatar: users.reservedAliasAvatar,
+    userAvatar: users.avatar,
+    alias: userAliases.alias,
+    aliasAvatar: userAliases.avatar,
+  })
+  .from(users)
+  .leftJoin(userAliases, eq(users.id, userAliases.userId))
+  .where(and(
+    ne(users.id, userId),
+    sql`${users.id} NOT IN ${blockedIdsSql}`,
+    or(
+      ilike(users.reservedAlias, pattern),
+      ilike(users.name, pattern),
+      ilike(userAliases.alias, pattern)
+    )
+  ))
+  .limit(30);
+
+  const result: Array<{ id: string, name: string, alias: string, avatar?: string }> = [];
+  const seenUserIds = new Set<string>();
+
+  for (const m of matches) {
+    if (seenUserIds.has(m.id)) continue;
+    seenUserIds.add(m.id);
+
+    const alias = m.reservedAlias || m.alias || m.name.toLowerCase().replace(/\s+/g, '-');
+    const avatar = m.reservedAliasAvatar || m.aliasAvatar || m.userAvatar || undefined;
+
+    result.push({
+      id: m.id,
+      name: m.name,
+      alias,
+      avatar,
+    });
+
+    if (result.length >= 6) break;
+  }
+
+  return result;
+}
+
 
 

@@ -166,6 +166,7 @@ export interface TribePost {
   dataAiHintImage?: string;
   vibes?: number;
   recentVibes?: { emoji: string; count: number }[];
+  vibeDetails?: { emoji: string; userName: string; userId: string }[];
   hasVibed?: boolean;
   comments?: number;
   commentsData?: DiscussionComment[]; // Array of root-level comments
@@ -214,6 +215,9 @@ export interface DiscussionComment {
   content: string;
   timestamp: Date;
   vibes?: number;
+  recentVibes?: { emoji: string; count: number }[];
+  vibeDetails?: { emoji: string; userName: string; userId: string }[];
+  hasVibed?: boolean;
   replies?: DiscussionComment[];
   dataAiHintAvatar?: string;
   authorIsAlias?: boolean;
@@ -261,6 +265,7 @@ export interface MoodStreamPost {
   timestamp: Date;
   vibes?: number;
   recentVibes?: { emoji: string; count: number }[];
+  vibeDetails?: { emoji: string; userName: string; userId: string }[];
   hasVibed?: boolean;
   comments?: number;
   promotedByName?: string;
@@ -354,6 +359,7 @@ export interface CommunicationItem {
   timestamp: Date;
   vibes?: number;
   recentVibes?: { emoji: string; count: number }[];
+  vibeDetails?: { emoji: string; userName: string; userId: string }[];
   hasVibed?: boolean;
   comments?: number;
   dataAiHint?: string;
