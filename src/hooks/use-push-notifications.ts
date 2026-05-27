@@ -6,6 +6,12 @@
  * Web DEV mode: Uses toast alerts.
  * Web PROD mode: Registers Service Worker + VAPID subscription.
  * Native (iOS/Android) mode: Registers via native APNs/FCM and sends token to server.
+ *
+ * IMPORTANT: On Android, we must NOT call PushNotifications.checkPermissions()
+ * eagerly on mount. Capacitor core's getPermissionStates() has a known NPE bug
+ * on certain Android devices/versions that kills the entire native process.
+ * Instead we persist subscription state to localStorage and only touch native
+ * APIs when the user explicitly interacts with the push notification toggle.
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -16,6 +22,7 @@ type PushPermission = 'default' | 'granted' | 'denied';
 
 const IS_DEV = process.env.NODE_ENV === 'development';
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+const PUSH_STATE_KEY = 'tribes:push-subscribed';
 
 export function usePushNotifications() {
   const { toast } = useToast();
@@ -24,19 +31,21 @@ export function usePushNotifications() {
   const [isSupported, setIsSupported] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Check support and current permission on mount
+  // Check support and current permission on mount.
+  // For NATIVE: we restore the last-known subscription state from localStorage
+  // instead of calling the native checkPermissions() API, which can cause a
+  // fatal NullPointerException crash on certain Android devices (Capacitor bug).
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     if (isNative) {
       setIsSupported(true);
-      import('@capacitor/push-notifications').then(({ PushNotifications }) => {
-        PushNotifications.checkPermissions().then((status) => {
-          const perm = status.receive === 'granted' ? 'granted' : (status.receive === 'denied' ? 'denied' : 'default');
-          setPermission(perm);
-          setIsSubscribed(status.receive === 'granted');
-        });
-      });
+      // Restore persisted state — avoids touching the native plugin on mount
+      const saved = localStorage.getItem(PUSH_STATE_KEY);
+      if (saved === 'granted') {
+        setPermission('granted');
+        setIsSubscribed(true);
+      }
       return;
     }
 
@@ -112,6 +121,8 @@ export function usePushNotifications() {
                   platform: platform
                 });
                 setIsSubscribed(true);
+                setPermission('granted');
+                localStorage.setItem(PUSH_STATE_KEY, 'granted');
                 toast({
                   title: 'Notifications Enabled! 🎉',
                   description: 'You will now receive native push notifications on this device.',
@@ -209,6 +220,8 @@ export function usePushNotifications() {
     setIsLoading(true);
     try {
       setIsSubscribed(false);
+      setPermission('default');
+      localStorage.removeItem(PUSH_STATE_KEY);
 
       // Remove from server
       try {
