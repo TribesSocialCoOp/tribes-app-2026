@@ -19,3 +19,23 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# ─── Capacitor Core & Plugins Proguard Rules ──────────────────────────────────
+# Preserve Capacitor core classes, fields, and methods from obfuscation and shrinking
+-keep class com.getcapacitor.** { *; }
+-keep interface com.getcapacitor.** { *; }
+
+# Keep all Capacitor Plugins and their annotations intact
+-keep public class * extends com.getcapacitor.Plugin {
+    *;
+}
+
+# Preserve Capacitor annotations required for reflection at runtime
+-keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
+
+-keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }
+-keepclassmembers class * {
+    @com.getcapacitor.PluginMethod public void *(...);
+    @com.getcapacitor.annotation.PermissionCallback public void *(...);
+}
+
