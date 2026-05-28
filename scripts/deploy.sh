@@ -83,11 +83,14 @@ rsync -avz --delete \
 ok "Files synced successfully"
 
 # ── Step 2b: Push keys (additive-only, never deletes server keys) ────
-if [ -f "$LOCAL_DIR/keys/fcm-service-account.json" ]; then
-  log "Syncing FCM service account key to server..."
+if [ -f "$LOCAL_DIR/keys/fcm-service-account.json" ] || [ -f "$LOCAL_DIR/keys/apns-push.p12" ]; then
+  log "Syncing push notification keys to server..."
   ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" "mkdir -p $REMOTE_DIR/keys"
-  scp -o StrictHostKeyChecking=no "$LOCAL_DIR/keys/fcm-service-account.json" "$REMOTE_HOST:$REMOTE_DIR/keys/fcm-service-account.json"
-  ok "FCM key synced"
+  [ -f "$LOCAL_DIR/keys/fcm-service-account.json" ] && \
+    scp -o StrictHostKeyChecking=no "$LOCAL_DIR/keys/fcm-service-account.json" "$REMOTE_HOST:$REMOTE_DIR/keys/fcm-service-account.json"
+  [ -f "$LOCAL_DIR/keys/apns-push.p12" ] && \
+    scp -o StrictHostKeyChecking=no "$LOCAL_DIR/keys/apns-push.p12" "$REMOTE_HOST:$REMOTE_DIR/keys/apns-push.p12"
+  ok "Push notification keys synced"
 fi
 
 # ── Step 3: Run consolidated remote deployment ───────────────

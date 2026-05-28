@@ -219,7 +219,10 @@ async function sendApnsPushNotification(
 ): Promise<DeliveryResult> {
   const p12Path = path.join(process.cwd(), 'keys/apns-push.p12');
   if (!fs.existsSync(p12Path)) {
-    console.warn('[push-apns] APNs certificate not found at keys/apns-push.p12 — logging mock push instead');
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[push-apns] ⚠️ APNs certificate MISSING in production at keys/apns-push.p12 — iOS push will NOT work! Re-upload the .p12 file to the server.');
+      return 'error';
+    }
     console.log(`[push-apns] [MOCK SEND] Token: ${truncateToken(deviceToken)}, Title: ${payload.title}`);
     return 'delivered'; // Graceful mock success for dev environments
   }
