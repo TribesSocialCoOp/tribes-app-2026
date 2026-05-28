@@ -67,6 +67,7 @@ rsync -avz --delete \
   --exclude='node_modules' \
   --exclude='.next' \
   --exclude='.git' \
+  --exclude='keys' \
   --exclude='tribes.db' \
   --exclude='local.db' \
   --exclude='sqlite.db' \
@@ -80,6 +81,14 @@ rsync -avz --delete \
   "$LOCAL_DIR/" "$REMOTE_HOST:$REMOTE_DIR/" \
   | tail -5
 ok "Files synced successfully"
+
+# ── Step 2b: Push keys (additive-only, never deletes server keys) ────
+if [ -f "$LOCAL_DIR/keys/fcm-service-account.json" ]; then
+  log "Syncing FCM service account key to server..."
+  ssh -o StrictHostKeyChecking=no "$REMOTE_HOST" "mkdir -p $REMOTE_DIR/keys"
+  scp -o StrictHostKeyChecking=no "$LOCAL_DIR/keys/fcm-service-account.json" "$REMOTE_HOST:$REMOTE_DIR/keys/fcm-service-account.json"
+  ok "FCM key synced"
+fi
 
 # ── Step 3: Run consolidated remote deployment ───────────────
 log "Invoking remote deployment pipeline..."
