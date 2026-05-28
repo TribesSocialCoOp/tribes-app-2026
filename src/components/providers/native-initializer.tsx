@@ -257,17 +257,37 @@ export function NativeInitializer() {
           // ignore
         }
 
-        // Show standard in-app toast
-        const { toast } = await import('@/hooks/use-toast');
-        toast({
+        // Extract deep link URL from notification data
+        const pushUrl = notification.data?.url;
+
+        // Show in-app toast — navigate on click if we have a deep link
+        const { toast: showToast } = await import('@/hooks/use-toast');
+
+        const t = showToast({
           title: notification.title || 'New Notification',
           description: notification.body || '',
         });
+
+        // Auto-navigate after a short delay if user doesn't dismiss
+        if (pushUrl) {
+          // Store for later navigation when the toast is tapped
+          const handler = () => {
+            window.location.assign(pushUrl);
+          };
+          // Listen for click on toast elements
+          setTimeout(() => {
+            const toastEl = document.querySelector('[data-state="open"][role="status"]');
+            if (toastEl) {
+              toastEl.addEventListener('click', handler, { once: true });
+              (toastEl as HTMLElement).style.cursor = 'pointer';
+            }
+          }, 100);
+        }
       });
 
       // Listen for background notification actions (tap)
       const actionHandle = await PushNotifications.addListener('pushNotificationActionPerformed', async (action) => {
-        console.log('[push] Notification action performed:', action);
+        console.log('[push] Notification action performed:', JSON.stringify(action));
         
         // Extract redirect URL (e.g. data.url or action.notification.data.url)
         const data = action.notification?.data;
@@ -283,7 +303,8 @@ export function NativeInitializer() {
             : '/your-comms';
         
         console.log('[push] Navigating to push action URL:', redirectUrl);
-        router.push(redirectUrl);
+        // Use hard navigation — router.push() fails silently in Capacitor WebView
+        window.location.assign(redirectUrl);
       });
 
       pushCleanup = () => {

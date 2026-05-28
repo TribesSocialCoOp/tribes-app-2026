@@ -129,8 +129,9 @@ export async function proxy(request: NextRequest) {
         response.cookies.set(SESSION_COOKIE_NAME, '', { expires: new Date(0), path: '/' });
         return response;
       }
-    } else {
-      console.warn('[proxy] INTERNAL_API_SECRET not set, skipping DB session revocation check');
+    } else if (!process.env._PROXY_SECRET_WARNED) {
+      process.env._PROXY_SECRET_WARNED = '1';
+      console.log('[proxy] INTERNAL_API_SECRET not set — session revocation checks skipped (dev mode)');
     }
 
     // Check if account is pending deletion — redirect to recovery page

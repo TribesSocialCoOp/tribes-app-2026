@@ -1661,13 +1661,23 @@ export async function sendMessage(
   }
 
   const { sendMessage: fn } = await import('@/lib/services/message-service');
-  return fn(bondId, userId, ciphertextBase64, attachment);
+  const row = await fn(bondId, userId, ciphertextBase64, attachment);
+  return {
+    ...row,
+    ciphertext: row.ciphertext ? Buffer.from(row.ciphertext).toString('base64') : null,
+  };
 }
 
 export async function getMessagesForBond(bondId: string, limit?: number, beforeTimestamp?: Date) {
   const userId = await requireAuth();
   const { getMessages: fn } = await import('@/lib/services/message-service');
-  return fn(bondId, userId, limit, beforeTimestamp);
+  const rows = await fn(bondId, userId, limit, beforeTimestamp);
+  // Serialize Buffer → base64 string for the RSC boundary
+  // (Next.js can't pass Uint8Array/Buffer to Client Components)
+  return rows.map(r => ({
+    ...r,
+    ciphertext: r.ciphertext ? Buffer.from(r.ciphertext).toString('base64') : null,
+  }));
 }
 
 export async function markMessagesRead(bondId: string) {
@@ -1824,6 +1834,7 @@ export async function saveNotificationPreferences(prefs: {
   bondMessagesEnabled?: boolean;
   tribeActivityEnabled?: boolean;
   eventRemindersEnabled?: boolean;
+  governanceEnabled?: boolean;
 }) {
   const userId = await requireAuth();
   const { savePreferences: fn } = await import('@/lib/services/notification-service');
@@ -1909,12 +1920,14 @@ const pushSubscriptionSchema = z.object({
     auth: z.string().max(512).optional(),
   }).optional(),
   platform: z.enum(['web', 'ios', 'android']).optional(),
+  apnsSandbox: z.boolean().optional(),
 });
 
 export async function registerPushSubscriptionAction(subscription: {
   endpoint: string;
   keys?: { p256dh?: string; auth?: string };
   platform?: 'web' | 'ios' | 'android';
+  apnsSandbox?: boolean;
 }) {
   const userId = await requireAuth();
   

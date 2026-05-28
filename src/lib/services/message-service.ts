@@ -108,19 +108,27 @@ export async function sendMessage(
   // The WS relay handles real-time delivery; this is the offline fallback
   import('./realtime-dispatch').then(async ({ notifyBondMessage }) => {
     const { users } = await import('@/db/schema');
-    const { eq } = await import('drizzle-orm');
+    const { eq, and } = await import('drizzle-orm');
 
     // Find the bond partner's userId
     const [bond] = await db.select({ targetId: bonds.targetId })
       .from(bonds).where(eq(bonds.id, bondId)).limit(1);
     if (!bond) return;
 
+    // Resolve the RECIPIENT's bond ID for the deep link
+    // (sender's bond is `sb1`, recipient's mirror bond is `sb2`)
+    const [peerBond] = await db.select({ id: bonds.id })
+      .from(bonds)
+      .where(and(eq(bonds.userId, bond.targetId), eq(bonds.targetId, senderId)))
+      .limit(1);
+    const targetBondId = peerBond?.id ?? bondId;
+
     // Get sender name for the notification
     const [sender] = await db.select({ name: users.name })
       .from(users).where(eq(users.id, senderId)).limit(1);
 
-    await notifyBondMessage(bond.targetId, sender?.name ?? 'Someone', bondId);
-  }).catch(() => {});
+    await notifyBondMessage(bond.targetId, sender?.name ?? 'Someone', targetBondId);
+  }).catch((err) => { console.error('[push] Bond message notification error:', err); });
 
   // Auto-refresh: messaging keeps your bond alive (fire-and-forget)
   import('./bond-service').then(async ({ touchBondOnActivity, strengthenBondConnection }) => {

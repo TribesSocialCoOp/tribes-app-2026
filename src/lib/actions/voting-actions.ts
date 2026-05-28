@@ -105,33 +105,23 @@ export async function createProposal(payload: {
     options: payload.options,
   });
 
-  // If a non-admin founder created this, notify all admins (fire-and-forget)
-  if (!payload.tribeId) {
+  // Notify eligible voters about the new proposal (fire-and-forget)
+  // Replaces the old admin-only push — now notifies all paid co-op members
+  // (platform-wide) or all tribe members (tribe-scoped).
+  import('@/lib/services/realtime-dispatch').then(async ({ notifyNewProposal }) => {
     const { db: dbInner } = await import('@/db');
     const { users: usersTable } = await import('@/db/schema');
     const { eq: eqOp } = await import('drizzle-orm');
-    const [creator] = await dbInner.select({ role: usersTable.role, name: usersTable.name })
+    const [creator] = await dbInner.select({ name: usersTable.name })
       .from(usersTable).where(eqOp(usersTable.id, userId)).limit(1);
-
-    if (creator?.role !== 'Admin') {
-      // Find all admins
-      const admins = await dbInner.select({ id: usersTable.id })
-        .from(usersTable)
-        .where(eqOp(usersTable.role, 'Admin'));
-      const adminIds = admins.map(a => a.id);
-
-      if (adminIds.length > 0) {
-        import('@/lib/services/push-service').then(({ sendPushToMultiple }) => {
-          sendPushToMultiple(adminIds, {
-            title: '🏛️ New Proposal Submitted',
-            body: `${creator?.name ?? 'A tribe founder'} submitted a new proposal: "${payload.title}"`,
-            url: `/voting`,
-            tag: 'governance-new-proposal',
-          }).catch(() => {});
-        }).catch(() => {});
-      }
-    }
-  }
+    notifyNewProposal(
+      result.id,
+      userId,
+      creator?.name ?? 'A tribe founder',
+      payload.title,
+      payload.tribeId ?? null,
+    );
+  }).catch(() => {});
 
   return result;
 }
@@ -211,7 +201,12 @@ export async function closeProposal(proposalId: string): Promise<void> {
   }
 
   const { closeProposal: fn } = await import('@/lib/services/voting-service');
-  return fn(proposalId);
+  await fn(proposalId);
+
+  // Notify creator that their proposal has been closed (fire-and-forget)
+  import('@/lib/services/realtime-dispatch').then(({ notifyProposalClosed }) => {
+    notifyProposalClosed(proposalId, proposal.title, proposal.createdBy);
+  }).catch(() => {});
 }
 
 export async function cancelProposal(proposalId: string): Promise<void> {
@@ -364,6 +359,15 @@ export async function createProposalComment(payload: {
     content: payload.content.trim(),
     createdAt: new Date(),
   });
+
+  // Notify proposal author about the new comment (fire-and-forget)
+  import('@/lib/services/realtime-dispatch').then(async ({ notifyProposalComment }) => {
+    const [prop] = await db.select({ createdBy: proposals.createdBy, title: proposals.title })
+      .from(proposals).where(eq(proposals.id, payload.proposalId)).limit(1);
+    if (prop) {
+      notifyProposalComment(prop.createdBy, userId, author?.name ?? 'Someone', payload.proposalId, prop.title);
+    }
+  }).catch(() => {});
 
   return {
     id,

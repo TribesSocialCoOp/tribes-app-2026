@@ -52,6 +52,11 @@
         <meta-data
             android:name="asset_statements"
             android:resource="@string/capacitor_passkey_asset_statements" />
+
+        <!-- FCM default notification channel (Android 8+) -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="PushDefaultChannel" />
     </application>
 
     <!-- Permissions -->

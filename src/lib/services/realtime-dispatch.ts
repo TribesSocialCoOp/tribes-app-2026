@@ -393,3 +393,136 @@ export async function notifyVibe(
     tag: `vibe-${targetAuthorId}-${targetType}`,
   });
 }
+
+// ============================================================
+// GOVERNANCE NOTIFICATIONS
+// ============================================================
+
+/**
+ * Notify eligible voters about a new proposal.
+ * For platform-wide proposals: all paid co-op members.
+ * For tribe-scoped proposals: all tribe members.
+ * Respects governanceEnabled preference.
+ */
+export async function notifyNewProposal(
+  proposalId: string,
+  creatorId: string,
+  creatorName: string,
+  proposalTitle: string,
+  tribeId: string | null,
+): Promise<void> {
+  try {
+    const { db } = await import('@/db');
+    const { subscriptions, tribeMembers, notificationPreferences } = await import('@/db/schema');
+    const { eq, and, ne, inArray } = await import('drizzle-orm');
+    const { sendPushToMultiple } = await import('./push-service');
+
+    let recipientIds: string[];
+
+    if (tribeId) {
+      // Tribe-scoped: notify all tribe members except creator
+      const members = await db.select({ userId: tribeMembers.userId })
+        .from(tribeMembers)
+        .where(eq(tribeMembers.tribeId, tribeId));
+      recipientIds = members.map(m => m.userId).filter(id => id !== creatorId);
+    } else {
+      // Platform-wide: notify all paid co-op members (who can vote)
+      const paidSubs = await db.select({ userId: subscriptions.userId })
+        .from(subscriptions)
+        .where(and(
+          eq(subscriptions.status, 'active'),
+          ne(subscriptions.source, 'earned'),
+        ));
+      recipientIds = [...new Set(paidSubs.map(s => s.userId))].filter(id => id !== creatorId);
+    }
+
+    if (recipientIds.length === 0) return;
+
+    // Filter by governanceEnabled preference
+    const pushEligible: string[] = [];
+    try {
+      const prefsRows = await db.select()
+        .from(notificationPreferences)
+        .where(inArray(notificationPreferences.userId, recipientIds));
+      const prefsMap = new Map(prefsRows.map(r => [r.userId, r]));
+
+      for (const userId of recipientIds) {
+        const row = prefsMap.get(userId);
+        const govEnabled = row?.governanceEnabled ?? true;
+        const pushEnabled = row?.pushEnabled ?? true;
+        if (govEnabled && pushEnabled) {
+          pushEligible.push(userId);
+        }
+      }
+    } catch {
+      // Fallback: send to all
+      pushEligible.push(...recipientIds);
+    }
+
+    if (pushEligible.length > 0) {
+      sendPushToMultiple(pushEligible, {
+        title: '🏛️ New Proposal',
+        body: `${creatorName} submitted: "${proposalTitle}"`,
+        url: `/voting/${proposalId}`,
+        tag: `governance-proposal-${proposalId}`,
+      }).catch(() => {});
+    }
+  } catch (err) {
+    console.warn('[realtime-dispatch] notifyNewProposal failed:', err);
+  }
+}
+
+/**
+ * Notify the proposal creator when their proposal is closed (results available).
+ * Respects governanceEnabled preference.
+ */
+export async function notifyProposalClosed(
+  proposalId: string,
+  proposalTitle: string,
+  creatorId: string,
+): Promise<void> {
+  try {
+    const { getPreferences } = await import('./notification-service');
+    const prefs = await getPreferences(creatorId);
+    if (!prefs.governanceEnabled) return;
+  } catch {
+    // Prefs not loadable — send anyway
+  }
+
+  await notifyUser(creatorId, {
+    title: '🏛️ Proposal Closed',
+    body: `Voting has ended on "${proposalTitle}" — view results`,
+    url: `/voting/${proposalId}`,
+    tag: `governance-closed-${proposalId}`,
+  });
+}
+
+/**
+ * Notify a proposal author when someone comments on their proposal.
+ * Skips self-comments. Respects governanceEnabled preference.
+ */
+export async function notifyProposalComment(
+  proposalAuthorId: string,
+  commenterId: string,
+  commenterName: string,
+  proposalId: string,
+  proposalTitle: string,
+): Promise<void> {
+  // Don't notify yourself
+  if (commenterId === proposalAuthorId) return;
+
+  try {
+    const { getPreferences } = await import('./notification-service');
+    const prefs = await getPreferences(proposalAuthorId);
+    if (!prefs.governanceEnabled) return;
+  } catch {
+    // Prefs not loadable — send anyway
+  }
+
+  await notifyUser(proposalAuthorId, {
+    title: '🏛️ New Comment on Proposal',
+    body: `${commenterName} commented on "${proposalTitle}"`,
+    url: `/voting/${proposalId}`,
+    tag: `governance-comment-${proposalId}`,
+  });
+}

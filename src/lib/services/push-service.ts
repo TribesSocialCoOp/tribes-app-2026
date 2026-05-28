@@ -30,6 +30,14 @@ function truncateToken(token: string): string {
 let _apnsCertBuffer: Buffer | null = null;
 let _fcmJwtClient: any = null;
 
+/**
+ * Delivery result for platform-specific push senders.
+ * - 'delivered': Push was accepted by the gateway.
+ * - 'stale': Token is permanently invalid (unregistered, expired). Safe to prune from DB.
+ * - 'error': Transient failure (network, auth, config). Keep subscription — retry later.
+ */
+type DeliveryResult = 'delivered' | 'stale' | 'error';
+
 // ============================================================
 // VAPID CONFIGURATION
 // ============================================================
@@ -72,6 +80,7 @@ export async function registerPushSubscription(
     endpoint: string;
     keys?: { p256dh?: string; auth?: string };
     platform?: 'web' | 'ios' | 'android';
+    apnsSandbox?: boolean;
   },
 ): Promise<void> {
   const platform = subscription.platform ?? 'web';
@@ -95,6 +104,10 @@ export async function registerPushSubscription(
     keysP256dh: subscription.keys?.p256dh ?? null,
     keysAuth: subscription.keys?.auth ?? null,
     platform,
+    // For iOS: store whether this device expects sandbox or production APNs.
+    // Default to true (sandbox) for safety — TestFlight builds use sandbox,
+    // App Store builds should pass apnsSandbox: false.
+    apnsSandbox: platform === 'ios' ? (subscription.apnsSandbox ?? true) : null,
   });
 }
 
@@ -164,10 +177,11 @@ async function sendWebPushNotification(
   keysP256dh: string,
   keysAuth: string,
   payload: PushPayload,
-): Promise<boolean> {
+): Promise<DeliveryResult> {
   const configured = await ensureVapidConfigured();
   if (!configured) {
-    return false;
+    // VAPID not configured is a server-side config issue, not a stale token
+    return 'error';
   }
 
   try {
@@ -182,40 +196,44 @@ async function sendWebPushNotification(
       },
       JSON.stringify(payload),
     );
-    return true;
+    return 'delivered';
   } catch (err: any) {
     if (err?.statusCode === 410 || err?.statusCode === 404) {
       console.log('[push-web] Subscription expired, marking stale');
-      return false; // Stale, will trigger db cleanup
+      return 'stale';
     }
     console.error('[push-web] Web push delivery error:', err?.message ?? err);
-    return false;
+    // Any other error (5xx, network, etc.) is transient — keep subscription
+    return 'error';
   }
 }
 
 /**
  * Delivers push notification directly to Apple APNs using native node:http2 client certificate auth.
+ * Routes to sandbox or production APNs based on the per-subscription apnsSandbox flag.
  */
 async function sendApnsPushNotification(
   deviceToken: string,
   payload: PushPayload,
-): Promise<boolean> {
+  useSandbox: boolean,
+): Promise<DeliveryResult> {
   const p12Path = path.join(process.cwd(), 'keys/apns-push.p12');
   if (!fs.existsSync(p12Path)) {
     console.warn('[push-apns] APNs certificate not found at keys/apns-push.p12 — logging mock push instead');
     console.log(`[push-apns] [MOCK SEND] Token: ${truncateToken(deviceToken)}, Title: ${payload.title}`);
-    return true; // Graceful mock success for dev environments
+    return 'delivered'; // Graceful mock success for dev environments
   }
 
-  const isProduction = process.env.NODE_ENV === 'production';
-  // Use sandbox for local dev / TestFlight, production for App Store
-  const apnsHost = isProduction ? 'https://api.push.apple.com' : 'https://api.sandbox.push.apple.com';
+  // Route to correct APNs gateway based on per-device flag
+  const apnsHost = useSandbox
+    ? 'https://api.sandbox.push.apple.com'
+    : 'https://api.push.apple.com';
   const topic = 'app.tribes.TribesApp'; // iOS Bundle ID
   // APNS_PASSPHRASE env var: set to the .p12 export password (empty string if none)
 
-  return new Promise<boolean>((resolve) => {
+  return new Promise<DeliveryResult>((resolve) => {
     let resolved = false;
-    const safeResolve = (val: boolean) => {
+    const safeResolve = (val: DeliveryResult) => {
       if (!resolved) { resolved = true; resolve(val); }
     };
 
@@ -230,9 +248,9 @@ async function sendApnsPushNotification(
       });
 
       client.on('error', (err) => {
-        console.error('[push-apns] APNs HTTP/2 connection error:', err);
+        console.error(`[push-apns] APNs HTTP/2 connection error (${useSandbox ? 'sandbox' : 'production'}):`, err);
         client.close();
-        safeResolve(false);
+        safeResolve('error');
       });
 
       const body = {
@@ -268,15 +286,15 @@ async function sendApnsPushNotification(
       req.on('end', () => {
         client.close();
         if (responseStatus === 200) {
-          console.log(`[push-apns] APNs push sent to ${truncateToken(deviceToken)}`);
-          safeResolve(true);
+          console.log(`[push-apns] APNs push sent to ${truncateToken(deviceToken)} (${useSandbox ? 'sandbox' : 'production'})`);
+          safeResolve('delivered');
         } else {
           console.error(`[push-apns] APNs delivery failed (${responseStatus}): ${responseData}`);
           // 410 (Unregistered) or 400 (BadDeviceToken) indicates stale token
           if (responseStatus === 410 || responseStatus === 404 || responseStatus === 400) {
-            safeResolve(false); // Stale token, will trigger db cleanup
+            safeResolve('stale');
           } else {
-            safeResolve(true); // Temporary failure, keep registration
+            safeResolve('error'); // Temporary failure, keep registration
           }
         }
       });
@@ -284,14 +302,14 @@ async function sendApnsPushNotification(
       req.on('error', (err) => {
         console.error('[push-apns] APNs HTTP/2 stream error:', err);
         client.close();
-        safeResolve(false);
+        safeResolve('error');
       });
 
       req.write(JSON.stringify(body));
       req.end();
     } catch (err) {
       console.error('[push-apns] APNs direct push execution error:', err);
-      safeResolve(false);
+      safeResolve('error');
     }
   });
 }
@@ -302,12 +320,12 @@ async function sendApnsPushNotification(
 async function sendFcmPushNotification(
   deviceToken: string,
   payload: PushPayload,
-): Promise<boolean> {
+): Promise<DeliveryResult> {
   const serviceAccountPath = path.join(process.cwd(), 'keys/fcm-service-account.json');
   if (!fs.existsSync(serviceAccountPath)) {
     console.warn('[push-fcm] FCM service account key not found at keys/fcm-service-account.json — logging mock push instead');
     console.log(`[push-fcm] [MOCK SEND] Token: ${truncateToken(deviceToken)}, Title: ${payload.title}`);
-    return true; // Graceful mock success for dev environments
+    return 'delivered'; // Graceful mock success for dev environments
   }
 
   try {
@@ -331,7 +349,7 @@ async function sendFcmPushNotification(
 
     if (!accessToken) {
       console.error('[push-fcm] Failed to generate FCM OAuth2 token');
-      return false;
+      return 'error';
     }
 
     const projectId = _fcmJwtClient.projectId;
@@ -348,8 +366,9 @@ async function sendFcmPushNotification(
           url: payload.url || '/your-comms',
         },
         android: {
+          priority: 'high',
           notification: {
-            click_action: 'OPEN_ACTIVITY',
+            channel_id: 'PushDefaultChannel',
             sound: 'default',
           },
         },
@@ -367,19 +386,19 @@ async function sendFcmPushNotification(
 
     if (res.ok) {
       console.log(`[push-fcm] FCM push sent to ${truncateToken(deviceToken)}`);
-      return true;
+      return 'delivered';
     } else {
       const errorText = await res.text();
       console.error(`[push-fcm] FCM delivery failed with status ${res.status}: ${errorText}`);
       // Clean up stale subscription on 404 (UNREGISTERED) or 410
       if (res.status === 404 || res.status === 410) {
-        return false; // Stale token, will trigger db Pruning
+        return 'stale';
       }
-      return true; // Temporary error, keep registration
+      return 'error'; // Temporary error, keep registration
     }
   } catch (err) {
     console.error('[push-fcm] FCM direct push execution error:', err);
-    return false;
+    return 'error';
   }
 }
 
@@ -390,7 +409,7 @@ async function sendFcmPushNotification(
 /**
  * Sends a push notification to all active devices (web, iOS, Android) for a user.
  * Checks notification preferences before sending.
- * Cleans up stale/expired subscriptions automatically.
+ * Only prunes subscriptions that are confirmed stale (permanent token failure).
  *
  * @returns true if at least one notification was successfully dispatched, false otherwise
  */
@@ -403,6 +422,7 @@ export async function sendPushNotification(
     const { getPreferences } = await import('./notification-service');
     const prefs = await getPreferences(userId);
     if (!prefs.pushEnabled) {
+      console.log(`[push] Push disabled by user preference for ${userId}`);
       return false;
     }
   } catch {
@@ -412,36 +432,43 @@ export async function sendPushNotification(
   // Retrieve all active device subscriptions for the target user
   const subs = await getPushSubscriptions(userId);
   if (subs.length === 0) {
+    console.log(`[push] No push subscriptions found for user ${userId} — has the user enabled push in Settings?`);
     return false;
   }
+  console.log(`[push] Dispatching to ${subs.length} subscription(s) for user ${userId}: ${subs.map(s => s.platform).join(', ')}`);
 
   let overallSuccess = false;
 
   for (const sub of subs) {
     const platform = sub.platform ?? 'web';
-    let success = false;
+    let result: DeliveryResult = 'error';
 
     try {
       if (platform === 'ios') {
-        success = await sendApnsPushNotification(sub.endpoint, payload);
+        // Route to the correct APNs gateway based on per-device flag
+        const useSandbox = sub.apnsSandbox ?? true;
+        result = await sendApnsPushNotification(sub.endpoint, payload, useSandbox);
       } else if (platform === 'android') {
-        success = await sendFcmPushNotification(sub.endpoint, payload);
+        result = await sendFcmPushNotification(sub.endpoint, payload);
       } else {
         // Web push
         if (sub.keysP256dh && sub.keysAuth) {
-          success = await sendWebPushNotification(sub.endpoint, sub.keysP256dh, sub.keysAuth, payload);
+          result = await sendWebPushNotification(sub.endpoint, sub.keysP256dh, sub.keysAuth, payload);
         } else {
           console.warn(`[push] Stale web subscription missing keys for user ${userId}`);
-          success = false;
+          result = 'stale';
         }
       }
 
-      if (success) {
+      if (result === 'delivered') {
         overallSuccess = true;
-      } else {
-        // Prune the expired/stale subscription endpoint from the database
+      } else if (result === 'stale') {
+        // Only prune on confirmed stale tokens — not transient errors
         console.log(`[push] Pruning stale subscription (${platform}) for user ${userId}`);
         await db.delete(pushSubscriptions).where(eq(pushSubscriptions.id, sub.id));
+      } else {
+        // 'error' — transient failure, keep subscription for next attempt
+        console.warn(`[push] Transient delivery failure (${platform}) for user ${userId} — keeping subscription`);
       }
     } catch (err) {
       console.error(`[push] Failed to send push on platform ${platform} for user ${userId}:`, err);
@@ -470,4 +497,3 @@ export async function sendPushToMultiple(
 
   return { sent, failed };
 }
-

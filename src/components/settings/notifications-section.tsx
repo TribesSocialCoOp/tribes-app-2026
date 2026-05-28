@@ -18,6 +18,7 @@ export interface NotifPrefsState {
   bondMessagesEnabled: boolean;
   tribeActivityEnabled: boolean;
   eventRemindersEnabled: boolean;
+  governanceEnabled: boolean;
 }
 
 interface NotificationsSectionProps {
@@ -121,6 +122,8 @@ export function NotificationsSection({ notifPrefs, setNotifPrefs, isSaving, onSa
           checked={notifPrefs.tribeActivityEnabled} onChange={(v) => setNotifPrefs(p => ({ ...p, tribeActivityEnabled: v }))} />
         <NotifToggle id="eventReminders" label="Event Reminders" description="Upcoming event alerts and RSVP updates"
           checked={notifPrefs.eventRemindersEnabled} onChange={(v) => setNotifPrefs(p => ({ ...p, eventRemindersEnabled: v }))} />
+        <NotifToggle id="governanceVoting" label="🏛️ Governance & Voting" description="New proposals, vote results, and discussion updates"
+          checked={notifPrefs.governanceEnabled} onChange={(v) => setNotifPrefs(p => ({ ...p, governanceEnabled: v }))} />
       </CardContent>
       <CardFooter>
         <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={onSave} disabled={isSaving}>

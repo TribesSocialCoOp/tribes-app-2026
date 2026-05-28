@@ -57,16 +57,11 @@ export async function processMentions(
         createdAt: new Date(),
       });
 
-      // Fire push notification (fire-and-forget)
-      const { sendPushNotification } = await import('./push-service');
-      const [author] = await db.select({ name: users.name })
-        .from(users).where(eq(users.id, authorId)).limit(1);
-
-      sendPushNotification(userId, {
-        title: 'You were mentioned',
-        body: `${author?.name ?? 'Someone'} mentioned you in a ${sourceType.replace('_', ' ')}.`,
-        url: sourceType === 'post' ? '/your-comms' : undefined,
-        tag: `mention-${sourceId}`,
+      // Fire push notification with deep link (fire-and-forget)
+      import('./realtime-dispatch').then(async ({ notifyMention }) => {
+        const [author] = await db.select({ name: users.name })
+          .from(users).where(eq(users.id, authorId)).limit(1);
+        notifyMention(userId, author?.name ?? 'Someone', sourceType, sourceId);
       }).catch(() => {});
     }
   } catch (err) {

@@ -36,6 +36,13 @@
       "when": 1779387248384,
       "tag": "0004_aspiring_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779919971783,
+      "tag": "0005_strange_old_lace",
+      "breakpoints": true
     }
   ]
 }

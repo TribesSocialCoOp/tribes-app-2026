@@ -17,8 +17,9 @@ import {
   mentions,
   posts,
   comments,
+  proposals,
 } from '@/db/schema';
-import { eq, and, isNull, ne, desc, sql, inArray, gte } from 'drizzle-orm';
+import { eq, and, or, isNull, ne, desc, sql, inArray, gte } from 'drizzle-orm';
 import { buildPostPath } from '@/lib/utils/slugify';
 
 // ============================================================
@@ -27,7 +28,7 @@ import { buildPostPath } from '@/lib/utils/slugify';
 
 export interface ActivityItem {
   id: string;
-  type: 'bond_request' | 'unread_message' | 'tribe_join_request' | 'mention' | 'new_tribe_post' | 'new_comment' | 'system';
+  type: 'bond_request' | 'unread_message' | 'tribe_join_request' | 'mention' | 'new_tribe_post' | 'new_comment' | 'governance' | 'system';
   title: string;
   description: string;
   timestamp: Date;
@@ -42,6 +43,7 @@ export interface NotificationPrefs {
   bondMessagesEnabled: boolean;
   tribeActivityEnabled: boolean;
   eventRemindersEnabled: boolean;
+  governanceEnabled: boolean;
 }
 
 const DEFAULT_PREFS: NotificationPrefs = {
@@ -51,6 +53,7 @@ const DEFAULT_PREFS: NotificationPrefs = {
   bondMessagesEnabled: true,
   tribeActivityEnabled: true,
   eventRemindersEnabled: true,
+  governanceEnabled: true,
 };
 
 // ============================================================
@@ -71,6 +74,7 @@ export async function getPreferences(userId: string): Promise<NotificationPrefs>
     bondMessagesEnabled: row.bondMessagesEnabled ?? true,
     tribeActivityEnabled: row.tribeActivityEnabled ?? true,
     eventRemindersEnabled: row.eventRemindersEnabled ?? true,
+    governanceEnabled: row.governanceEnabled ?? true,
   };
 }
 
@@ -152,16 +156,31 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
 
   // 2. Unread messages (if bond messages enabled)
   if (prefs.bondMessagesEnabled) {
-    const userBonds = await db.select({ id: bonds.id, targetName: bonds.targetName })
+    const userBonds = await db.select({
+      id: bonds.id,
+      targetId: bonds.targetId,
+      targetName: bonds.targetName,
+    })
       .from(bonds)
       .where(eq(bonds.userId, userId));
 
     for (const bond of userBonds) {
+      // Messages may be stored under either bond ID (sender's or recipient's)
+      // so we need to check both — same pattern as getMessages()
+      const [peerBond] = await db.select({ id: bonds.id })
+        .from(bonds)
+        .where(and(eq(bonds.userId, bond.targetId), eq(bonds.targetId, userId)))
+        .limit(1);
+
+      const bondIdCondition = peerBond
+        ? or(eq(messages.bondId, bond.id), eq(messages.bondId, peerBond.id))!
+        : eq(messages.bondId, bond.id);
+
       const [unread] = await db.select({
         count: sql<number>`count(*)`,
       }).from(messages)
         .where(and(
-          eq(messages.bondId, bond.id),
+          bondIdCondition,
           ne(messages.senderId, userId),
           isNull(messages.readAt),
         ));
@@ -305,10 +324,10 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
     }
   }
 
-  // 6. Comments on user's posts (last 7 days)
+  // 6. Comments on user's posts (last 30 days)
   if (prefs.tribeActivityEnabled) {
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const userPosts = await db.select({ id: posts.id, tribeId: posts.tribeId, slug: posts.slug })
       .from(posts)
@@ -336,7 +355,7 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
       }).from(comments)
         .where(and(
           inArray(comments.postId, postIds),
-          gte(comments.createdAt, sevenDaysAgo),
+          gte(comments.createdAt, thirtyDaysAgo),
         ))
         .orderBy(desc(comments.createdAt))
         .limit(10);
@@ -354,6 +373,39 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
           read: false,
         });
       }
+    }
+  }
+
+  // 7. Active governance proposals (last 14 days)
+  if (prefs.governanceEnabled) {
+    const fourteenDaysAgo = new Date();
+    fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+
+    const activeProposals = await db.select({
+      id: proposals.id,
+      title: proposals.title,
+      createdBy: proposals.createdBy,
+      createdAt: proposals.createdAt,
+      status: proposals.status,
+    }).from(proposals)
+      .where(and(
+        eq(proposals.status, 'active'),
+        gte(proposals.createdAt, fourteenDaysAgo),
+      ))
+      .orderBy(desc(proposals.createdAt))
+      .limit(5);
+
+    for (const proposal of activeProposals) {
+      if (proposal.createdBy === userId) continue; // Skip own proposals
+      items.push({
+        id: `activity-governance-${proposal.id}`,
+        type: 'governance',
+        title: '🏛️ Active Proposal',
+        description: `"${proposal.title}" — vote now`,
+        timestamp: proposal.createdAt ?? new Date(),
+        actionUrl: `/voting/${proposal.id}`,
+        read: false,
+      });
     }
   }
 

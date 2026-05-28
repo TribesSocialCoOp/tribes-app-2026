@@ -734,6 +734,7 @@ export const notificationPreferences = pgTable('notification_preferences', {
   bondMessagesEnabled: boolean('bond_messages_enabled').default(true),
   tribeActivityEnabled: boolean('tribe_activity_enabled').default(true),
   eventRemindersEnabled: boolean('event_reminders_enabled').default(true),
+  governanceEnabled: boolean('governance_enabled').default(true),
   lastActivityViewedAt: timestamp('last_activity_viewed_at', { withTimezone: true }),
   readActivityIds: jsonb('read_activity_ids').$type<string[]>().default([]),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
@@ -750,6 +751,8 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   keysP256dh: text('keys_p256dh'),
   keysAuth: text('keys_auth'),
   platform: text('platform').default('web'),
+  /** true = APNs sandbox (TestFlight/dev), false = APNs production (App Store). Only relevant for iOS. */
+  apnsSandbox: boolean('apns_sandbox').default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
 });
 

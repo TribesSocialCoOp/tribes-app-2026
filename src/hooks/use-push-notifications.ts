@@ -118,7 +118,10 @@ export function usePushNotifications() {
                 const { registerPushSubscriptionAction } = await import('@/lib/actions/content-actions');
                 await registerPushSubscriptionAction({
                   endpoint: token.value,
-                  platform: platform
+                  platform: platform,
+                  // TestFlight/dev builds use APNs sandbox; App Store uses production.
+                  // NODE_ENV is baked at build time, so this correctly reflects the build target.
+                  ...(platform === 'ios' ? { apnsSandbox: IS_DEV } : {}),
                 });
                 setIsSubscribed(true);
                 setPermission('granted');
