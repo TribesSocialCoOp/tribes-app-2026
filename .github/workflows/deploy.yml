@@ -103,6 +103,18 @@ jobs:
             StrictHostKeyChecking no
           EOF
 
+      - name: Provision FCM Service Account Key
+        env:
+          FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -n "$FCM_SERVICE_ACCOUNT_JSON" ]; then
+            mkdir -p keys
+            echo "$FCM_SERVICE_ACCOUNT_JSON" > keys/fcm-service-account.json
+            echo "✅ FCM service account key written to keys/"
+          else
+            echo "⚠️ FCM_SERVICE_ACCOUNT_JSON secret not set — Android push will use mock mode"
+          fi
+
       - name: Execute Deploy Script
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}

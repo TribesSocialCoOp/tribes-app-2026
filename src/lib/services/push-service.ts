@@ -323,7 +323,10 @@ async function sendFcmPushNotification(
 ): Promise<DeliveryResult> {
   const serviceAccountPath = path.join(process.cwd(), 'keys/fcm-service-account.json');
   if (!fs.existsSync(serviceAccountPath)) {
-    console.warn('[push-fcm] FCM service account key not found at keys/fcm-service-account.json — logging mock push instead');
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[push-fcm] ⚠️ FCM service account key MISSING in production at keys/fcm-service-account.json — Android push will NOT work! Re-upload the key file to the server.');
+      return 'error';
+    }
     console.log(`[push-fcm] [MOCK SEND] Token: ${truncateToken(deviceToken)}, Title: ${payload.title}`);
     return 'delivered'; // Graceful mock success for dev environments
   }
