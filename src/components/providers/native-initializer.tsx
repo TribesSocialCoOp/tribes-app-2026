@@ -64,6 +64,18 @@ export function NativeInitializer() {
         }
       }
 
+      // Context-aware: if the user arrived at a post from Activity, go back there
+      // Only match actual post-detail routes — not bare tribe pages (/t/slug)
+      if (currentPath.startsWith('/post/') || /^\/t\/[^/]+\/post\//.test(currentPath)) {
+        const origin = sessionStorage.getItem('post-detail-origin');
+        if (origin === 'activity') {
+          sessionStorage.removeItem('post-detail-origin');
+          // console.log('[native] post from activity, navigating to /your-comms');
+          window.location.assign('/your-comms');
+          return;
+        }
+      }
+
       // Tribe sub-pages → go back to tribe detail
       // e.g. /tribes/1/manage-members → /tribes/1, /t/slug/settings → /t/slug
       const tribeSubPageMatch = currentPath.match(/^(\/(?:tribes\/[^/]+|t\/[^/]+))\/.+$/);

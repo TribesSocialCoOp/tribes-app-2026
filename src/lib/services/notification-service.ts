@@ -20,7 +20,25 @@ import {
   proposals,
 } from '@/db/schema';
 import { eq, and, or, isNull, ne, desc, sql, inArray, gte } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { buildPostPath } from '@/lib/utils/slugify';
+
+/**
+ * Batch-fetches tribe slugs for a set of tribe IDs.
+ * Returns a Map<tribeId, slug> (only includes tribes that have a slug).
+ */
+async function buildTribeSlugMap(tribeIds: string[]): Promise<Map<string, string>> {
+  const slugMap = new Map<string, string>();
+  if (tribeIds.length === 0) return slugMap;
+  const uniqueIds = [...new Set(tribeIds)];
+  const rows = await db.select({ id: tribes.id, slug: tribes.slug })
+    .from(tribes)
+    .where(inArray(tribes.id, uniqueIds));
+  for (const row of rows) {
+    if (row.slug) slugMap.set(row.id, row.slug);
+  }
+  return slugMap;
+}
 
 // ============================================================
 // TYPES
@@ -298,16 +316,12 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
         .limit(15);
 
       // Look up tribe names and slugs for display/routing
+      const tribeSlugMap = await buildTribeSlugMap(tribeIds);
       const tribeNameMap = new Map<string, string>();
-      const tribeSlugMap = new Map<string, string>();
-      for (const tId of tribeIds) {
-        const [tribe] = await db.select({ name: tribes.name, slug: tribes.slug })
-          .from(tribes).where(eq(tribes.id, tId)).limit(1);
-        if (tribe) {
-          tribeNameMap.set(tId, tribe.name);
-          if (tribe.slug) tribeSlugMap.set(tId, tribe.slug);
-        }
-      }
+      const tribeNameRows = await db.select({ id: tribes.id, name: tribes.name })
+        .from(tribes)
+        .where(inArray(tribes.id, tribeIds));
+      for (const row of tribeNameRows) { tribeNameMap.set(row.id, row.name); }
 
       for (const post of recentPosts) {
         if (post.authorId === userId) continue; // Skip own posts
@@ -340,11 +354,7 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
       
       // Also fetch slugs for these tribes
       const tribeIds = [...new Set(userPosts.map(p => p.tribeId).filter(Boolean) as string[])];
-      const tribeSlugMap = new Map<string, string>();
-      if (tribeIds.length > 0) {
-        const tRows = await db.select({ id: tribes.id, slug: tribes.slug }).from(tribes).where(inArray(tribes.id, tribeIds));
-        for (const tr of tRows) { if (tr.slug) tribeSlugMap.set(tr.id, tr.slug); }
-      }
+      const tribeSlugMap = await buildTribeSlugMap(tribeIds);
 
       const recentComments = await db.select({
         id: comments.id,
@@ -370,6 +380,58 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
           description: `${cmt.authorName ?? 'Someone'} commented on your post`,
           timestamp: cmt.createdAt ?? new Date(),
           actionUrl: `${buildPostPath(cmt.postId, postSlugMap.get(cmt.postId), tribeId ? tribeSlugMap.get(tribeId) : undefined)}?commentId=${cmt.id}`,
+          read: false,
+        });
+      }
+    }
+  }
+
+  // 6b. Replies to user's comments on OTHER people's posts (last 30 days)
+  // Section 6 covers comments on posts the user authored. This section covers
+  // threaded replies to the user's comments on posts they do NOT own.
+  // Uses a single joined query to avoid pulling all user comments into memory.
+  if (prefs.tribeActivityEnabled) {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Alias the comments table for the self-join: reply → parentComment → post
+    const parentComments = alias(comments, 'parent_comments');
+
+    const replyRows = await db.select({
+      id: comments.id,
+      authorId: comments.authorId,
+      authorName: comments.authorName,
+      postId: comments.postId,
+      createdAt: comments.createdAt,
+      postSlug: posts.slug,
+      postTribeId: posts.tribeId,
+    })
+      .from(comments)
+      .innerJoin(parentComments, eq(comments.parentCommentId, parentComments.id))
+      .innerJoin(posts, eq(comments.postId, posts.id))
+      .where(and(
+        eq(parentComments.authorId, userId),    // parent comment is mine
+        ne(comments.authorId, userId),          // reply is not mine
+        ne(posts.authorId, userId),             // post is not mine (section 6 handles that)
+        gte(comments.createdAt, thirtyDaysAgo),
+      ))
+      .orderBy(desc(comments.createdAt))
+      .limit(15);
+
+    if (replyRows.length > 0) {
+      // Batch-fetch tribe slugs for deep links
+      const replyTribeIds = [...new Set(replyRows.map(r => r.postTribeId).filter(Boolean) as string[])];
+      const replyTribeSlugMap = await buildTribeSlugMap(replyTribeIds);
+
+      for (const reply of replyRows) {
+        const tribeSlug = reply.postTribeId ? replyTribeSlugMap.get(reply.postTribeId) : undefined;
+        items.push({
+          id: `activity-reply-${reply.id}`,
+          type: 'new_comment',
+          title: 'New Reply',
+          description: `${reply.authorName ?? 'Someone'} replied to your comment`,
+          timestamp: reply.createdAt ?? new Date(),
+          actionUrl: `${buildPostPath(reply.postId, reply.postSlug, tribeSlug)}?commentId=${reply.id}`,
           read: false,
         });
       }
