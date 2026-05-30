@@ -1920,6 +1920,7 @@ const pushSubscriptionSchema = z.object({
     auth: z.string().max(512).optional(),
   }).optional(),
   platform: z.enum(['web', 'ios', 'android']).optional(),
+  // ⚠️ APNs sandbox flag — see push-service.ts for why this must NOT be removed.
   apnsSandbox: z.boolean().optional(),
 });
 

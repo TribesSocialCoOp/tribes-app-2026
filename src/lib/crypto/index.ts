@@ -83,7 +83,6 @@ export {
 // Passkey PRF vault (Phase 3)
 export {
   isPrfSupported,
-  getPrfSalt,
   getPrfSaltBytes,
   derivePrfWrappingKey,
   encryptVaultWithPrf,
@@ -93,8 +92,7 @@ export {
 // Tribe group encryption (Phase 3)
 export {
   generateTribeGroupKey,
-  wrapTribeKey,
-  unwrapTribeKey,
   encryptWithTribeKey,
   decryptWithTribeKey,
 } from './tribe-encryption';
+

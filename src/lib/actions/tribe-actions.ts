@@ -284,11 +284,14 @@ export async function getTribeOwnerVerified(tribeId: string): Promise<boolean> {
 /**
  * Fetches the current user's tribe key grants for all active tribe keys.
  * Called by the KeySyncProvider to populate the local tribe key store.
+ *
+ * When deviceKeyId is provided, returns grants targeting that device
+ * plus legacy grants (deviceKeyId = NULL) for backwards compatibility.
  */
-export async function getMyTribeKeyGrants() {
+export async function getMyTribeKeyGrants(deviceKeyId?: string) {
   const userId = await requireAuth();
   const { getUserTribeKeyGrants } = await import('@/lib/services/tribe-key-service');
-  return getUserTribeKeyGrants(userId);
+  return getUserTribeKeyGrants(userId, deviceKeyId);
 }
 
 /**
@@ -306,16 +309,21 @@ export async function initializeTribeKey(tribeId: string): Promise<string> {
 /**
  * Stores a wrapped tribe key grant for a specific recipient.
  * Called by key admins (founders/speakers) to distribute the tribe key.
+ *
+ * When deviceKeyId is provided, the grant targets a specific device
+ * (per-device multi-device model). When omitted, uses the legacy
+ * single-identity model.
  */
 export async function issueTribeKeyGrant(
   tribeKeyId: string,
   recipientId: string,
   wrappedKey: string,
   wrapIv: string,
+  deviceKeyId?: string,
 ): Promise<void> {
   const userId = await requireAuth();
   const { createTribeKeyGrant } = await import('@/lib/services/tribe-key-service');
-  return createTribeKeyGrant(tribeKeyId, recipientId, wrappedKey, wrapIv, userId);
+  return createTribeKeyGrant(tribeKeyId, recipientId, wrappedKey, wrapIv, userId, deviceKeyId);
 }
 
 /**
@@ -341,6 +349,19 @@ export async function getUngrantedTribeMembers(tribeId: string): Promise<string[
   await requireTribeSpeaker(userId, tribeId);
   const { getMembersWithoutGrants } = await import('@/lib/services/tribe-key-service');
   return getMembersWithoutGrants(tribeId);
+}
+
+/**
+ * Gets all active devices across tribe members that don't have a grant.
+ * Used by Phase C for per-device grant fan-out.
+ * Returns { userId, deviceKeyId, publicKey }[] for each ungranted device.
+ */
+export async function getUngrantedTribeDevices(tribeId: string) {
+  const userId = await requireAuth();
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
+  const { getUngrantedDevices } = await import('@/lib/services/tribe-key-service');
+  return getUngrantedDevices(tribeId);
 }
 
 /**
@@ -383,7 +404,7 @@ export async function deleteTribeKeyGrantForSelf(grantId: string): Promise<void>
  */
 export async function updateTribeSlug(tribeId: string, newSlug: string): Promise<{ success: boolean; newSlug: string }> {
   const userId = await requireAuth();
-  
+
   const { db } = await import('@/db');
   const { tribes, users, tribeMembers, tribeSlugRedirects } = await import('@/db/schema');
   const { eq, and, ne } = await import('drizzle-orm');

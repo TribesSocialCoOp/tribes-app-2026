@@ -9,8 +9,8 @@
  */
 
 import { db } from '@/db';
-import { tribeKeys, tribeKeyGrants, tribeMembers, tribes } from '@/db/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { tribeKeys, tribeKeyGrants, tribeMembers, tribes, userDeviceKeys } from '@/db/schema';
+import { eq, and, inArray, isNull, or } from 'drizzle-orm';
 
 // ============================================================
 // TRIBE KEY CRUD
@@ -80,6 +80,11 @@ export async function rotateTribeKey(
 
 /**
  * Stores a wrapped tribe key grant for a recipient.
+ * Optionally targets a specific device via deviceKeyId.
+ *
+ * When deviceKeyId is provided, the grant is device-specific — only that device
+ * can unwrap it. When NULL, the grant uses the legacy single-identity model
+ * (backwards compatible with pre-multi-device grants).
  */
 export async function createTribeKeyGrant(
   tribeKeyId: string,
@@ -87,6 +92,7 @@ export async function createTribeKeyGrant(
   wrappedKey: string,
   wrapIv: string,
   grantedBy: string,
+  deviceKeyId?: string,
 ): Promise<void> {
   const id = `tkg-${recipientId.substring(0, 8)}-${Date.now()}`;
 
@@ -98,6 +104,7 @@ export async function createTribeKeyGrant(
     wrapIv,
     grantedBy,
     grantedAt: new Date(),
+    deviceKeyId: deviceKeyId ?? null,
   });
 }
 
@@ -122,8 +129,11 @@ export async function getTribeKeyGrant(
 /**
  * Gets all grants for a user across all active tribe keys.
  * Used by the KeySyncProvider to fetch tribe keys on app mount.
+ *
+ * Returns grants matching the given deviceKeyId, OR grants with no deviceKeyId
+ * (legacy single-identity grants for backwards compatibility).
  */
-export async function getUserTribeKeyGrants(userId: string) {
+export async function getUserTribeKeyGrants(userId: string, deviceKeyId?: string) {
   const rows = await db.select({
     grantId: tribeKeyGrants.id,
     tribeKeyId: tribeKeyGrants.tribeKeyId,
@@ -131,12 +141,17 @@ export async function getUserTribeKeyGrants(userId: string) {
     wrapIv: tribeKeyGrants.wrapIv,
     tribeId: tribeKeys.tribeId,
     keyVersion: tribeKeys.keyVersion,
+    deviceKeyId: tribeKeyGrants.deviceKeyId,
   })
     .from(tribeKeyGrants)
     .innerJoin(tribeKeys, eq(tribeKeyGrants.tribeKeyId, tribeKeys.id))
     .where(and(
       eq(tribeKeyGrants.recipientId, userId),
       eq(tribeKeys.isActive, true),
+      // Match device-specific grants OR legacy grants (deviceKeyId = NULL)
+      deviceKeyId
+        ? or(eq(tribeKeyGrants.deviceKeyId, deviceKeyId), isNull(tribeKeyGrants.deviceKeyId))
+        : isNull(tribeKeyGrants.deviceKeyId),
     ));
 
   return rows;
@@ -145,6 +160,8 @@ export async function getUserTribeKeyGrants(userId: string) {
 /**
  * Gets members of a tribe who DON'T yet have a grant for the active key.
  * Used by key admins to know who needs a new grant.
+ *
+ * Legacy mode: Returns user IDs missing any grant (backwards compatible).
  */
 export async function getMembersWithoutGrants(tribeId: string): Promise<string[]> {
   const activeKey = await getActiveTribeKey(tribeId);
@@ -168,6 +185,90 @@ export async function getMembersWithoutGrants(tribeId: string): Promise<string[]
 
   const grantedIds = new Set(existingGrants.map(g => g.recipientId));
   return memberIds.filter(id => !grantedIds.has(id));
+}
+
+/**
+ * Gets all active devices across tribe members that don't yet have a
+ * device-targeted grant for the active key.
+ *
+ * Returns an array of { userId, deviceKeyId, publicKey } for each ungranted device.
+ * This enables Phase C to fan out one grant per device instead of one per user.
+ *
+ * Backwards compatible: Members with NO registered devices are included with
+ * deviceKeyId = null (they'll get a legacy single-identity grant).
+ */
+export async function getUngrantedDevices(tribeId: string): Promise<Array<{
+  userId: string;
+  deviceKeyId: string | null;
+  publicKey: string | null;
+}>> {
+  const activeKey = await getActiveTribeKey(tribeId);
+  if (!activeKey) return [];
+
+  // Get all tribe member user IDs
+  const members = await db.select({ userId: tribeMembers.userId })
+    .from(tribeMembers)
+    .where(eq(tribeMembers.tribeId, tribeId));
+
+  const memberIds = members.map(m => m.userId);
+  if (memberIds.length === 0) return [];
+
+  // Get all existing grants for this key
+  const existingGrants = await db.select({
+    recipientId: tribeKeyGrants.recipientId,
+    deviceKeyId: tribeKeyGrants.deviceKeyId,
+  })
+    .from(tribeKeyGrants)
+    .where(and(
+      eq(tribeKeyGrants.tribeKeyId, activeKey.id),
+      inArray(tribeKeyGrants.recipientId, memberIds),
+    ));
+
+  // Build a set of "userId:deviceKeyId" strings for granted combinations
+  const grantedSet = new Set(
+    existingGrants.map(g => `${g.recipientId}:${g.deviceKeyId ?? 'null'}`)
+  );
+
+  // Get all active devices for these members
+  const devices = await db.select({
+    userId: userDeviceKeys.userId,
+    deviceKeyId: userDeviceKeys.id,
+    publicKey: userDeviceKeys.publicKey,
+  })
+    .from(userDeviceKeys)
+    .where(and(
+      inArray(userDeviceKeys.userId, memberIds),
+      eq(userDeviceKeys.isActive, true),
+    ));
+
+  // Build a map of userId -> devices
+  const deviceMap = new Map<string, Array<{ deviceKeyId: string; publicKey: string | null }>>();
+  for (const d of devices) {
+    if (!deviceMap.has(d.userId)) deviceMap.set(d.userId, []);
+    deviceMap.get(d.userId)!.push({ deviceKeyId: d.deviceKeyId, publicKey: d.publicKey });
+  }
+
+  const ungranted: Array<{ userId: string; deviceKeyId: string | null; publicKey: string | null }> = [];
+
+  for (const userId of memberIds) {
+    const userDevices = deviceMap.get(userId);
+
+    if (!userDevices || userDevices.length === 0) {
+      // No registered devices — check if they have a legacy grant
+      if (!grantedSet.has(`${userId}:null`)) {
+        ungranted.push({ userId, deviceKeyId: null, publicKey: null });
+      }
+    } else {
+      // Check each device for an existing grant
+      for (const device of userDevices) {
+        if (!grantedSet.has(`${userId}:${device.deviceKeyId}`)) {
+          ungranted.push({ userId, deviceKeyId: device.deviceKeyId, publicKey: device.publicKey });
+        }
+      }
+    }
+  }
+
+  return ungranted;
 }
 
 /**

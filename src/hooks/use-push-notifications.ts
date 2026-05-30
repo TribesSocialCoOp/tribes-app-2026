@@ -119,9 +119,9 @@ export function usePushNotifications() {
                 await registerPushSubscriptionAction({
                   endpoint: token.value,
                   platform: platform,
-                  // TestFlight/dev builds use APNs sandbox; App Store uses production.
-                  // NODE_ENV is baked at build time, so this correctly reflects the build target.
-                  ...(platform === 'ios' ? { apnsSandbox: IS_DEV } : {}),
+                  // ⚠️ APNs sandbox routing — TestFlight/dev builds use sandbox gateway.
+                  // On Android this is ignored (null). On iOS it routes to the correct APNs host.
+                  apnsSandbox: platform === 'ios' ? IS_DEV : undefined,
                 });
                 setIsSubscribed(true);
                 setPermission('granted');

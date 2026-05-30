@@ -168,7 +168,7 @@ export async function deriveSharedSecret(
     {
       name: HKDF_ALGORITHM,
       hash: HKDF_HASH,
-      salt: new Uint8Array(32), // Zero salt — each key pair is unique already
+      salt: new Uint8Array(32), // Zero salt — each ECDH key pair is unique already
       info: HKDF_INFO,
     },
     hkdfKey,

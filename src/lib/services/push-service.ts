@@ -104,9 +104,10 @@ export async function registerPushSubscription(
     keysP256dh: subscription.keys?.p256dh ?? null,
     keysAuth: subscription.keys?.auth ?? null,
     platform,
-    // For iOS: store whether this device expects sandbox or production APNs.
-    // Default to true (sandbox) for safety — TestFlight builds use sandbox,
-    // App Store builds should pass apnsSandbox: false.
+    // ⚠️ Per-device APNs gateway routing — DO NOT remove.
+    // TestFlight/dev builds use the APNs sandbox; App Store builds use production.
+    // Defaulting to true (sandbox) is safe — TestFlight failures are silent,
+    // but sending sandbox tokens to production APNs returns BadDeviceToken (400).
     apnsSandbox: platform === 'ios' ? (subscription.apnsSandbox ?? true) : null,
   });
 }
@@ -210,7 +211,10 @@ async function sendWebPushNotification(
 
 /**
  * Delivers push notification directly to Apple APNs using native node:http2 client certificate auth.
- * Routes to sandbox or production APNs based on the per-subscription apnsSandbox flag.
+ *
+ * ⚠️ Routes to sandbox or production APNs based on the per-subscription apnsSandbox flag.
+ * DO NOT replace this with NODE_ENV — TestFlight builds run NODE_ENV=production but use
+ * the APNs sandbox gateway. Mixing this up causes silent push failures.
  */
 async function sendApnsPushNotification(
   deviceToken: string,
@@ -227,7 +231,8 @@ async function sendApnsPushNotification(
     return 'delivered'; // Graceful mock success for dev environments
   }
 
-  // Route to correct APNs gateway based on per-device flag
+  // ⚠️ Route to correct APNs gateway based on per-device flag (NOT NODE_ENV).
+  // TestFlight builds have NODE_ENV=production but use the sandbox gateway.
   const apnsHost = useSandbox
     ? 'https://api.sandbox.push.apple.com'
     : 'https://api.push.apple.com';
@@ -451,7 +456,8 @@ export async function sendPushNotification(
 
     try {
       if (platform === 'ios') {
-        // Route to the correct APNs gateway based on per-device flag
+        // ⚠️ Route to the correct APNs gateway based on per-device flag.
+        // Default to sandbox (true) for safety — TestFlight builds use sandbox.
         const useSandbox = sub.apnsSandbox ?? true;
         result = await sendApnsPushNotification(sub.endpoint, payload, useSandbox);
       } else if (platform === 'android') {

@@ -134,3 +134,8 @@ public/test-*.svg
 # ws-relay build artifacts
 ws-relay/node_modules/
 ws-relay/package-lock.json
+
+# Dev artifacts — local testing
+dev-mailbox.json
+public/emulator-screenshot.png
+tests/check-emulator-idb.mjs

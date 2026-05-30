@@ -70,6 +70,8 @@ const KeySyncContext = createContext<KeySyncState>({
 
 export const useKeySync = () => useContext(KeySyncContext);
 
+import { detectCurrentDeviceLabel } from '@/lib/utils/device';
+
 // ============================================================
 // PROVIDER COMPONENT
 // ============================================================
@@ -171,6 +173,50 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
             'Vault restore needed for tribe key operations.'
           );
           // identityKey remains null — tribe key operations will be skipped this cycle
+        }
+      }
+
+      // ========================================
+      // PHASE 0.5: Device Key Registration
+      // ========================================
+      // Register this device's identity key in user_device_keys for
+      // per-device tribe key grant targeting. This is an ADDITIVE overlay
+      // on top of the existing single-identity model.
+
+      let currentDeviceKeyId: string | null = null;
+
+      if (identityKey) {
+        try {
+          const { registerDeviceKeyAction } = await import('@/lib/actions/device-key-actions');
+
+          // Compute a fingerprint for dedup (same key = same device)
+          const pubKeyJson = JSON.stringify(identityKey.publicKeyJwk);
+          const fingerprintBuffer = await crypto.subtle.digest(
+            'SHA-256',
+            new TextEncoder().encode(pubKeyJson)
+          );
+          const fingerprint = Array.from(new Uint8Array(fingerprintBuffer))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+
+          // Auto-detect device label from User-Agent
+          const deviceLabel = detectCurrentDeviceLabel();
+
+          const result = await registerDeviceKeyAction(deviceLabel, pubKeyJson, fingerprint);
+          currentDeviceKeyId = result.deviceKeyId;
+
+          // Persist fingerprint to localStorage for the "This device" badge in settings
+          try { localStorage.setItem('tribes:current-device-fingerprint', fingerprint); } catch { /* non-critical */ }
+
+          if (result.isNew) {
+            console.debug(`[key-sync] Registered new device: ${deviceLabel} (${result.deviceKeyId.substring(0, 12)}...)`);
+          } else {
+            console.debug(`[key-sync] Device already registered, updated lastSeenAt (${result.deviceKeyId.substring(0, 12)}...)`);
+          }
+        } catch (err) {
+          // Non-fatal: device registration failing doesn't block the rest of sync.
+          // Legacy grants (deviceKeyId = NULL) will still work.
+          console.warn('[key-sync] Device key registration failed (non-fatal):', err);
         }
       }
 
@@ -345,8 +391,8 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
           const cachedSecret = await getSharedSecret(bond.id);
 
           if (cachedSecret
-              && cachedSecret.peerKeyHash === currentPeerHash
-              && cachedSecret.localKeyHash === localHash) {
+            && cachedSecret.peerKeyHash === currentPeerHash
+            && cachedSecret.localKeyHash === localHash) {
             ready++;
             continue;
           }
@@ -394,7 +440,8 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       try {
         const { getMyTribeKeyGrants } = await import('@/lib/actions/tribe-actions');
 
-        const grants = await getMyTribeKeyGrants();
+        // Pass deviceKeyId to get device-targeted grants + legacy grants (NULL fallback)
+        const grants = await getMyTribeKeyGrants(currentDeviceKeyId ?? undefined);
 
         for (const grant of grants) {
           try {
@@ -457,7 +504,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const { getMyTribesList } = await import('@/lib/actions/content-actions');
-        const { getActiveTribeKeyForTribe, initializeTribeKey, issueTribeKeyGrant, getUngrantedTribeMembers } = await import('@/lib/actions/tribe-actions');
+        const { getActiveTribeKeyForTribe, initializeTribeKey, issueTribeKeyGrant, getUngrantedTribeDevices } = await import('@/lib/actions/tribe-actions');
         const { getMemberEncryptionKeys } = await import('@/lib/actions/identity-key-actions');
         const { generateTribeGroupKey } = await import('@/lib/crypto/tribe-encryption');
 
@@ -488,7 +535,8 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
               if (identityKey) {
                 const myPubKey = await importIdentityPublicKey(identityKey.publicKeyJwk);
                 const { wrappedKey, iv } = await wrapKeyForRecipient(newKey, myPubKey);
-                await issueTribeKeyGrant(tribeKeyId, user!.id, wrappedKey, iv);
+                // Self-grant targets our device (if registered) for multi-device compat
+                await issueTribeKeyGrant(tribeKeyId, user!.id, wrappedKey, iv, currentDeviceKeyId ?? undefined);
               }
 
               // Cache locally
@@ -497,35 +545,54 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
               activeKey = await getActiveTribeKeyForTribe(tribe.id);
             }
 
-            // Step 2: Distribution to ungranted members
+            // Step 2: Distribution to ungranted members/devices
             if (isAdmin && activeKey && localTribeKey) {
-              const ungrantedMembers = await getUngrantedTribeMembers(tribe.id);
+              const ungrantedDevices = await getUngrantedTribeDevices(tribe.id);
 
-              if (ungrantedMembers.length > 0) {
-                console.debug(`[key-sync] Distributing tribe key for ${tribe.name} to ${ungrantedMembers.length} member(s)...`);
+              if (ungrantedDevices.length > 0) {
+                console.debug(`[key-sync] Distributing tribe key for ${tribe.name} to ${ungrantedDevices.length} ungranted device(s)...`);
 
-                // Batch fetch public keys for these members
-                const memberPublicKeys = await getMemberEncryptionKeys(ungrantedMembers);
+                // Batch fetch public keys for members without registered devices
+                // (legacy single-identity model fallback)
+                const legacyMemberIds = ungrantedDevices
+                  .filter(d => d.deviceKeyId === null)
+                  .map(d => d.userId);
+                const memberPublicKeys = legacyMemberIds.length > 0
+                  ? await getMemberEncryptionKeys(legacyMemberIds)
+                  : {};
 
-                for (const memberId of ungrantedMembers) {
+                for (const target of ungrantedDevices) {
                   try {
-                    const memberPubKeyJwk = memberPublicKeys[memberId];
-                    if (!memberPubKeyJwk) {
-                      console.debug(`[key-sync] Member ${memberId.substring(0, 8)}... has no published identity key, skipping grant`);
+                    let pubKeyJwk: JsonWebKey | null = null;
+
+                    if (target.deviceKeyId && target.publicKey) {
+                      // Per-device model: use the device's registered public key
+                      pubKeyJwk = JSON.parse(target.publicKey) as JsonWebKey;
+                    } else {
+                      // Legacy model: use the user's identity public key
+                      pubKeyJwk = memberPublicKeys[target.userId] ?? null;
+                    }
+
+                    if (!pubKeyJwk) {
+                      console.debug(`[key-sync] No public key for ${target.userId.substring(0, 8)}... device=${target.deviceKeyId?.substring(0, 8) ?? 'legacy'}, skipping grant`);
                       continue;
                     }
 
-                    // Import their public key
-                    const memberPubKey = await importIdentityPublicKey(memberPubKeyJwk);
+                    // Import their public key and wrap the tribe key
+                    const recipientPubKey = await importIdentityPublicKey(pubKeyJwk);
+                    const { wrappedKey, iv } = await wrapKeyForRecipient(localTribeKey.key, recipientPubKey);
 
-                    // Wrap the tribe key using their RSA public key
-                    const { wrappedKey, iv } = await wrapKeyForRecipient(localTribeKey.key, memberPubKey);
-
-                    // Submit grant to server
-                    await issueTribeKeyGrant(activeKey.id, memberId, wrappedKey, iv);
-                    console.debug(`[key-sync] Successfully granted tribe key to member ${memberId.substring(0, 8)}...`);
+                    // Submit grant to server with device targeting
+                    await issueTribeKeyGrant(
+                      activeKey.id,
+                      target.userId,
+                      wrappedKey,
+                      iv,
+                      target.deviceKeyId ?? undefined,
+                    );
+                    console.debug(`[key-sync] Granted tribe key to ${target.userId.substring(0, 8)}... device=${target.deviceKeyId?.substring(0, 8) ?? 'legacy'}`);
                   } catch (grantErr) {
-                    console.warn(`[key-sync] Failed to grant tribe key to ${memberId.substring(0, 8)}...:`, grantErr);
+                    console.warn(`[key-sync] Failed to grant tribe key to ${target.userId.substring(0, 8)}... device=${target.deviceKeyId?.substring(0, 8) ?? 'legacy'}:`, grantErr);
                   }
                 }
               }
