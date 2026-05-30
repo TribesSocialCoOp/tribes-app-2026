@@ -40,19 +40,12 @@ export async function regenerateInviteToken(tribeId: string): Promise<string> {
   const userId = await getCurrentUserId();
   if (!userId) throw new Error('Not authenticated');
 
-  // Verify the caller is a founder/speaker of this tribe
+  const { requireTribeSpeaker } = await import('@/lib/services/tribe-auth');
+  await requireTribeSpeaker(userId, tribeId);
+
   const { db } = await import('@/db');
-  const { tribeMembers, tribes } = await import('@/db/schema');
-  const { eq, and } = await import('drizzle-orm');
-
-  const [membership] = await db.select({ role: tribeMembers.role })
-    .from(tribeMembers)
-    .where(and(eq(tribeMembers.tribeId, tribeId), eq(tribeMembers.userId, userId)))
-    .limit(1);
-
-  if (!membership || !['founder', 'speaker'].includes(membership.role || '')) {
-    throw new Error('Only tribe founders and speakers can regenerate invite links');
-  }
+  const { tribes } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
 
   const { generateInviteToken } = await import('@/lib/invite-token');
   const newToken = generateInviteToken();

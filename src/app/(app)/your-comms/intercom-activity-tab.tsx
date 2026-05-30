@@ -32,6 +32,9 @@ const ActivityItemCard: React.FC<ActivityItemCardProps> = ({ item, icon, badgeSl
     if (item.type === 'tribe_join_request') {
       sessionStorage.setItem('manage-members-origin', 'activity');
     }
+    if (item.type === 'new_comment' || item.type === 'new_tribe_post') {
+      sessionStorage.setItem('post-detail-origin', 'activity');
+    }
     
     router.push(url);
   };
