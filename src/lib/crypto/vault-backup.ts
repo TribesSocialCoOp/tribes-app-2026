@@ -31,6 +31,7 @@ import {
   storeTribeKey,
   getTribeKey,
 } from './key-store';
+import type { VaultEntry, VaultPayload, TribeKeyVaultEntry } from './vault-types';
 
 // ============================================================
 // CONSTANTS
@@ -41,33 +42,6 @@ const PBKDF2_HASH = 'SHA-256';
 const AES_KEY_LENGTH = 256;
 const SALT_LENGTH = 32; // 256-bit salt
 
-// ============================================================
-// VAULT TYPES
-// ============================================================
-
-interface VaultEntry {
-  bondId: string;
-  privateKeyJwk: JsonWebKey;
-  publicKeyJwk: JsonWebKey;
-  createdAt: number;
-}
-
-interface VaultPayload {
-  version: number;
-  entries: VaultEntry[];
-  identityKey?: {
-    privateKeyJwk: JsonWebKey;
-    publicKeyJwk: JsonWebKey;
-  };
-  tribeKeys?: TribeKeyVaultEntry[];
-  exportedAt: number;
-}
-
-interface TribeKeyVaultEntry {
-  tribeId: string;
-  keyJwk: JsonWebKey;
-  version: number;
-}
 
 // ============================================================
 // PASSPHRASE → KEY DERIVATION
@@ -400,7 +374,6 @@ export async function restoreVaultBackup(
       // The next key-sync cycle will re-derive it with the correct key pair.
       if (existingKey) {
         try {
-          const { deleteSharedSecret } = await import('./key-store');
           await deleteSharedSecret(entry.bondId);
           console.debug(`[vault] Cleared stale shared secret for bond ${entry.bondId.substring(0, 16)}...`);
         } catch { /* non-fatal */ }

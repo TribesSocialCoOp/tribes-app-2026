@@ -478,9 +478,11 @@ export const tribeKeyGrants = pgTable('tribe_key_grants', {
   wrapIv: text('wrap_iv').notNull(),            // Base64: IV for the wrapping
   grantedBy: text('granted_by').notNull().references(() => users.id),
   grantedAt: timestamp('granted_at', { withTimezone: true }).default(sql`NOW()`),
+  deviceKeyId: text('device_key_id').references(() => userDeviceKeys.id, { onDelete: 'set null' }), // Per-device key grant targeting
 }, (table) => [
   index('idx_tribe_key_grants_recipient').on(table.recipientId, table.tribeKeyId),
   index('idx_tribe_key_grants_key').on(table.tribeKeyId),
+  index('idx_tribe_key_grants_device').on(table.deviceKeyId),
 ]);
 
 export const vibes = pgTable('vibes', {
@@ -510,43 +512,43 @@ export const reports = pgTable('reports', {
 export const nciiReports = pgTable('ncii_reports', {
   id: text('id').primaryKey(),                    // UUID
   trackingNumber: text('tracking_number').notNull().unique(), // Human-readable: 'NCII-2026-00001'
-  
+
   // Requester info (may not be a platform user)
   requesterName: text('requester_name').notNull(),
   requesterEmail: text('requester_email').notNull(),
   requesterSignature: text('requester_signature').notNull(), // Electronic signature (typed name attestation)
   isDepictedPerson: boolean('is_depicted_person').default(true), // vs authorized representative
-  
+
   // Content identification
   contentDescription: text('content_description').notNull(),
   contentUrls: text('content_urls'),              // JSON array of URLs/locations on platform
   posterUsername: text('poster_username'),         // Username of who posted it
   searchTerms: text('search_terms'),              // Search terms that surface the content
   contentType: text('content_type').notNull(),    // 'authentic_ncii' | 'deepfake' | 'minor'
-  
+
   // Linked platform content (if identified)
   linkedPostIds: text('linked_post_ids'),         // JSON array of post IDs matched
-  
+
   // Non-consent attestation
   nonConsentStatement: boolean('non_consent_statement').notNull(), // Checkbox attestation
-  
+
   // Status & SLA
   status: text('status').notNull().default('pending'),  // 'pending' | 'in_review' | 'removed' | 'rejected' | 'requires_info'
   slaDeadline: timestamp('sla_deadline', { withTimezone: true }).notNull(), // reportedAt + 48h
-  
+
   // Action tracking
   reviewedBy: text('reviewed_by').references(() => users.id),
   reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
   actionTaken: text('action_taken'),              // 'content_removed' | 'content_not_found' | 'insufficient_info' | 'not_ncii'
   actionNotes: text('action_notes'),
-  
+
   // Hash storage (for re-upload prevention)
   pdqHashesStored: boolean('pdq_hashes_stored').default(false),
-  
+
   // Envelope encryption columns
   encryptedPayload: text('encrypted_payload'),   // Base64 AES-256-GCM ciphertext of PII fields
   encryptionIv: text('encryption_iv'),           // Base64 IV for the AES key
-  
+
   // Timestamps
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
@@ -751,10 +753,43 @@ export const pushSubscriptions = pgTable('push_subscriptions', {
   keysP256dh: text('keys_p256dh'),
   keysAuth: text('keys_auth'),
   platform: text('platform').default('web'),
-  /** true = APNs sandbox (TestFlight/dev), false = APNs production (App Store). Only relevant for iOS. */
+  /**
+   * APNs sandbox routing flag (iOS only).
+   * ⚠️ DO NOT REMOVE THIS COLUMN — it controls which Apple Push gateway receives
+   * notifications for each iOS device. TestFlight/dev builds use the APNs sandbox
+   * gateway; App Store builds use the production gateway. Removing this causes
+   * TestFlight push notifications to silently fail with BadDeviceToken errors.
+   *
+   * Set at registration time by the client: true = sandbox (dev/TestFlight),
+   * false = production (App Store). Null for non-iOS platforms.
+   */
   apnsSandbox: boolean('apns_sandbox').default(true),
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
 });
+
+// ============================================================
+// USER DEVICE KEYS (Multi-device E2E key management)
+// ============================================================
+
+/**
+ * Tracks per-device public keys for multi-device E2E encryption.
+ * Each device registers its own key pair; tribe key grants can
+ * target a specific device key so all of a user's devices can
+ * independently decrypt tribe content.
+ */
+export const userDeviceKeys = pgTable('user_device_keys', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  deviceLabel: text('device_label').notNull(),       // Human-readable (e.g. "Pixel 9", "MacBook Pro")
+  publicKey: text('public_key').notNull(),            // JWK-exported public key
+  keyFingerprint: text('key_fingerprint').notNull(),  // SHA-256 hash of publicKey for dedup
+  isActive: boolean('is_active').notNull().default(true),
+  lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).default(sql`NOW()`),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+}, (table) => [
+  index('idx_udk_user').on(table.userId, table.isActive),
+  uniqueIndex('idx_udk_fingerprint').on(table.userId, table.keyFingerprint),
+]);
 
 // ============================================================
 // EMAIL VERIFICATION TOKENS

@@ -28,6 +28,7 @@ import {
   storeTribeKey,
   getTribeKey,
 } from './key-store';
+import type { VaultEntry, VaultPayload, TribeKeyVaultEntry } from './vault-types';
 
 // ============================================================
 // CONSTANTS
@@ -114,7 +115,7 @@ export async function isPrfSupported(): Promise<boolean> {
  * that satisfies the WebAuthn PRF extension requirement.
  *
  * This value is used identically on both the server (registration options)
- * and the client (getPrfSalt()) so the same authenticator input is always evaluated.
+ * and the client (getPrfSaltBytes()) so the same authenticator input is always evaluated.
  */
 export async function getPrfSaltBytes(): Promise<Uint8Array> {
   const label = new TextEncoder().encode(PRF_SALT);
@@ -128,14 +129,6 @@ export async function getPrfSaltBytes(): Promise<Uint8Array> {
   }
   const hash = await crypto.subtle.digest('SHA-256', label);
   return new Uint8Array(hash);
-}
-
-/**
- * Returns the application-scoped PRF salt as raw bytes.
- * @deprecated Use getPrfSaltBytes() for the hashed 32-byte version.
- */
-export function getPrfSalt(): Uint8Array {
-  return new TextEncoder().encode(PRF_SALT);
 }
 
 // ============================================================
@@ -185,29 +178,6 @@ export async function derivePrfWrappingKey(prfOutput: ArrayBuffer): Promise<Cryp
 // VAULT OPERATIONS
 // ============================================================
 
-interface VaultEntry {
-  bondId: string;
-  privateKeyJwk: JsonWebKey;
-  publicKeyJwk: JsonWebKey;
-  createdAt: number;
-}
-
-interface VaultPayload {
-  version: number;
-  entries: VaultEntry[];
-  identityKey?: {
-    privateKeyJwk: JsonWebKey;
-    publicKeyJwk: JsonWebKey;
-  };
-  tribeKeys?: TribeKeyVaultEntry[];
-  exportedAt: number;
-}
-
-interface TribeKeyVaultEntry {
-  tribeId: string;
-  keyJwk: JsonWebKey;
-  version: number;
-}
 
 /**
  * Encrypts the local keystore into a vault blob using a PRF wrapping key.

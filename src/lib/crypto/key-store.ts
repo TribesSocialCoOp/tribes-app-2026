@@ -62,8 +62,6 @@ const SHARED_SECRETS_STORE = 'shared_secrets';
 const TRIBE_KEYS_STORE = 'tribe_keys';
 const IDENTITY_KEYS_STORE = 'identity_keys';
 
-/** @deprecated Use BOND_KEYS_STORE instead. Kept for compatibility with existing callers. */
-const STORE_NAME = BOND_KEYS_STORE;
 
 /**
  * Opens (or creates) the IndexedDB database.
@@ -124,8 +122,8 @@ export async function storeBondKey(
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(BOND_KEYS_STORE, 'readwrite');
+    const store = tx.objectStore(BOND_KEYS_STORE);
 
     const entry: StoredBondKey = {
       bondId,
@@ -150,8 +148,8 @@ export async function getBondKey(bondId: string): Promise<StoredBondKey | null> 
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(BOND_KEYS_STORE, 'readonly');
+    const store = tx.objectStore(BOND_KEYS_STORE);
     const request = store.get(bondId);
 
     request.onsuccess = () => resolve(request.result ?? null);
@@ -178,8 +176,8 @@ export async function deleteBondKey(bondId: string): Promise<void> {
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(BOND_KEYS_STORE, 'readwrite');
+    const store = tx.objectStore(BOND_KEYS_STORE);
     const request = store.delete(bondId);
 
     request.onsuccess = () => resolve();
@@ -197,8 +195,8 @@ export async function getAllBondKeyIds(): Promise<string[]> {
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(BOND_KEYS_STORE, 'readonly');
+    const store = tx.objectStore(BOND_KEYS_STORE);
     const request = store.getAllKeys();
 
     request.onsuccess = () => resolve(request.result as string[]);
@@ -216,8 +214,8 @@ export async function getAllBondKeys(): Promise<StoredBondKey[]> {
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(BOND_KEYS_STORE, 'readonly');
+    const store = tx.objectStore(BOND_KEYS_STORE);
     const request = store.getAll();
 
     request.onsuccess = () => resolve(request.result);
@@ -238,8 +236,8 @@ export async function markKeyRotated(bondId: string): Promise<void> {
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(BOND_KEYS_STORE, 'readwrite');
+    const store = tx.objectStore(BOND_KEYS_STORE);
 
     const updated: StoredBondKey = {
       ...existing,
@@ -262,8 +260,8 @@ export async function clearAllKeys(): Promise<void> {
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(BOND_KEYS_STORE, 'readwrite');
+    const store = tx.objectStore(BOND_KEYS_STORE);
     const request = store.clear();
 
     request.onsuccess = () => resolve();
@@ -288,8 +286,8 @@ export async function hasAnyKeys(): Promise<boolean> {
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
+    const tx = db.transaction(BOND_KEYS_STORE, 'readonly');
+    const store = tx.objectStore(BOND_KEYS_STORE);
     const request = store.count();
 
     request.onsuccess = () => resolve(request.result > 0);
