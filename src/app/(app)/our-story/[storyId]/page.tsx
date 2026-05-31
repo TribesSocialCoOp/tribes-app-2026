@@ -2,6 +2,7 @@
 "use client";
 
 import { useParams, useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import Link from 'next/link';
 import { profilePath } from '@/lib/utils/paths';
 import Image from 'next/image';
@@ -188,6 +189,7 @@ const StoryCommentCard: React.FC<CommentCardProps> = ({ comment, storyId, level 
 
 export default function StoryDetailPage() {
   const router = useRouter();
+  const goBack = useGoBack();
   const params = useParams();
   const storyId = params.storyId as string;
   const { toast } = useToast();
@@ -307,7 +309,7 @@ export default function StoryDetailPage() {
         <History className="h-16 w-16 text-destructive mb-4" />
         <h1 className="text-2xl font-semibold mb-2">Story Not Found</h1>
         <p className="text-muted-foreground mb-6">The story topic you are looking for does not exist or may have been moved.</p>
-        <Button onClick={() => router.push('/our-story')} variant="outline">
+        <Button onClick={goBack} variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Our Story
         </Button>
       </div>
@@ -317,7 +319,7 @@ export default function StoryDetailPage() {
   return (
     <div className="space-y-6 pb-12 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mt-2">
-        <Button variant="outline" size="sm" onClick={() => router.push('/our-story')}>
+        <Button variant="outline" size="sm" onClick={goBack}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Our Story
         </Button>
       </div>

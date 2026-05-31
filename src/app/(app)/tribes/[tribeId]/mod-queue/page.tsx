@@ -2,6 +2,7 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import { useTribeIdFromParams } from '@/hooks/use-tribe-id';
 import Image from 'next/image';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -60,6 +61,7 @@ export default function TribeModQueuePage() {
 
 function TribeModQueueContent() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { toast } = useToast();
   const { role } = useUser();
   const { tribeId } = useTribeIdFromParams();
@@ -271,7 +273,7 @@ function TribeModQueueContent() {
             <CardDescription>You do not have the required permissions to view this page.</CardDescription>
         </CardHeader>
         <CardFooter className="flex justify-center">
-            <Button onClick={() => router.back()}>
+            <Button onClick={goBack}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
             </Button>
         </CardFooter>
@@ -298,7 +300,7 @@ function TribeModQueueContent() {
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="flex items-center mt-2">
-        <Button variant="outline" size="sm" onClick={() => router.push(`/t/${tribe?.slug || tribeId}`)}>
+        <Button variant="outline" size="sm" onClick={goBack}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to {tribe.name}
         </Button>

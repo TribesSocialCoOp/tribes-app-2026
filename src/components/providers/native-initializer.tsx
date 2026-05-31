@@ -36,71 +36,25 @@ export function NativeInitializer() {
 
     // console.log('[native] Registering Android backButton listener');
     const handler = App.addListener('backButton', () => {
-      const currentPath = pathnameRef.current;
-      // console.log('[native] backButton pressed, pathname:', currentPath);
-
-      // Capacitor WebView history.length is always 1 — pushState entries
-      // are lost when the native proxy intercepts page loads. We can't use
-      // router.back() or history.back(). Instead, map each screen to its
-      // logical parent explicitly (like a native navigation stack).
-      // We use window.location.assign() (not router.push) because Next.js
-      // soft navigation doesn't always take effect in a WebView.
-
-      // Root screens → exit the app
-      if (currentPath === '/your-comms' || currentPath === '/') {
-        // console.log('[native] At root, exiting app');
+      // The layout.tsx sentinel injection guarantees a /your-comms entry
+      // with { _tribesSentinel: true } state at the bottom of the history
+      // stack. When we reach it, there's no more in-app history → exit.
+      if (window.history.state?._tribesSentinel) {
         App.exitApp();
         return;
       }
 
-      // Context-aware: if the user arrived from Activity, go back there
-      if (currentPath.includes('/manage-members')) {
-        const origin = sessionStorage.getItem('manage-members-origin');
-        if (origin === 'activity') {
-          sessionStorage.removeItem('manage-members-origin');
-          // console.log('[native] manage-members from activity, navigating to /your-comms');
-          window.location.assign('/your-comms');
-          return;
-        }
-      }
-
-      // Context-aware: if the user arrived at a post from Activity, go back there
-      // Only match actual post-detail routes — not bare tribe pages (/t/slug)
-      if (currentPath.startsWith('/post/') || /^\/t\/[^/]+\/post\//.test(currentPath)) {
-        const origin = sessionStorage.getItem('post-detail-origin');
-        if (origin === 'activity') {
-          sessionStorage.removeItem('post-detail-origin');
-          // console.log('[native] post from activity, navigating to /your-comms');
-          window.location.assign('/your-comms');
-          return;
-        }
-      }
-
-      // Tribe sub-pages → go back to tribe detail
-      // e.g. /tribes/1/manage-members → /tribes/1, /t/slug/settings → /t/slug
-      const tribeSubPageMatch = currentPath.match(/^(\/(?:tribes\/[^/]+|t\/[^/]+))\/.+$/);
-      if (tribeSubPageMatch) {
-        // console.log('[native] tribe sub-page, navigating to:', tribeSubPageMatch[1]);
-        window.location.assign(tribeSubPageMatch[1]);
-        return;
-      }
-
-      // Tribe detail pages → go to tribes list
-      if (currentPath.match(/^\/(?:tribes\/[^/]+|t\/[^/]+)$/)) {
-        // console.log('[native] tribe detail, navigating to /tribes');
-        window.location.assign('/tribes');
-        return;
-      }
-
-      // Everything else → go to home (Activity)
-      // console.log('[native] fallback, navigating to /your-comms');
-      window.location.assign('/your-comms');
+      // Navigate back through actual browser history.
+      // SPA navigations (router.push / link interceptor) add proper
+      // pushState entries, so history.back() follows the real path
+      // the user took — not a deterministic parent mapping.
+      window.history.back();
     });
 
     return () => {
       handler.then(h => h.remove());
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- router is not used; we use window.location.assign()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- router is not used; we use window.history.back()
   }, []);
 
   // ── Global internal-link interceptor ───────────────────────────────────────
@@ -116,6 +70,11 @@ export function NativeInitializer() {
 
       const href = anchor.getAttribute('href');
       if (!href) return;
+
+      // Never intercept links that explicitly request a new tab/window.
+      // e.g. target="_blank" links to /terms, /privacy — let the browser
+      // handle those natively so the new tab actually opens.
+      if (anchor.target === '_blank') return;
 
       try {
         const url = new URL(href, window.location.origin);

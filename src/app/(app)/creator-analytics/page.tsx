@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { useGoBack } from '@/hooks/use-go-back';
 import {
   ArrowLeft, BarChart3, Users, FileText, Heart, Calendar,
   Link2, TrendingUp, Sparkles, Lock,
@@ -36,6 +37,7 @@ export default function CreatorAnalyticsPage() {
 
 function AnalyticsContent() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { role, user } = useUser();
   const [data, setData] = useState<CreatorData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,7 @@ function AnalyticsContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center gap-3">
-            <Button variant="outline" onClick={() => router.back()}>
+            <Button variant="outline" onClick={goBack}>
               <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
             </Button>
             <Button onClick={() => router.push('/billing')}>
@@ -105,7 +107,7 @@ function AnalyticsContent() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center mt-2">
-        <Button variant="outline" size="sm" onClick={() => router.back()}>
+        <Button variant="outline" size="sm" onClick={goBack}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back
         </Button>
         <h1 className="text-2xl font-bold ml-4 flex items-center gap-2">

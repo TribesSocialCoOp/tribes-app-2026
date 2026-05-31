@@ -7,6 +7,7 @@
  */
 
 import { useParams, useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +42,7 @@ function BondChatContent() {
   const params = useParams();
   const bondId = params.bondId as string;
   const router = useRouter();
+  const goBack = useGoBack();
   const { toast } = useToast();
   const { user } = useUser();
 
@@ -335,7 +337,7 @@ function BondChatContent() {
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
         <h2 className="text-xl font-semibold mb-2">Bond Not Found</h2>
-        <Button variant="outline" onClick={() => router.push('/bonds')}>
+        <Button variant="outline" onClick={goBack}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Bonds
         </Button>
       </div>
@@ -346,7 +348,7 @@ function BondChatContent() {
     <div className="flex flex-col flex-1 max-w-2xl mx-auto min-h-0">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b bg-background/95 backdrop-blur-sm">
-        <Button variant="ghost" size="icon" onClick={() => router.push('/bonds')}>
+        <Button variant="ghost" size="icon" onClick={goBack}>
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <Avatar className="h-10 w-10">

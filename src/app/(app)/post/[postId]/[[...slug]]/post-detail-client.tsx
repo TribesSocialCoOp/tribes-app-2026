@@ -4,6 +4,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { profilePath } from '@/lib/utils/paths';
 import { useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import { useScrollToPost } from '@/hooks/use-scroll-to-post';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { VibePicker } from '@/components/ui/vibe-picker';
@@ -66,18 +67,7 @@ export function PostDetailClient({
   const router = useRouter();
   const isMobile = useIsMobile();
 
-  // Context-aware back navigation — covers the on-screen Back button (web + WebView).
-  // The Android hardware back button is handled separately in native-initializer.tsx
-  // using window.location.assign() (router.push() is unreliable in Capacitor WebViews).
-  const handleBack = useCallback(() => {
-    const origin = sessionStorage.getItem('post-detail-origin');
-    if (origin === 'activity') {
-      sessionStorage.removeItem('post-detail-origin');
-      router.push('/your-comms');
-      return;
-    }
-    router.back();
-  }, [router]);
+  const goBack = useGoBack();
   const displayTime = useTimeSince(post.timestamp);
 
 
@@ -323,7 +313,7 @@ export function PostDetailClient({
     return (
       <div className="text-center py-20 text-muted-foreground">
         <p className="text-lg font-medium">Post deleted</p>
-        <Button variant="ghost" className="mt-4" onClick={handleBack}>Go Back</Button>
+        <Button variant="ghost" className="mt-4" onClick={goBack}>Go Back</Button>
       </div>
     );
   }
@@ -333,7 +323,7 @@ export function PostDetailClient({
       {/* Breadcrumb / Context Bar */}
       <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="gap-1.5 -ml-2" onClick={handleBack}>
+          <Button variant="ghost" size="sm" className="gap-1.5 -ml-2" onClick={goBack}>
             <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
