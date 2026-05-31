@@ -2,6 +2,7 @@
 "use client";
 
 import { useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import Link from 'next/link';
 import { useTribeIdFromParams } from '@/hooks/use-tribe-id';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,7 @@ export default function ManageMembersPage() {
 
 function ManageMembersContent() {
   const router = useRouter();
+  const goBack = useGoBack();
   // Read origin from sessionStorage (set by activity tab) — adblocker-proof alternative to ?from= query params
   // Must use useEffect, not useState initializer — SSR renders client components first, and
   // React hydration preserves the server's initial state (null) without re-running the initializer.
@@ -221,7 +223,7 @@ function ManageMembersContent() {
       // If from activity and no more pending, auto-return
       if (from === 'activity' && reloadResult?.pendingCount === 0) {
         sessionStorage.removeItem('manage-members-origin');
-        setTimeout(() => router.push('/your-comms'), 600);
+        setTimeout(() => router.replace('/your-comms'), 600);
       }
     } catch (err) {
       handleError(err, 'Failed to approve member');
@@ -241,7 +243,7 @@ function ManageMembersContent() {
       // If from activity and no more pending, auto-return
       if (from === 'activity' && reloadResult?.pendingCount === 0) {
         sessionStorage.removeItem('manage-members-origin');
-        setTimeout(() => router.push('/your-comms'), 600);
+        setTimeout(() => router.replace('/your-comms'), 600);
       }
     } catch (err) {
       handleError(err, 'Failed to deny request');
@@ -331,7 +333,7 @@ function ManageMembersContent() {
             <CardDescription>You do not have the required permissions to view this page.</CardDescription>
         </CardHeader>
         <CardFooter className="flex justify-center">
-            <Button onClick={() => router.back()}>
+            <Button onClick={goBack}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
             </Button>
         </CardFooter>
@@ -361,14 +363,7 @@ function ManageMembersContent() {
         <Button 
           variant="outline" 
           size="sm" 
-          onClick={() => {
-            if (from === 'activity') {
-              sessionStorage.removeItem('manage-members-origin');
-              router.push('/your-comms');
-            } else {
-              router.push(`/t/${tribe?.slug || tribeId}`);
-            }
-          }}
+          onClick={goBack}
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
           {from === 'activity' ? 'Back to Activity' : `Back to ${tribe.name}`}

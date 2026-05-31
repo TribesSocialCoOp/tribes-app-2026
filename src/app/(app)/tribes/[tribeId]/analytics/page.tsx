@@ -3,6 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import { useTribeIdFromParams } from '@/hooks/use-tribe-id';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -26,6 +27,7 @@ export default function AnalyticsPage() {
 
 function AnalyticsContent() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { tribeId } = useTribeIdFromParams();
   const [tribe, setTribe] = useState<Tribe | null>(null);
   const [analytics, setAnalytics] = useState<TribeAnalytics | null>(null);
@@ -75,7 +77,7 @@ function AnalyticsContent() {
             <CardDescription>{error}</CardDescription>
         </CardHeader>
         <CardFooter className="flex justify-center">
-            <Button onClick={() => router.back()}>
+            <Button onClick={goBack}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
             </Button>
         </CardFooter>
@@ -96,7 +98,7 @@ function AnalyticsContent() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="flex items-center mt-2">
-        <Button variant="outline" size="sm" onClick={() => router.push(`/t/${tribe.slug}`)}>
+        <Button variant="outline" size="sm" onClick={goBack}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to {tribe.name}
         </Button>

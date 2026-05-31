@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,7 @@ function shiftHue(hex: string, deg: number): string {
 
 export function TribeHeroBanner() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { state, tribeId, isTribeAdmin, handleInitiateJoinTribe, handleLeaveTribe } = useTribeDetail();
   const { tribe, isMember, isJoining } = state;
   const { toast } = useToast();
@@ -89,7 +91,7 @@ export function TribeHeroBanner() {
     <div className="space-y-3">
       <Card className="overflow-hidden shadow-xl relative">
         <div className="absolute top-4 left-4 z-10">
-          <Button variant="outline" size="icon" onClick={() => router.back()} className="bg-background/70 hover:bg-background/90 backdrop-blur-sm">
+          <Button variant="outline" size="icon" onClick={goBack} className="bg-background/70 hover:bg-background/90 backdrop-blur-sm">
             <ArrowLeft className="h-5 w-5" />
           </Button>
         </div>

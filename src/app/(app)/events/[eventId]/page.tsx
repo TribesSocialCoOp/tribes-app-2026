@@ -2,6 +2,7 @@
 "use client";
 
 import { useParams, useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import Image from 'next/image';
 import Link from 'next/link';
 import React, { useEffect, useState } from 'react';
@@ -33,6 +34,7 @@ export default function EventDetailPage({ eventId: propEventId }: { eventId?: st
 
 function EventDetailContent({ eventId: propEventId }: { eventId?: string }) {
   const router = useRouter();
+  const goBack = useGoBack();
   const params = useParams();
   const eventId = propEventId || (params.eventId as string);
 
@@ -119,7 +121,7 @@ function EventDetailContent({ eventId: propEventId }: { eventId?: string }) {
         <Info className="h-16 w-16 text-destructive mb-4" />
         <h1 className="text-2xl font-semibold mb-2">Event Not Found</h1>
         <p className="text-muted-foreground mb-6">The event you are looking for does not exist or may have been moved.</p>
-        <Button onClick={() => router.push('/events')} variant="outline">
+        <Button onClick={goBack} variant="outline">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to Events List
         </Button>
       </div>
@@ -131,7 +133,7 @@ function EventDetailContent({ eventId: propEventId }: { eventId?: string }) {
 
   return (
     <div className="space-y-6 pb-12 max-w-4xl mx-auto">
-      <Button variant="outline" size="sm" onClick={() => router.back()} className="mb-6 mt-2">
+      <Button variant="outline" size="sm" onClick={goBack} className="mb-6 mt-2">
         <ArrowLeft className="mr-2 h-4 w-4" /> Back
       </Button>
 

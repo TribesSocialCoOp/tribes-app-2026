@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,7 @@ function CreatorFlair({ role, isFounder, size = 'sm' }: { role: string; isFounde
 
 function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: string }) {
   const router = useRouter();
+  const goBack = useGoBack();
   const params = useParams();
   const proposalId = propProposalId || (params.proposalId as string);
   const { role, user } = useUser();
@@ -143,7 +145,7 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
             <CardTitle>Proposal Not Found</CardTitle>
           </CardHeader>
           <CardFooter className="flex justify-center">
-            <Button variant="outline" onClick={() => router.push('/voting')}>
+            <Button variant="outline" onClick={goBack}>
               <ArrowLeft className="mr-2 h-4 w-4" /> Back to Proposals
             </Button>
           </CardFooter>
@@ -181,7 +183,7 @@ function ProposalDetailContent({ proposalId: propProposalId }: { proposalId?: st
   return (
     <div className="space-y-3 md:space-y-6 min-w-0">
       <div className="flex items-center mt-2">
-        <Button variant="outline" size="sm" onClick={() => router.push('/voting')}>
+        <Button variant="outline" size="sm" onClick={goBack}>
           <ArrowLeft className="mr-2 h-4 w-4" /> All Proposals
         </Button>
       </div>

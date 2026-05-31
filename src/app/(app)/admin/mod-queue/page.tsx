@@ -3,6 +3,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import Image from 'next/image';
 import { format } from 'date-fns';
 
@@ -63,6 +64,7 @@ export default function ModQueuePage() {
 
 function ModQueueContent() {
   const router = useRouter();
+  const goBack = useGoBack();
   const { toast } = useToast();
   const { role } = useUser();
 
@@ -344,7 +346,7 @@ function ModQueueContent() {
             <CardDescription>You do not have the required permissions to view this page.</CardDescription>
         </CardHeader>
         <CardFooter className="flex justify-center">
-            <Button onClick={() => router.back()}>
+            <Button onClick={goBack}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
             </Button>
         </CardFooter>

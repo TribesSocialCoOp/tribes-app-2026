@@ -2,6 +2,7 @@
 "use client";
 
 import { useParams, useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import Link from 'next/link';
 import Image from 'next/image';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
@@ -64,6 +65,7 @@ export default function TribeSettingsPage() {
 
 function TribeSettingsContent() {
   const router = useRouter();
+  const goBack = useGoBack();
   const params = useParams();
   const slugParam = params.slug as string | undefined;
   const tribeIdParam = params.tribeId as string | undefined;
@@ -267,7 +269,7 @@ function TribeSettingsContent() {
             <CardDescription>You do not have the required permissions to view this page.</CardDescription>
         </CardHeader>
         <CardFooter className="flex justify-center">
-            <Button onClick={() => router.back()}>
+            <Button onClick={goBack}>
                 <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
             </Button>
         </CardFooter>
@@ -287,7 +289,7 @@ function TribeSettingsContent() {
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <div className="flex items-center mt-2">
-        <Button variant="outline" size="sm" onClick={() => router.push(`/t/${tribe.slug}`)}>
+        <Button variant="outline" size="sm" onClick={goBack}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to {tribe.name}
         </Button>

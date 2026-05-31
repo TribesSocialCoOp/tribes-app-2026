@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useGoBack } from '@/hooks/use-go-back';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,7 @@ export default function PublicProfilePage({ userId: propUserId }: { userId?: str
   const params = useParams();
   const userId = propUserId || (params.userId as string);
   const router = useRouter();
+  const goBack = useGoBack();
   const { user } = useUser();
 
   const [profile, setProfile] = useState<PublicProfile | null>(null);
@@ -180,7 +182,7 @@ export default function PublicProfilePage({ userId: propUserId }: { userId?: str
         <UserIcon className="h-16 w-16 text-muted-foreground/30" />
         <h2 className="text-xl font-semibold text-foreground">User Not Found</h2>
         <p className="text-muted-foreground text-sm">This profile doesn't exist or has been removed.</p>
-        <Button variant="outline" onClick={() => router.back()}>
+        <Button variant="outline" onClick={goBack}>
           <ArrowLeft className="mr-2 h-4 w-4" /> Go Back
         </Button>
       </div>
@@ -214,7 +216,7 @@ export default function PublicProfilePage({ userId: propUserId }: { userId?: str
       <div className="space-y-8 max-w-7xl mx-auto">
         {/* Profile Header */}
         <header className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => router.back()} className="shrink-0 -ml-2">
+          <Button variant="ghost" size="icon" onClick={goBack} className="shrink-0 -ml-2">
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <Avatar className="h-16 w-16 sm:h-20 sm:w-20 border-2 border-primary/20">
@@ -334,7 +336,7 @@ export default function PublicProfilePage({ userId: propUserId }: { userId?: str
               const { blockUser } = await import('@/lib/actions/bond-actions');
               await blockUser(userId, 'Blocked from profile page');
               toast({ title: 'User Blocked', description: `${profile.name} has been blocked.` });
-              router.back();
+              goBack();
             } catch {
               toast({ variant: 'destructive', title: 'Error', description: 'Could not block user.' });
             }
