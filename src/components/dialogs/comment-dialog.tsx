@@ -77,7 +77,14 @@ export function CommentDialog({
                 setContent(e.target.value);
                 checkMention(e.target.value, e.target.selectionStart);
               }}
-              onKeyDown={handleMentionKeyDown}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && content.trim().length >= 1) {
+                  e.preventDefault();
+                  handleConfirm();
+                  return;
+                }
+                handleMentionKeyDown(e);
+              }}
               onSelect={(e) => {
                 const target = e.target as HTMLTextAreaElement;
                 checkMention(target.value, target.selectionStart);
