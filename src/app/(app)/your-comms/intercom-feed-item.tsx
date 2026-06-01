@@ -19,7 +19,7 @@ import {
   ResponsiveMenuTrigger,
 } from "@/components/ui/responsive-menu";
 import { MessageSquareText, Rss, Loader2, Smile, Send, Megaphone, Pin, Lock, Trash2, Pencil, MoreVertical, Flag, UserRoundX, Link2, ShieldAlert } from "lucide-react";
-import { cn } from '@/lib/utils';
+import { cn, countAllComments, insertReplyIntoTree } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
 import { toggleVibe, createComment, getCommentsForPost, togglePinToWall, deleteOwnPost } from '@/lib/actions/content-actions';
@@ -107,10 +107,18 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
     try {
       const comments = await getCommentsForPost(item.id);
       setLoadedComments(comments);
-      setCommentCount(comments.length);
+      setCommentCount(countAllComments(comments));
     } catch { /* ignore */ } finally {
       setIsLoadingComments(false);
     }
+  };
+
+  const handleCommentAdded = (newReply?: DiscussionComment) => {
+    if (newReply) {
+      setLoadedComments(prev => insertReplyIntoTree(prev, newReply));
+      setCommentCount(prev => prev + 1);
+    }
+    loadComments();
   };
 
   const handleToggleComments = async () => {
@@ -148,8 +156,10 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
       toast({ title: 'Reply sent', description: 'Your comment has been posted.' });
       setReplyText('');
       setShowReply(false);
-      await loadComments();
+      setLoadedComments(prev => [...prev, result as DiscussionComment]);
+      setCommentCount(prev => prev + 1);
       setShowComments(true);
+      loadComments();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'An unexpected error occurred';
       toast({ title: 'Error', description: message, variant: 'destructive' });
@@ -527,7 +537,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
               postId={item.id} 
               currentUserId={user?.id}
               postAuthorId={item.authorId}
-              onCommentAdded={loadComments}
+              onCommentAdded={handleCommentAdded}
               tribeId={item.tribeId}
               isPublic={!item.isEncrypted}
             />
@@ -587,8 +597,10 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
                 throw new Error(result.serverError as string);
               }
               toast({ title: 'Reply sent', description: 'Your comment has been posted.' });
-              await loadComments();
+              setLoadedComments(prev => [...prev, result as DiscussionComment]);
+              setCommentCount(prev => prev + 1);
               setShowComments(true);
+              loadComments();
             } catch (e: unknown) {
               const message = e instanceof Error ? e.message : 'An unexpected error occurred';
               toast({ title: 'Error', description: message, variant: 'destructive' });

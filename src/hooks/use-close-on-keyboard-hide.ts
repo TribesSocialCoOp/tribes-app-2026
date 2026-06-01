@@ -12,6 +12,7 @@ import { isAndroid, isNative } from '@/lib/capacitor/platform';
 export function useCloseOnKeyboardHide(
   isOpen: boolean,
   onClose: () => void,
+  suppressRef?: React.RefObject<boolean | null>,
 ) {
   useEffect(() => {
     if (!isOpen || !isNative || !isAndroid) return;
@@ -20,6 +21,10 @@ export function useCloseOnKeyboardHide(
 
     import('@capacitor/keyboard').then(({ Keyboard }) => {
       const handle = Keyboard.addListener('keyboardDidHide', () => {
+        if (suppressRef?.current) {
+          // Skip closing because we're interacting with elements that blur input
+          return;
+        }
         onClose();
       });
       cleanup = () => {
@@ -32,5 +37,5 @@ export function useCloseOnKeyboardHide(
     return () => {
       cleanup?.();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, suppressRef]);
 }

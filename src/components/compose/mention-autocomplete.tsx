@@ -8,6 +8,7 @@ export interface MentionAutocompleteProps {
   query: string | null;
   onSelect: (alias: string) => void;
   className?: string;
+  suppressRef?: React.RefObject<boolean | null>;
 }
 
 export interface MentionAutocompleteRef {
@@ -22,7 +23,7 @@ interface SuggestionUser {
 }
 
 export const MentionAutocomplete = forwardRef<MentionAutocompleteRef, MentionAutocompleteProps>(
-  ({ query, onSelect, className }, ref) => {
+  ({ query, onSelect, className, suppressRef }, ref) => {
     const [suggestions, setSuggestions] = useState<SuggestionUser[]>([]);
     const [activeIdx, setActiveIdx] = useState<number>(0);
     const [loading, setLoading] = useState<boolean>(false);
@@ -57,6 +58,16 @@ export const MentionAutocomplete = forwardRef<MentionAutocompleteRef, MentionAut
       return () => clearTimeout(timer);
     }, [query]);
 
+    const handleSelect = (alias: string) => {
+      if (suppressRef) suppressRef.current = true;
+      onSelect(alias);
+      if (suppressRef) {
+        setTimeout(() => {
+          suppressRef.current = false;
+        }, 200);
+      }
+    };
+
     // Expose keyboard navigation helpers to the parent textarea's onKeyDown
     useImperativeHandle(ref, () => ({
       handleKeyDown(e: React.KeyboardEvent<any>) {
@@ -72,7 +83,7 @@ export const MentionAutocomplete = forwardRef<MentionAutocompleteRef, MentionAut
           case 'Enter':
           case 'Tab':
             if (suggestions[activeIdx]) {
-              onSelect(suggestions[activeIdx].alias);
+              handleSelect(suggestions[activeIdx].alias);
               return true;
             }
             return false;
@@ -92,7 +103,7 @@ export const MentionAutocomplete = forwardRef<MentionAutocompleteRef, MentionAut
     return (
       <div
         className={cn(
-          "absolute left-0 right-0 z-50 mt-1 max-h-60 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md animate-in fade-in slide-in-from-top-2 duration-200",
+          "absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md animate-in fade-in slide-in-from-top-2 duration-200",
           className
         )}
       >
@@ -114,7 +125,10 @@ export const MentionAutocomplete = forwardRef<MentionAutocompleteRef, MentionAut
                     ? "bg-accent text-accent-foreground"
                     : "text-foreground hover:bg-muted"
                 )}
-                onClick={() => onSelect(user.alias)}
+                onPointerDown={() => {
+                  if (suppressRef) suppressRef.current = true;
+                }}
+                onClick={() => handleSelect(user.alias)}
                 onMouseEnter={() => setActiveIdx(idx)}
               >
                 <UserAvatar

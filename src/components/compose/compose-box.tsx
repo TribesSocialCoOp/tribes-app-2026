@@ -480,7 +480,7 @@ export function ComposeBox({
   };
 
   return (
-    <Card ref={cardRef} className={cn("overflow-hidden border-none shadow-sm bg-card/50 backdrop-blur-sm", className)}>
+    <Card ref={cardRef} className={cn("overflow-visible border-none shadow-sm bg-card/50 backdrop-blur-sm", className)}>
       <CardContent className="p-3 sm:p-4">
         <div className="flex gap-3 sm:gap-4">
           <div className="flex flex-col items-center gap-1">

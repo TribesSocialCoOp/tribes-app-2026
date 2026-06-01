@@ -74,8 +74,15 @@ export function VersionGuard({ children }: { children: React.ReactNode }) {
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    // Hard refresh — bypass the service worker and browser cache
-    window.location.reload();
+    // On Capacitor native, window.location.reload() hits the WebView HTTP cache
+    // and may serve stale JS/CSS bundles even after a new deploy.
+    // Force a true network fetch by navigating to the current URL with a
+    // cache-busting query param — this bypasses both the WebView cache and
+    // the browser's BFCache. The ?_cb param is stripped by Next.js and never
+    // reaches server routing logic.
+    const url = new URL(window.location.href);
+    url.searchParams.set('_cb', `${CLIENT_BUILD_ID}-${Date.now()}`);
+    window.location.assign(url.toString());
   };
 
   return (

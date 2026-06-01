@@ -68,23 +68,47 @@ export function VibePicker({
   // Track visual viewport height to dynamically size the emoji picker
   // when the iOS virtual keyboard appears. On iOS Safari, the visual
   // viewport shrinks but the layout viewport doesn't, so we listen to
-  // visualViewport.resize to calculate available space. This lets vaul's
-  // repositionInputs keep working correctly instead of disabling it.
+  // visualViewport.resize to calculate available space. In Capacitor,
+  // the --keyboard-height CSS variable (set by native-initializer.tsx)
+  // gives precise keyboard dimensions, so we use both signals. We also
+  // observe style attribute mutations on <html> to catch the Capacitor
+  // Keyboard plugin setting --keyboard-height via setProperty().
   React.useEffect(() => {
     if (!drawerOpen) return;
     const vv = window.visualViewport;
-    if (!vv) return;
 
     const update = () => {
-      // Available height minus drawer chrome (handle, padding, safe area)
-      // ~100px accounts for drawer handle, padding, and safe-area bottom
-      const available = vv.height - 100;
+      // Read the Capacitor keyboard-height variable (set on iOS, zeroed on Android)
+      const kbHeight = parseInt(
+        getComputedStyle(document.documentElement)
+          .getPropertyValue('--keyboard-height') || '0',
+        10,
+      ) || 0;
+      // Use visual viewport if available, otherwise fall back to innerHeight
+      const viewportH = vv ? vv.height : window.innerHeight;
+      // Available height = smaller of visual viewport and (full height minus keyboard)
+      // minus drawer chrome (~100px for handle, padding, safe area)
+      const available = Math.min(viewportH, window.innerHeight - kbHeight) - 100;
       setPickerHeight(Math.max(200, Math.min(420, available)));
     };
 
     update();
-    vv.addEventListener('resize', update);
-    return () => vv.removeEventListener('resize', update);
+
+    // visualViewport resize (Safari, Chrome mobile)
+    vv?.addEventListener('resize', update);
+
+    // Observe --keyboard-height changes from Capacitor keyboard plugin
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.attributeName === 'style') update();
+      }
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+
+    return () => {
+      vv?.removeEventListener('resize', update);
+      observer.disconnect();
+    };
   }, [drawerOpen]);
 
   // Detect dark mode on first open

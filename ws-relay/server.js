@@ -42,7 +42,7 @@ const MAX_CONNS_PER_IP = 10;
 const CONN_WINDOW_MS = 60_000;
 
 /** Valid message types (reject anything else) */
-const VALID_MSG_TYPES = new Set(['message', 'typing', 'presence', 'read']);
+const VALID_MSG_TYPES = new Set(['message', 'typing', 'presence', 'read', 'feed-update', 'activity']);
 
 // ============================================================
 // SERVER
@@ -249,11 +249,61 @@ process.on('SIGTERM', () => {
   wss.close(() => process.exit(0));
 });
 
-// --- HEALTH CHECK SERVER (HTTP 9004) ---
+// --- HEALTH CHECK SERVER & INTERNAL PUSH (HTTP 9004) ---
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || 'tribes-internal-super-secret-123';
+
 const healthServer = http.createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', connections: wss.clients.size }));
+  } else if (req.url === '/internal/push' && req.method === 'POST') {
+    if (req.headers['x-internal-secret'] !== INTERNAL_API_SECRET) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Forbidden' }));
+      return;
+    }
+
+    let body = '';
+    const MAX_BODY = 64 * 1024; // 64KB — same as WS maxPayload
+    let oversized = false;
+    req.on('data', chunk => {
+      body += chunk.toString();
+      if (body.length > MAX_BODY) {
+        oversized = true;
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Payload too large' }));
+        req.destroy();
+      }
+    });
+
+    req.on('end', () => {
+      if (oversized) return;
+      try {
+        const { userId, payload } = JSON.parse(body);
+        if (!userId || !payload) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing userId or payload' }));
+          return;
+        }
+
+        const sockets = connections.get(userId);
+        let deliveredCount = 0;
+        if (sockets) {
+          const msg = JSON.stringify(payload);
+          for (const sock of sockets) {
+            if (sock.readyState === WebSocket.OPEN) {
+              sock.send(msg);
+              deliveredCount++;
+            }
+          }
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ delivered: deliveredCount }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON body' }));
+      }
+    });
   } else {
     res.writeHead(404);
     res.end();
@@ -262,7 +312,7 @@ const healthServer = http.createServer((req, res) => {
 
 const HEALTH_PORT = process.env.HEALTH_PORT || '9004';
 healthServer.listen(HEALTH_PORT, '0.0.0.0', () => {
-  console.log(`[ws-relay] Health check listening on http://0.0.0.0:${HEALTH_PORT}/health`);
+  console.log(`[ws-relay] Health check & internal push listening on http://0.0.0.0:${HEALTH_PORT}`);
 });
 
 console.log(`[ws-relay] Ready. Awaiting connections.`);
