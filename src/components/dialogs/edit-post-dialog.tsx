@@ -333,6 +333,12 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
                 className="min-h-[160px] resize-none focus-visible:ring-primary/30"
                 value={content}
                 onChange={e => setContent(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && content.trim() && !isSubmitting) {
+                    e.preventDefault();
+                    onSubmit();
+                  }
+                }}
                 disabled={isSubmitting}
               />
             </div>

@@ -569,7 +569,14 @@ export function ComposeBox({
                       setContent(e.target.value);
                       checkMention(e.target.value, e.target.selectionStart);
                     }}
-                    onKeyDown={handleMentionKeyDown}
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && (content.trim() || imageFiles.length > 0) && !isPending && !(ring === 'tribes' && selectedTribeIds.length === 0)) {
+                        e.preventDefault();
+                        handleSubmit();
+                        return;
+                      }
+                      handleMentionKeyDown(e);
+                    }}
                     onSelect={(e) => {
                       const target = e.target as HTMLTextAreaElement;
                       checkMention(target.value, target.selectionStart);
