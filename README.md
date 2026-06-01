@@ -1,6 +1,6 @@
 # 🌌 Tribes.app — The Privacy-First Social Co-Op
 
-[![Release](https://img.shields.io/badge/version-1.0.13-blue.svg)](https://github.com/TribesSocialCoOp/tribes-app-2026/releases)
+[![Release](https://img.shields.io/github/v/tag/TribesSocialCoOp/tribes-app-2026?color=blue&label=version)](https://github.com/TribesSocialCoOp/tribes-app-2026/tags)
 [![CI](https://github.com/TribesSocialCoOp/tribes-app-2026/actions/workflows/ci.yml/badge.svg)](https://github.com/TribesSocialCoOp/tribes-app-2026/actions/workflows/ci.yml)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
 
