@@ -6,6 +6,7 @@ import type { CommunicationItem, Ring } from '@/lib/types';
 import type { ActivityItem } from '@/lib/services/notification-service';
 import { getUnifiedFeedAction, getActivityFeed, markActivityViewed, markSingleActivityRead } from '@/lib/actions/content-actions';
 import { useToast } from '@/hooks/use-toast';
+import { TribesWebSocket } from '@/lib/ws-client';
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -228,6 +229,36 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
       fetchActivity();
     }
   }, [state.activeTab, fetchActivity]);
+
+  // Subscribe to real-time WebSocket events and tab visibility changes
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const ws = TribesWebSocket.getInstance();
+    
+    const unsubscribeFeed = ws.subscribe('feed-update', () => {
+      fetchFeed();
+    });
+    
+    const unsubscribeActivity = ws.subscribe('activity', () => {
+      fetchActivity();
+    });
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchFeed();
+        fetchActivity();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      unsubscribeFeed();
+      unsubscribeActivity();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchFeed, fetchActivity]);
 
   // Mark all read: update client state immediately + persist to server + refetch
   const markAllRead = useCallback(async () => {

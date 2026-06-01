@@ -31,12 +31,13 @@ export function CommentDialog({
 }: CommentDialogProps) {
   const [content, setContent] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mentionSuppressRef = useRef(false);
 
   const { mentionQuery, mentionRef, checkMention, handleSelectMention, handleMentionKeyDown, resetMention } =
     useMentionAutocomplete(textareaRef, content, setContent);
 
   const handleClose = useCallback(() => onOpenChange(false), [onOpenChange]);
-  useCloseOnKeyboardHide(isOpen, handleClose);
+  useCloseOnKeyboardHide(isOpen, handleClose, mentionSuppressRef);
 
   useEffect(() => {
     if (!isOpen) {
@@ -67,7 +68,7 @@ export function CommentDialog({
       <div className="py-4 space-y-4">
         <div>
           <Label htmlFor="comment-content" className="sr-only">Comment</Label>
-          <div className="relative">
+          <div className="relative z-10">
             <Textarea
               id="comment-content"
               ref={textareaRef}
@@ -89,6 +90,7 @@ export function CommentDialog({
               ref={mentionRef}
               query={mentionQuery}
               onSelect={handleSelectMention}
+              suppressRef={mentionSuppressRef}
             />
           </div>
         </div>

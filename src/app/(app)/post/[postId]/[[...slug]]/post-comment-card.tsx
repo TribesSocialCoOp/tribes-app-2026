@@ -10,7 +10,7 @@ interface PostCommentCardProps {
   level?: number;
   currentUserId?: string | null;
   postAuthorId?: string;
-  onCommentAdded: () => void;
+  onCommentAdded: (newReply?: DiscussionComment) => void;
   tribeId?: string;
   isPublic?: boolean;
 }

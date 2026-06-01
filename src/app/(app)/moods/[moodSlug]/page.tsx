@@ -16,7 +16,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageSquareText, Smile, Filter as FilterIcon, Settings2, Loader2, Send, Megaphone } from 'lucide-react';
 import { LoadMoreButton } from '@/components/ui/load-more-button';
 import { moodsData } from '@/lib/moods-data'; 
-import { cn } from '@/lib/utils';
+import { cn, countAllComments } from '@/lib/utils';
 import { useTimeSince } from '@/hooks/use-time-since';
 import type { MoodStreamPost, DiscussionComment } from '@/lib/types';
 import { getMoodStreamPosts, toggleVibe, createComment, getCommentsForPost } from '@/lib/actions/content-actions';
@@ -118,7 +118,7 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
     try {
       const comments = await getCommentsForPost(post.id);
       setLoadedComments(comments);
-      setCommentCount(comments.length);
+      setCommentCount(countAllComments(comments));
     } catch { /* ignore */ } finally {
       setIsLoadingComments(false);
     }

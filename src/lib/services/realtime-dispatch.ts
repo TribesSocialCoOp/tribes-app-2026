@@ -236,6 +236,12 @@ export async function notifyTribePost(
         }
       }).catch(() => {});
     }
+
+    // Realtime WS push to all members
+    const allTribeUsers = [...recipientIds, authorId];
+    for (const memberId of allTribeUsers) {
+      pushToUserSocket(memberId, { type: 'feed-update' }).catch(() => {});
+    }
   } catch (err) {
     console.warn('[realtime-dispatch] notifyTribePost failed:', err);
   }
@@ -253,6 +259,23 @@ export async function notifyComment(
   tribeId: string | null,
   commentId?: string,
 ): Promise<void> {
+  // Push real-time WS events
+  if (tribeId) {
+    import('@/db').then(async ({ db }) => {
+      const { tribeMembers } = await import('@/db/schema');
+      const { eq } = await import('drizzle-orm');
+      const members = await db.select({ userId: tribeMembers.userId })
+        .from(tribeMembers).where(eq(tribeMembers.tribeId, tribeId));
+      for (const m of members) {
+        pushToUserSocket(m.userId, { type: 'feed-update' }).catch(() => {});
+      }
+    }).catch(() => {});
+  } else {
+    pushToUserSocket(postAuthorId, { type: 'feed-update' }).catch(() => {});
+    pushToUserSocket(commenterId, { type: 'feed-update' }).catch(() => {});
+  }
+  pushToUserSocket(postAuthorId, { type: 'activity' }).catch(() => {});
+
   // Don't notify yourself
   if (commenterId === postAuthorId) return;
 
@@ -286,6 +309,23 @@ export async function notifyCommentReply(
   tribeId: string | null,
   commentId?: string,
 ): Promise<void> {
+  // Push real-time WS events
+  if (tribeId) {
+    import('@/db').then(async ({ db }) => {
+      const { tribeMembers } = await import('@/db/schema');
+      const { eq } = await import('drizzle-orm');
+      const members = await db.select({ userId: tribeMembers.userId })
+        .from(tribeMembers).where(eq(tribeMembers.tribeId, tribeId));
+      for (const m of members) {
+        pushToUserSocket(m.userId, { type: 'feed-update' }).catch(() => {});
+      }
+    }).catch(() => {});
+  } else {
+    pushToUserSocket(parentCommentAuthorId, { type: 'feed-update' }).catch(() => {});
+    pushToUserSocket(replierId, { type: 'feed-update' }).catch(() => {});
+  }
+  pushToUserSocket(parentCommentAuthorId, { type: 'activity' }).catch(() => {});
+
   // Don't notify yourself
   if (replierId === parentCommentAuthorId) return;
 
@@ -525,4 +565,32 @@ export async function notifyProposalComment(
     url: `/voting/${proposalId}`,
     tag: `governance-comment-${proposalId}`,
   });
+}
+
+/**
+ * Pushes a real-time message to the user's active WebSockets via ws-relay internal HTTP API.
+ */
+export async function pushToUserSocket(
+  userId: string,
+  payload: { type: 'feed-update' | 'activity'; [key: string]: any }
+): Promise<void> {
+  const internalSecret = process.env.INTERNAL_API_SECRET || 'tribes-internal-super-secret-123';
+  const url = process.env.WS_RELAY_INTERNAL_URL || 'http://localhost:9004';
+
+  try {
+    const res = await fetch(`${url}/internal/push`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-secret': internalSecret,
+      },
+      body: JSON.stringify({ userId, payload }),
+    });
+
+    if (!res.ok) {
+      console.warn(`[realtime-dispatch] Failed to push to socket for user ${userId}: HTTP ${res.status}`);
+    }
+  } catch (err) {
+    console.warn(`[realtime-dispatch] Error pushing to socket for user ${userId}:`, err);
+  }
 }

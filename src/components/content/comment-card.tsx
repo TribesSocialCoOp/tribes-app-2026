@@ -44,7 +44,7 @@ interface CommentCardProps {
   level?: number;
   currentUserId?: string | null;
   postAuthorId?: string;
-  onCommentAdded: () => void; // callback to reload comments after reply
+  onCommentAdded: (newReply?: DiscussionComment) => void; // callback to reload comments after reply
   tribeId?: string; // needed for comment decryption + encryption of replies
   isPublic?: boolean; // tribe public flag — false means comments should be encrypted
 }
@@ -277,7 +277,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
       toast({ title: 'Reply sent' });
       setReplyText('');
       setShowReply(false);
-      onCommentAdded();
+      onCommentAdded(result as DiscussionComment);
       if (result && typeof result === 'object' && 'id' in result) {
         scrollToAndHighlight(result.id as string);
       }
@@ -295,7 +295,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
       const result = await sendReply(content);
       toast({ title: 'Reply sent' });
       setIsReplyDialogOpen(false);
-      onCommentAdded();
+      onCommentAdded(result as DiscussionComment);
       if (result && typeof result === 'object' && 'id' in result) {
         scrollToAndHighlight(result.id as string);
       }
@@ -499,7 +499,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
       {/* ── Inline reply to this comment (desktop only) ── */}
       {showReply && (
         <div className={cn("mt-2 flex gap-2", isDeep ? "ml-1 md:ml-9" : "ml-11")}>
-          <div className="relative flex-1">
+          <div className="relative flex-1 z-10">
             <Textarea
               ref={replyTextareaRef}
               placeholder={`Reply to ${comment.authorName}...`}

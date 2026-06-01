@@ -480,7 +480,7 @@ export function ComposeBox({
   };
 
   return (
-    <Card ref={cardRef} className={cn("overflow-hidden border-none shadow-sm bg-card/50 backdrop-blur-sm", className)}>
+    <Card ref={cardRef} className={cn("overflow-visible border-none shadow-sm bg-card/50 backdrop-blur-sm", className)}>
       <CardContent className="p-3 sm:p-4">
         <div className="flex gap-3 sm:gap-4">
           <div className="flex flex-col items-center gap-1">
@@ -561,7 +561,7 @@ export function ComposeBox({
             ) : (
               /* Expanded state — full compose form */
               <div className="space-y-2.5">
-                <div className="relative">
+                <div className="relative z-10">
                   <Textarea
                     ref={textareaRef}
                     value={content}

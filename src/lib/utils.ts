@@ -90,3 +90,41 @@ export function cleanUrl(rawUrl: string): string {
   return url;
 }
 
+interface HasReplies {
+  replies?: HasReplies[];
+}
+
+/**
+ * Recursively counts all comments in a threaded tree.
+ */
+export function countAllComments(comments: HasReplies[]): number {
+  return comments.reduce((sum, c) => sum + 1 + countAllComments(c.replies ?? []), 0);
+}
+
+interface ThreadedComment {
+  id: string;
+  parentCommentId?: string | null;
+  replies?: ThreadedComment[];
+}
+
+/**
+ * Recursively inserts a new reply into a threaded comment tree.
+ */
+export function insertReplyIntoTree<T extends ThreadedComment>(comments: T[], reply: T): T[] {
+  return comments.map(c => {
+    if (c.id === reply.parentCommentId) {
+      return {
+        ...c,
+        replies: [...(c.replies ?? []), reply],
+      } as T;
+    }
+    if (c.replies && c.replies.length > 0) {
+      return {
+        ...c,
+        replies: insertReplyIntoTree(c.replies as T[], reply),
+      } as T;
+    }
+    return c;
+  });
+}
+
