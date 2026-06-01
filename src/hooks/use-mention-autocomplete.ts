@@ -36,8 +36,15 @@ export function useMentionAutocomplete(
       return;
     }
 
-    // @ must be at start of string or preceded by whitespace
-    if (lastAtIdx > 0 && !/\s/.test(textBeforeCursor.charAt(lastAtIdx - 1))) {
+    // Walk back past any consecutive @ characters (e.g. "@@") to find the
+    // true trigger position, then check if *that* is at start or after whitespace.
+    let triggerIdx = lastAtIdx;
+    while (triggerIdx > 0 && textBeforeCursor.charAt(triggerIdx - 1) === '@') {
+      triggerIdx--;
+    }
+
+    // The first @ in the run must be at start of string or preceded by whitespace
+    if (triggerIdx > 0 && !/\s/.test(textBeforeCursor.charAt(triggerIdx - 1))) {
       setMentionQuery(null);
       return;
     }
@@ -55,13 +62,20 @@ export function useMentionAutocomplete(
       const lastAtIdx = textBeforeCursor.lastIndexOf("@");
 
       if (lastAtIdx !== -1) {
+        // Walk back past any consecutive @ characters (e.g. "@@") so we
+        // consume all of them and insert a single clean @alias.
+        let atStart = lastAtIdx;
+        while (atStart > 0 && textBeforeCursor.charAt(atStart - 1) === '@') {
+          atStart--;
+        }
+
         const textAfterCursor = content.substring(selStart);
         const newContent =
-          content.substring(0, lastAtIdx) + `@${alias} ` + textAfterCursor;
+          content.substring(0, atStart) + `@${alias} ` + textAfterCursor;
         setContent(newContent);
         setMentionQuery(null);
 
-        const newCursorPos = lastAtIdx + alias.length + 2;
+        const newCursorPos = atStart + alias.length + 2;
         setTimeout(() => {
           textarea.focus();
           textarea.setSelectionRange(newCursorPos, newCursorPos);
