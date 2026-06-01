@@ -2223,7 +2223,7 @@ export async function searchMentionableUsers(query: string): Promise<Array<{
     if (seenUserIds.has(m.id)) continue;
     seenUserIds.add(m.id);
 
-    const alias = m.reservedAlias || m.alias || m.name.toLowerCase().replace(/\s+/g, '-');
+    const alias = (m.reservedAlias || m.alias || m.name.toLowerCase().replace(/\s+/g, '-')).replace(/^@+/, '');
     const avatar = m.reservedAliasAvatar || m.aliasAvatar || m.userAvatar || undefined;
 
     result.push({

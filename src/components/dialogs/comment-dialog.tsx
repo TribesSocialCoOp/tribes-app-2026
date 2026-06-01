@@ -68,7 +68,7 @@ export function CommentDialog({
       <div className="py-4 space-y-4">
         <div>
           <Label htmlFor="comment-content" className="sr-only">Comment</Label>
-          <div className="relative">
+          <div className="relative z-10">
             <Textarea
               id="comment-content"
               ref={textareaRef}

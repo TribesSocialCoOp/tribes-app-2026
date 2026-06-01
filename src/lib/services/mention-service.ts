@@ -75,24 +75,32 @@ export async function processMentions(
  * Checks reserved_alias first, then user_aliases table.
  */
 async function resolveAlias(alias: string): Promise<string | null> {
-  // Check reserved alias (case-insensitive)
+  const cleanAlias = alias.replace(/^@+/, '');
+
+  // Check reserved alias (match both with/without @)
   const [byReserved] = await db.select({ id: users.id })
     .from(users)
-    .where(eq(users.reservedAlias, alias))
+    .where(or(
+      eq(users.reservedAlias, cleanAlias),
+      eq(users.reservedAlias, '@' + cleanAlias)
+    ))
     .limit(1);
   if (byReserved) return byReserved.id;
 
   // Check user_aliases table
   const [byAlias] = await db.select({ userId: userAliases.userId })
     .from(userAliases)
-    .where(eq(userAliases.alias, alias))
+    .where(or(
+      eq(userAliases.alias, cleanAlias),
+      eq(userAliases.alias, '@' + cleanAlias)
+    ))
     .limit(1);
   if (byAlias) return byAlias.userId;
 
   // Check by exact username match (name field)
   const [byName] = await db.select({ id: users.id })
     .from(users)
-    .where(eq(users.name, alias))
+    .where(eq(users.name, cleanAlias))
     .limit(1);
   if (byName) return byName.id;
 

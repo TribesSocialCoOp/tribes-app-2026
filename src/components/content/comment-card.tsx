@@ -499,7 +499,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
       {/* ── Inline reply to this comment (desktop only) ── */}
       {showReply && (
         <div className={cn("mt-2 flex gap-2", isDeep ? "ml-1 md:ml-9" : "ml-11")}>
-          <div className="relative flex-1">
+          <div className="relative flex-1 z-10">
             <Textarea
               ref={replyTextareaRef}
               placeholder={`Reply to ${comment.authorName}...`}

@@ -561,7 +561,7 @@ export function ComposeBox({
             ) : (
               /* Expanded state — full compose form */
               <div className="space-y-2.5">
-                <div className="relative">
+                <div className="relative z-10">
                   <Textarea
                     ref={textareaRef}
                     value={content}
