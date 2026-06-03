@@ -8,15 +8,19 @@ import { profilePath } from '@/lib/utils/paths';
 import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { InlineReplyBox } from '@/components/content/inline-reply-box';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { MessageSquareText, Smile, Filter as FilterIcon, Settings2, Loader2, Send, Megaphone } from 'lucide-react';
+import { MessageSquareText, Smile, Filter as FilterIcon, Settings2, Loader2, Send, Megaphone, ChevronDown, ChevronRight } from 'lucide-react';
+import { useDoubleTap } from '@/hooks/use-double-tap';
 import { LoadMoreButton } from '@/components/ui/load-more-button';
 import { moodsData } from '@/lib/moods-data'; 
 import { cn, countAllComments } from '@/lib/utils';
+import { ThreadCollapseHeader } from '@/components/content/thread-collapse-header';
 import { useTimeSince } from '@/hooks/use-time-since';
 import type { MoodStreamPost, DiscussionComment } from '@/lib/types';
 import { getMoodStreamPosts, toggleVibe, createComment, getCommentsForPost } from '@/lib/actions/content-actions';
@@ -78,10 +82,20 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
+  const isMobile = useIsMobile();
+  const [replyDialogOpen, setReplyDialogOpen] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [loadedComments, setLoadedComments] = useState<DiscussionComment[]>([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [commentCount, setCommentCount] = useState(post.comments ?? 0);
+  const [isBodyCollapsed, setIsBodyCollapsed] = useState(false);
+
+  // Mobile: double-tap avatar to toggle body collapse
+  const handleAvatarDoubleTap = useDoubleTap({
+    onDoubleTap: useCallback(() => {
+      setIsBodyCollapsed(prev => !prev);
+    }, []),
+  });
 
   const replyRef = useRef<HTMLDivElement>(null);
 
@@ -153,13 +167,23 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
   };
 
   return (
-    <Card className="overflow-hidden shadow-none sm:shadow-md hover:sm:shadow-lg transition-shadow duration-200">
+    <Card className="overflow-visible shadow-none sm:shadow-md hover:sm:shadow-lg transition-shadow duration-200">
       <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
         <div className="flex items-start space-x-3">
-          <Avatar className="h-10 w-10">
-            {post.authorAvatarSrc && <AvatarImage src={post.authorAvatarSrc} alt={post.author} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
-            <AvatarFallback>{post.authorAvatarFallback || post.author.substring(0,2)}</AvatarFallback>
-          </Avatar>
+          {/* Avatar — on mobile: double-tap toggles body collapse */}
+          {isMobile ? (
+            <div onClick={handleAvatarDoubleTap} className="shrink-0">
+              <Avatar className={cn("h-10 w-10 cursor-pointer transition-all", isBodyCollapsed ? "ring-1 ring-primary/20" : "")}>
+                {post.authorAvatarSrc && <AvatarImage src={post.authorAvatarSrc} alt={post.author} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
+                <AvatarFallback>{post.authorAvatarFallback || post.author.substring(0,2)}</AvatarFallback>
+              </Avatar>
+            </div>
+          ) : (
+            <Avatar className="h-10 w-10">
+              {post.authorAvatarSrc && <AvatarImage src={post.authorAvatarSrc} alt={post.author} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
+              <AvatarFallback>{post.authorAvatarFallback || post.author.substring(0,2)}</AvatarFallback>
+            </Avatar>
+          )}
           <div className="flex-1">
             <CardTitle className="text-sm font-semibold leading-tight tracking-normal">
                 {post.author} {post.tribeName && <span className="text-xs text-muted-foreground font-normal">in <Link href={`/tribes/${post.tribeId}`} className="font-medium text-primary hover:underline">{post.tribeName}</Link></span>}
@@ -173,10 +197,23 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
               )}
             </CardDescription>
           </div>
+          {/* Desktop: chevron to collapse/expand post body */}
+          <button
+            onClick={() => setIsBodyCollapsed(!isBodyCollapsed)}
+            className="hidden md:flex p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-muted transition-colors items-center justify-center ml-auto"
+            title={isBodyCollapsed ? "Expand post" : "Collapse post"}
+          >
+            {isBodyCollapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </button>
         </div>
       </CardHeader>
       <CardContent className="p-3 sm:p-4 pt-1 sm:pt-2">
         {post.title && <h3 className="text-lg font-semibold mb-1.5 text-foreground tracking-normal">{post.title}</h3>}
+        {!isBodyCollapsed && (<>
         {post.imageUrl && (
           <div className="mb-3 relative aspect-video w-full overflow-hidden rounded-md border">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -194,6 +231,7 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
             <Megaphone className="h-3 w-3" /> Promoted by {post.promotedByName}
           </p>
         )}
+        </>)}
       </CardContent>
       {(post.vibes !== undefined || post.comments !== undefined) && (
         <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start space-x-4 border-t">
@@ -246,51 +284,78 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
               variant="ghost"
               size="sm"
               className="text-muted-foreground hover:text-primary"
-              onClick={() => setShowReply(!showReply)}
+              onClick={() => {
+                if (isMobile) {
+                  setReplyDialogOpen(true);
+                } else {
+                  setShowReply(!showReply);
+                }
+              }}
             >
               <Send className="mr-1.5 h-4 w-4" /> Reply
             </Button>
           )}
         </CardFooter>
       )}
+      {commentCount > 0 && (
+        <div className="px-3 sm:px-4 border-t pt-2 pb-1">
+          <ThreadCollapseHeader
+            count={commentCount}
+            isExpanded={showComments}
+            onToggle={handleToggleComments}
+          />
+        </div>
+      )}
       {showComments && loadedComments.length > 0 && (
-        <div className="px-3 sm:px-4 pb-2 space-y-3 border-t pt-3">
+        <div className="px-3 sm:px-4 pb-2 space-y-3">
           {loadedComments.map(comment => (
             <CommentInline key={comment.id} comment={comment} />
           ))}
         </div>
       )}
       {showComments && loadedComments.length === 0 && !isLoadingComments && (
-        <div className="px-3 sm:px-4 pb-3 pt-2 border-t">
+        <div className={cn("px-3 sm:px-4 pb-3 pt-2", commentCount === 0 && "border-t")}>
           <p className="text-xs text-muted-foreground text-center py-2">No comments yet — be the first to reply!</p>
         </div>
       )}
-      {showReply && (
-        <div ref={replyRef} className="px-3 sm:px-4 pb-3 sm:pb-4 flex gap-2">
-          <Input
-            placeholder="Write a reply..."
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendReply()}
-            className="text-sm"
-            autoFocus
-            onFocus={() => {
-              setTimeout(() => {
-                replyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }, 350);
-            }}
-          />
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={!replyText.trim() || isSendingReply}
-            onClick={handleSendReply}
-            className="shrink-0"
-          >
-            {isSendingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
-        </div>
+      {!isMobile && showReply && (
+        <InlineReplyBox
+          ref={replyRef}
+          value={replyText}
+          onChange={setReplyText}
+          onSend={handleSendReply}
+          isSending={isSendingReply}
+          onFocus={() => {
+            setTimeout(() => {
+              replyRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 350);
+          }}
+        />
       )}
+
+      <CommentDialog
+        isOpen={replyDialogOpen}
+        onOpenChange={setReplyDialogOpen}
+        onConfirmComment={async (content) => {
+          if (!content.trim()) return;
+          setIsSendingReply(true);
+          try {
+            const result = await createComment(post.id, content.trim());
+            if (result && typeof result === 'object' && 'serverError' in result) {
+              throw new Error(result.serverError as string);
+            }
+            toast({ title: 'Reply sent', description: 'Your comment has been posted.' });
+            await loadComments();
+            setShowComments(true);
+          } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : 'An unexpected error occurred';
+            toast({ title: 'Error', description: message, variant: 'destructive' });
+          } finally {
+            setIsSendingReply(false);
+          }
+        }}
+        postTitle={post.title || undefined}
+      />
     </Card>
   );
 };

@@ -64,7 +64,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     // current route changed to '/your-comms', and subsequent router.push() calls would
     // navigate there instead of the intended URL.
     // History.prototype methods are the native browser implementations (unpatched).
-    History.prototype.replaceState.call(window.history, { _tribesSentinel: true }, '', '/your-comms');
+    const sentinelState = {
+      _tribesSentinel: true,
+      as: '/your-comms',
+      url: '/your-comms',
+    };
+    History.prototype.replaceState.call(window.history, sentinelState, '', '/your-comms');
     History.prototype.pushState.call(window.history, null, '', currentUrl);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once on mount only

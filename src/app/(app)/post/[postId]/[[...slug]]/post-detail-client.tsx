@@ -12,7 +12,6 @@ import { useTimeSince } from '@/hooks/use-time-since';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   ResponsiveMenu,
   ResponsiveMenuContent,
@@ -41,6 +40,8 @@ import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { EditPostDialog } from '@/components/dialogs/edit-post-dialog';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { PinToWallDialog } from '@/components/dialogs/pin-to-wall-dialog';
+import { InlineReplyBox } from '@/components/content/inline-reply-box';
+import { ThreadCollapseHeader } from '@/components/content/thread-collapse-header';
 
 
 interface PostDetailClientProps {
@@ -367,7 +368,7 @@ export function PostDetailClient({
           ═══════════════════════════════════════════════════════ */}
       <Card
         id={`post-${post.id}`}
-        className="shadow-none sm:shadow-md hover:sm:shadow-lg transition-shadow duration-200 overflow-hidden"
+        className="shadow-none sm:shadow-md hover:sm:shadow-lg transition-shadow duration-200 overflow-visible"
       >
         <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
           <div className="flex items-start space-x-3">
@@ -716,8 +717,17 @@ export function PostDetailClient({
         </CardFooter>
 
         {/* ── Comments section ── */}
+        {commentCount > 0 && (
+          <div className="px-3 sm:px-4 border-t pt-2 pb-1">
+            <ThreadCollapseHeader
+              count={commentCount}
+              isExpanded={showComments}
+              onToggle={handleToggleComments}
+            />
+          </div>
+        )}
         {showComments && loadedComments.length > 0 && (
-          <div className="px-3 sm:px-4 pb-2 space-y-1 border-t pt-3">
+          <div className="px-3 sm:px-4 pb-2 space-y-1">
             {loadedComments.map(comment => (
               <PostCommentCard
                 key={comment.id}
@@ -733,32 +743,20 @@ export function PostDetailClient({
           </div>
         )}
         {showComments && loadedComments.length === 0 && !isLoadingComments && (
-          <div className="px-3 sm:px-4 pb-3 pt-2 border-t">
+          <div className={cn("px-3 sm:px-4 pb-3 pt-2", commentCount === 0 && "border-t")}>
             <p className="text-xs text-muted-foreground text-center py-2">No comments yet — be the first to reply!</p>
           </div>
         )}
 
         {/* ── Inline reply (desktop) ── */}
         {!isMobile && showReply && (
-          <div ref={replyRef} className="px-3 sm:px-4 pb-3 sm:pb-4 flex gap-2">
-            <Input
-              placeholder="Write a reply..."
-              value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendReply()}
-              className="text-sm"
-              autoFocus
-            />
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={!replyText.trim() || isSendingReply}
-              onClick={handleSendReply}
-              className="shrink-0"
-            >
-              {isSendingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
-          </div>
+          <InlineReplyBox
+            ref={replyRef}
+            value={replyText}
+            onChange={setReplyText}
+            onSend={handleSendReply}
+            isSending={isSendingReply}
+          />
         )}
 
         {/* ── Reply dialog (mobile) ── */}

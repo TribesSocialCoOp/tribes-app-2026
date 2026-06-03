@@ -229,40 +229,8 @@ export async function getPostById(postId: string): Promise<{
   }
 
   // Fetch comments
-  const allComments = await db.select().from(comments)
-    .where(eq(comments.postId, postId))
-    .orderBy(comments.createdAt);
-
-  // Batch-fetch slugs for comment authors
-  const commentAuthorIds = [...new Set(allComments.map(c => c.authorId))];
-  const slugRows = commentAuthorIds.length > 0
-    ? await db.select({ id: users.id, slug: users.slug }).from(users).where(inArray(users.id, commentAuthorIds))
-    : [];
-  const commentSlugMap = new Map<string, string | null>(slugRows.map(r => [r.id, r.slug]));
-
-  function buildTree(parentId: string | null): import('@/lib/types').DiscussionComment[] {
-    return allComments
-      .filter(c => c.parentCommentId === parentId)
-      .map(c => ({
-        id: c.id,
-        authorId: c.authorId,
-        authorSlug: commentSlugMap.get(c.authorId) ?? undefined,
-        authorName: c.authorName,
-        authorAvatar: c.authorAvatar ?? undefined,
-        authorAvatarFallback: c.authorAvatarFallback,
-        content: c.content,
-        vibes: c.vibeCount ?? 0,
-        timestamp: c.createdAt ?? new Date(),
-        replies: buildTree(c.id),
-        // E2E encryption fields
-        isEncrypted: c.isEncrypted ?? false,
-        ciphertextBase64: c.ciphertext
-          ? Buffer.from(c.ciphertext as Buffer).toString('base64')
-          : undefined,
-        encryptionIv: c.encryptionIv ?? undefined,
-      }));
-  }
-  const commentsData = buildTree(null);
+  const { getCommentsForPost: fetchCommentsService } = await import('@/lib/services/post-service');
+  const commentsData = await fetchCommentsService(postId, userId ?? undefined, row.authorId);
 
   // Fetch vibes (join with users to get reactor names)
   const allVibes = await db.select({

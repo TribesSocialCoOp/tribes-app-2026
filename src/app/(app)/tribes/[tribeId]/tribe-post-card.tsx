@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useDoubleTap } from '@/hooks/use-double-tap';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -9,8 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil, Lock, Globe, UserRoundX, Send, Loader2, Link2 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil, Lock, Globe, UserRoundX, Send, Loader2, Link2, ChevronDown, ChevronRight } from "lucide-react";
 import { createComment } from '@/lib/actions/content-actions';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -34,6 +34,8 @@ import { MarkdownContent, getReferencedImageIndices } from '@/components/ui/mark
 import { ImageLightbox } from '@/components/ui/image-lightbox';
 import { EncryptedImage } from '@/components/ui/encrypted-image';
 import { LinkPreviewCard } from '@/components/ui/link-preview-card';
+import { InlineReplyBox } from '@/components/content/inline-reply-box';
+import { ThreadCollapseHeader } from '@/components/content/thread-collapse-header';
 import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
 import { triggerHaptic, triggerSelectionHaptic } from '@/lib/capacitor/haptics';
 import { ImpactStyle } from '@capacitor/haptics';
@@ -89,6 +91,21 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   const [isSendingInlineReply, setIsSendingInlineReply] = useState(false);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [showComments, setShowComments] = useState(true);
+  const [isBodyCollapsed, setIsBodyCollapsed] = useState(false);
+
+  // Mobile: double-tap avatar to toggle body collapse
+  const handleAvatarDoubleTap = useDoubleTap({
+    onDoubleTap: useCallback(() => {
+      setIsBodyCollapsed(prev => !prev);
+      triggerHaptic(ImpactStyle.Light);
+    }, []),
+    onSingleTap: useCallback(() => {
+      if (!post.authorIsAlias) {
+        router.push(profilePath(post.authorId, post.authorSlug));
+      }
+    }, [post.authorIsAlias, post.authorId, post.authorSlug, router]),
+  });
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const [isAdminDeleteDialogOpen, setIsAdminDeleteDialogOpen] = useState(false);
   const [isEditSlugDialogOpen, setIsEditSlugDialogOpen] = useState(false);
@@ -261,7 +278,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
   return (
     <Card className={cn(
-      "overflow-hidden shadow-none sm:shadow-lg relative",
+      "overflow-visible shadow-none sm:shadow-lg relative",
       isPromoted && "bg-accent/5 hover:bg-accent/10 border-accent/30",
       isReported && !post.isRemoved && "border-destructive/50 ring-2 ring-destructive/30",
       post.isPinned && "border-primary/50 ring-2 ring-primary/30"
@@ -297,7 +314,17 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
       <div>
         <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
           <div className="flex items-start space-x-3">
-            {!post.authorIsAlias ? (
+            {/* Avatar — on mobile: double-tap toggles body collapse, single-tap navigates to profile */}
+            {isMobile ? (
+              <div onClick={handleAvatarDoubleTap} className="shrink-0">
+                <UserAvatar
+                  user={{ name: post.authorName, avatar: post.authorAvatar }}
+                  className={cn("h-10 w-10 cursor-pointer hover:ring-2 transition-all", isBodyCollapsed ? "hover:ring-primary/50 ring-1 ring-primary/20" : "hover:ring-primary/30")}
+                  fallback={post.authorAvatarFallback}
+                  dataAiHint={post.dataAiHintAvatar || "avatar"}
+                />
+              </div>
+            ) : !post.authorIsAlias ? (
               <Link href={profilePath(post.authorId, post.authorSlug)}>
                 <UserAvatar
                   user={{ name: post.authorName, avatar: post.authorAvatar }}
@@ -462,6 +489,18 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                   )}
                 </ResponsiveMenuContent>
               </ResponsiveMenu>
+              {/* Desktop: chevron to collapse/expand post body */}
+              <button
+                onClick={() => { setIsBodyCollapsed(!isBodyCollapsed); triggerHaptic(ImpactStyle.Light); }}
+                className="hidden md:flex p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-muted transition-colors items-center justify-center"
+                title={isBodyCollapsed ? "Expand post" : "Collapse post"}
+              >
+                {isBodyCollapsed ? (
+                  <ChevronRight className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
               </div>
             )}
           </div>
@@ -472,6 +511,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
               <h3 className="text-lg font-semibold mb-1.5 text-foreground tracking-tight">{post.title}</h3>
             </Link>
           )}
+          {!isBodyCollapsed && (<>
           {/* Multi-image support — only show images NOT referenced inline via [img:N] */}
           {(() => {
             const allImages = post.imageUrls?.length ? post.imageUrls : (post.imageUrl ? [post.imageUrl] : []);
@@ -582,7 +622,12 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
           )}
           {(post.commentsData && post.commentsData.length > 0) && (
             <div className="mt-4 pt-3 border-t">
-              {post.commentsData.map(comment => (
+              <ThreadCollapseHeader
+                count={post.comments ?? post.commentsData.length}
+                isExpanded={showComments}
+                onToggle={() => setShowComments(!showComments)}
+              />
+              {showComments && post.commentsData.map(comment => (
                 <CommentCard
                   key={comment.id}
                   comment={comment}
@@ -595,10 +640,12 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                   postAuthorId={post.authorId}
                   tribeId={tribeId}
                   onCommentAdded={syncAllData}
+                  isPublic={state.tribe?.isPublic ?? true}
                 />
               ))}
             </div>
           )}
+          </>)}
         </CardContent>
         <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start space-x-4 border-t">
           {isLoggedIn && isMember ? (
@@ -632,7 +679,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
             disabled={post.isRemoved}
             onClick={() => {
               triggerHaptic(ImpactStyle.Light);
-              if (isLoggedIn && isMember) handleOpenCommentDialog({ postId: post.id, postTitle: post.title });
+              setShowComments(!showComments);
             }}
           >
             <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
@@ -674,25 +721,13 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
           </Button>
         </CardFooter>
         {!isMobile && showInlineReply && (
-          <div ref={inlineReplyRef} className="px-3 sm:px-4 pb-3 sm:pb-4 flex gap-2">
-            <Input
-              placeholder="Write a reply..."
-              value={inlineReplyText}
-              onChange={(e) => setInlineReplyText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendInlineReply()}
-              className="text-sm"
-              autoFocus
-            />
-            <Button
-              size="icon"
-              variant="ghost"
-              disabled={!inlineReplyText.trim() || isSendingInlineReply}
-              onClick={handleSendInlineReply}
-              className="shrink-0"
-            >
-              {isSendingInlineReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
-          </div>
+          <InlineReplyBox
+            ref={inlineReplyRef}
+            value={inlineReplyText}
+            onChange={setInlineReplyText}
+            onSend={handleSendInlineReply}
+            isSending={isSendingInlineReply}
+          />
         )}
       </div>
       )}

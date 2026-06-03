@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useDoubleTap } from '@/hooks/use-double-tap';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { profilePath } from '@/lib/utils/paths';
 import Image from 'next/image';
@@ -10,7 +12,6 @@ import { useTimeSince } from '@/hooks/use-time-since';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   ResponsiveMenu,
   ResponsiveMenuContent,
@@ -18,7 +19,7 @@ import {
   ResponsiveMenuSeparator,
   ResponsiveMenuTrigger,
 } from "@/components/ui/responsive-menu";
-import { MessageSquareText, Rss, Loader2, Smile, Send, Megaphone, Pin, Lock, Trash2, Pencil, MoreVertical, Flag, UserRoundX, Link2, ShieldAlert } from "lucide-react";
+import { MessageSquareText, Rss, Loader2, Smile, Send, Megaphone, Pin, Lock, Trash2, Pencil, MoreVertical, Flag, UserRoundX, Link2, ShieldAlert, ChevronDown, ChevronRight } from "lucide-react";
 import { cn, countAllComments, insertReplyIntoTree } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
@@ -34,13 +35,16 @@ import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { buildPostPath } from '@/lib/utils/slugify';
 import { CommentCard } from '@/components/content/comment-card';
+import { ThreadCollapseHeader } from '@/components/content/thread-collapse-header';
 import { PinToWallDialog } from '@/components/dialogs/pin-to-wall-dialog';
+import { InlineReplyBox } from '@/components/content/inline-reply-box';
 import { ModRemovalDialog } from '@/components/dialogs/mod-removal-dialog';
 
 
 export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   const { toast } = useToast();
   const { user } = useUser();
+  const router = useRouter();
   const { handleOpenEditPostDialog } = useIntercom();
   const displayTime = useTimeSince(item.timestamp);
   const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string, count: number }[] | null>(null);
@@ -72,6 +76,19 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
   const [modRemoveOpen, setModRemoveOpen] = useState(false);
   const [isAdminDeleteDialogOpen, setIsAdminDeleteDialogOpen] = useState(false);
+  const [isBodyCollapsed, setIsBodyCollapsed] = useState(false);
+
+  // Mobile: double-tap avatar to toggle body collapse
+  const handleAvatarDoubleTap = useDoubleTap({
+    onDoubleTap: useCallback(() => {
+      setIsBodyCollapsed(prev => !prev);
+    }, []),
+    onSingleTap: useCallback(() => {
+      if (!item.authorIsAlias && item.authorId) {
+        router.push(profilePath(item.authorId!, item.authorSlug));
+      }
+    }, [item.authorIsAlias, item.authorId, item.authorSlug, router]),
+  });
 
 
   const currentRecentVibes = localRecentVibes !== null ? localRecentVibes : (item.recentVibes || []);
@@ -204,11 +221,21 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const cardContent = (
     <Card 
       id={`post-${item.id}`}
-      className="shadow-none sm:shadow-md hover:sm:shadow-lg transition-shadow duration-200 overflow-hidden"
+      className="shadow-none sm:shadow-md hover:sm:shadow-lg transition-shadow duration-200 overflow-visible"
     >
       <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
         <div className="flex items-start space-x-3">
-          {!item.authorIsAlias && item.authorId ? (
+          {/* Avatar — on mobile: double-tap toggles body collapse, single-tap navigates to profile */}
+          {isMobile ? (
+            <div onClick={handleAvatarDoubleTap} className="shrink-0">
+              <UserAvatar 
+                user={{ name: item.sender || item.tribeName, avatar: item.avatarSrc }} 
+                className={cn("h-10 w-10 cursor-pointer hover:ring-2 transition-all", isBodyCollapsed ? "hover:ring-primary/50 ring-1 ring-primary/20" : "hover:ring-primary/30")} 
+                fallback={item.avatarFallback || "N/A"}
+                dataAiHint={item.dataAiHint || "avatar"}
+              />
+            </div>
+          ) : !item.authorIsAlias && item.authorId ? (
             <Link href={profilePath(item.authorId!, item.authorSlug)}>
               <UserAvatar 
                 user={{ name: item.sender || item.tribeName, avatar: item.avatarSrc }} 
@@ -347,11 +374,26 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
               </ResponsiveMenu>
             </>
           )}
+          {/* Desktop: chevron to collapse/expand post body */}
+          {isPost && (
+            <button
+              onClick={() => setIsBodyCollapsed(!isBodyCollapsed)}
+              className="hidden md:flex p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-muted transition-colors items-center justify-center"
+              title={isBodyCollapsed ? "Expand post" : "Collapse post"}
+            >
+              {isBodyCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </button>
+          )}
           </div>
         </div>
       </CardHeader>
       <CardContent className="p-3 sm:p-4 pt-2 sm:pt-3">
         {item.title && <h3 className="text-lg font-semibold mb-1.5 text-foreground tracking-tight">{item.title}</h3>}
+        {!isBodyCollapsed && (<>
         {/* Multi-image support — only show images NOT referenced inline via [img:N] */}
         {(() => {
           const allImages = item.imageUrls?.length ? item.imageUrls : (item.imageUrl ? [item.imageUrl] : []);
@@ -433,6 +475,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
             <Megaphone className="h-3 w-3" /> Promoted by {item.promotedByName}
           </p>
         )}
+        </>)}
       </CardContent>
       <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start space-x-4 border-t">
         {isPost && (
@@ -528,8 +571,17 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
           />
         )}
       </CardFooter>
+      {commentCount > 0 && (
+        <div className="px-3 sm:px-4 border-t pt-2 pb-1">
+          <ThreadCollapseHeader
+            count={commentCount}
+            isExpanded={showComments}
+            onToggle={handleToggleComments}
+          />
+        </div>
+      )}
       {showComments && loadedComments.length > 0 && (
-        <div className="px-3 sm:px-4 pb-2 space-y-3 border-t pt-3">
+        <div className="px-3 sm:px-4 pb-2 space-y-3">
           {loadedComments.map(comment => (
             <CommentCard 
               key={comment.id} 
@@ -545,30 +597,18 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
         </div>
       )}
       {showComments && loadedComments.length === 0 && !isLoadingComments && (
-        <div className="px-3 sm:px-4 pb-3 pt-2 border-t">
+        <div className={cn("px-3 sm:px-4 pb-3 pt-2", commentCount === 0 && "border-t")}>
           <p className="text-xs text-muted-foreground text-center py-2">No comments yet — be the first to reply!</p>
         </div>
       )}
       {!isMobile && showReply && (
-        <div ref={replyRef} className="px-3 sm:px-4 pb-3 sm:pb-4 flex gap-2">
-          <Input
-            placeholder="Write a reply..."
-            value={replyText}
-            onChange={(e) => setReplyText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendReply()}
-            className="text-sm"
-            autoFocus
-          />
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={!replyText.trim() || isSendingReply}
-            onClick={handleSendReply}
-            className="shrink-0"
-          >
-            {isSendingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          </Button>
-        </div>
+        <InlineReplyBox
+          ref={replyRef}
+          value={replyText}
+          onChange={setReplyText}
+          onSend={handleSendReply}
+          isSending={isSendingReply}
+        />
       )}
       <CommentDialog
         isOpen={replyDialogOpen}

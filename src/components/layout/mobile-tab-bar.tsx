@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { Rss, Tent, SquarePen, Link2, User, ShieldAlert, LogIn } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
+import { scrollMainToTop } from '@/lib/utils/scroll-utils';
 
 export function MobileTabBar() {
   const pathname = usePathname();
@@ -45,6 +46,12 @@ export function MobileTabBar() {
               href={tab.href}
               aria-label={tab.label}
               aria-current={isActive ? "page" : undefined}
+              onClick={(e) => {
+                if (isActive) {
+                  e.preventDefault();
+                  scrollMainToTop();
+                }
+              }}
               className={cn(
                 "flex flex-col items-center justify-center gap-0.5 flex-1 py-1 rounded-lg transition-colors relative min-h-[44px]",
                 tab.isCompose ? "mt-[-20px]" : (isActive ? "text-primary" : "text-muted-foreground hover:text-foreground")

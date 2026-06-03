@@ -22,10 +22,21 @@ import {
   ResponsiveMenuTrigger,
 } from "@/components/ui/responsive-menu";
 
-import { Smile, MoreVertical, Flag, UserRoundX, Pencil, Check, X, Send, Loader2, Lock, Trash2 } from "lucide-react";
+import { Smile, MoreVertical, Flag, UserRoundX, Pencil, Check, X, Send, Loader2, Lock, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
-import { cn } from '@/lib/utils';
+/**
+ * @fileoverview Shared interactive comment card.
+ * 
+ * NOTE: This component is intentionally kept separate from the Tribes-specific CommentCard
+ * (in src/app/(app)/tribes/[tribeId]/comment-card.tsx) to support distinct styling
+ * (e.g., bg-muted/30 bubble backgrounds and border styling) and the inline reply UX
+ * with autocomplete on desktop.
+ * 
+ * Supports: vibes, reply-to-comment, edit own comment, report, block.
+ */
+
+import { cn, countAllComments } from '@/lib/utils';
 import { useIsMobile } from "@/hooks/use-mobile";
 import { toggleVibe, createComment, editComment, reportComment, deleteOwnComment } from '@/lib/actions/content-actions';
 import { useToast } from '@/hooks/use-toast';
@@ -154,6 +165,9 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
   const [isReplyDialogOpen, setIsReplyDialogOpen] = useState(false);
+
+  // ── Collapsible thread state ──
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // ── Block ──
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
@@ -324,6 +338,22 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   const isDeep = level >= 2; // Hide avatars on mobile at depth 2+
   const isFlat = level >= 4; // Stop nesting on mobile at depth 4+
 
+  if (isCollapsed) {
+    return (
+      <div className={cn(isFlat ? "ml-0 md:ml-6" : indentClass, "mt-3")} id={`comment-${comment.id}`}>
+        <button 
+          className="flex items-center gap-1.5 bg-muted/20 hover:bg-muted/30 border border-transparent rounded-lg px-3 py-1.5 cursor-pointer text-xs text-muted-foreground w-fit transition-all" 
+          onClick={() => setIsCollapsed(false)}
+        >
+          <ChevronRight className="h-3.5 w-3.5 text-primary/80 shrink-0" />
+          <span className="font-medium text-foreground">{comment.authorName}</span>
+          <span>·</span>
+          <span>{countAllComments(comment.replies ?? [])} replies hidden</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={cn(isFlat ? "ml-0 md:ml-6" : indentClass)} id={`comment-${comment.id}`}>
       <div className={cn("flex items-start mt-3", isDeep ? "space-x-1 md:space-x-3" : "space-x-2 md:space-x-3")}>
@@ -378,6 +408,15 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               )}
               {!isDeep && (
                 <p className="text-[10px] text-muted-foreground whitespace-nowrap">{format(comment.timestamp, "MMM d, h:mm a")}</p>
+              )}
+              {comment.replies && comment.replies.length > 0 && (
+                <button 
+                  onClick={() => setIsCollapsed(true)} 
+                  className="text-muted-foreground/60 hover:text-primary transition-colors cursor-pointer select-none rounded hover:bg-muted/50 p-0.5 flex items-center justify-center"
+                  title="Collapse thread"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                </button>
               )}
             </div>
             <div className="flex items-center space-x-2">
@@ -508,7 +547,15 @@ export const CommentCard: React.FC<CommentCardProps> = ({
                 setReplyText(e.target.value);
                 checkMention(e.target.value, e.target.selectionStart);
               }}
-              onKeyDown={handleMentionKeyDown}
+              onKeyDown={(e) => {
+                handleMentionKeyDown(e);
+                if (e.isDefaultPrevented()) return;
+
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSendReply();
+                }
+              }}
               onSelect={(e) => {
                 const target = e.target as HTMLTextAreaElement;
                 checkMention(target.value, target.selectionStart);

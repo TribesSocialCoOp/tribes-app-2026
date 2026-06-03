@@ -13,7 +13,7 @@ import {
   ResponsiveMenuSeparator,
 } from "@/components/ui/responsive-menu";
 
-import { Smile, MoreVertical, Flag, UserRoundX, Lock, Pencil, Check, X, Loader2, Trash2 } from "lucide-react";
+import { Smile, MoreVertical, Flag, UserRoundX, Lock, Pencil, Check, X, Loader2, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
@@ -24,7 +24,16 @@ import {
   ResponsiveDialogDescription,
   ResponsiveDialogFooter,
 } from "@/components/ui/responsive-dialog";
-import { cn } from '@/lib/utils';
+/**
+ * @fileoverview Tribes-specific Comment Card.
+ * 
+ * NOTE: This component is intentionally kept separate from the global CommentCard
+ * (in src/components/content/comment-card.tsx) to support distinct styling
+ * (e.g., bg-muted/50 bubble backgrounds) and a dialog-based reply UX instead of
+ * desktop inline inputs.
+ */
+
+import { cn, countAllComments } from '@/lib/utils';
 
 import { toggleVibe, editComment, deleteOwnComment } from '@/lib/actions/content-actions';
 import { useToast } from '@/hooks/use-toast';
@@ -48,12 +57,13 @@ interface CommentCardProps {
   postAuthorId?: string;
   tribeId?: string;
   onCommentAdded?: () => void;
+  isPublic?: boolean;
 }
 
 export const CommentCard: React.FC<CommentCardProps> = ({
   comment, postId, level = 0,
   onReportComment, onOpenReplyDialog, isLoggedIn, isMember, currentUserId, postAuthorId, tribeId,
-  onCommentAdded,
+  onCommentAdded, isPublic = true,
 }) => {
   const { toast } = useToast();
   const isCurrentUserAuthor = comment.authorId === currentUserId;
@@ -77,6 +87,9 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   const [editContent, setEditContent] = useState(comment.content);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+
+  // ── Collapsible thread state ──
+  const [isCollapsed, setIsCollapsed] = useState(false);
 
   // ── Comment decryption ──
   const [displayContent, setDisplayContent] = useState(comment.content);
@@ -109,7 +122,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
 
   // ── Opportunistic backfill: encrypt legacy plaintext comments ──
   useEffect(() => {
-    if (comment.isEncrypted || !tribeId || !comment.content || comment.content === '[encrypted]') return;
+    if (comment.isEncrypted || isPublic || !tribeId || !comment.content || comment.content === '[encrypted]') return;
 
     let active = true;
     async function backfill() {
@@ -134,7 +147,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
 
     backfill();
     return () => { active = false; };
-  }, [comment.id, comment.isEncrypted, comment.content, tribeId]);
+  }, [comment.id, comment.isEncrypted, comment.content, isPublic, tribeId]);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingComment, setIsDeletingComment] = useState(false);
@@ -206,6 +219,22 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   const isDeep = level >= 2; // Hide avatars on mobile at depth 2+
   const isFlat = level >= 4; // Stop nesting on mobile at depth 4+
 
+  if (isCollapsed) {
+    return (
+      <div className={cn(isFlat ? "ml-0 md:ml-6" : indentClass, "mt-3")} id={`comment-${comment.id}`}>
+        <button 
+          className="flex items-center gap-1.5 bg-muted/20 hover:bg-muted/30 border border-transparent rounded-lg px-3 py-1.5 cursor-pointer text-xs text-muted-foreground w-fit transition-all" 
+          onClick={() => setIsCollapsed(false)}
+        >
+          <ChevronRight className="h-3.5 w-3.5 text-primary/80 shrink-0" />
+          <span className="font-medium text-foreground">{comment.authorName}</span>
+          <span>·</span>
+          <span>{countAllComments(comment.replies ?? [])} replies hidden</span>
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className={cn(isFlat ? "ml-0 md:ml-6" : indentClass)} id={`comment-${comment.id}`}>
       <div className={cn("flex items-start mt-3", isDeep ? "space-x-1 md:space-x-3" : "space-x-2 md:space-x-3")}>
@@ -264,6 +293,15 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               {/* Date inline on desktop / non-deep, separate line when deep+mobile */}
               {!isDeep && (
                 <p className="text-[10px] text-muted-foreground whitespace-nowrap">{format(comment.timestamp, "MMM d, h:mm a")}</p>
+              )}
+              {comment.replies && comment.replies.length > 0 && (
+                <button 
+                  onClick={() => setIsCollapsed(true)} 
+                  className="text-muted-foreground/60 hover:text-primary transition-colors cursor-pointer select-none rounded hover:bg-muted/50 p-0.5 flex items-center justify-center"
+                  title="Collapse thread"
+                >
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                </button>
               )}
             </div>
             <div className="flex items-center space-x-2">
@@ -400,6 +438,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               postAuthorId={postAuthorId}
               tribeId={tribeId}
               onCommentAdded={onCommentAdded}
+              isPublic={isPublic}
             />
           ))}
         </div>
