@@ -22,9 +22,9 @@ interface UseOptimisticVibesConfig {
   serverRecentVibes: { emoji: string; count: number }[];
   /** Server-provided vibe details (only when viewer can see reactors) */
   serverVibeDetails: VibeDetail[];
-  /** Whether the current user has already vibed (posts only; comments use selectedVibe) */
+  /** Whether the current user has already vibed */
   serverHasVibed: boolean;
-  /** The user's currently selected emoji (comments only; derived from vibeDetails). Null if no vibe. */
+  /** The user's currently selected emoji. Null if no vibe. */
   serverSelectedVibe: string | null;
   /** Whether the current user can see reactor details (author, post author, etc.) */
   canSeeReactors: boolean;
@@ -127,22 +127,52 @@ export function useOptimisticVibes(config: UseOptimisticVibesConfig) {
       const prevHasVibed = hasVibed;
       const prevSelectedVibe = selectedVibe;
 
-      // Determine if we're removing based on content type
-      const isRemoving = targetType === 'comment'
-        ? selectedVibe === vibe
-        : hasVibed;
+      // Determine if we're removing or replacing
+      const isRemoving = selectedVibe === vibe;
+      const isReplacing = !isRemoving && selectedVibe != null;
 
-      const newCount = isRemoving ? Math.max(0, prevCount - 1) : prevCount + 1;
+      const newCount = isRemoving
+        ? Math.max(0, prevCount - 1)
+        : isReplacing
+          ? prevCount // replacing doesn't change overall count
+          : prevCount + 1;
 
       // Optimistic UI update
       triggerHaptic(isRemoving ? ImpactStyle.Light : ImpactStyle.Medium);
       setLocalVibeCount(newCount);
 
-      if (targetType === 'comment') {
-        setLocalSelectedVibe(isRemoving ? null : vibe);
+      setLocalSelectedVibe(isRemoving ? null : vibe);
+      setLocalHasVibed(!isRemoving);
+
+      // Optimistically update recentVibes array to avoid visual flicker
+      const incrementEmoji = (arr: { emoji: string; count: number }[], emoji: string) => {
+        const idx = arr.findIndex(rv => rv.emoji === emoji);
+        if (idx > -1) {
+          arr[idx].count += 1;
+        } else {
+          arr.push({ emoji, count: 1 });
+        }
+      };
+
+      let updatedVibes = prevRecentVibes.map(rv => ({ ...rv }));
+      if (isRemoving) {
+        const idx = updatedVibes.findIndex(rv => rv.emoji === vibe);
+        if (idx > -1) {
+          updatedVibes[idx].count = Math.max(0, updatedVibes[idx].count - 1);
+          if (updatedVibes[idx].count === 0) updatedVibes.splice(idx, 1);
+        }
+      } else if (isReplacing && prevSelectedVibe) {
+        // Decrement old emoji
+        const oldIdx = updatedVibes.findIndex(rv => rv.emoji === prevSelectedVibe);
+        if (oldIdx > -1) {
+          updatedVibes[oldIdx].count = Math.max(0, updatedVibes[oldIdx].count - 1);
+          if (updatedVibes[oldIdx].count === 0) updatedVibes.splice(oldIdx, 1);
+        }
+        incrementEmoji(updatedVibes, vibe);
       } else {
-        setLocalHasVibed(!isRemoving);
+        incrementEmoji(updatedVibes, vibe);
       }
+      setLocalRecentVibes(updatedVibes.sort((a, b) => b.count - a.count).slice(0, 3));
 
       if (canSeeReactors) {
         setLocalVibeDetails(updateVibeDetails(prevVibeDetails, vibe, isRemoving));
@@ -157,11 +187,8 @@ export function useOptimisticVibes(config: UseOptimisticVibesConfig) {
           setLocalRecentVibes(result.recentVibes);
         }
 
-        if (targetType === 'comment') {
-          setLocalSelectedVibe(result.vibed ? vibe : null);
-        } else {
-          setLocalHasVibed(result.vibed);
-        }
+        setLocalSelectedVibe(result.vibed ? vibe : null);
+        setLocalHasVibed(result.vibed);
 
         if (canSeeReactors) {
           // If the server returned updated details, use them; otherwise fall back to optimistic update
@@ -176,11 +203,8 @@ export function useOptimisticVibes(config: UseOptimisticVibesConfig) {
         setLocalVibeCount(prevCount);
         setLocalRecentVibes(prevRecentVibes);
         setLocalVibeDetails(prevVibeDetails);
-        if (targetType === 'comment') {
-          setLocalSelectedVibe(prevSelectedVibe);
-        } else {
-          setLocalHasVibed(prevHasVibed);
-        }
+        setLocalSelectedVibe(prevSelectedVibe);
+        setLocalHasVibed(prevHasVibed);
       } finally {
         isVibingRef.current = false;
       }

@@ -77,7 +77,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   const canSeeReactors = isCurrentUserAuthor || isPostAuthor;
 
   // ── Vibes (consolidated hook) ──
-  const userVibe = comment.vibeDetails?.find(v => v.userId === currentUserId)?.emoji ?? null;
+  const userVibe = comment.selectedVibe ?? comment.vibeDetails?.find(v => v.userId === currentUserId)?.emoji ?? null;
   const {
     vibeCount,
     recentVibes: localRecentVibes,
@@ -90,7 +90,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
     serverVibeCount: comment.vibes || 0,
     serverRecentVibes: comment.recentVibes || [],
     serverVibeDetails: comment.vibeDetails || [],
-    serverHasVibed: false,
+    serverHasVibed: !!userVibe,
     serverSelectedVibe: userVibe,
     canSeeReactors: canSeeReactors,
     currentUserId,

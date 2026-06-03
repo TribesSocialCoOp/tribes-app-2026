@@ -245,6 +245,9 @@ export async function getPostById(postId: string): Promise<{
   .where(and(eq(vibes.targetId, postId), eq(vibes.targetType, 'post')));
 
   const hasVibed = userId ? allVibes.some(v => v.userId === userId) : false;
+  const selectedVibe = userId
+    ? (allVibes.find(v => v.userId === userId)?.emoji ?? null)
+    : null;
   const { computeRecentVibes } = await import('@/lib/services/post-service');
   const recentVibes = computeRecentVibes(allVibes);
 
@@ -274,6 +277,7 @@ export async function getPostById(postId: string): Promise<{
   post.recentVibes = recentVibes;
   post.vibeDetails = vibeDetails;
   post.hasVibed = hasVibed;
+  post.selectedVibe = selectedVibe;
   post.authorSlug = authorUser?.slug ?? undefined;
 
   return {

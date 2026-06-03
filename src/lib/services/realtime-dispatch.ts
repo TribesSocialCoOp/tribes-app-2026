@@ -110,7 +110,20 @@ export async function notifyMention(
       const [comment] = await db.select({ postId: comments.postId })
         .from(comments).where(eq(comments.id, sourceId)).limit(1);
       if (comment) url = `/post/${comment.postId}?commentId=${sourceId}`;
-    } catch {
+    } catch (err) {
+      console.warn('[realtime-dispatch] Failed to resolve comment deep link for mention', { sourceType, sourceId }, err);
+      // Fallback to /your-comms if lookup fails
+    }
+  } else if (sourceType === 'story_comment') {
+    try {
+      const { db } = await import('@/db');
+      const { storyComments } = await import('@/db/schema');
+      const { eq } = await import('drizzle-orm');
+      const [comment] = await db.select({ storyId: storyComments.storyId })
+        .from(storyComments).where(eq(storyComments.id, sourceId)).limit(1);
+      if (comment) url = `/our-story/${comment.storyId}?commentId=${sourceId}`;
+    } catch (err) {
+      console.warn('[realtime-dispatch] Failed to resolve comment deep link for mention', { sourceType, sourceId }, err);
       // Fallback to /your-comms if lookup fails
     }
   }
