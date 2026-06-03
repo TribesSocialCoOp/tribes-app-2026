@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useOptimisticVibes } from '@/hooks/use-optimistic-vibes';
+import { useUser } from '@/hooks/use-user';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDoubleTap } from '@/hooks/use-double-tap';
 import { useRouter } from 'next/navigation';
@@ -25,7 +27,6 @@ import {
 import { cn } from '@/lib/utils';
 import { useTimeSince } from '@/hooks/use-time-since';
 import { VibePicker } from '@/components/ui/vibe-picker';
-import { toggleVibe } from '@/lib/actions/content-actions';
 import type { TribePost, DiscussionComment } from '@/lib/types';
 import { CommentCard } from './comment-card';
 import { EditSlugDialog } from '@/components/dialogs/edit-slug-dialog';
@@ -37,7 +38,7 @@ import { LinkPreviewCard } from '@/components/ui/link-preview-card';
 import { InlineReplyBox } from '@/components/content/inline-reply-box';
 import { ThreadCollapseHeader } from '@/components/content/thread-collapse-header';
 import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
-import { triggerHaptic, triggerSelectionHaptic } from '@/lib/capacitor/haptics';
+import { triggerHaptic } from '@/lib/capacitor/haptics';
 import { ImpactStyle } from '@capacitor/haptics';
 import { shareContent } from '@/lib/capacitor/share';
 import { RoleBadge } from '@/components/ui/role-badge';
@@ -65,6 +66,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useUser();
   const tribeId = state.tribe?.id;
   const isMobile = useIsMobile();
 
@@ -76,10 +78,25 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   const canEditSlug = !!(isGlobalAdmin || isTribeFounder || isTribeSpeaker || (isCurrentUserAuthor && !post.slugEditedBy));
   const isSlugLocked = !!(isCurrentUserAuthor && post.slugEditedBy && !isTribeLeader);
 
-  // Track local override for optimistic updates
-  const [localVibesCount, setLocalVibesCount] = useState<number | null>(null);
-  const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string, count: number }[] | null>(null);
-  const [localHasVibed, setLocalHasVibed] = useState<boolean | null>(null);
+  // ── Optimistic vibes (consolidated hook) ──
+  const {
+    vibeCount: currentVibesCount,
+    recentVibes: currentRecentVibes,
+    vibeDetails: currentVibeDetails,
+    hasVibed: currentUserHasVibed,
+    handleVibeSelection,
+  } = useOptimisticVibes({
+    targetId: post.id,
+    targetType: 'post',
+    serverVibeCount: post.vibes || 0,
+    serverRecentVibes: post.recentVibes || [],
+    serverVibeDetails: post.vibeDetails || [],
+    serverHasVibed: post.hasVibed || false,
+    serverSelectedVibe: null,
+    canSeeReactors: isCurrentUserAuthor,
+    currentUserId,
+    currentUserName: user?.name,
+  });
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -248,33 +265,6 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
   // Display content: decrypted text for encrypted posts, raw content for public
   const displayContent = post.isEncrypted ? (decryptedContent ?? '') : post.content;
-
-  const currentVibesCount = localVibesCount !== null ? localVibesCount : (post.vibes || 0);
-  const currentRecentVibes = localRecentVibes !== null ? localRecentVibes : (post.recentVibes || []);
-  const currentUserHasVibed = localHasVibed !== null ? localHasVibed : (post.hasVibed || false);
-
-  const handleVibeSelection = async (vibe: string) => {
-    // Optimistic update
-    const isRemoving = currentUserHasVibed;
-    const newCount = isRemoving ? Math.max(0, currentVibesCount - 1) : currentVibesCount + 1;
-
-    triggerHaptic(isRemoving ? ImpactStyle.Light : ImpactStyle.Medium);
-    setLocalHasVibed(!isRemoving);
-    setLocalVibesCount(newCount);
-
-    try {
-      const result = await toggleVibe(post.id, 'post', vibe);
-      setLocalHasVibed(result.vibed);
-      setLocalVibesCount(result.newCount);
-      if (result.recentVibes) {
-        setLocalRecentVibes(result.recentVibes);
-      }
-    } catch {
-      // Revert optimistic update on failure
-      setLocalHasVibed(currentUserHasVibed);
-      setLocalVibesCount(currentVibesCount);
-    }
-  };
 
   return (
     <Card className={cn(
@@ -661,7 +651,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
             <VibePicker
               vibeCount={currentVibesCount}
               recentVibes={currentRecentVibes}
-              vibeDetails={post.vibeDetails}
+              vibeDetails={currentVibeDetails}
               hasVibed={currentUserHasVibed}
               isAuthor={isCurrentUserAuthor}
               onVibeSelect={handleVibeSelection}

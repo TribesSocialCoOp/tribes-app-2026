@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback } from 'react';
+import { useOptimisticVibes } from '@/hooks/use-optimistic-vibes';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDoubleTap } from '@/hooks/use-double-tap';
 import { useRouter } from 'next/navigation';
@@ -25,7 +26,7 @@ import { MessageSquareText, Rss, Loader2, Smile, Send, Megaphone, Pin, Lock, Tra
 import { cn, countAllComments, insertReplyIntoTree } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
-import { toggleVibe, createComment, getCommentsForPost, togglePinToWall, deleteOwnPost } from '@/lib/actions/content-actions';
+import { createComment, getCommentsForPost, togglePinToWall, deleteOwnPost } from '@/lib/actions/content-actions';
 import type { CommunicationItem, DiscussionComment } from '@/lib/types';
 import { MarkdownContent, getReferencedImageIndices } from '@/components/ui/markdown-content';
 import { useIntercom } from './intercom-context';
@@ -49,9 +50,36 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const router = useRouter();
   const { handleOpenEditPostDialog } = useIntercom();
   const displayTime = useTimeSince(item.timestamp);
-  const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string, count: number }[] | null>(null);
-  const [localHasVibed, setLocalHasVibed] = useState<boolean | null>(null);
-  const [vibeCount, setVibeCount] = useState(item.vibes ?? 0);
+
+  const isPost = item.type === 'mood-stream' || item.type === 'ring-post';
+  const isOwnPost = isPost && !!user?.id && item.authorId === user.id;
+
+  // ── Optimistic vibes (consolidated hook) ──
+  const {
+    vibeCount,
+    recentVibes: currentRecentVibes,
+    vibeDetails: currentVibeDetails,
+    hasVibed: currentUserHasVibed,
+    handleVibeSelection: rawHandleVibeSelection,
+  } = useOptimisticVibes({
+    targetId: item.id,
+    targetType: 'post',
+    serverVibeCount: item.vibes ?? 0,
+    serverRecentVibes: item.recentVibes || [],
+    serverVibeDetails: item.vibeDetails || [],
+    serverHasVibed: item.hasVibed || false,
+    serverSelectedVibe: null,
+    canSeeReactors: isOwnPost,
+    currentUserId: user?.id,
+    currentUserName: user?.name,
+  });
+
+  // Guard: only allow vibing on post items
+  const handleVibeSelection = useCallback(
+    (vibe: string) => { if (isPost) rawHandleVibeSelection(vibe); },
+    [isPost, rawHandleVibeSelection],
+  );
+
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
@@ -68,8 +96,6 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
-  const isPost = item.type === 'mood-stream' || item.type === 'ring-post';
-  const isOwnPost = isPost && !!user?.id && item.authorId === user.id;
   const isTribeSpeaker = item.currentUserTribeRole ? ['founder', 'platform_admin', 'speaker'].includes(item.currentUserTribeRole) : false;
   const replyRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
@@ -92,34 +118,6 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
       setIsMenuOpen(true);
     }, []),
   });
-
-
-  const currentRecentVibes = localRecentVibes !== null ? localRecentVibes : (item.recentVibes || []);
-  const currentUserHasVibed = localHasVibed !== null ? localHasVibed : (item.hasVibed || false);
-
-  const handleVibeSelection = async (vibe: string) => {
-    if (!isPost) return;
-    
-    // Optimistic update
-    const isRemoving = currentUserHasVibed;
-    const newCount = isRemoving ? Math.max(0, vibeCount - 1) : vibeCount + 1;
-    
-    setLocalHasVibed(!isRemoving);
-    setVibeCount(newCount);
-
-    try {
-      const result = await toggleVibe(item.id, 'post', vibe);
-      setLocalHasVibed(result.vibed);
-      setVibeCount(result.newCount);
-      if (result.recentVibes) {
-        setLocalRecentVibes(result.recentVibes);
-      }
-    } catch {
-      // Revert optimistic update on failure
-      setLocalHasVibed(currentUserHasVibed);
-      setVibeCount(vibeCount);
-    }
-  };
 
   const loadComments = async () => {
     if (!isPost) return;
@@ -494,7 +492,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
           <VibePicker
             vibeCount={vibeCount}
             recentVibes={currentRecentVibes}
-            vibeDetails={item.vibeDetails}
+            vibeDetails={currentVibeDetails}
             hasVibed={currentUserHasVibed}
             isAuthor={isOwnPost}
             onVibeSelect={handleVibeSelection}

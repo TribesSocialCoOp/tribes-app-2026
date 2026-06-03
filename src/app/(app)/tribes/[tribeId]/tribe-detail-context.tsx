@@ -7,7 +7,7 @@ import { useActionError } from '@/hooks/use-action-error';
 import { useUser } from '@/hooks/use-user';
 import { getTribeById, getTribeBySlug, getTribeMembers, leaveTribe, getMyTribeIds, requestToJoinTribe, checkTribeAccess, checkPendingMembership } from '@/lib/actions/tribe-actions';
 import { getEventsForTribe } from '@/lib/actions/event-actions';
-import { getPostsForTribe, promotePostToMoods, repost, createTribePost, getActiveReportedPostIds, getActiveReportsForTribe, reportPost, reportComment, toggleVibe, createComment, deleteOwnPost, togglePinTribePost } from '@/lib/actions/content-actions';
+import { getPostsForTribe, promotePostToMoods, repost, createTribePost, getActiveReportedPostIds, getActiveReportsForTribe, reportPost, reportComment, createComment, deleteOwnPost, togglePinTribePost } from '@/lib/actions/content-actions';
 import type { Tribe, Event, TribePost, ReportedPost, TribeMember, DiscussionComment, PaginatedResult } from '@/lib/types';
 import type { PostFormValues } from '@/components/dialogs/create-post-dialog';
 import type { TribeAccessLevel } from '@/lib/services/tribe-auth';
@@ -324,7 +324,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     } else {
       router.replace('/tribes');
     }
-  }, [slugParam, tribeIdParam, router]);
+  }, [slugParam, tribeIdParam, router, isLoggedIn]);
 
   useEffect(() => { syncAllData(); }, [slugParam, tribeIdParam, syncAllData]);
   useEffect(() => {

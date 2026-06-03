@@ -6,9 +6,10 @@ import { db } from '@/db';
 import { posts, postMoodTags, comments, blockedUsers, vibes, tribeMembers, users, tribes } from '@/db/schema';
 import { eq, desc, and, sql, inArray, lt } from 'drizzle-orm';
 import { getBlockedAuthorIds, getUserTribeIds, resolveDisplayIdentity } from './query-helpers';
-import type { TribePost, MoodStreamPost, DiscussionComment, PaginatedResult } from '@/lib/types';
+import type { TribePost, MoodStreamPost, DiscussionComment, PaginatedResult, VibeDetail } from '@/lib/types';
 import { rowToTribePost } from '@/lib/mappers/post-mapper';
 import { slugify } from '@/lib/utils/slugify';
+import { logger } from '@/lib/logger';
 
 /**
  * Helper: Batch-fetch live avatars and names for a set of user IDs.
@@ -39,9 +40,46 @@ export function computeRecentVibes(vibeList: { emoji: string }[], topN = 3): { e
     .slice(0, topN);
 }
 
+
+
+/**
+ * Shared helper: fetch vibes for a target and optionally join user names.
+ * When `includeNames` is true, performs a LEFT JOIN to `users` for reactor names.
+ * Returns { recentVibes, vibeDetails? } to avoid repeating this query 3× in toggleVibe.
+ */
+async function fetchVibesWithDetails(
+  queryRunner: Pick<typeof db, 'select'>,
+  targetId: string,
+  targetType: 'post' | 'comment',
+  includeNames: boolean,
+): Promise<{ recentVibes: { emoji: string; count: number }[]; vibeDetails?: VibeDetail[] }> {
+  if (includeNames) {
+    const rows = await queryRunner.select({
+      id: vibes.id,
+      userId: vibes.userId,
+      targetId: vibes.targetId,
+      emoji: vibes.emoji,
+      userName: users.name,
+    })
+    .from(vibes)
+    .leftJoin(users, eq(vibes.userId, users.id))
+    .where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
+
+    return {
+      recentVibes: computeRecentVibes(rows),
+      vibeDetails: rows.map(v => ({ emoji: v.emoji, userId: v.userId, userName: v.userName ?? 'Someone' })),
+    };
+  }
+
+  const rows = await queryRunner.select().from(vibes)
+    .where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
+
+  return { recentVibes: computeRecentVibes(rows) };
+}
+
 interface CommentVibeEnrichment {
   recentVibes: { emoji: string; count: number }[];
-  vibeDetails?: { emoji: string; userName: string; userId: string }[];
+  vibeDetails?: VibeDetail[];
   hasVibed: boolean;
 }
 
@@ -269,6 +307,7 @@ export async function getPostsForTribe(
       ? postVibes.map(v => ({ emoji: v.emoji, userId: v.userId, userName: v.userName ?? 'Someone' }))
       : undefined;
 
+
     // A post is an alias post only when the author explicitly joined the tribe
     // under an alias AND the stored authorName matches that alias.
     // Simple name changes (user updated their profile) are NOT alias posts.
@@ -433,6 +472,7 @@ export async function getMoodStreamPosts(
 
     return {
       id: postRow.id,
+      authorId: postRow.authorId,
       author: displayName,
       authorAvatarSrc: postAvatar,
       authorAvatarFallback: displayFallback,
@@ -694,6 +734,50 @@ export async function promotePostToMoods(postId: string, moodSlugs: string[], pr
 // ============================================================
 
 /**
+ * Fire-and-forget: bond activity refresh + notification for a post vibe.
+ * Extracted from inline .then() chains for readability and error logging.
+ */
+async function notifyPostVibe(userId: string, targetId: string, emoji: string): Promise<void> {
+  const [vibeTarget] = await db.select({ authorId: posts.authorId, tribeId: posts.tribeId })
+    .from(posts).where(eq(posts.id, targetId)).limit(1);
+  if (!vibeTarget) return;
+
+  // Bond activity refresh
+  if (vibeTarget.tribeId) {
+    const { touchBondOnActivity, strengthenBondConnection } = await import('./bond-service');
+    touchBondOnActivity(userId, vibeTarget.tribeId, 'tribe');
+    strengthenBondConnection(userId, vibeTarget.tribeId, 1);
+  }
+
+  // Notification to content author
+  const [author] = await db.select({ name: users.name }).from(users)
+    .where(eq(users.id, userId)).limit(1);
+  const viberName = author?.name ?? 'Someone';
+  const { notifyVibe } = await import('./realtime-dispatch');
+  notifyVibe(vibeTarget.authorId, userId, viberName, emoji, 'post', vibeTarget.tribeId, targetId);
+}
+
+/**
+ * Fire-and-forget: notification for a comment vibe.
+ * Extracted from inline .then() chains for readability and error logging.
+ */
+async function notifyCommentVibe(userId: string, targetId: string, emoji: string): Promise<void> {
+  const [vibeTarget] = await db.select({ authorId: comments.authorId, postId: comments.postId })
+    .from(comments).where(eq(comments.id, targetId)).limit(1);
+  if (!vibeTarget) return;
+
+  const [parentPost] = await db.select({ tribeId: posts.tribeId }).from(posts)
+    .where(eq(posts.id, vibeTarget.postId)).limit(1);
+
+  const [author] = await db.select({ name: users.name }).from(users)
+    .where(eq(users.id, userId)).limit(1);
+  const viberName = author?.name ?? 'Someone';
+
+  const { notifyVibe } = await import('./realtime-dispatch');
+  notifyVibe(vibeTarget.authorId, userId, viberName, emoji, 'comment', parentPost?.tribeId ?? null, vibeTarget.postId);
+}
+
+/**
  * Toggle a vibe (reaction) on a post or comment.
  * If the user already vibed → remove it (decrement count).
  * If not → add it (increment count).
@@ -704,7 +788,7 @@ export async function toggleVibe(
   targetId: string,
   targetType: 'post' | 'comment',
   emoji: string,
-): Promise<{ vibed: boolean; newCount: number; recentVibes: { emoji: string; count: number }[] }> {
+): Promise<{ vibed: boolean; newCount: number; recentVibes: { emoji: string; count: number }[]; vibeDetails?: VibeDetail[] }> {
   // ── Input validation ──────────────────────────────────────
   if (!targetId || typeof targetId !== 'string') {
     throw new Error('Invalid target ID');
@@ -713,127 +797,130 @@ export async function toggleVibe(
     throw new Error('Invalid emoji');
   }
 
-  // Check if ANY vibe already exists from this user on this target
-  const existing = await db.select().from(vibes).where(
-    and(
-      eq(vibes.userId, userId),
-      eq(vibes.targetId, targetId),
-      eq(vibes.targetType, targetType),
-    )
-  ).limit(1);
+  const result = await db.transaction(async (tx) => {
+    // Determine if user is authorized to see vibe details (reactors)
+    let isAuthorized = false;
+    if (targetType === 'post') {
+      const [postRow] = await tx.select({ authorId: posts.authorId }).from(posts).where(eq(posts.id, targetId)).limit(1);
+      if (postRow && postRow.authorId === userId) {
+        isAuthorized = true;
+      }
+    } else {
+      const [commentRow] = await tx.select({ authorId: comments.authorId, postId: comments.postId }).from(comments).where(eq(comments.id, targetId)).limit(1);
+      if (commentRow) {
+        if (commentRow.authorId === userId) {
+          isAuthorized = true;
+        } else {
+          const [postRow] = await tx.select({ authorId: posts.authorId }).from(posts).where(eq(posts.id, commentRow.postId)).limit(1);
+          if (postRow && postRow.authorId === userId) {
+            isAuthorized = true;
+          }
+        }
+      }
+    }
 
-  if (existing.length > 0) {
-    const existingVibe = existing[0]!;
+    // Check if ANY vibe already exists from this user on this target (lock the vibe row if found)
+    const existing = await tx.select().from(vibes).where(
+      and(
+        eq(vibes.userId, userId),
+        eq(vibes.targetId, targetId),
+        eq(vibes.targetType, targetType),
+      )
+    ).limit(1).for('update');
 
-    if (existingVibe.emoji === emoji) {
-      // Same emoji clicked -> Toggle OFF (remove)
-      await db.delete(vibes).where(eq(vibes.id, existingVibe.id));
+    if (existing.length > 0) {
+      const existingVibe = existing[0]!;
 
-      // Decrement count
+      if (existingVibe.emoji === emoji) {
+        // Same emoji clicked -> Toggle OFF (remove)
+        await tx.delete(vibes).where(eq(vibes.id, existingVibe.id));
+
+        // Decrement count
+        if (targetType === 'post') {
+          await tx.update(posts).set({
+            vibeCount: sql`MAX(0, ${posts.vibeCount} - 1)`,
+          }).where(eq(posts.id, targetId));
+        } else {
+          await tx.update(comments).set({
+            vibeCount: sql`MAX(0, ${comments.vibeCount} - 1)`,
+          }).where(eq(comments.id, targetId));
+        }
+
+        // Get new count and recent vibes
+        const newCount = targetType === 'post'
+          ? (await tx.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
+          : (await tx.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
+
+        const { recentVibes, vibeDetails } = await fetchVibesWithDetails(tx, targetId, targetType, isAuthorized);
+
+        return { vibed: false, isNewVibe: false, newCount, recentVibes, vibeDetails };
+      } else {
+        // Different emoji clicked -> REPLACE
+        await tx.update(vibes).set({ 
+          emoji, 
+          createdAt: new Date() 
+        }).where(eq(vibes.id, existingVibe.id));
+
+        // Count stays the same, so we don't update posts/comments table.
+        
+        const newCount = targetType === 'post'
+          ? (await tx.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
+          : (await tx.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
+
+        const { recentVibes, vibeDetails } = await fetchVibesWithDetails(tx, targetId, targetType, isAuthorized);
+
+        return { vibed: true, isNewVibe: false, newCount, recentVibes, vibeDetails };
+      }
+    } else {
+      // No vibe exists -> Add new
+      const id = crypto.randomUUID();
+      await tx.insert(vibes).values({
+        id,
+        userId,
+        targetId,
+        targetType,
+        emoji,
+        createdAt: new Date(),
+      });
+
+      // Increment count
       if (targetType === 'post') {
-        await db.update(posts).set({
-          vibeCount: sql`MAX(0, ${posts.vibeCount} - 1)`,
+        await tx.update(posts).set({
+          vibeCount: sql`${posts.vibeCount} + 1`,
         }).where(eq(posts.id, targetId));
       } else {
-        await db.update(comments).set({
-          vibeCount: sql`MAX(0, ${comments.vibeCount} - 1)`,
+        await tx.update(comments).set({
+          vibeCount: sql`${comments.vibeCount} + 1`,
         }).where(eq(comments.id, targetId));
       }
 
-      // Get new count and recent vibes
       const newCount = targetType === 'post'
-        ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
-        : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
+        ? (await tx.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
+        : (await tx.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
 
-      const targetVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
-      const recentVibes = computeRecentVibes(targetVibes);
+      const { recentVibes, vibeDetails } = await fetchVibesWithDetails(tx, targetId, targetType, isAuthorized);
 
-      return { vibed: false, newCount, recentVibes };
-    } else {
-      // Different emoji clicked -> REPLACE
-      await db.update(vibes).set({ 
-        emoji, 
-        createdAt: new Date() 
-      }).where(eq(vibes.id, existingVibe.id));
-
-      // Count stays the same, so we don't update posts/comments table.
-      
-      const newCount = targetType === 'post'
-        ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
-        : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
-
-      const targetVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
-      const recentVibes = computeRecentVibes(targetVibes);
-
-      return { vibed: true, newCount, recentVibes };
+      return { vibed: true, isNewVibe: true, newCount, recentVibes, vibeDetails };
     }
-  } else {
-    // No vibe exists -> Add new
-    const id = crypto.randomUUID();
-    await db.insert(vibes).values({
-      id,
-      userId,
-      targetId,
-      targetType,
-      emoji,
-      createdAt: new Date(),
-    });
+  });
 
-    // Increment count
+  // Auto-refresh and notify side effects outside of the transaction block (fire-and-forget)
+  // Only for genuinely NEW vibes — not emoji replacements (which would spam notifications)
+  if (result.isNewVibe) {
     if (targetType === 'post') {
-      await db.update(posts).set({
-        vibeCount: sql`${posts.vibeCount} + 1`,
-      }).where(eq(posts.id, targetId));
+      notifyPostVibe(userId, targetId, emoji).catch((err) =>
+        logger.warn({ err: (err as Error).message, module: 'vibes', targetId }, 'Post vibe side-effect failed'),
+      );
     } else {
-      await db.update(comments).set({
-        vibeCount: sql`${comments.vibeCount} + 1`,
-      }).where(eq(comments.id, targetId));
+      notifyCommentVibe(userId, targetId, emoji).catch((err) =>
+        logger.warn({ err: (err as Error).message, module: 'vibes', targetId }, 'Comment vibe side-effect failed'),
+      );
     }
-
-    const newCount = targetType === 'post'
-      ? (await db.select({ c: posts.vibeCount }).from(posts).where(eq(posts.id, targetId)))[0]?.c ?? 0
-      : (await db.select({ c: comments.vibeCount }).from(comments).where(eq(comments.id, targetId)))[0]?.c ?? 0;
-
-    const targetVibes = await db.select().from(vibes).where(and(eq(vibes.targetId, targetId), eq(vibes.targetType, targetType)));
-    const recentVibes = computeRecentVibes(targetVibes);
-
-    // Auto-refresh: vibing keeps your tribe bond alive (fire-and-forget)
-    if (targetType === 'post') {
-      const [vibePost] = await db.select({ tribeId: posts.tribeId }).from(posts)
-        .where(eq(posts.id, targetId)).limit(1);
-      if (vibePost?.tribeId) {
-        import('./bond-service').then(({ touchBondOnActivity, strengthenBondConnection }) => {
-          touchBondOnActivity(userId, vibePost.tribeId!, 'tribe');
-          strengthenBondConnection(userId, vibePost.tribeId!, 1);
-        }).catch(() => {});
-      }
-    }
-
-    // Notify the content author about the vibe (fire-and-forget)
-    import('./realtime-dispatch').then(async ({ notifyVibe }) => {
-      const [author] = await db.select({ name: users.name }).from(users)
-        .where(eq(users.id, userId)).limit(1);
-      const viberName = author?.name ?? 'Someone';
-
-      if (targetType === 'post') {
-        const [vibeTarget] = await db.select({ authorId: posts.authorId, tribeId: posts.tribeId })
-          .from(posts).where(eq(posts.id, targetId)).limit(1);
-        if (vibeTarget) {
-          notifyVibe(vibeTarget.authorId, userId, viberName, emoji, 'post', vibeTarget.tribeId, targetId);
-        }
-      } else {
-        const [vibeTarget] = await db.select({ authorId: comments.authorId, postId: comments.postId })
-          .from(comments).where(eq(comments.id, targetId)).limit(1);
-        if (vibeTarget) {
-          const [parentPost] = await db.select({ tribeId: posts.tribeId })
-            .from(posts).where(eq(posts.id, vibeTarget.postId)).limit(1);
-          notifyVibe(vibeTarget.authorId, userId, viberName, emoji, 'comment', parentPost?.tribeId ?? null, vibeTarget.postId);
-        }
-      }
-    }).catch(() => {});
-
-    return { vibed: true, newCount, recentVibes };
   }
+
+  // Strip internal-only field before returning across the Server Action boundary
+  const { isNewVibe: _, ...clientResult } = result;
+  return clientResult;
 }
 
 // ============================================================

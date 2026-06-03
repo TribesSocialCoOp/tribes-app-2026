@@ -32,16 +32,28 @@ async function batchFetchLiveAvatarInfo(userIds: string[]): Promise<Map<string, 
 async function batchFetchVibesData(postIds: string[], viewerUserId: string): Promise<{
   vibesByPost: Map<string, { emoji: string; count: number }[]>;
   hasVibedByPost: Map<string, boolean>;
+  vibeDetailsByPost: Map<string, { emoji: string; userId: string; userName: string }[]>;
 }> {
-  if (postIds.length === 0) return { vibesByPost: new Map(), hasVibedByPost: new Map() };
+  if (postIds.length === 0) {
+    return { vibesByPost: new Map(), hasVibedByPost: new Map(), vibeDetailsByPost: new Map() };
+  }
   
-  const allVibes = await db.select().from(vibes)
+  const allVibes = await db.select({
+      id: vibes.id,
+      userId: vibes.userId,
+      targetId: vibes.targetId,
+      emoji: vibes.emoji,
+      userName: users.name,
+    })
+    .from(vibes)
+    .leftJoin(users, eq(vibes.userId, users.id))
     .where(and(inArray(vibes.targetId, postIds), eq(vibes.targetType, 'post')));
     
   const vibesByPost = new Map<string, { emoji: string; count: number }[]>();
   const hasVibedByPost = new Map<string, boolean>();
+  const vibeDetailsByPost = new Map<string, { emoji: string; userId: string; userName: string }[]>();
   
-  const rawVibesByPost = new Map<string, (typeof vibes.$inferSelect)[]>();
+  const rawVibesByPost = new Map<string, typeof allVibes>();
   for (const v of allVibes) {
     if (!rawVibesByPost.has(v.targetId)) rawVibesByPost.set(v.targetId, []);
     rawVibesByPost.get(v.targetId)!.push(v);
@@ -60,9 +72,16 @@ async function batchFetchVibesData(postIds: string[], viewerUserId: string): Pro
       .sort((a, b) => b.count - a.count)
       .slice(0, 3);
     vibesByPost.set(postId, recentVibes);
+
+    const details = postVibes.map(v => ({
+      emoji: v.emoji,
+      userId: v.userId,
+      userName: v.userName ?? 'Someone',
+    }));
+    vibeDetailsByPost.set(postId, details);
   }
   
-  return { vibesByPost, hasVibedByPost };
+  return { vibesByPost, hasVibedByPost, vibeDetailsByPost };
 }
 
 /**
@@ -229,6 +248,11 @@ export async function getUnifiedFeed(params: UnifiedFeedParams): Promise<Communi
     if (vibesData.vibesByPost.has(item.id)) {
       item.recentVibes = vibesData.vibesByPost.get(item.id);
       item.hasVibed = vibesData.hasVibedByPost.get(item.id);
+      
+      // vibeDetails: only populate for the post author
+      if (userId === item.authorId && vibesData.vibeDetailsByPost.has(item.id)) {
+        item.vibeDetails = vibesData.vibeDetailsByPost.get(item.id);
+      }
     }
     // 3. Author Role Enrichment
     if (item.tribeId && item.authorId) {

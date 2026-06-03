@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useOptimisticVibes } from '@/hooks/use-optimistic-vibes';
 import Link from 'next/link';
 import { profilePath } from '@/lib/utils/paths';
 import { useRouter } from 'next/navigation';
@@ -28,7 +29,7 @@ import {
 import { cn, countAllComments, insertReplyIntoTree } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
-import { toggleVibe, createComment, getCommentsForPost, togglePinToWall, deleteOwnPost } from '@/lib/actions/content-actions';
+import { createComment, getCommentsForPost, togglePinToWall, deleteOwnPost } from '@/lib/actions/content-actions';
 import type { TribePost, DiscussionComment } from '@/lib/types';
 import { PostCommentCard } from './post-comment-card';
 import { MarkdownContent, getReferencedImageIndices } from '@/components/ui/markdown-content';
@@ -77,12 +78,25 @@ export function PostDetailClient({
   const isTribeSpeaker = authorRole ? ['founder', 'platform_admin', 'speaker'].includes(authorRole) : false;
   const tribeLink = tribeSlug ? `/t/${tribeSlug}` : tribeId ? `/tribes/${tribeId}` : null;
 
-  // ── Vibes ──
-  const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string, count: number }[] | null>(null);
-  const [localHasVibed, setLocalHasVibed] = useState<boolean | null>(null);
-  const [vibeCount, setVibeCount] = useState(post.vibes ?? 0);
-  const currentRecentVibes = localRecentVibes !== null ? localRecentVibes : (post.recentVibes || []);
-  const currentUserHasVibed = localHasVibed !== null ? localHasVibed : false;
+  // ── Optimistic vibes (consolidated hook) ──
+  const {
+    vibeCount,
+    recentVibes: currentRecentVibes,
+    vibeDetails: currentVibeDetails,
+    hasVibed: currentUserHasVibed,
+    handleVibeSelection,
+  } = useOptimisticVibes({
+    targetId: post.id,
+    targetType: 'post',
+    serverVibeCount: post.vibes ?? 0,
+    serverRecentVibes: post.recentVibes || [],
+    serverVibeDetails: post.vibeDetails || [],
+    serverHasVibed: false,
+    serverSelectedVibe: null,
+    canSeeReactors: isOwnPost,
+    currentUserId: user?.id,
+    currentUserName: user?.name,
+  });
 
   // ── Comments ──
   const [showComments, setShowComments] = useState(true); // show by default on post page
@@ -101,7 +115,6 @@ export function PostDetailClient({
   const [isPinned, setIsPinned] = useState(post.pinnedToWall ?? false);
   const [isPinning, setIsPinning] = useState(false);
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
-
 
   // ── Delete ──
   const [isDeleted, setIsDeleted] = useState(false);
@@ -135,7 +148,6 @@ export function PostDetailClient({
         const effectiveTribeId = post.tribeId || tribeId;
 
         if (effectiveTribeId) {
-          // TRIBE PATH: try tribe group key first
           const { getTribeKey } = await import('@/lib/crypto/key-store');
           const cachedTribeKey = await getTribeKey(effectiveTribeId);
 
@@ -156,7 +168,6 @@ export function PostDetailClient({
           }
         }
 
-        // GRANT-BASED FALLBACK: use key grants (pairwise encryption)
         const { getPostKeyGrants } = await import('@/lib/actions/content-actions');
         const grants = await getPostKeyGrants([post.id]);
         const grant = grants[post.id];
@@ -205,7 +216,7 @@ export function PostDetailClient({
           setDecryptionStatus('success');
         }
       } catch (err) {
-        console.error('[PostDetail] Decryption failed:', err);
+        console.error('[PostDetailClient] Decryption failed:', err);
         if (active) {
           if (err instanceof DOMException && err.name === 'OperationError') {
             setDecryptionStatus('key_mismatch');
@@ -231,24 +242,6 @@ export function PostDetailClient({
   const body = displayContent || '';
   const inlineRefs = body ? getReferencedImageIndices(body) : new Set<number>();
   const headerImages = allImages.filter((_, idx) => !inlineRefs.has(idx + 1));
-
-  // ── Handlers ──
-
-  const handleVibeSelection = async (vibe: string) => {
-    const isRemoving = currentUserHasVibed;
-    const newCount = isRemoving ? Math.max(0, vibeCount - 1) : vibeCount + 1;
-    setLocalHasVibed(!isRemoving);
-    setVibeCount(newCount);
-    try {
-      const result = await toggleVibe(post.id, 'post', vibe);
-      setLocalHasVibed(result.vibed);
-      setVibeCount(result.newCount);
-      if (result.recentVibes) setLocalRecentVibes(result.recentVibes);
-    } catch {
-      setLocalHasVibed(currentUserHasVibed);
-      setVibeCount(vibeCount);
-    }
-  };
 
   const loadComments = useCallback(async () => {
     setIsLoadingComments(true);
@@ -613,7 +606,7 @@ export function PostDetailClient({
           <VibePicker
             vibeCount={vibeCount}
             recentVibes={currentRecentVibes}
-            vibeDetails={post.vibeDetails}
+            vibeDetails={currentVibeDetails}
             hasVibed={currentUserHasVibed}
             isAuthor={isOwnPost}
             onVibeSelect={handleVibeSelection}

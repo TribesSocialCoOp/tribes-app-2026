@@ -4,7 +4,7 @@ import { requireAuth, requireVerifiedEmail, getCurrentUserId, trackContribution 
 import { withPublicErrors } from './error-utils';
 import type { TribePost, MoodStreamPost, ReportedPost, Tribe, StoryTopic, SourceArticle, DiscussionComment, Ring, CommunicationItem, PaginatedResult } from '@/lib/types';
 import type { PostFormValues } from '@/components/dialogs/create-post-dialog';
-import { postLimiter, commentLimiter, rsvpLimiter } from '@/lib/auth/rate-limit';
+import { postLimiter, commentLimiter, rsvpLimiter, vibeLimiter } from '@/lib/auth/rate-limit';
 import { slugify } from '@/lib/utils/slugify';
 
 /**
@@ -1212,7 +1212,7 @@ export async function promotePostToMoods(postId: string, moodSlugs: string[]): P
 // ======== VIBES ========
 export async function toggleVibe(targetId: string, targetType: 'post' | 'comment', emoji: string = '❤️') {
   const userId = await requireAuth();
-  await rsvpLimiter.check(userId);
+  await vibeLimiter.check(userId);
   const { toggleVibe: fn } = await import('@/lib/services/post-service');
   const result = await fn(userId, targetId, targetType, emoji);
   // Track vibe contribution (only when adding, not removing)
@@ -2205,6 +2205,44 @@ export async function searchMentionableUsers(query: string): Promise<Array<{
   }
 
   return result;
+}
+
+export async function reconcileVibeCounts(): Promise<{ postsReconciled: number; commentsReconciled: number }> {
+  const { requireAdmin } = await import('./shared');
+  await requireAdmin();
+  const { db } = await import('@/db');
+  const { sql } = await import('drizzle-orm');
+  
+  const postRes = await db.execute(sql`
+    WITH post_counts AS (
+      SELECT p.id, COALESCE(COUNT(v.id), 0)::int as actual_count
+      FROM posts p
+      LEFT JOIN vibes v ON v.target_id = p.id AND v.target_type = 'post'
+      GROUP BY p.id
+    )
+    UPDATE posts p
+    SET vibe_count = pc.actual_count
+    FROM post_counts pc
+    WHERE p.id = pc.id AND p.vibe_count != pc.actual_count
+  `);
+  
+  const commentRes = await db.execute(sql`
+    WITH comment_counts AS (
+      SELECT c.id, COALESCE(COUNT(v.id), 0)::int as actual_count
+      FROM comments c
+      LEFT JOIN vibes v ON v.target_id = c.id AND v.target_type = 'comment'
+      GROUP BY c.id
+    )
+    UPDATE comments c
+    SET vibe_count = cc.actual_count
+    FROM comment_counts cc
+    WHERE c.id = cc.id AND c.vibe_count != cc.actual_count
+  `);
+
+  return {
+    postsReconciled: postRes.rowCount ?? 0,
+    commentsReconciled: commentRes.rowCount ?? 0,
+  };
 }
 
 

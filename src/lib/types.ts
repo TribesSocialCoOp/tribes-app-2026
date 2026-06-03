@@ -56,6 +56,9 @@ export type AccessTier = "spectator" | "attendee" | "vip";
 // Concentric Rings
 export type Ring = "journal" | "inner_circle" | "my_people" | "tribes";
 
+/** Individual vibe/reaction detail — who reacted with which emoji. */
+export type VibeDetail = { emoji: string; userId: string; userName: string };
+
 // Link preview metadata (unfurled at compose time)
 export interface LinkPreviewData {
   url: string;
@@ -166,7 +169,7 @@ export interface TribePost {
   dataAiHintImage?: string;
   vibes?: number;
   recentVibes?: { emoji: string; count: number }[];
-  vibeDetails?: { emoji: string; userName: string; userId: string }[];
+  vibeDetails?: VibeDetail[];
   hasVibed?: boolean;
   comments?: number;
   commentsData?: DiscussionComment[]; // Array of root-level comments
@@ -216,7 +219,7 @@ export interface DiscussionComment {
   timestamp: Date;
   vibes?: number;
   recentVibes?: { emoji: string; count: number }[];
-  vibeDetails?: { emoji: string; userName: string; userId: string }[];
+  vibeDetails?: VibeDetail[];
   hasVibed?: boolean;
   replies?: DiscussionComment[];
   dataAiHintAvatar?: string;
@@ -251,6 +254,7 @@ export interface PendingMember {
 
 export interface MoodStreamPost {
   id: string;
+  authorId: string;
   title?: string;
   content: string;
   author: string;
@@ -265,7 +269,7 @@ export interface MoodStreamPost {
   timestamp: Date;
   vibes?: number;
   recentVibes?: { emoji: string; count: number }[];
-  vibeDetails?: { emoji: string; userName: string; userId: string }[];
+  vibeDetails?: VibeDetail[];
   hasVibed?: boolean;
   comments?: number;
   promotedByName?: string;
@@ -359,7 +363,7 @@ export interface CommunicationItem {
   timestamp: Date;
   vibes?: number;
   recentVibes?: { emoji: string; count: number }[];
-  vibeDetails?: { emoji: string; userName: string; userId: string }[];
+  vibeDetails?: VibeDetail[];
   hasVibed?: boolean;
   comments?: number;
   dataAiHint?: string;

@@ -1,6 +1,6 @@
 {
   "name": "tribes-app",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack --port 9002 --hostname 0.0.0.0",

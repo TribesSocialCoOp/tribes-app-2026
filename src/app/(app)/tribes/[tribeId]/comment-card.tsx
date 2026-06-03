@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useOptimisticVibes } from '@/hooks/use-optimistic-vibes';
+import { useUser } from '@/hooks/use-user';
 import { format } from 'date-fns';
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -35,7 +37,7 @@ import {
 
 import { cn, countAllComments } from '@/lib/utils';
 
-import { toggleVibe, editComment, deleteOwnComment } from '@/lib/actions/content-actions';
+import { editComment, deleteOwnComment } from '@/lib/actions/content-actions';
 import { useToast } from '@/hooks/use-toast';
 import type { DiscussionComment } from '@/lib/types';
 import type { CommentContext } from './tribe-detail-context';
@@ -66,27 +68,39 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   onCommentAdded, isPublic = true,
 }) => {
   const { toast } = useToast();
+  const { user } = useUser();
   const isCurrentUserAuthor = comment.authorId === currentUserId;
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
-
 
   const isPostAuthor = !!(currentUserId && postAuthorId && currentUserId === postAuthorId);
   // Comment author or post author can see who reacted (tooltip/drawer)
   const canSeeReactors = isCurrentUserAuthor || isPostAuthor;
 
-  // ── Vibes ──
-  // Only use the user's known emoji from vibeDetails (available when viewer is
-  // the comment author or the post author). Otherwise fall back to null.
+  // ── Vibes (consolidated hook) ──
   const userVibe = comment.vibeDetails?.find(v => v.userId === currentUserId)?.emoji ?? null;
-  const [selectedVibe, setSelectedVibe] = useState<string | null>(userVibe);
-  const [vibeCount, setVibeCount] = useState(comment.vibes || 0);
-  const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string; count: number }[]>(comment.recentVibes || []);
+  const {
+    vibeCount,
+    recentVibes: localRecentVibes,
+    vibeDetails: currentVibeDetails,
+    selectedVibe,
+    handleVibeSelection,
+  } = useOptimisticVibes({
+    targetId: comment.id,
+    targetType: 'comment',
+    serverVibeCount: comment.vibes || 0,
+    serverRecentVibes: comment.recentVibes || [],
+    serverVibeDetails: comment.vibeDetails || [],
+    serverHasVibed: false,
+    serverSelectedVibe: userVibe,
+    canSeeReactors: canSeeReactors,
+    currentUserId,
+    currentUserName: user?.name,
+  });
 
   // ── Edit state ──
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState(comment.content);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
-
 
   // ── Collapsible thread state ──
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -172,28 +186,6 @@ export const CommentCard: React.FC<CommentCardProps> = ({
       });
     } finally {
       setIsDeletingComment(false);
-    }
-  };
-
-  const handleVibeSelection = async (vibe: string) => {
-    const wasSelected = selectedVibe === vibe;
-    const prevCount = vibeCount;
-    const prevRecent = localRecentVibes;
-
-    setSelectedVibe(wasSelected ? null : vibe);
-    setVibeCount(wasSelected ? prevCount - 1 : prevCount + 1);
-
-    try {
-      const result = await toggleVibe(comment.id, 'comment', vibe);
-      setSelectedVibe(result.vibed ? vibe : null);
-      setVibeCount(result.newCount ?? vibeCount);
-      if (result.recentVibes) {
-        setLocalRecentVibes(result.recentVibes);
-      }
-    } catch {
-      setSelectedVibe(wasSelected ? vibe : null);
-      setVibeCount(prevCount);
-      setLocalRecentVibes(prevRecent);
     }
   };
 
@@ -381,7 +373,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
             <VibePicker
               vibeCount={vibeCount}
               recentVibes={localRecentVibes}
-              vibeDetails={comment.vibeDetails}
+              vibeDetails={currentVibeDetails}
               hasVibed={!!selectedVibe}
               isAuthor={canSeeReactors}
               onVibeSelect={handleVibeSelection}

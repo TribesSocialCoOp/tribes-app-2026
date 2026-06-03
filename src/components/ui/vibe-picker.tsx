@@ -11,7 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Smile, MoreHorizontal } from 'lucide-react';
+import { Smile, MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VIBE_EMOTICONS } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -59,10 +59,10 @@ export function VibePicker({
 }: VibePickerProps) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [authorDrawerOpen, setAuthorDrawerOpen] = useState(false);
   const [showFullPicker, setShowFullPicker] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [pickerHeight, setPickerHeight] = useState(420);
+  const [drawerContentMode, setDrawerContentMode] = useState<'details' | 'picker'>('details');
   const isMobile = useIsMobile();
 
   // Track visual viewport height to dynamically size the emoji picker
@@ -113,13 +113,13 @@ export function VibePicker({
 
   // Detect dark mode on first open
   React.useEffect(() => {
-    if (popoverOpen || drawerOpen || authorDrawerOpen) {
+    if (popoverOpen || drawerOpen) {
       setIsDark(
         window.matchMedia('(prefers-color-scheme: dark)').matches ||
         document.documentElement.classList.contains('dark')
       );
     }
-  }, [popoverOpen, drawerOpen, authorDrawerOpen]);
+  }, [popoverOpen, drawerOpen]);
 
   const handleSelect = (emoji: string) => {
     onVibeSelect(emoji);
@@ -135,6 +135,7 @@ export function VibePicker({
   const handleMoreClick = () => {
     if (isMobile) {
       // Close the floating popover, open a proper drawer
+      setDrawerContentMode('picker');
       setPopoverOpen(false);
       setDrawerOpen(true);
     } else {
@@ -178,7 +179,10 @@ export function VibePicker({
       <>
         {isMobile ? (
           // Mobile: tap opens author drawer
-          <div onClick={() => setAuthorDrawerOpen(true)}>
+          <div onClick={() => {
+            setDrawerContentMode('details');
+            setDrawerOpen(true);
+          }}>
             {triggerButton}
           </div>
         ) : (
@@ -223,7 +227,7 @@ export function VibePicker({
                       onClick={() => setShowFullPicker(true)}
                       aria-label="More emoji"
                     >
-                      <MoreHorizontal className="h-4 w-4" />
+                      <MoreVertical className="h-4 w-4" />
                     </Button>
                   </div>
                 </div>
@@ -270,49 +274,99 @@ export function VibePicker({
           </Popover>
         )}
 
-        {/* Author Reaction Details Drawer (mobile only) */}
-        <Drawer open={authorDrawerOpen} onOpenChange={setAuthorDrawerOpen}>
-          <DrawerContent className="px-4 pb-safe max-h-[85vh]">
-            <DrawerTitle className="text-center font-semibold text-base py-3 border-b">
-              Reactions
-            </DrawerTitle>
-            
-            {/* Quick-react bar */}
-            <div className="py-4 border-b">
-              <p className="text-xs text-muted-foreground mb-2 text-center">Add a reaction</p>
-              <div className="flex space-x-2 justify-center">
-                {VIBE_EMOTICONS.map((emo) => (
-                  <Button
-                    key={emo}
-                    variant="ghost"
-                    size="icon"
-                    className={cn("text-2xl p-2 h-11 w-11 rounded-full", hasVibed && "bg-primary/10 border border-primary/20")}
-                    onClick={() => {
-                      handleSelect(emo);
-                      setAuthorDrawerOpen(false);
-                    }}
-                  >
-                    {emo}
-                  </Button>
-                ))}
-              </div>
-            </div>
-
-            {/* Reaction list */}
-            <div className="overflow-y-auto py-4 space-y-3 max-h-[40vh]">
-              {vibeDetails && vibeDetails.length > 0 ? (
-                vibeDetails.map((v, i) => (
-                  <div key={i} className="flex items-center justify-between py-1 px-2 hover:bg-muted/40 rounded-lg">
-                    <span className="text-sm font-medium text-foreground">{v.userName}</span>
-                    <span className="text-xl">{v.emoji}</span>
+        {/*
+          Author-mode Drawer (mobile only)
+          ─────────────────────────────────
+          USE CASE: Content authors tapping the vibe button see a combined drawer
+          with two modes (toggled via `drawerContentMode`):
+            • 'details' — Shows the list of who reacted, plus a quick-react bar
+                          and a "More" button to switch to the picker.
+            • 'picker'  — Full emoji grid for searching/selecting any emoji.
+          This is intentionally a separate Drawer from the standard-mode picker
+          below because it serves a richer, author-specific UX (reactor identity
+          + quick-react + full picker in one surface). Do not consolidate.
+        */}
+        {isMobile && (
+          <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
+            <DrawerContent className={cn("pb-safe max-h-[85vh]", drawerContentMode === 'picker' ? "px-0" : "px-4")}>
+              {drawerContentMode === 'picker' ? (
+                <>
+                  <DrawerTitle className="sr-only">Choose an emoji</DrawerTitle>
+                  <div className="flex justify-center w-full px-2 py-3">
+                    <EmojiPicker
+                      onEmojiClick={handleFullPickerSelect}
+                      theme={isDark ? Theme.DARK : Theme.LIGHT}
+                      emojiStyle={EmojiStyle.NATIVE}
+                      height={pickerHeight}
+                      width="100%"
+                      searchPlaceholder="Search emoji..."
+                      previewConfig={{ showPreview: false }}
+                      lazyLoadEmojis
+                      autoFocusSearch={false}
+                    />
                   </div>
-                ))
+                  <Button 
+                    variant="link" 
+                    size="sm" 
+                    className="w-full text-xs mb-2 text-muted-foreground"
+                    onClick={() => setDrawerContentMode('details')}
+                  >
+                    Back to reactions list
+                  </Button>
+                </>
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">No reactions yet</p>
+                <>
+                  <DrawerTitle className="text-center font-semibold text-base py-3 border-b">
+                    Reactions
+                  </DrawerTitle>
+                  
+                  {/* Quick-react bar */}
+                  <div className="py-4 border-b">
+                    <p className="text-xs text-muted-foreground mb-2 text-center">Add a reaction</p>
+                    <div className="flex space-x-2 justify-center items-center">
+                      {VIBE_EMOTICONS.map((emo) => (
+                        <Button
+                          key={emo}
+                          variant="ghost"
+                          size="icon"
+                          className={cn("text-2xl p-2 h-11 w-11 rounded-full", hasVibed && "bg-primary/10 border border-primary/20")}
+                          onClick={() => handleSelect(emo)}
+                        >
+                          {emo}
+                        </Button>
+                      ))}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-xs p-2 h-11 w-11 rounded-full hover:bg-accent text-muted-foreground flex items-center justify-center"
+                        onClick={() => {
+                          setDrawerContentMode('picker');
+                        }}
+                        aria-label="More emoji"
+                      >
+                        <MoreVertical className="h-6 w-6" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Reaction list */}
+                  <div className="overflow-y-auto py-4 space-y-3 max-h-[40vh]">
+                    {vibeDetails && vibeDetails.length > 0 ? (
+                      vibeDetails.map((v, i) => (
+                        <div key={i} className="flex items-center justify-between py-1 px-2 hover:bg-muted/40 rounded-lg">
+                          <span className="text-sm font-medium text-foreground">{v.userName}</span>
+                          <span className="text-xl">{v.emoji}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No reactions yet</p>
+                    )}
+                  </div>
+                </>
               )}
-            </div>
-          </DrawerContent>
-        </Drawer>
+            </DrawerContent>
+          </Drawer>
+        )}
       </>
     );
   }
@@ -366,14 +420,22 @@ export function VibePicker({
                 onClick={handleMoreClick}
                 aria-label="More emoji"
               >
-                <MoreHorizontal className="h-5 w-5" />
+                <MoreVertical className="h-5 w-5" />
               </Button>
             </div>
           )}
         </PopoverContent>
       </Popover>
 
-      {/* ── Full emoji picker drawer (mobile only) ── */}
+      {/*
+        Standard-mode Drawer (mobile only)
+        ───────────────────────────────────
+        USE CASE: Non-author users (or authors with zero reactions) tapping
+        "More" on the quick-pick popover get a simple full-width emoji picker
+        drawer. No reactor list, no mode toggle — just the grid.
+        This is intentionally a separate Drawer from the author-mode drawer
+        above because it serves a simpler, single-purpose UX. Do not consolidate.
+      */}
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen}>
         <DrawerContent className="px-0 pb-safe">
           <DrawerTitle className="sr-only">Choose an emoji</DrawerTitle>

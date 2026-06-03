@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useOptimisticVibes } from '@/hooks/use-optimistic-vibes';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { profilePath } from '@/lib/utils/paths';
@@ -22,7 +23,7 @@ import { cn, countAllComments } from '@/lib/utils';
 import { ThreadCollapseHeader } from '@/components/content/thread-collapse-header';
 import { useTimeSince } from '@/hooks/use-time-since';
 import type { MoodStreamPost, DiscussionComment } from '@/lib/types';
-import { getMoodStreamPosts, toggleVibe, createComment, getCommentsForPost } from '@/lib/actions/content-actions';
+import { getMoodStreamPosts, createComment, getCommentsForPost } from '@/lib/actions/content-actions';
 import { useUser } from '@/hooks/use-user';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -70,13 +71,32 @@ const CommentInline: React.FC<{ comment: DiscussionComment; level?: number }> = 
 
 const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
   const router = useRouter();
-  const { role } = useUser();
+  const { role, user } = useUser();
+  const currentUserId = user?.id;
+  const isCurrentUserAuthor = !!(currentUserId && currentUserId === post.authorId);
   const { toast } = useToast();
   const isLoggedIn = !!role;
   const displayTime = useTimeSince(post.timestamp);
-  const [localVibesCount, setLocalVibesCount] = useState<number | null>(null);
-  const [localRecentVibes, setLocalRecentVibes] = useState<{ emoji: string, count: number }[] | null>(null);
-  const [localHasVibed, setLocalHasVibed] = useState<boolean | null>(null);
+
+  // ── Optimistic vibes (consolidated hook) ──
+  const {
+    vibeCount: currentVibesCount,
+    recentVibes: currentRecentVibes,
+    vibeDetails: currentVibeDetails,
+    hasVibed: currentUserHasVibed,
+    handleVibeSelection,
+  } = useOptimisticVibes({
+    targetId: post.id,
+    targetType: 'post',
+    serverVibeCount: post.vibes || 0,
+    serverRecentVibes: post.recentVibes || [],
+    serverVibeDetails: post.vibeDetails || [],
+    serverHasVibed: post.hasVibed || false,
+    serverSelectedVibe: null,
+    canSeeReactors: isCurrentUserAuthor,
+    currentUserId,
+    currentUserName: user?.name,
+  });
 
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState('');
@@ -92,34 +112,6 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
   // Double-tap hook is not used here as collapse button is always visible
 
   const replyRef = useRef<HTMLDivElement>(null);
-
-  const currentVibesCount = localVibesCount !== null ? localVibesCount : (post.vibes || 0);
-  const currentRecentVibes = localRecentVibes !== null ? localRecentVibes : (post.recentVibes || []);
-  const currentUserHasVibed = localHasVibed !== null ? localHasVibed : (post.hasVibed || false);
-
-  const handleVibeSelection = async (vibe: string) => {
-    if (!isLoggedIn) return;
-    
-    // Optimistic update
-    const isRemoving = currentUserHasVibed;
-    const newCount = isRemoving ? Math.max(0, currentVibesCount - 1) : currentVibesCount + 1;
-    
-    setLocalHasVibed(!isRemoving);
-    setLocalVibesCount(newCount);
-
-    try {
-      const result = await toggleVibe(post.id, 'post', vibe);
-      setLocalHasVibed(result.vibed);
-      setLocalVibesCount(result.newCount);
-      if (result.recentVibes) {
-        setLocalRecentVibes(result.recentVibes);
-      }
-    } catch {
-      // Revert optimistic update on failure
-      setLocalHasVibed(currentUserHasVibed);
-      setLocalVibesCount(currentVibesCount);
-    }
-  };
 
   const loadComments = async () => {
     setIsLoadingComments(true);
@@ -224,8 +216,9 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
               <VibePicker
                 vibeCount={currentVibesCount}
                 recentVibes={currentRecentVibes}
-                vibeDetails={post.vibeDetails}
+                vibeDetails={currentVibeDetails}
                 hasVibed={currentUserHasVibed}
+                isAuthor={isCurrentUserAuthor}
                 onVibeSelect={handleVibeSelection}
               />
             ) : (

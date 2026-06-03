@@ -249,6 +249,12 @@ export const rsvpLimiter = new RateLimiter({
   maxRequests: 10,
 });
 
+export const vibeLimiter = new RateLimiter({
+  prefix: 'vibe',
+  windowMs: 60 * 1000,        // 1 minute
+  maxRequests: 30,             // Allows rapid reactions but blocks automated spam
+});
+
 export const contributionLimiter = new RateLimiter({
   prefix: 'contribution',
   windowMs: 60 * 60 * 1000,  // 1 hour

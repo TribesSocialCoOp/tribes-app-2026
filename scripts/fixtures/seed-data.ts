@@ -177,6 +177,7 @@ export const initialSampleTribePosts: TribePost[] = [
 export const allMoodStreamPosts: MoodStreamPost[] = [
   {
     id: "msp1",
+    authorId: "dustin",
     title: "The perfect lofi beat for a rainy day",
     content: "Just found this amazing lofi hip hop mix on YouTube.",
     author: "ChillCoder",
