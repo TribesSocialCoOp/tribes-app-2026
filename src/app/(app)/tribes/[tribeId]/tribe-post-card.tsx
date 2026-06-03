@@ -94,17 +94,17 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   const [showComments, setShowComments] = useState(true);
   const [isBodyCollapsed, setIsBodyCollapsed] = useState(false);
 
-  // Mobile: double-tap avatar to toggle body collapse
-  const handleAvatarDoubleTap = useDoubleTap({
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Mobile: double-tap ⋮ menu button to toggle body collapse
+  const handleMenuDoubleTap = useDoubleTap({
     onDoubleTap: useCallback(() => {
       setIsBodyCollapsed(prev => !prev);
       triggerHaptic(ImpactStyle.Light);
     }, []),
     onSingleTap: useCallback(() => {
-      if (!post.authorIsAlias) {
-        router.push(profilePath(post.authorId, post.authorSlug));
-      }
-    }, [post.authorIsAlias, post.authorId, post.authorSlug, router]),
+      setIsMenuOpen(true);
+    }, []),
   });
   const [isBlockDialogOpen, setIsBlockDialogOpen] = useState(false);
   const [isAdminDeleteDialogOpen, setIsAdminDeleteDialogOpen] = useState(false);
@@ -314,18 +314,8 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
       <div>
         <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
           <div className="flex items-start space-x-3">
-            {/* Avatar — on mobile: double-tap toggles body collapse, single-tap navigates to profile */}
-            {isMobile ? (
-              <div onClick={handleAvatarDoubleTap} className="shrink-0">
-                <UserAvatar
-                  user={{ name: post.authorName, avatar: post.authorAvatar }}
-                  className={cn("h-10 w-10 cursor-pointer hover:ring-2 transition-all", isBodyCollapsed ? "hover:ring-primary/50 ring-1 ring-primary/20" : "hover:ring-primary/30")}
-                  fallback={post.authorAvatarFallback}
-                  dataAiHint={post.dataAiHintAvatar || "avatar"}
-                />
-              </div>
-            ) : !post.authorIsAlias ? (
-              <Link href={profilePath(post.authorId, post.authorSlug)}>
+            {!post.authorIsAlias ? (
+              <Link href={profilePath(post.authorId, post.authorSlug)} className="shrink-0">
                 <UserAvatar
                   user={{ name: post.authorName, avatar: post.authorAvatar }}
                   className="h-10 w-10 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all"
@@ -336,7 +326,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
             ) : (
               <UserAvatar
                 user={{ name: post.authorName, avatar: post.authorAvatar }}
-                className="h-10 w-10"
+                className="h-10 w-10 shrink-0"
                 fallback={post.authorAvatarFallback}
                 dataAiHint={post.dataAiHintAvatar || "avatar"}
               />
@@ -398,9 +388,14 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                 >
                   <Link2 className="h-4 w-4" />
                 </Link>
-                <ResponsiveMenu>
+                <ResponsiveMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
                 <ResponsiveMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 touch-target-44 text-muted-foreground">
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-8 w-8 touch-target-44 text-muted-foreground"
+                    onClick={isMobile ? handleMenuDoubleTap : undefined}
+                  >
                     <MoreVertical className="h-4 w-4" />
                   </Button>
                 </ResponsiveMenuTrigger>
@@ -411,6 +406,20 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                     toast({ title: 'Link copied', description: 'Post link copied to clipboard.' });
                   }}>
                     <Link2 className="mr-2 h-4 w-4" /> Copy Link
+                  </ResponsiveMenuItem>
+                  <ResponsiveMenuItem onClick={() => {
+                    setIsBodyCollapsed(!isBodyCollapsed);
+                    triggerHaptic(ImpactStyle.Light);
+                  }}>
+                    {isBodyCollapsed ? (
+                      <>
+                        <ChevronDown className="mr-2 h-4 w-4" /> Expand Post
+                      </>
+                    ) : (
+                      <>
+                        <ChevronRight className="mr-2 h-4 w-4" /> Collapse Post
+                      </>
+                    )}
                   </ResponsiveMenuItem>
                   <ResponsiveMenuSeparator />
                   {isTribeSpeaker && (

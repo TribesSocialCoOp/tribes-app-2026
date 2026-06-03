@@ -13,6 +13,7 @@ import { EmailVerificationBanner } from "@/components/providers/email-verificati
 import { VersionGuard } from "@/components/providers/version-guard";
 
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
+import { JumpToTop } from "@/components/layout/jump-to-top";
 import { NativeInitializer } from "@/components/providers/native-initializer";
 import { OverlayScrollGuard } from "@/components/providers/overlay-scroll-guard";
 import { PullToRefresh } from "@/components/layout/pull-to-refresh";
@@ -68,7 +69,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       _tribesSentinel: true,
       as: '/your-comms',
       url: '/your-comms',
-    };
+      };
     History.prototype.replaceState.call(window.history, sentinelState, '', '/your-comms');
     History.prototype.pushState.call(window.history, null, '', currentUrl);
 
@@ -104,6 +105,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </SidebarInset>
 
               <MobileTabBar />
+              <JumpToTop />
             </SidebarProvider>
           </WebSocketProvider>
         </KeySyncProvider>

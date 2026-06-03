@@ -16,7 +16,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageSquareText, Smile, Filter as FilterIcon, Settings2, Loader2, Send, Megaphone, ChevronDown, ChevronRight } from 'lucide-react';
-import { useDoubleTap } from '@/hooks/use-double-tap';
 import { LoadMoreButton } from '@/components/ui/load-more-button';
 import { moodsData } from '@/lib/moods-data'; 
 import { cn, countAllComments } from '@/lib/utils';
@@ -90,12 +89,7 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
   const [commentCount, setCommentCount] = useState(post.comments ?? 0);
   const [isBodyCollapsed, setIsBodyCollapsed] = useState(false);
 
-  // Mobile: double-tap avatar to toggle body collapse
-  const handleAvatarDoubleTap = useDoubleTap({
-    onDoubleTap: useCallback(() => {
-      setIsBodyCollapsed(prev => !prev);
-    }, []),
-  });
+  // Double-tap hook is not used here as collapse button is always visible
 
   const replyRef = useRef<HTMLDivElement>(null);
 
@@ -170,20 +164,10 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
     <Card className="overflow-visible shadow-none sm:shadow-md hover:sm:shadow-lg transition-shadow duration-200">
       <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
         <div className="flex items-start space-x-3">
-          {/* Avatar — on mobile: double-tap toggles body collapse */}
-          {isMobile ? (
-            <div onClick={handleAvatarDoubleTap} className="shrink-0">
-              <Avatar className={cn("h-10 w-10 cursor-pointer transition-all", isBodyCollapsed ? "ring-1 ring-primary/20" : "")}>
-                {post.authorAvatarSrc && <AvatarImage src={post.authorAvatarSrc} alt={post.author} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
-                <AvatarFallback>{post.authorAvatarFallback || post.author.substring(0,2)}</AvatarFallback>
-              </Avatar>
-            </div>
-          ) : (
-            <Avatar className="h-10 w-10">
-              {post.authorAvatarSrc && <AvatarImage src={post.authorAvatarSrc} alt={post.author} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
-              <AvatarFallback>{post.authorAvatarFallback || post.author.substring(0,2)}</AvatarFallback>
-            </Avatar>
-          )}
+          <Avatar className="h-10 w-10 shrink-0">
+            {post.authorAvatarSrc && <AvatarImage src={post.authorAvatarSrc} alt={post.author} data-ai-hint={post.dataAiHintAvatar || "avatar"} />}
+            <AvatarFallback>{post.authorAvatarFallback || post.author.substring(0,2)}</AvatarFallback>
+          </Avatar>
           <div className="flex-1">
             <CardTitle className="text-sm font-semibold leading-tight tracking-normal">
                 {post.author} {post.tribeName && <span className="text-xs text-muted-foreground font-normal">in <Link href={`/tribes/${post.tribeId}`} className="font-medium text-primary hover:underline">{post.tribeName}</Link></span>}
@@ -197,10 +181,10 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
               )}
             </CardDescription>
           </div>
-          {/* Desktop: chevron to collapse/expand post body */}
+          {/* Chevron to collapse/expand post body (always visible) */}
           <button
             onClick={() => setIsBodyCollapsed(!isBodyCollapsed)}
-            className="hidden md:flex p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-muted transition-colors items-center justify-center ml-auto"
+            className="flex p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-muted transition-colors items-center justify-center ml-auto"
             title={isBodyCollapsed ? "Expand post" : "Collapse post"}
           >
             {isBodyCollapsed ? (

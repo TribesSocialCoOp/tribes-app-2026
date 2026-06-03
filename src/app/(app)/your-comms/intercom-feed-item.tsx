@@ -4,6 +4,8 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDoubleTap } from '@/hooks/use-double-tap';
 import { useRouter } from 'next/navigation';
+import { triggerHaptic } from '@/lib/capacitor/haptics';
+import { ImpactStyle } from '@capacitor/haptics';
 import Link from 'next/link';
 import { profilePath } from '@/lib/utils/paths';
 import Image from 'next/image';
@@ -78,16 +80,17 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const [isAdminDeleteDialogOpen, setIsAdminDeleteDialogOpen] = useState(false);
   const [isBodyCollapsed, setIsBodyCollapsed] = useState(false);
 
-  // Mobile: double-tap avatar to toggle body collapse
-  const handleAvatarDoubleTap = useDoubleTap({
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Mobile: double-tap ⋮ menu button to toggle body collapse
+  const handleMenuDoubleTap = useDoubleTap({
     onDoubleTap: useCallback(() => {
       setIsBodyCollapsed(prev => !prev);
+      triggerHaptic(ImpactStyle.Light);
     }, []),
     onSingleTap: useCallback(() => {
-      if (!item.authorIsAlias && item.authorId) {
-        router.push(profilePath(item.authorId!, item.authorSlug));
-      }
-    }, [item.authorIsAlias, item.authorId, item.authorSlug, router]),
+      setIsMenuOpen(true);
+    }, []),
   });
 
 
@@ -225,18 +228,8 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
     >
       <CardHeader className="p-3 sm:p-4 pb-2 sm:pb-3">
         <div className="flex items-start space-x-3">
-          {/* Avatar — on mobile: double-tap toggles body collapse, single-tap navigates to profile */}
-          {isMobile ? (
-            <div onClick={handleAvatarDoubleTap} className="shrink-0">
-              <UserAvatar 
-                user={{ name: item.sender || item.tribeName, avatar: item.avatarSrc }} 
-                className={cn("h-10 w-10 cursor-pointer hover:ring-2 transition-all", isBodyCollapsed ? "hover:ring-primary/50 ring-1 ring-primary/20" : "hover:ring-primary/30")} 
-                fallback={item.avatarFallback || "N/A"}
-                dataAiHint={item.dataAiHint || "avatar"}
-              />
-            </div>
-          ) : !item.authorIsAlias && item.authorId ? (
-            <Link href={profilePath(item.authorId!, item.authorSlug)}>
+          {!item.authorIsAlias && item.authorId ? (
+            <Link href={profilePath(item.authorId!, item.authorSlug)} className="shrink-0">
               <UserAvatar 
                 user={{ name: item.sender || item.tribeName, avatar: item.avatarSrc }} 
                 className="h-10 w-10 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all" 
@@ -247,7 +240,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
           ) : (
             <UserAvatar 
               user={{ name: item.sender || item.tribeName, avatar: item.avatarSrc }} 
-              className="h-10 w-10" 
+              className="h-10 w-10 shrink-0" 
               fallback={item.avatarFallback || "N/A"}
               dataAiHint={item.dataAiHint || "avatar"}
             />
@@ -288,9 +281,14 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
                 <Link href={buildPostPath(item.id, item.slug, item.tribeSlug)} className="p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-muted transition-colors" title="View Post">
                   <Link2 className="h-4 w-4" />
                 </Link>
-                <ResponsiveMenu>
+                <ResponsiveMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
                   <ResponsiveMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 touch-target-44 text-muted-foreground -mr-2">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 touch-target-44 text-muted-foreground -mr-2"
+                      onClick={isMobile ? handleMenuDoubleTap : undefined}
+                    >
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </ResponsiveMenuTrigger>
@@ -302,6 +300,20 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
                   }}>
                     <Link2 className="mr-2 h-4 w-4" /> Copy Link
                   </ResponsiveMenuItem>
+                  <ResponsiveMenuItem onClick={() => {
+                      setIsBodyCollapsed(!isBodyCollapsed);
+                      triggerHaptic(ImpactStyle.Light);
+                    }}>
+                      {isBodyCollapsed ? (
+                        <>
+                          <ChevronDown className="mr-2 h-4 w-4" /> Expand Post
+                        </>
+                      ) : (
+                        <>
+                          <ChevronRight className="mr-2 h-4 w-4" /> Collapse Post
+                        </>
+                      )}
+                    </ResponsiveMenuItem>
                   <ResponsiveMenuSeparator />
                   {isTribeSpeaker && item.type === 'ring-post' && item.tribeId && (
                     <>
@@ -377,7 +389,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
           {/* Desktop: chevron to collapse/expand post body */}
           {isPost && (
             <button
-              onClick={() => setIsBodyCollapsed(!isBodyCollapsed)}
+              onClick={() => { setIsBodyCollapsed(!isBodyCollapsed); triggerHaptic(ImpactStyle.Light); }}
               className="hidden md:flex p-1.5 text-muted-foreground hover:text-primary rounded-md hover:bg-muted transition-colors items-center justify-center"
               title={isBodyCollapsed ? "Expand post" : "Collapse post"}
             >

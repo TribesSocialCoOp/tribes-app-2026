@@ -35,7 +35,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { UserRole } from "@/lib/types";
 import { useUser } from "@/hooks/use-user";
-import { scrollMainToTop } from "@/lib/utils/scroll-utils";
+
 
 const navItems: { href: string; icon: React.ElementType; label: string; tooltip: string; roles?: UserRole[] }[] = [
   { href: "/your-comms", icon: Rss, label: "Feed", tooltip: "Your Feed" },
@@ -69,16 +69,9 @@ export function AppSidebar() {
     const id = pathname.split('/')[2];
     composeHref = `/tribes/${id}?compose=true`;
   }
-  const handleLinkClick = (e?: React.MouseEvent, href?: string) => {
+  const handleLinkClick = () => {
     if (isMobile) {
       setOpenMobile(false);
-    }
-    if (e && href) {
-      const isActive = pathname.startsWith(href) && (href === '/' ? pathname === '/' : true);
-      if (isActive) {
-        e.preventDefault();
-        scrollMainToTop();
-      }
     }
   };
 
@@ -159,7 +152,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon" variant="sidebar" side="left" className="border-r">
       <SidebarHeader className="flex items-center justify-between p-3 border-b">
-        <Link href="/your-comms" className="flex items-center gap-2" onClick={(e) => handleLinkClick(e, '/your-comms')}>
+        <Link href="/your-comms" className="flex items-center gap-2" onClick={handleLinkClick}>
           <AppLogo width={32} height={32} />
           <span className="font-semibold text-lg font-mono text-sidebar-foreground group-data-[collapsible=icon]:hidden tracking-normal">
             Tribes
@@ -284,7 +277,7 @@ export function AppSidebar() {
             <SidebarMenuItem key={item.href}>
               <SidebarMenuButton
                 asChild
-                onClick={(e) => handleLinkClick(e, item.href)}
+                onClick={handleLinkClick}
                 isActive={pathname.startsWith(item.href) && (item.href === "/" ? pathname === "/" : true)}
                 tooltip={item.tooltip}
                 className={cn(
@@ -319,7 +312,7 @@ export function AppSidebar() {
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
-                  onClick={(e) => handleLinkClick(e, item.href)}
+                  onClick={handleLinkClick}
                   isActive={pathname.startsWith(item.href)}
                   tooltip={item.tooltip}
                   className={cn(
