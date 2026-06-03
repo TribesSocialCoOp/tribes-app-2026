@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Bell, HeartHandshake, MessageSquareText, Users, ChevronRight, Loader2, FileText, MessageCircle, CheckCheck } from "lucide-react";
+import { Bell, HeartHandshake, MessageSquareText, Users, ChevronRight, Loader2, FileText, MessageCircle, CheckCheck, AtSign, Landmark } from "lucide-react";
 import { format } from 'date-fns';
 import { useIntercom } from './intercom-context';
 import { RecentChats } from '@/components/circles/recent-chats';
@@ -106,6 +106,8 @@ export function IntercomActivityTab() {
   const tribeJoinRequests = activityItems.filter((a: any) => a.type === 'tribe_join_request');
   const tribePosts = activityItems.filter((a: any) => a.type === 'new_tribe_post');
   const newComments = activityItems.filter((a: any) => a.type === 'new_comment');
+  const mentionItems = activityItems.filter((a: any) => a.type === 'mention');
+  const governanceItems = activityItems.filter((a: any) => a.type === 'governance');
 
   return (
     <>
@@ -210,6 +212,40 @@ export function IntercomActivityTab() {
                 key={item.id}
                 item={item}
                 icon={<div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center"><MessageCircle className="h-5 w-5 text-amber-500" /></div>}
+                onRead={markItemRead}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      {mentionItems.length > 0 && (
+        <section>
+          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center">
+            <AtSign className="mr-2 h-5 w-5 text-violet-500" /> Mentions
+          </h3>
+          <div className="space-y-2">
+            {mentionItems.map((item: any) => (
+              <ActivityItemCard
+                key={item.id}
+                item={item}
+                icon={<div className="h-10 w-10 rounded-full bg-violet-100 flex items-center justify-center"><AtSign className="h-5 w-5 text-violet-500" /></div>}
+                onRead={markItemRead}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      {governanceItems.length > 0 && (
+        <section>
+          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center">
+            <Landmark className="mr-2 h-5 w-5 text-teal-500" /> Governance
+          </h3>
+          <div className="space-y-2">
+            {governanceItems.map((item: any) => (
+              <ActivityItemCard
+                key={item.id}
+                item={item}
+                icon={<div className="h-10 w-10 rounded-full bg-teal-100 flex items-center justify-center"><Landmark className="h-5 w-5 text-teal-500" /></div>}
                 onRead={markItemRead}
               />
             ))}

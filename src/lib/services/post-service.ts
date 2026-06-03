@@ -81,6 +81,7 @@ interface CommentVibeEnrichment {
   recentVibes: { emoji: string; count: number }[];
   vibeDetails?: VibeDetail[];
   hasVibed: boolean;
+  selectedVibe?: string | null;
 }
 
 async function getCommentVibeEnrichmentMap(
@@ -114,8 +115,9 @@ async function getCommentVibeEnrichmentMap(
   for (const cid of commentIds) {
     const cVibes = vibesByComment.get(cid) ?? [];
     const hasVibed = viewerUserId ? cVibes.some(v => v.userId === viewerUserId) : false;
-
-
+    const selectedVibe = viewerUserId
+      ? (cVibes.find(v => v.userId === viewerUserId)?.emoji ?? null)
+      : null;
 
     const recentVibes = computeRecentVibes(cVibes);
 
@@ -143,6 +145,7 @@ async function getCommentVibeEnrichmentMap(
     map.set(cid, {
       recentVibes,
       hasVibed,
+      selectedVibe,
       vibeDetails,
     });
   }
@@ -173,6 +176,7 @@ function buildCommentTree(
         recentVibes: enrichment?.recentVibes,
         vibeDetails: enrichment?.vibeDetails,
         hasVibed: enrichment?.hasVibed,
+        selectedVibe: enrichment?.selectedVibe,
         timestamp: c.createdAt ?? new Date(),
         replies: buildCommentTree(allComments, c.id, slugMap, enrichmentMap),
         // E2E encryption fields
@@ -298,6 +302,9 @@ export async function getPostsForTribe(
     
     const postVibes = vibesByPost.get(row.id) ?? [];
     const hasVibed = viewerUserId ? postVibes.some(v => v.userId === viewerUserId) : false;
+    const selectedVibe = viewerUserId
+      ? (postVibes.find(v => v.userId === viewerUserId)?.emoji ?? null)
+      : null;
     
     const recentVibes = computeRecentVibes(postVibes);
 
@@ -321,6 +328,7 @@ export async function getPostsForTribe(
     post.recentVibes = recentVibes;
     post.vibeDetails = vibeDetails;
     post.hasVibed = hasVibed;
+    post.selectedVibe = selectedVibe;
     return post;
   });
 
@@ -461,6 +469,9 @@ export async function getMoodStreamPosts(
 
     const postVibes = vibesByPost.get(postRow.id) ?? [];
     const hasVibed = viewerUserId ? postVibes.some(v => v.userId === viewerUserId) : false;
+    const selectedVibe = viewerUserId
+      ? (postVibes.find(v => v.userId === viewerUserId)?.emoji ?? null)
+      : null;
     
     const recentVibes = computeRecentVibes(postVibes);
 
@@ -490,6 +501,7 @@ export async function getMoodStreamPosts(
       recentVibes,
       vibeDetails,
       hasVibed,
+      selectedVibe,
       comments: postRow.commentCount ?? 0,
       moodTags: tags,
       promotedByName,
@@ -838,11 +850,11 @@ export async function toggleVibe(
         // Decrement count
         if (targetType === 'post') {
           await tx.update(posts).set({
-            vibeCount: sql`MAX(0, ${posts.vibeCount} - 1)`,
+            vibeCount: sql`GREATEST(0, ${posts.vibeCount} - 1)`,
           }).where(eq(posts.id, targetId));
         } else {
           await tx.update(comments).set({
-            vibeCount: sql`MAX(0, ${comments.vibeCount} - 1)`,
+            vibeCount: sql`GREATEST(0, ${comments.vibeCount} - 1)`,
           }).where(eq(comments.id, targetId));
         }
 

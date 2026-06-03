@@ -33,9 +33,15 @@ async function batchFetchVibesData(postIds: string[], viewerUserId: string): Pro
   vibesByPost: Map<string, { emoji: string; count: number }[]>;
   hasVibedByPost: Map<string, boolean>;
   vibeDetailsByPost: Map<string, { emoji: string; userId: string; userName: string }[]>;
+  selectedVibeByPost: Map<string, string | null>;
 }> {
   if (postIds.length === 0) {
-    return { vibesByPost: new Map(), hasVibedByPost: new Map(), vibeDetailsByPost: new Map() };
+    return {
+      vibesByPost: new Map(),
+      hasVibedByPost: new Map(),
+      vibeDetailsByPost: new Map(),
+      selectedVibeByPost: new Map(),
+    };
   }
   
   const allVibes = await db.select({
@@ -52,6 +58,7 @@ async function batchFetchVibesData(postIds: string[], viewerUserId: string): Pro
   const vibesByPost = new Map<string, { emoji: string; count: number }[]>();
   const hasVibedByPost = new Map<string, boolean>();
   const vibeDetailsByPost = new Map<string, { emoji: string; userId: string; userName: string }[]>();
+  const selectedVibeByPost = new Map<string, string | null>();
   
   const rawVibesByPost = new Map<string, typeof allVibes>();
   for (const v of allVibes) {
@@ -62,6 +69,7 @@ async function batchFetchVibesData(postIds: string[], viewerUserId: string): Pro
   for (const postId of postIds) {
     const postVibes = rawVibesByPost.get(postId) ?? [];
     hasVibedByPost.set(postId, postVibes.some(v => v.userId === viewerUserId));
+    selectedVibeByPost.set(postId, postVibes.find(v => v.userId === viewerUserId)?.emoji ?? null);
     
     const emojiCounts = new Map<string, number>();
     for (const v of postVibes) {
@@ -81,7 +89,7 @@ async function batchFetchVibesData(postIds: string[], viewerUserId: string): Pro
     vibeDetailsByPost.set(postId, details);
   }
   
-  return { vibesByPost, hasVibedByPost, vibeDetailsByPost };
+  return { vibesByPost, hasVibedByPost, vibeDetailsByPost, selectedVibeByPost };
 }
 
 /**
@@ -248,6 +256,7 @@ export async function getUnifiedFeed(params: UnifiedFeedParams): Promise<Communi
     if (vibesData.vibesByPost.has(item.id)) {
       item.recentVibes = vibesData.vibesByPost.get(item.id);
       item.hasVibed = vibesData.hasVibedByPost.get(item.id);
+      item.selectedVibe = vibesData.selectedVibeByPost.get(item.id) ?? null;
       
       // vibeDetails: only populate for the post author
       if (userId === item.authorId && vibesData.vibeDetailsByPost.has(item.id)) {

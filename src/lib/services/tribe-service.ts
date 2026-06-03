@@ -393,7 +393,7 @@ export async function leaveTribe(userId: string, tribeId: string): Promise<void>
 
   // Decrement member count
   await db.update(tribes).set({ 
-    memberCount: sql`MAX(0, COALESCE(${tribes.memberCount}, 1) - 1)` 
+    memberCount: sql`GREATEST(0, COALESCE(${tribes.memberCount}, 1) - 1)` 
   }).where(eq(tribes.id, tribeId));
 
   // Revoke the tribe bond

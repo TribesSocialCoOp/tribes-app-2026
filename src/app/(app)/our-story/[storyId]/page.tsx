@@ -1,9 +1,10 @@
 
 "use client";
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useGoBack } from '@/hooks/use-go-back';
 import Link from 'next/link';
+import { useScrollToPost } from '@/hooks/use-scroll-to-post';
 import { profilePath } from '@/lib/utils/paths';
 import Image from 'next/image';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
@@ -106,77 +107,79 @@ const StoryCommentCard: React.FC<CommentCardProps> = ({ comment, storyId, level 
   };
 
   return (
-    <Card className={`shadow-sm ${level > 0 ? 'ml-4 sm:ml-6' : ''} bg-background`}>
-      <CardHeader className="p-3 pb-2">
-        <div className="flex items-start space-x-2">
-          {!comment.authorIsAlias ? (
-            <Link href={profilePath(comment.authorId, comment.authorSlug)}>
-              <Avatar className="h-8 w-8 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all">
+    <Card id={`comment-${comment.id}`} className={`shadow-sm ${level > 0 ? 'ml-4 sm:ml-6' : ''} bg-background`}>
+      <div id={`comment-bubble-${comment.id}`} className="transition-all duration-500 rounded-lg">
+        <CardHeader className="p-3 pb-2">
+          <div className="flex items-start space-x-2">
+            {!comment.authorIsAlias ? (
+              <Link href={profilePath(comment.authorId, comment.authorSlug)}>
+                <Avatar className="h-8 w-8 cursor-pointer hover:ring-2 hover:ring-primary/30 transition-all">
+                  {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} data-ai-hint={comment.dataAiHintAvatar || "avatar"} />}
+                  <AvatarFallback className="text-xs">{comment.authorAvatarFallback}</AvatarFallback>
+                </Avatar>
+              </Link>
+            ) : (
+              <Avatar className="h-8 w-8">
                 {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} data-ai-hint={comment.dataAiHintAvatar || "avatar"} />}
                 <AvatarFallback className="text-xs">{comment.authorAvatarFallback}</AvatarFallback>
               </Avatar>
-            </Link>
-          ) : (
-            <Avatar className="h-8 w-8">
-              {comment.authorAvatar && <AvatarImage src={comment.authorAvatar} alt={comment.authorName} data-ai-hint={comment.dataAiHintAvatar || "avatar"} />}
-              <AvatarFallback className="text-xs">{comment.authorAvatarFallback}</AvatarFallback>
-            </Avatar>
-          )}
-          <div className="flex-1">
-            {!comment.authorIsAlias ? (
-              <Link href={profilePath(comment.authorId, comment.authorSlug)} className="hover:underline decoration-primary/30 underline-offset-2">
-                <p className="text-xs font-semibold">{comment.authorName}</p>
-              </Link>
-            ) : (
-              <p className="text-xs font-semibold">{comment.authorName}</p>
             )}
-            <p className="text-xs text-muted-foreground">{format(comment.timestamp, "MMM d, yyyy 'at' h:mm a")}</p>
-          </div>
-          {isUserLoggedIn && (
-            <ResponsiveMenu>
-              <ResponsiveMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </ResponsiveMenuTrigger>
-              <ResponsiveMenuContent align="end">
-                <ResponsiveMenuItem onClick={() => onReportComment(comment)}>
-                  <Flag className="mr-2 h-4 w-4" /> Report Comment
-                </ResponsiveMenuItem>
-                {/* Future actions like Edit/Delete for comment author can be added here */}
-              </ResponsiveMenuContent>
-            </ResponsiveMenu>
-          )}
-        </div>
-      </CardHeader>
-      <CardContent className="p-3 pt-0">
-        <p className="text-sm whitespace-pre-line">{comment.content}</p>
-      </CardContent>
-      {isUserLoggedIn && (
-        <CardFooter className="p-3 pt-1 flex items-center justify-start space-x-3">
-          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary">
-              <Smile className="mr-1 h-3.5 w-3.5"/> {comment.vibes || 0}
-          </Button>
-          <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary" onClick={() => setShowReplyInput(!showReplyInput)}>
-              <MessageSquare className="mr-1 h-3.5 w-3.5"/> Reply
-          </Button>
-        </CardFooter>
-      )}
-      {showReplyInput && (
-        <div className="p-3 border-t">
-            <Textarea
-                placeholder={`Replying to ${comment.authorName}...`}
-                value={replyContent}
-                onChange={(e) => setReplyContent(e.target.value)}
-                className="min-h-[60px] text-sm"
-            />
-            <div className="mt-2 flex justify-end">
-                <Button size="sm" disabled={!replyContent.trim() || isReplying} onClick={handlePostReply}>
-                    {isReplying ? 'Posting...' : 'Post Reply'} <Send className="ml-1.5 h-3.5 w-3.5"/>
-                </Button>
+            <div className="flex-1">
+              {!comment.authorIsAlias ? (
+                <Link href={profilePath(comment.authorId, comment.authorSlug)} className="hover:underline decoration-primary/30 underline-offset-2">
+                  <p className="text-xs font-semibold">{comment.authorName}</p>
+                </Link>
+              ) : (
+                <p className="text-xs font-semibold">{comment.authorName}</p>
+              )}
+              <p className="text-xs text-muted-foreground">{format(comment.timestamp, "MMM d, yyyy 'at' h:mm a")}</p>
             </div>
-        </div>
-      )}
+            {isUserLoggedIn && (
+              <ResponsiveMenu>
+                <ResponsiveMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </ResponsiveMenuTrigger>
+                <ResponsiveMenuContent align="end">
+                  <ResponsiveMenuItem onClick={() => onReportComment(comment)}>
+                    <Flag className="mr-2 h-4 w-4" /> Report Comment
+                  </ResponsiveMenuItem>
+                  {/* Future actions like Edit/Delete for comment author can be added here */}
+                </ResponsiveMenuContent>
+              </ResponsiveMenu>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="p-3 pt-0">
+          <p className="text-sm whitespace-pre-line">{comment.content}</p>
+        </CardContent>
+        {isUserLoggedIn && (
+          <CardFooter className="p-3 pt-1 flex items-center justify-start space-x-3">
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary">
+                <Smile className="mr-1 h-3.5 w-3.5"/> {comment.vibes || 0}
+            </Button>
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-primary" onClick={() => setShowReplyInput(!showReplyInput)}>
+                <MessageSquare className="mr-1 h-3.5 w-3.5"/> Reply
+            </Button>
+          </CardFooter>
+        )}
+        {showReplyInput && (
+          <div className="p-3 border-t">
+              <Textarea
+                  placeholder={`Replying to ${comment.authorName}...`}
+                  value={replyContent}
+                  onChange={(e) => setReplyContent(e.target.value)}
+                  className="min-h-[60px] text-sm"
+              />
+              <div className="mt-2 flex justify-end">
+                  <Button size="sm" disabled={!replyContent.trim() || isReplying} onClick={handlePostReply}>
+                      {isReplying ? 'Posting...' : 'Post Reply'} <Send className="ml-1.5 h-3.5 w-3.5"/>
+                  </Button>
+              </div>
+          </div>
+        )}
+      </div>
       {comment.replies && comment.replies.length > 0 && (
         <div className="p-3 border-t space-y-2 bg-muted/30">
           {comment.replies.map(reply => <StoryCommentCard key={reply.id} comment={reply} storyId={storyId} level={level + 1} onReportComment={onReportComment} />)}
@@ -195,6 +198,9 @@ export default function StoryDetailPage() {
   const { toast } = useToast();
   const { role, user } = useUser();
 
+  const searchParams = useSearchParams();
+  const commentId = searchParams.get('commentId');
+
   const [story, setStory] = useState<StoryTopic | null>(null);
   const [articles, setArticles] = useState<SourceArticle[]>([]);
   const [comments, setComments] = useState<DiscussionComment[]>([]);
@@ -209,6 +215,14 @@ export default function StoryDetailPage() {
   
   const isCreatorOrAdmin = role === 'Creator' || role === 'Admin';
   const isLoggedIn = !!role;
+
+  useEffect(() => {
+    if (commentId) {
+      setActiveTab("discussions");
+    }
+  }, [commentId]);
+
+  useScrollToPost([comments.length]);
 
 
   useEffect(() => {

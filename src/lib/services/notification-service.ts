@@ -18,6 +18,7 @@ import {
   posts,
   comments,
   proposals,
+  storyComments,
 } from '@/db/schema';
 import { eq, and, or, isNull, ne, desc, sql, inArray, gte } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
@@ -261,6 +262,7 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
     const mentionRows = await db.select({
       id: mentions.id,
       sourceType: mentions.sourceType,
+      sourceId: mentions.sourceId,
       mentionerUserId: mentions.mentionerUserId,
       createdAt: mentions.createdAt,
       read: mentions.read,
@@ -272,19 +274,102 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
       .orderBy(desc(mentions.createdAt))
       .limit(10);
 
-    for (const m of mentionRows) {
-      const [mentioner] = await db.select({ name: users.name })
-        .from(users).where(eq(users.id, m.mentionerUserId)).limit(1);
+    if (mentionRows.length > 0) {
+      // 1. Batch query posts for mentions of type 'post'
+      const postIds = mentionRows.filter(m => m.sourceType === 'post').map(m => m.sourceId);
+      const postMap = new Map<string, { slug: string | null; tribeId: string | null }>();
+      if (postIds.length > 0) {
+        const postRows = await db.select({ id: posts.id, slug: posts.slug, tribeId: posts.tribeId })
+          .from(posts).where(inArray(posts.id, postIds));
+        for (const r of postRows) {
+          postMap.set(r.id, { slug: r.slug, tribeId: r.tribeId });
+        }
+      }
 
-      items.push({
-        id: `activity-mention-${m.id}`,
-        type: 'mention',
-        title: 'You were mentioned',
-        description: `${mentioner?.name ?? 'Someone'} mentioned you in a ${m.sourceType?.replace('_', ' ') ?? 'post'}`,
-        timestamp: m.createdAt ?? new Date(),
-        actionUrl: '/your-comms',
-        read: false,
-      });
+      // 2. Batch query comments and their corresponding posts for mentions of type 'comment'
+      const commentIds = mentionRows.filter(m => m.sourceType === 'comment').map(m => m.sourceId);
+      const commentMap = new Map<string, { postId: string }>();
+      const commentPostMap = new Map<string, { slug: string | null; tribeId: string | null }>();
+      if (commentIds.length > 0) {
+        const commentRows = await db.select({ id: comments.id, postId: comments.postId })
+          .from(comments).where(inArray(comments.id, commentIds));
+        for (const r of commentRows) {
+          commentMap.set(r.id, { postId: r.postId });
+        }
+        const commentPostIds = commentRows.map(r => r.postId);
+        if (commentPostIds.length > 0) {
+          const postRows = await db.select({ id: posts.id, slug: posts.slug, tribeId: posts.tribeId })
+            .from(posts).where(inArray(posts.id, commentPostIds));
+          for (const r of postRows) {
+            commentPostMap.set(r.id, { slug: r.slug, tribeId: r.tribeId });
+          }
+        }
+      }
+
+      // 3. Batch query story comments for mentions of type 'story_comment'
+      const storyCommentIds = mentionRows.filter(m => m.sourceType === 'story_comment').map(m => m.sourceId);
+      const storyCommentMap = new Map<string, { storyId: string }>();
+      if (storyCommentIds.length > 0) {
+        const storyCommentRows = await db.select({ id: storyComments.id, storyId: storyComments.storyId })
+          .from(storyComments).where(inArray(storyComments.id, storyCommentIds));
+        for (const r of storyCommentRows) {
+          storyCommentMap.set(r.id, { storyId: r.storyId });
+        }
+      }
+
+      // 4. Batch query tribe slugs for all referenced tribes
+      const tribeIds: string[] = [];
+      for (const p of postMap.values()) {
+        if (p.tribeId) tribeIds.push(p.tribeId);
+      }
+      for (const p of commentPostMap.values()) {
+        if (p.tribeId) tribeIds.push(p.tribeId);
+      }
+      const tribeSlugMap = await buildTribeSlugMap(tribeIds);
+
+      // 5. Batch query mentioner display names
+      const mentionerIds = [...new Set(mentionRows.map(m => m.mentionerUserId).filter(Boolean) as string[])];
+      const mentionerNameMap = new Map<string, string>();
+      if (mentionerIds.length > 0) {
+        const mentionerRows = await db.select({ id: users.id, name: users.name })
+          .from(users).where(inArray(users.id, mentionerIds));
+        for (const r of mentionerRows) {
+          if (r.name) mentionerNameMap.set(r.id, r.name);
+        }
+      }
+
+      for (const m of mentionRows) {
+        const mentionerName = m.mentionerUserId ? (mentionerNameMap.get(m.mentionerUserId) ?? 'Someone') : 'Someone';
+
+        let actionUrl = '/your-comms';
+        if (m.sourceType === 'post') {
+          const p = postMap.get(m.sourceId);
+          if (p) {
+            actionUrl = buildPostPath(m.sourceId, p.slug, p.tribeId ? tribeSlugMap.get(p.tribeId) : undefined);
+          }
+        } else if (m.sourceType === 'comment') {
+          const c = commentMap.get(m.sourceId);
+          if (c) {
+            const p = commentPostMap.get(c.postId);
+            actionUrl = `${buildPostPath(c.postId, p?.slug, p?.tribeId ? tribeSlugMap.get(p.tribeId) : undefined)}?commentId=${m.sourceId}`;
+          }
+        } else if (m.sourceType === 'story_comment') {
+          const sc = storyCommentMap.get(m.sourceId);
+          if (sc) {
+            actionUrl = `/our-story/${sc.storyId}?commentId=${m.sourceId}`;
+          }
+        }
+
+        items.push({
+          id: `activity-mention-${m.id}`,
+          type: 'mention',
+          title: 'You were mentioned',
+          description: `${mentionerName} mentioned you in a ${m.sourceType?.replace('_', ' ') ?? 'post'}`,
+          timestamp: m.createdAt ?? new Date(),
+          actionUrl,
+          read: false,
+        });
+      }
     }
   }
 

@@ -92,7 +92,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
     serverRecentVibes: post.recentVibes || [],
     serverVibeDetails: post.vibeDetails || [],
     serverHasVibed: post.hasVibed || false,
-    serverSelectedVibe: null,
+    serverSelectedVibe: post.selectedVibe ?? null,
     canSeeReactors: isCurrentUserAuthor,
     currentUserId,
     currentUserName: user?.name,

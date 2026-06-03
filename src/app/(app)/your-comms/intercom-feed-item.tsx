@@ -68,7 +68,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
     serverRecentVibes: item.recentVibes || [],
     serverVibeDetails: item.vibeDetails || [],
     serverHasVibed: item.hasVibed || false,
-    serverSelectedVibe: null,
+    serverSelectedVibe: item.selectedVibe ?? null,
     canSeeReactors: isOwnPost,
     currentUserId: user?.id,
     currentUserName: user?.name,
