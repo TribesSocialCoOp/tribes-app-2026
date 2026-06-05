@@ -61,6 +61,7 @@ qa.ts
 .playwright-mcp/
 
 # Root-level screenshots (dev testing)
+double-at-*.png
 billing_*.png
 founding_member_success.png
 free_user_billing.png
