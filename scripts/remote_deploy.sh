@@ -208,14 +208,21 @@ fi
 # ── Step 11: Cleanup (preserve both slot images!) ────────────
 log "Pruning old containers and build cache..."
 docker container prune -f >/dev/null
+# Remove the builder image immediately — it's rebuilt every deploy (~350MB)
+docker rmi tribes-builder 2>/dev/null || true
 # Do NOT prune images aggressively — we need both slot images preserved
 docker builder prune --keep-storage 2G --force >/dev/null 2>&1 || true
 ok "Cleanup complete"
 
 # ── Step 12: Cron Jobs ───────────────────────────────────────
-CRON_JOB="0 3 * * * CONTAINER=\$(cat /opt/tribes/.active-color 2>/dev/null || echo blue) && cd /opt/tribes && docker compose -f docker-compose.prod.yml --profile \$CONTAINER exec -T app-\$CONTAINER npx tsx scripts/cleanup-seaweedfs.ts >> /var/log/tribes-cleanup.log 2>&1"
-(crontab -l 2>/dev/null | grep -v "cleanup-seaweedfs.ts" ; echo "$CRON_JOB") | crontab -
-ok "Cron jobs updated"
+# SeaweedFS orphan cleanup (daily at 3am UTC)
+CRON_SEAWEEDFS="0 3 * * * CONTAINER=\$(cat /opt/tribes/.active-color 2>/dev/null || echo blue) && cd /opt/tribes && docker compose -f docker-compose.prod.yml --profile \$CONTAINER exec -T app-\$CONTAINER npx tsx scripts/cleanup-seaweedfs.ts >> /var/log/tribes-cleanup.log 2>&1"
+# Server maintenance: Docker image pruning + disk space alerts (every 6 hours)
+CRON_MAINTENANCE="0 */6 * * * /usr/bin/bash /opt/tribes/scripts/server-maintenance.sh >> /var/log/tribes-maintenance.log 2>&1"
+
+# Rebuild crontab: remove old entries, add current ones
+(crontab -l 2>/dev/null | grep -v "cleanup-seaweedfs.ts" | grep -v "server-maintenance.sh" | grep -v "storage-cleanup" ; echo "$CRON_SEAWEEDFS" ; echo "$CRON_MAINTENANCE") | crontab -
+ok "Cron jobs updated (seaweedfs cleanup + server maintenance)"
 
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}"
