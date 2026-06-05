@@ -79,6 +79,7 @@ export default async function TribePostSlugDetailPage({ params }: PageProps) {
       tribeId={data.tribeId}
       isPublic={data.isPublic}
       authorRole={data.authorRole}
+      viewerRole={data.viewerRole}
       viewerIsMember={data.viewerIsMember}
     />
   );

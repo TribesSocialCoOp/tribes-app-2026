@@ -388,6 +388,7 @@ const Sidebar = React.forwardRef<
             data-state={openMobile ? "expanded" : "collapsed"}
             className={cn(
               "fixed inset-y-0 z-30 h-full bg-sidebar text-sidebar-foreground p-0",
+              side === "left" ? "left-0 pl-safe" : "right-0 pr-safe",
               "w-[var(--sidebar-width-mobile)]",
               "transition-transform duration-300 ease-in-out",
               side === "left" ? (openMobile ? "translate-x-0" : "-translate-x-full") : (openMobile ? "translate-x-0" : "translate-x-full"),
