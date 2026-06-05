@@ -307,7 +307,7 @@ const markdownComponents = {
   h2: ({ children }: any) => <h4 className="text-base font-semibold mt-3 mb-1.5 text-foreground">{children}</h4>,
   h3: ({ children }: any) => <h5 className="text-sm font-semibold mt-2 mb-1 text-foreground">{children}</h5>,
   // Paragraphs
-  p: ({ children }: any) => <p className="text-sm text-foreground leading-relaxed mb-2 last:mb-0">{children}</p>,
+  p: ({ children }: any) => <p className="text-sm text-foreground leading-relaxed mb-2 last:mb-0 whitespace-pre-wrap">{children}</p>,
   // Links
   a: ({ href, children }: any) => {
     const isMention = href?.startsWith('/u/');

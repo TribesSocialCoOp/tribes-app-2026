@@ -44,6 +44,7 @@ import { shareContent } from '@/lib/capacitor/share';
 import { RoleBadge } from '@/components/ui/role-badge';
 import { buildPostPath } from '@/lib/utils/slugify';
 import { profilePath } from '@/lib/utils/paths';
+import { CardFooterButton } from '@/components/content/card-footer-button';
 
 interface TribePostCardProps {
   post: TribePost;
@@ -646,7 +647,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
           )}
           </>)}
         </CardContent>
-        <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start space-x-4 border-t">
+        <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start flex-wrap gap-x-2 sm:gap-x-4 gap-y-1 border-t">
           {isLoggedIn && isMember ? (
             <VibePicker
               vibeCount={currentVibesCount}
@@ -666,28 +667,25 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                   ))}
                 </div>
               ) : (
-                <Smile className="mr-1.5 h-4 w-4" />
+                <Smile className="mr-1 sm:mr-1.5 h-4 w-4" />
               )}
               {currentVibesCount}
             </Button>
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-primary"
+          <CardFooterButton
+            icon={MessageSquareText}
             disabled={post.isRemoved}
             onClick={() => {
               triggerHaptic(ImpactStyle.Light);
               setShowComments(!showComments);
             }}
           >
-            <MessageSquareText className="mr-1.5 h-4 w-4" /> {post.comments || 0}
-          </Button>
+            {post.comments || 0}
+          </CardFooterButton>
           {isLoggedIn && isMember && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-primary"
+            <CardFooterButton
+              icon={Send}
+              label="Reply"
               disabled={post.isRemoved}
               onClick={() => {
                 triggerHaptic(ImpactStyle.Light);
@@ -698,14 +696,11 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                   setShowInlineReply(!showInlineReply);
                 }
               }}
-            >
-              <Send className="mr-1.5 h-4 w-4" /> Reply
-            </Button>
+            />
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground hover:text-primary"
+          <CardFooterButton
+            icon={SquareArrowUp}
+            label="Share"
             disabled={post.isRemoved}
             onClick={() => {
               triggerHaptic(ImpactStyle.Medium);
@@ -715,9 +710,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                 url: `${typeof window !== 'undefined' ? window.location.origin : ''}${buildPostPath(post.id, post.slug, state.tribe?.slug)}`
               });
             }}
-          >
-            <SquareArrowUp className="mr-1.5 h-4 w-4" /> Share
-          </Button>
+          />
         </CardFooter>
         {!isMobile && showInlineReply && (
           <InlineReplyBox

@@ -78,7 +78,7 @@ export function JumpToTop() {
       onClick={handleClick}
       aria-label="Scroll to top"
       className={cn(
-        "fixed z-40 right-4 md:right-8 flex items-center justify-center w-10 h-10 rounded-full",
+        "fixed z-40 right-[calc(1rem+env(safe-area-inset-right,0px))] md:right-8 flex items-center justify-center w-10 h-10 rounded-full",
         "bg-primary text-primary-foreground shadow-lg backdrop-blur-sm bg-primary/95",
         "border border-primary-foreground/10 hover:bg-primary/90 hover:scale-105 active:scale-95",
         "transition-all duration-300 ease-out will-change-all",

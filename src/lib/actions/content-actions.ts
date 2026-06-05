@@ -170,6 +170,7 @@ export async function getPostById(postId: string): Promise<{
   tribeId: string | null;
   isPublic: boolean;
   authorRole: 'founder' | 'speaker' | 'member';
+  viewerRole: 'founder' | 'speaker' | 'member' | null;
   viewerIsMember: boolean;
 } | null> {
   const userId = await getCurrentUserId();
@@ -195,6 +196,7 @@ export async function getPostById(postId: string): Promise<{
   let isPublic = true;
   let viewerIsMember = false;
   let authorRole: 'founder' | 'speaker' | 'member' = 'member';
+  let viewerRole: 'founder' | 'speaker' | 'member' | null = null;
 
   if (row.tribeId) {
     const [tribe] = await db.select({ name: tribes.name, slug: tribes.slug, isPublic: tribes.isPublic })
@@ -212,6 +214,9 @@ export async function getPostById(postId: string): Promise<{
         .where(and(eq(tribeMembers.tribeId, row.tribeId), eq(tribeMembers.userId, userId)))
         .limit(1);
       viewerIsMember = !!membership;
+      if (membership) {
+        viewerRole = membership.role as 'founder' | 'speaker' | 'member';
+      }
     }
 
     // Security: private tribe posts are only visible to members
@@ -287,6 +292,7 @@ export async function getPostById(postId: string): Promise<{
     tribeId: row.tribeId,
     isPublic,
     authorRole,
+    viewerRole,
     viewerIsMember,
   };
 }
@@ -306,6 +312,7 @@ export async function getPostBySlug(
   tribeId: string | null;
   isPublic: boolean;
   authorRole: 'founder' | 'speaker' | 'member';
+  viewerRole: 'founder' | 'speaker' | 'member' | null;
   viewerIsMember: boolean;
   redirectSlug?: string;
 } | null> {

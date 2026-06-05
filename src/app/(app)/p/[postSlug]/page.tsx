@@ -80,6 +80,7 @@ export default async function StandalonePostSlugDetailPage({ params }: PageProps
       tribeId={data.tribeId}
       isPublic={data.isPublic}
       authorRole={data.authorRole}
+      viewerRole={data.viewerRole}
       viewerIsMember={data.viewerIsMember}
     />
   );

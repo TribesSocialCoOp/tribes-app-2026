@@ -61,6 +61,7 @@ qa.ts
 .playwright-mcp/
 
 # Root-level screenshots (dev testing)
+double-at-*.png
 billing_*.png
 founding_member_success.png
 free_user_billing.png
@@ -132,6 +133,7 @@ scripts/seed-*.ts
 
 # Test assets
 public/test-*.svg
+public/test-svg-darkmode.svg
 
 # ws-relay build artifacts
 ws-relay/node_modules/
