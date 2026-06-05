@@ -70,7 +70,7 @@
 
     import security_headers
 
-    # Block script execution in media documents (SVGs loaded via <object>, etc.)
+    # Block script execution in media documents (SVGs loaded via <img>, etc.)
     header Content-Security-Policy "script-src 'none'; object-src 'none'"
 
     # Long-lived cache for immutable media files
