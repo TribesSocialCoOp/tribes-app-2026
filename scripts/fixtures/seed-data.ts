@@ -171,6 +171,20 @@ export const initialSampleTribePosts: TribePost[] = [
       }
     ]
   },
+  {
+    id: "svg_darkmode_test_post",
+    tribeId: "1",
+    authorId: "dustin",
+    authorName: "Dustin Moore",
+    authorAvatarFallback: "DM",
+    timestamp: new Date(MOCK_POST_DATE_MS + 60000),
+    title: "SVG Dark Mode Rendering Test Post",
+    content: "This post contains the production SVG diagram (`/test-svg-darkmode.svg`) that was rendering as a black box in Chrome/Firefox/Safari when dark mode was active.",
+    imageUrl: "/test-svg-darkmode.svg",
+    imageAlt: "Production SVG test",
+    vibes: 1,
+    comments: 0,
+  },
 ];
 
 

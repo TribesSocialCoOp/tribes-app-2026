@@ -23,8 +23,6 @@ interface ImageLightboxProps {
 const MIN_SCALE = 1;
 const MAX_SCALE = 8;
 const DOUBLE_TAP_SCALE = 2.5;
-/** Computed once at module load — user agent never changes mid-session */
-const IS_ANDROID_WEBVIEW = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
 
 /**
  * Inner toolbar component — uses useControls() from react-zoom-pan-pinch
@@ -156,9 +154,9 @@ export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, is
 
   const currentUrl = images[currentIndex];
   const currentIsSvg = !isEncrypted && isSvgUrl(currentUrl);
-  // Android WebView blocks <object> tags — fall back to <img> for SVGs there.
-  // iOS/desktop use <object> which re-renders the SVG as a vector at any zoom level.
-  const useSvgObject = currentIsSvg && !IS_ANDROID_WEBVIEW;
+  // SVGs are always rendered via <img>. Browsers render SVG <img> tags as full vectors (crisp at
+  // any zoom), while <object> creates a browsing context that inherits color-scheme from the OS —
+  // causing dark-mode SVGs with light-dark() fills to render as black boxes.
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -233,15 +231,6 @@ export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, is
                   ring={ring}
                   tribeId={tribeId}
                   className="max-w-full max-h-[90vh] object-contain pointer-events-auto shadow-2xl"
-                />
-              ) : useSvgObject ? (
-                // iOS/Desktop: <object> renders SVG as a separate document → crisp vector at any zoom.
-                // Script execution is blocked by CSP on media.tribes.app (script-src 'none').
-                <object
-                  data={currentUrl}
-                  type="image/svg+xml"
-                  className="w-[90vw] h-[90vh] pointer-events-none shadow-2xl"
-                  aria-label={`Image ${currentIndex + 1} of ${images.length}`}
                 />
               ) : (
                 /* eslint-disable-next-line @next/next/no-img-element */

@@ -133,6 +133,7 @@ scripts/seed-*.ts
 
 # Test assets
 public/test-*.svg
+public/test-svg-darkmode.svg
 
 # ws-relay build artifacts
 ws-relay/node_modules/
