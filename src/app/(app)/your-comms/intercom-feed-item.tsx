@@ -42,6 +42,7 @@ import { ThreadCollapseHeader } from '@/components/content/thread-collapse-heade
 import { PinToWallDialog } from '@/components/dialogs/pin-to-wall-dialog';
 import { InlineReplyBox } from '@/components/content/inline-reply-box';
 import { ModRemovalDialog } from '@/components/dialogs/mod-removal-dialog';
+import { CardFooterButton } from '@/components/content/card-footer-button';
 
 
 export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
@@ -96,10 +97,10 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
-  const isTribeSpeaker = item.currentUserTribeRole ? ['founder', 'platform_admin', 'speaker'].includes(item.currentUserTribeRole) : false;
+  const isGlobalAdmin = user?.role === 'Admin';
+  const isTribeSpeaker = isGlobalAdmin || (item.currentUserTribeRole ? ['founder', 'speaker'].includes(item.currentUserTribeRole) : false);
   const replyRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
-  const isGlobalAdmin = user?.role === 'Admin';
   const [replyDialogOpen, setReplyDialogOpen] = useState(false);
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
   const [modRemoveOpen, setModRemoveOpen] = useState(false);
@@ -487,7 +488,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
         )}
         </>)}
       </CardContent>
-      <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start space-x-4 border-t">
+      <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start flex-wrap gap-x-2 sm:gap-x-4 gap-y-1 border-t">
         {isPost && (
           <VibePicker
             vibeCount={vibeCount}
@@ -499,32 +500,32 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
           />
         )}
         {isPost && (
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" onClick={handleToggleComments}>
-            {isLoadingComments ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <MessageSquareText className="mr-1.5 h-4 w-4" />}
+          <CardFooterButton icon={MessageSquareText} loading={isLoadingComments} onClick={handleToggleComments}>
             {commentCount}
-          </Button>
+          </CardFooterButton>
         )}
         {isPost && (
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" onClick={() => {
-            if (isMobile) {
-              setReplyDialogOpen(true);
-            } else {
-              setShowReply(!showReply);
-            }
-          }}>
-            <Send className="mr-1.5 h-4 w-4" /> Reply
-          </Button>
+          <CardFooterButton
+            icon={Send}
+            label="Reply"
+            onClick={() => {
+              if (isMobile) {
+                setReplyDialogOpen(true);
+              } else {
+                setShowReply(!showReply);
+              }
+            }}
+          />
         )}
         {/* Pin to Wall button — visible on all own posts */}
         {isOwnPost && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className={cn(
-              "text-muted-foreground hover:text-amber-600",
-              isPinned && "text-amber-600"
-            )}
+          <CardFooterButton
+            icon={Pin}
+            label={isPinned ? 'Pinned' : 'Pin to Wall'}
+            loading={isPinning}
             disabled={isPinning}
+            iconClassName={isPinned ? 'fill-amber-600' : undefined}
+            className={cn("hover:text-amber-600", isPinned && "text-amber-600")}
             onClick={async () => {
               if (item.isEncrypted && !isPinned) {
                 setPinDialogOpen(true);
@@ -548,14 +549,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
                 setIsPinning(false);
               }
             }}
-          >
-            {isPinning ? (
-              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-            ) : (
-              <Pin className={cn("mr-1.5 h-4 w-4", isPinned && "fill-amber-600")} />
-            )}
-            {isPinned ? 'Pinned' : 'Pin to Wall'}
-          </Button>
+          />
         )}
         {isOwnPost && confirmDelete && (
           <ConfirmActionDialog

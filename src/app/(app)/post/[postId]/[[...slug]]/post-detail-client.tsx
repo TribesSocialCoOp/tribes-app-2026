@@ -43,6 +43,7 @@ import { RoleBadge } from '@/components/ui/role-badge';
 import { PinToWallDialog } from '@/components/dialogs/pin-to-wall-dialog';
 import { InlineReplyBox } from '@/components/content/inline-reply-box';
 import { ThreadCollapseHeader } from '@/components/content/thread-collapse-header';
+import { CardFooterButton } from '@/components/content/card-footer-button';
 
 
 interface PostDetailClientProps {
@@ -52,6 +53,7 @@ interface PostDetailClientProps {
   tribeId: string | null;
   isPublic: boolean;
   authorRole: 'founder' | 'speaker' | 'member';
+  viewerRole: 'founder' | 'speaker' | 'member' | null;
   viewerIsMember: boolean;
 }
 
@@ -62,6 +64,7 @@ export function PostDetailClient({
   tribeId,
   isPublic,
   authorRole,
+  viewerRole,
   viewerIsMember,
 }: PostDetailClientProps) {
   const { toast } = useToast();
@@ -75,7 +78,8 @@ export function PostDetailClient({
 
   // ── Post state ──
   const isOwnPost = !!user?.id && post.authorId === user.id;
-  const isTribeSpeaker = authorRole ? ['founder', 'platform_admin', 'speaker'].includes(authorRole) : false;
+  const isGlobalAdmin = user?.role === 'Admin';
+  const isTribeSpeaker = isGlobalAdmin || (viewerRole ? ['founder', 'speaker'].includes(viewerRole) : false);
   const tribeLink = tribeSlug ? `/t/${tribeSlug}` : tribeId ? `/tribes/${tribeId}` : null;
 
   // ── Optimistic vibes (consolidated hook) ──
@@ -601,7 +605,7 @@ export function PostDetailClient({
         </CardContent>
 
         {/* ── Interactive Footer — vibes, comments, reply, pin ── */}
-        <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start space-x-4 border-t">
+        <CardFooter className="p-3 sm:p-4 pt-2 sm:pt-3 flex items-center justify-start flex-wrap gap-x-2 sm:gap-x-4 gap-y-1 border-t">
           {/* Vibe picker */}
           <VibePicker
             vibeCount={vibeCount}
@@ -613,32 +617,32 @@ export function PostDetailClient({
           />
 
           {/* Comment toggle */}
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" onClick={handleToggleComments}>
-            {isLoadingComments ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <MessageSquareText className="mr-1.5 h-4 w-4" />}
+          <CardFooterButton icon={MessageSquareText} loading={isLoadingComments} onClick={handleToggleComments}>
             {commentCount}
-          </Button>
+          </CardFooterButton>
 
           {/* Reply */}
-          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-primary" onClick={() => {
-            if (isMobile) {
-              setReplyDialogOpen(true);
-            } else {
-              setShowReply(!showReply);
-            }
-          }}>
-            <Send className="mr-1.5 h-4 w-4" /> Reply
-          </Button>
+          <CardFooterButton
+            icon={Send}
+            label="Reply"
+            onClick={() => {
+              if (isMobile) {
+                setReplyDialogOpen(true);
+              } else {
+                setShowReply(!showReply);
+              }
+            }}
+          />
 
           {/* Pin to Wall */}
           {isOwnPost && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn(
-                "text-muted-foreground hover:text-amber-600",
-                isPinned && "text-amber-600"
-              )}
+            <CardFooterButton
+              icon={Pin}
+              label={isPinned ? 'Pinned' : 'Pin to Wall'}
+              loading={isPinning}
               disabled={isPinning}
+              iconClassName={isPinned ? 'fill-amber-600' : undefined}
+              className={cn("hover:text-amber-600", isPinned && "text-amber-600")}
               onClick={async () => {
                 if (post.isEncrypted && !isPinned) {
                   setPinDialogOpen(true);
@@ -664,14 +668,7 @@ export function PostDetailClient({
                   setIsPinning(false);
                 }
               }}
-            >
-              {isPinning ? (
-                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-              ) : (
-                <Pin className={cn("mr-1.5 h-4 w-4", isPinned && "fill-amber-600")} />
-              )}
-              {isPinned ? 'Pinned' : 'Pin to Wall'}
-            </Button>
+            />
           )}
 
           {/* Delete confirm */}
