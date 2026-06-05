@@ -70,6 +70,9 @@
 
     import security_headers
 
+    # Allow the app origin to fetch media (needed for blob-based image download)
+    header Access-Control-Allow-Origin "https://{$APP_DOMAIN:tribes.app}"
+
     # Block script execution in media documents (SVGs loaded via <img>, etc.)
     header Content-Security-Policy "script-src 'none'; object-src 'none'"
 
