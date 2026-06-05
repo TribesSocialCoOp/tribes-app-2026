@@ -381,6 +381,7 @@ async function seed() {
       title: post.title,
       content: post.content,
       imageUrl: post.imageUrl,
+      imageUrls: post.imageUrls,
       imageAlt: post.imageAlt,
       dataAiHintAvatar: post.dataAiHintAvatar,
       dataAiHintImage: post.dataAiHintImage,

@@ -260,11 +260,17 @@ export function PostDetailClient({
 
   const handleCommentAdded = useCallback((newReply?: DiscussionComment) => {
     if (newReply) {
+      // Optimistic insert — don't re-fetch (avoids race where the server
+      // read returns stale data and overwrites the optimistic comment).
       setLoadedComments(prev => insertReplyIntoTree(prev, newReply));
       setCommentCount(prev => prev + 1);
+      router.refresh(); // sync server component props (e.g. comment count badge)
+    } else {
+      // No reply payload → something changed (e.g. comment deleted).
+      // Re-fetch the full tree so the deleted comment disappears.
+      loadComments();
     }
-    loadComments();
-  }, [loadComments]);
+  }, [router, loadComments]);
 
   const handleToggleComments = async () => {
     if (!showComments && loadedComments.length === 0) {
@@ -308,7 +314,7 @@ export function PostDetailClient({
       setLoadedComments(prev => [...prev, result as DiscussionComment]);
       setCommentCount(prev => prev + 1);
       setShowComments(true);
-      loadComments();
+      router.refresh();
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'An unexpected error occurred';
       toast({ title: 'Error', description: message, variant: 'destructive' });
