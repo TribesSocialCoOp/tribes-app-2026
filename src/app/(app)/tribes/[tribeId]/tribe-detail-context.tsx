@@ -9,6 +9,7 @@ import { getTribeById, getTribeBySlug, getTribeMembers, leaveTribe, getMyTribeId
 import { getEventsForTribe } from '@/lib/actions/event-actions';
 import { getPostsForTribe, promotePostToMoods, repost, createTribePost, getActiveReportedPostIds, getActiveReportsForTribe, reportPost, reportComment, createComment, deleteOwnPost, togglePinTribePost } from '@/lib/actions/content-actions';
 import type { Tribe, Event, TribePost, ReportedPost, TribeMember, DiscussionComment, PaginatedResult } from '@/lib/types';
+import { insertReplyIntoTree } from '@/lib/utils';
 import type { PostFormValues } from '@/components/dialogs/create-post-dialog';
 import type { TribeAccessLevel } from '@/lib/services/tribe-auth';
 import { TRIBE_0_ID } from '@/lib/constants';
@@ -94,7 +95,8 @@ type Action =
   | { type: 'OPEN_CREATE_POST' }
   | { type: 'CLOSE_CREATE_POST' }
   | { type: 'OPEN_JOIN_TRIBE' }
-  | { type: 'CLOSE_JOIN_TRIBE' };
+  | { type: 'CLOSE_JOIN_TRIBE' }
+  | { type: 'ADD_COMMENT'; payload: { postId: string; comment: DiscussionComment } };
 
 // ─── Reducer ─────────────────────────────────────────────────────────────────
 
@@ -126,6 +128,19 @@ function reducer(state: TribeDetailState, action: Action): TribeDetailState {
     case 'SET_HAS_TRIBE_KEY': return { ...state, hasTribeKey: action.payload };
     case 'ADD_PROMOTED_POST':
       return { ...state, promotedPostIds: new Set(state.promotedPostIds).add(action.payload) };
+    case 'ADD_COMMENT': {
+      const { postId, comment } = action.payload;
+      return {
+        ...state,
+        posts: state.posts.map(p => {
+          if (p.id !== postId) return p;
+          const updatedComments = comment.parentCommentId
+            ? insertReplyIntoTree(p.commentsData || [], comment)
+            : [...(p.commentsData || []), comment];
+          return { ...p, commentsData: updatedComments, comments: (p.comments ?? 0) + 1 };
+        }),
+      };
+    }
     case 'SET_REPORT_REASON': return { ...state, reportReason: action.payload };
     case 'OPEN_PROMOTE': return { ...state, promoteDialog: { open: true, target: action.payload } };
     case 'CLOSE_PROMOTE': return { ...state, promoteDialog: { open: false, target: null } };
@@ -553,11 +568,16 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
         throw new Error(result.serverError as string);
       }
       toast({ title: 'Comment Posted!', description: 'Your comment has been added.' });
-      await syncAllData();
+      if (result && typeof result === 'object' && 'id' in result) {
+        dispatch({
+          type: 'ADD_COMMENT',
+          payload: { postId: state.commentDialog.target.postId, comment: result as DiscussionComment },
+        });
+      }
     } catch (e: unknown) {
       handleError(e, 'Comment Failed');
     }
-  }, [state.commentDialog.target, state.tribe, toast, syncAllData]);
+  }, [state.commentDialog.target, state.tribe, toast]);
 
   const handleCreatePost = useCallback(async (values: PostFormValues) => {
     if (!state.tribe) return;

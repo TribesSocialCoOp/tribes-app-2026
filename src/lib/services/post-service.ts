@@ -1050,6 +1050,7 @@ export async function createComment(
 
   return {
     id,
+    parentCommentId: parentCommentId ?? undefined,
     authorId: userId,
     authorSlug: author.slug ?? undefined,
     authorName: resolvedName,
