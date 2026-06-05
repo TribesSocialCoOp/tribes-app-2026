@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { X, ChevronLeft, ChevronRight, Maximize, ZoomIn, ZoomOut } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Maximize, ZoomIn, ZoomOut, Download } from 'lucide-react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { cn } from '@/lib/utils';
 import { EncryptedImage } from './encrypted-image';
 import { isSvgUrl } from '@/lib/svg-sanitizer';
+import { downloadImage } from '@/lib/capacitor/share';
 import type { Ring } from '@/lib/types';
 
 interface ImageLightboxProps {
@@ -88,8 +89,26 @@ export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, is
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [scale, setScale] = useState(1);
   const transformWrapperRef = useRef<React.ComponentRef<typeof TransformWrapper>>(null);
-  
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
+
   const isZoomed = scale > 1.05;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || isZoomed || images.length <= 1) return;
+    const deltaX = touchStartX.current - e.changedTouches[0].clientX;
+    const deltaY = touchStartY.current! - e.changedTouches[0].clientY;
+    touchStartX.current = null;
+    if (Math.abs(deltaX) < 60 || Math.abs(deltaX) < Math.abs(deltaY)) return;
+    deltaX > 0
+      ? setCurrentIndex(prev => (prev < images.length - 1 ? prev + 1 : 0))
+      : setCurrentIndex(prev => (prev > 0 ? prev - 1 : images.length - 1));
+  };
 
   // Reset everything when dialog opens or index changes
   useEffect(() => {
@@ -160,20 +179,35 @@ export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, is
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 m-0 bg-black/95 border-none shadow-none rounded-none flex flex-col justify-center items-center gap-0 overflow-hidden [&>button:last-child]:hidden">
+      <DialogContent
+        className="max-w-[100vw] max-h-[100vh] w-screen h-screen p-0 m-0 bg-black/95 border-none shadow-none rounded-none flex flex-col justify-center items-center gap-0 overflow-hidden [&>button:last-child]:hidden"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
         <div className="sr-only">
             <DialogTitle>Image Viewer</DialogTitle>
             <DialogDescription>View post images in full screen. Pinch or scroll to zoom, drag to pan.</DialogDescription>
         </div>
 
         {/* Close button — safe zone on mobile */}
-        <button 
+        <button
             onClick={() => onOpenChange(false)}
             className="absolute top-[max(1rem,env(safe-area-inset-top,16px))] right-4 sm:top-6 sm:right-6 z-50 p-3 bg-black/50 hover:bg-black/70 active:bg-black/80 rounded-full text-white/90 hover:text-white transition-colors"
             aria-label="Close image viewer"
         >
           <X className="h-7 w-7 sm:h-6 sm:w-6" />
         </button>
+
+        {/* Download / share button — top-left, hidden for encrypted images */}
+        {!isEncrypted && (
+          <button
+            onClick={(e) => { e.stopPropagation(); void downloadImage(currentUrl); }}
+            className="absolute top-[max(1rem,env(safe-area-inset-top,16px))] left-4 sm:top-6 sm:left-6 z-50 p-3 bg-black/50 hover:bg-black/70 active:bg-black/80 rounded-full text-white/90 hover:text-white transition-colors"
+            aria-label="Save image"
+          >
+            <Download className="h-7 w-7 sm:h-6 sm:w-6" />
+          </button>
+        )}
 
         {/* Navigation arrows (multi-image, hidden when zoomed) */}
         {images.length > 1 && !isZoomed && (

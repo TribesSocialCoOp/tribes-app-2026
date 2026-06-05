@@ -172,6 +172,33 @@ export const initialSampleTribePosts: TribePost[] = [
     ]
   },
   {
+    id: "multi_image_test_post",
+    tribeId: "2",
+    authorId: "test-speaker-user",
+    authorName: "Speaker Sam",
+    authorAvatarFallback: "SS",
+    timestamp: new Date(MOCK_POST_DATE_MS - 21600000),
+    title: "Weekend trail photos",
+    content: "Snapped a few shots from the loop trail yesterday. The wildflowers are peaking right now!",
+    imageUrls: ["/seed/post-landscape.svg", "/seed/post-food.svg", "/seed/post-music.svg"],
+    vibes: 23,
+    comments: 2,
+    commentsData: [
+      {
+        id: "multi_img_comment_1", authorId: "user3", authorName: "Carol Cosmos", authorAvatarFallback: "CC",
+        content: "Gorgeous shots! What trail is this?",
+        timestamp: new Date(MOCK_POST_DATE_MS - 21600000 + 1800000),
+        vibes: 3,
+      },
+      {
+        id: "multi_img_comment_2", authorId: "authorAE", authorName: "Alice Example", authorAvatarFallback: "AE",
+        content: "Love the second one. The lighting is perfect.",
+        timestamp: new Date(MOCK_POST_DATE_MS - 21600000 + 3600000),
+        vibes: 1,
+      }
+    ]
+  },
+  {
     id: "svg_darkmode_test_post",
     tribeId: "1",
     authorId: "dustin",
