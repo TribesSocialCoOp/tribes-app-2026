@@ -211,6 +211,7 @@ export interface ReportedPost {
 
 export interface DiscussionComment {
   id: string;
+  parentCommentId?: string;
   authorId: string;
   authorSlug?: string;
   authorName: string;

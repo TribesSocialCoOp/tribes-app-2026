@@ -57,7 +57,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   post, isPromoted, isReported, isCurrentUserAuthor,
 }) => {
   const {
-    state, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker, isGlobalAdmin,
+    state, dispatch, isLoggedIn, currentUserId, isTribeAdmin, isTribeSpeaker, isGlobalAdmin,
     handleOpenPromoteDialog, handleOpenReportPostDialog,
     handleOpenRepostDialog, handleOpenReportCommentDialog,
     handleOpenCommentDialog, handleDeletePost,
@@ -157,6 +157,9 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
       toast({ title: 'Reply sent', description: 'Your comment has been posted.' });
       setInlineReplyText('');
       setShowInlineReply(false);
+      if (result && typeof result === 'object' && 'id' in result) {
+        dispatch({ type: 'ADD_COMMENT', payload: { postId: post.id, comment: result as DiscussionComment } });
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'An unexpected error occurred';
       toast({ title: 'Error', description: message, variant: 'destructive' });
@@ -639,7 +642,13 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                   currentUserId={currentUserId ?? undefined}
                   postAuthorId={post.authorId}
                   tribeId={tribeId}
-                  onCommentAdded={syncAllData}
+                  onCommentAdded={(newReply?: DiscussionComment) => {
+                    if (newReply) {
+                      dispatch({ type: 'ADD_COMMENT', payload: { postId: post.id, comment: newReply } });
+                    } else {
+                      syncAllData();
+                    }
+                  }}
                   isPublic={state.tribe?.isPublic ?? true}
                 />
               ))}

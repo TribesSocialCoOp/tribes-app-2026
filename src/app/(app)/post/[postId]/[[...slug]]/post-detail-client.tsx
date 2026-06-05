@@ -770,7 +770,7 @@ export function PostDetailClient({
               setLoadedComments(prev => [...prev, result as DiscussionComment]);
               setCommentCount(prev => prev + 1);
               setShowComments(true);
-              loadComments();
+              router.refresh();
             } catch (e: unknown) {
               const message = e instanceof Error ? e.message : 'An unexpected error occurred';
               toast({ title: 'Error', description: message, variant: 'destructive' });
