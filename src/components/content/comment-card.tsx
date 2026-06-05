@@ -46,6 +46,8 @@ import type { DiscussionComment } from '@/lib/types';
 import Link from 'next/link';
 import { MentionAutocomplete } from '../compose/mention-autocomplete';
 import { useMentionAutocomplete } from '@/hooks/use-mention-autocomplete';
+import { EmojiAutocomplete } from '../compose/emoji-autocomplete';
+import { useEmojiAutocomplete } from '@/hooks/use-emoji-autocomplete';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { profilePath } from '@/lib/utils/paths';
 import { VibePicker } from '@/components/ui/vibe-picker';
@@ -197,6 +199,9 @@ export const CommentCard: React.FC<CommentCardProps> = ({
 
   const { mentionQuery, mentionRef, checkMention, handleSelectMention, handleMentionKeyDown } =
     useMentionAutocomplete(replyTextareaRef, replyText, setReplyText);
+
+  const { emojiQuery, emojiRef, checkEmoji, handleSelectEmoji, handleEmojiKeyDown } =
+    useEmojiAutocomplete(replyTextareaRef, replyText, setReplyText);
 
   const handleDeleteComment = async () => {
     setIsDeletingComment(true);
@@ -541,9 +546,11 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               onChange={(e) => {
                 setReplyText(e.target.value);
                 checkMention(e.target.value, e.target.selectionStart);
+                checkEmoji(e.target.value, e.target.selectionStart);
               }}
               onKeyDown={(e) => {
                 handleMentionKeyDown(e);
+                handleEmojiKeyDown(e);
                 if (e.isDefaultPrevented()) return;
 
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -554,6 +561,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               onSelect={(e) => {
                 const target = e.target as HTMLTextAreaElement;
                 checkMention(target.value, target.selectionStart);
+                checkEmoji(target.value, target.selectionStart);
               }}
               className="text-sm min-h-[36px] resize-none w-full"
               rows={2}
@@ -563,6 +571,11 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               ref={mentionRef}
               query={mentionQuery}
               onSelect={handleSelectMention}
+            />
+            <EmojiAutocomplete
+              ref={emojiRef}
+              query={emojiQuery}
+              onSelect={handleSelectEmoji}
             />
           </div>
           <Button

@@ -15,6 +15,8 @@ import type { Ring, LinkPreviewData } from '@/lib/types';
 import { ImagePlus, Send, Loader2, X, Lock, Globe, Link2 } from 'lucide-react';
 import { MentionAutocomplete } from './mention-autocomplete';
 import { useMentionAutocomplete } from '@/hooks/use-mention-autocomplete';
+import { EmojiAutocomplete } from './emoji-autocomplete';
+import { useEmojiAutocomplete } from '@/hooks/use-emoji-autocomplete';
 import { cn, cleanUrl } from '@/lib/utils';
 import { useActionError } from '@/hooks/use-action-error';
 import { uploadFile } from '@/lib/upload';
@@ -112,6 +114,8 @@ export function ComposeBox({
 
   const { mentionQuery, mentionRef, checkMention, handleSelectMention, handleMentionKeyDown } =
     useMentionAutocomplete(textareaRef, content, setContent);
+  const { emojiQuery, emojiRef, checkEmoji, handleSelectEmoji, handleEmojiKeyDown } =
+    useEmojiAutocomplete(textareaRef, content, setContent);
   const [moodTag, setMoodTag] = useState<string | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
@@ -568,6 +572,7 @@ export function ComposeBox({
                     onChange={(e) => {
                       setContent(e.target.value);
                       checkMention(e.target.value, e.target.selectionStart);
+                      checkEmoji(e.target.value, e.target.selectionStart);
                     }}
                     onKeyDown={(e) => {
                       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && (content.trim() || imageFiles.length > 0) && !isPending && !(ring === 'tribes' && selectedTribeIds.length === 0)) {
@@ -576,10 +581,12 @@ export function ComposeBox({
                         return;
                       }
                       handleMentionKeyDown(e);
+                      handleEmojiKeyDown(e);
                     }}
                     onSelect={(e) => {
                       const target = e.target as HTMLTextAreaElement;
                       checkMention(target.value, target.selectionStart);
+                      checkEmoji(target.value, target.selectionStart);
                     }}
                     placeholder={
                       ring === 'journal'
@@ -597,6 +604,11 @@ export function ComposeBox({
                     ref={mentionRef}
                     query={mentionQuery}
                     onSelect={handleSelectMention}
+                  />
+                  <EmojiAutocomplete
+                    ref={emojiRef}
+                    query={emojiQuery}
+                    onSelect={handleSelectEmoji}
                   />
                 </div>
 

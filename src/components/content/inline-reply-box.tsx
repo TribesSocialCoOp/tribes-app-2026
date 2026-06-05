@@ -5,6 +5,8 @@ import { Loader2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MentionAutocomplete } from '@/components/compose/mention-autocomplete';
 import { useMentionAutocomplete } from '@/hooks/use-mention-autocomplete';
+import { EmojiAutocomplete } from '@/components/compose/emoji-autocomplete';
+import { useEmojiAutocomplete } from '@/hooks/use-emoji-autocomplete';
 
 export interface InlineReplyBoxProps {
   value: string;
@@ -34,6 +36,8 @@ export const InlineReplyBox = forwardRef<HTMLDivElement, InlineReplyBoxProps>(
     const textareaRef = React.useRef<HTMLTextAreaElement>(null);
     const { mentionQuery, mentionRef, checkMention, handleSelectMention, handleMentionKeyDown } =
       useMentionAutocomplete(textareaRef, value, onChange);
+    const { emojiQuery, emojiRef, checkEmoji, handleSelectEmoji, handleEmojiKeyDown } =
+      useEmojiAutocomplete(textareaRef, value, onChange);
 
     return (
       <div ref={ref} className={cn("px-3 sm:px-4 pb-3 sm:pb-4 flex gap-2", className)}>
@@ -45,9 +49,11 @@ export const InlineReplyBox = forwardRef<HTMLDivElement, InlineReplyBoxProps>(
             onChange={(e) => {
               onChange(e.target.value);
               checkMention(e.target.value, e.target.selectionStart);
+              checkEmoji(e.target.value, e.target.selectionStart);
             }}
             onKeyDown={(e) => {
               handleMentionKeyDown(e);
+              handleEmojiKeyDown(e);
               if (e.isDefaultPrevented()) return;
 
               if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -60,6 +66,7 @@ export const InlineReplyBox = forwardRef<HTMLDivElement, InlineReplyBoxProps>(
             onSelect={(e) => {
               const target = e.target as HTMLTextAreaElement;
               checkMention(target.value, target.selectionStart);
+              checkEmoji(target.value, target.selectionStart);
             }}
             rows={1}
             className="text-sm min-h-[36px] resize-none w-full"
@@ -70,6 +77,11 @@ export const InlineReplyBox = forwardRef<HTMLDivElement, InlineReplyBoxProps>(
             ref={mentionRef}
             query={mentionQuery}
             onSelect={handleSelectMention}
+          />
+          <EmojiAutocomplete
+            ref={emojiRef}
+            query={emojiQuery}
+            onSelect={handleSelectEmoji}
           />
         </div>
         <Button

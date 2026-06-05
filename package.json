@@ -90,6 +90,7 @@
     "dotenv": "^16.5.0",
     "drizzle-orm": "^0.45.2",
     "emoji-picker-react": "^4.19.1",
+    "gemoji": "^8.1.0",
     "google-auth-library": "^10.6.2",
     "heic2any": "^0.0.4",
     "ioredis": "^5.10.1",

@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { MessageSquareText, Send } from 'lucide-react';
 import { MentionAutocomplete } from '../compose/mention-autocomplete';
 import { useMentionAutocomplete } from '@/hooks/use-mention-autocomplete';
+import { EmojiAutocomplete } from '../compose/emoji-autocomplete';
+import { useEmojiAutocomplete } from '@/hooks/use-emoji-autocomplete';
 import {
   ResponsiveDialog, ResponsiveDialogHeader, ResponsiveDialogTitle,
   ResponsiveDialogDescription, ResponsiveDialogFooter
@@ -36,6 +38,9 @@ export function CommentDialog({
   const { mentionQuery, mentionRef, checkMention, handleSelectMention, handleMentionKeyDown, resetMention } =
     useMentionAutocomplete(textareaRef, content, setContent);
 
+  const { emojiQuery, emojiRef, checkEmoji, handleSelectEmoji, handleEmojiKeyDown, resetEmoji } =
+    useEmojiAutocomplete(textareaRef, content, setContent);
+
   const handleClose = useCallback(() => onOpenChange(false), [onOpenChange]);
   useCloseOnKeyboardHide(isOpen, handleClose, mentionSuppressRef);
 
@@ -43,8 +48,9 @@ export function CommentDialog({
     if (!isOpen) {
       setContent("");
       resetMention();
+      resetEmoji();
     }
-  }, [isOpen, resetMention]);
+  }, [isOpen, resetMention, resetEmoji]);
 
   const handleConfirm = () => {
     onConfirmComment(content);
@@ -76,6 +82,7 @@ export function CommentDialog({
               onChange={(e) => {
                 setContent(e.target.value);
                 checkMention(e.target.value, e.target.selectionStart);
+                checkEmoji(e.target.value, e.target.selectionStart);
               }}
               onKeyDown={(e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && content.trim().length >= 1) {
@@ -84,10 +91,12 @@ export function CommentDialog({
                   return;
                 }
                 handleMentionKeyDown(e);
+                handleEmojiKeyDown(e);
               }}
               onSelect={(e) => {
                 const target = e.target as HTMLTextAreaElement;
                 checkMention(target.value, target.selectionStart);
+                checkEmoji(target.value, target.selectionStart);
               }}
               placeholder="What are your thoughts?"
               className="mt-1 min-h-[120px] w-full"
@@ -97,6 +106,12 @@ export function CommentDialog({
               ref={mentionRef}
               query={mentionQuery}
               onSelect={handleSelectMention}
+              suppressRef={mentionSuppressRef}
+            />
+            <EmojiAutocomplete
+              ref={emojiRef}
+              query={emojiQuery}
+              onSelect={handleSelectEmoji}
               suppressRef={mentionSuppressRef}
             />
           </div>

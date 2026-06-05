@@ -7,6 +7,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import { cn } from '@/lib/utils';
 import type { Ring } from '@/lib/types';
 import Link from 'next/link';
+import { resolveEmojiShortcode } from '@/lib/emoji-data';
 
 const MAX_CHART_LENGTH = 10_000; // ~10 KB — generous for any reasonable diagram
 
@@ -28,6 +29,17 @@ function preprocessInlineImages(content: string): string {
  */
 function preprocessMentions(content: string): string {
   return content.replace(/(^|\s)@([a-zA-Z0-9_-]{2,30})/g, '$1[@$2](/u/$2)');
+}
+
+/**
+ * Pre-process post content: replace ::shortcode:: emoji references with the actual emoji character.
+ * Uses the gemoji dataset for lookup.
+ */
+function preprocessEmoji(content: string): string {
+  return content.replace(/::([a-z0-9_+-]+)::/g, (match, shortcode) => {
+    const emoji = resolveEmojiShortcode(shortcode);
+    return emoji ?? match; // Keep the original if shortcode not found
+  });
 }
 
 /**
@@ -162,6 +174,7 @@ export function MarkdownContent({
       result = preprocessInlineImages(result);
     }
     result = preprocessMentions(result);
+    result = preprocessEmoji(result);
     return result;
   }, [content, imageUrls?.length]);
 
