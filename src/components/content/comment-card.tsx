@@ -508,7 +508,14 @@ export const CommentCard: React.FC<CommentCardProps> = ({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => isMobile ? setIsReplyDialogOpen(true) : setShowReply(!showReply)}
+              onClick={() => {
+                if (isMobile) {
+                  setIsReplyDialogOpen(true);
+                } else {
+                  setShowReply(!showReply);
+                  setIsReplyDialogOpen(false);
+                }
+              }}
               className="px-1 text-muted-foreground hover:text-primary h-6 text-xs"
             >
               Reply
@@ -536,7 +543,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
       </div>
 
       {/* ── Inline reply to this comment (desktop only) ── */}
-      {showReply && (
+      {showReply && !isMobile && (
         <div className={cn("mt-2 flex gap-2", isDeep ? "ml-1 md:ml-9" : "ml-11")}>
           <div className="relative flex-1 z-10">
             <Textarea
@@ -592,7 +599,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
 
       {/* ── Reply dialog (mobile only) ── */}
       <CommentDialog
-        isOpen={isReplyDialogOpen}
+        isOpen={isReplyDialogOpen && isMobile}
         onOpenChange={setIsReplyDialogOpen}
         onConfirmComment={handleDialogReply}
         postTitle={undefined}
