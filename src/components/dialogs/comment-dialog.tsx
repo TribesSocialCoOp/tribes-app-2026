@@ -50,7 +50,7 @@ export function CommentDialog({
       resetMention();
       resetEmoji();
     }
-  }, [isOpen, resetMention]);
+  }, [isOpen, resetMention, resetEmoji]);
 
   const handleConfirm = () => {
     onConfirmComment(content);

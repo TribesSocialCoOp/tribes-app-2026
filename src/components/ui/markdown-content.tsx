@@ -36,9 +36,9 @@ function preprocessMentions(content: string): string {
  * Uses the gemoji dataset for lookup.
  */
 function preprocessEmoji(content: string): string {
-  return content.replace(/::([a-z0-9_+-]+)::/g, (_match, shortcode) => {
+  return content.replace(/::([a-z0-9_+-]+)::/g, (match, shortcode) => {
     const emoji = resolveEmojiShortcode(shortcode);
-    return emoji ?? _match; // Keep the original if shortcode not found
+    return emoji ?? match; // Keep the original if shortcode not found
   });
 }
 
