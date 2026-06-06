@@ -86,6 +86,15 @@ function buildSecurityHeaders() {
   const connectSources = ["'self'"];
   if (wsRelay) connectSources.push(wsRelay);
   if (appUrl) connectSources.push(appUrl);
+  // Media domain must be in connect-src as well as img-src — fetch() for image
+  // download hits connect-src, not img-src (img-src only covers <img> tag loads).
+  if (s3Public) {
+    try {
+      connectSources.push(new URL(s3Public).origin);
+    } catch {
+      connectSources.push(s3Public);
+    }
+  }
 
   // In development, allow connections to any host to support IP-based testing on mobile devices
   if (process.env.NODE_ENV !== 'production') {
