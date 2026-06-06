@@ -66,11 +66,20 @@
     # but public URLs use /<bucket>/<key>. Rewrite to add the /buckets prefix.
     rewrite * /buckets{path}
 
-    reverse_proxy seaweedfs-filer:8888
+    reverse_proxy seaweedfs-filer:8888 {
+        # SeaweedFS sends its own wildcard CORS headers which browsers reject when
+        # combined with Access-Control-Allow-Credentials: true. Strip them all so
+        # Caddy's header directives below set the correct values.
+        header_down -Access-Control-Allow-Origin
+        header_down -Access-Control-Allow-Credentials
+        header_down -Access-Control-Allow-Methods
+        header_down -Access-Control-Allow-Headers
+        header_down -Access-Control-Expose-Headers
+    }
 
     import security_headers
 
-    # Allow the app origin to fetch media (needed for blob-based image download)
+    # Allow only the app origin to fetch media (needed for blob-based image download)
     header Access-Control-Allow-Origin "https://{$APP_DOMAIN:tribes.app}"
 
     # Block script execution in media documents (SVGs loaded via <img>, etc.)
