@@ -83,7 +83,7 @@ const TribeListItem: React.FC<{ tribe: Tribe; isMyTribe: boolean; onJoin: (tribe
   return (
     <div className="flex items-center justify-between p-3 hover:bg-muted/50 border-b last:border-b-0">
       <div className="flex items-center space-x-3">
-        <Image src={tribe.cover} alt={tribe.name} width={40} height={40} className="rounded-md object-cover h-10 w-10" data-ai-hint={tribe.dataAiHint} />
+        <Image src={tribe.cover} alt={tribe.name} width={96} height={96} className="rounded-md object-cover h-10 w-10" data-ai-hint={tribe.dataAiHint} />
         <div>
           <Link href={`/t/${tribe.slug}`} passHref>
             <h3 className="font-semibold text-sm hover:underline">{tribe.name}</h3>
