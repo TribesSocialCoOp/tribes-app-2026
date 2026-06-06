@@ -2,12 +2,14 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { X, ChevronLeft, ChevronRight, Maximize, ZoomIn, ZoomOut, Download } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Maximize, ZoomIn, ZoomOut, Download, Share2, Link, EllipsisVertical } from 'lucide-react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { cn } from '@/lib/utils';
 import { EncryptedImage } from './encrypted-image';
 import { isSvgUrl } from '@/lib/svg-sanitizer';
-import { downloadImage } from '@/lib/capacitor/share';
+import { downloadImage, shareImage } from '@/lib/capacitor/share';
+import { ResponsiveMenu, ResponsiveMenuTrigger, ResponsiveMenuContent, ResponsiveMenuItem } from './responsive-menu';
+import { useToast } from '@/hooks/use-toast';
 import type { Ring } from '@/lib/types';
 
 interface ImageLightboxProps {
@@ -86,6 +88,7 @@ function ZoomToolbar({ scale, wrapperRef }: { scale: number; wrapperRef: React.R
 }
 
 export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, isEncrypted, postId, ring, tribeId }: ImageLightboxProps) {
+  const { toast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [scale, setScale] = useState(1);
   const transformWrapperRef = useRef<React.ComponentRef<typeof TransformWrapper>>(null);
@@ -198,15 +201,49 @@ export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, is
           <X className="h-7 w-7 sm:h-6 sm:w-6" />
         </button>
 
-        {/* Download / share button — top-left, hidden for encrypted images */}
+        {/* Action menu — top-left, hidden for encrypted images */}
         {!isEncrypted && (
-          <button
-            onClick={(e) => { e.stopPropagation(); void downloadImage(currentUrl); }}
-            className="absolute top-[max(1rem,env(safe-area-inset-top,16px))] left-4 sm:top-6 sm:left-6 z-50 p-3 bg-black/50 hover:bg-black/70 active:bg-black/80 rounded-full text-white/90 hover:text-white transition-colors"
-            aria-label="Save image"
-          >
-            <Download className="h-7 w-7 sm:h-6 sm:w-6" />
-          </button>
+          <div className="absolute top-[max(1rem,env(safe-area-inset-top,16px))] left-4 sm:top-6 sm:left-6 z-50">
+            <ResponsiveMenu>
+              <ResponsiveMenuTrigger asChild>
+                <button
+                  className="p-3 bg-black/50 hover:bg-black/70 active:bg-black/80 rounded-full text-white/90 hover:text-white transition-colors"
+                  aria-label="Image actions"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <EllipsisVertical className="h-7 w-7 sm:h-6 sm:w-6" />
+                </button>
+              </ResponsiveMenuTrigger>
+              <ResponsiveMenuContent align="start">
+                <ResponsiveMenuItem onClick={async () => {
+                  const ok = await downloadImage(currentUrl);
+                  if (ok) toast({ title: 'Image saved' });
+                  else toast({ title: 'Save failed', description: 'Could not save the image.', variant: 'destructive' });
+                }}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Save Image
+                </ResponsiveMenuItem>
+                <ResponsiveMenuItem onClick={async () => {
+                  const ok = await shareImage(currentUrl);
+                  if (!ok) toast({ title: 'Share failed', description: 'Could not complete the share.', variant: 'destructive' });
+                }}>
+                  <Share2 className="h-4 w-4 mr-2" />
+                  Share
+                </ResponsiveMenuItem>
+                <ResponsiveMenuItem onClick={() => {
+                  navigator.clipboard.writeText(currentUrl)
+                    .then(() => toast({ title: 'Link copied', description: 'Image URL copied to clipboard.' }))
+                    .catch((err) => {
+                      console.warn('[lightbox] Copy link failed:', err);
+                      toast({ title: 'Copy failed', description: 'Could not access clipboard.', variant: 'destructive' });
+                    });
+                }}>
+                  <Link className="h-4 w-4 mr-2" />
+                  Copy Link
+                </ResponsiveMenuItem>
+              </ResponsiveMenuContent>
+            </ResponsiveMenu>
+          </div>
         )}
 
         {/* Navigation arrows (multi-image, hidden when zoomed) */}

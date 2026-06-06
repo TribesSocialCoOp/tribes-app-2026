@@ -3,21 +3,18 @@ import { Filesystem, Directory } from '@capacitor/filesystem';
 import { isNative, isIos, isAndroid } from './platform';
 
 /**
- * Save or share an image.
- * iOS: opens native share sheet (includes "Save to Photos").
- * Android: fetches blob → writes to Downloads via Capacitor Filesystem.
- * Web: fetches blob → triggers download via <a download>.
- *   Falls back to new-tab if fetch fails (e.g. missing CORS headers).
+ * Save an image to the device.
+ * iOS: opens native share sheet (includes "Save to Photo Library").
+ * Android: writes to app-accessible external storage (Files app > Internal Storage > Android > data > …).
+ *          No share sheet — just saves and returns.
+ * Web: triggers a blob download via <a download>.
  */
-export async function downloadImage(url: string): Promise<void> {
-  // iOS share sheet handles image URLs natively and offers "Save to Photos"
+export async function downloadImage(url: string): Promise<boolean> {
   if (isIos) {
-    await shareContent({ url });
-    return;
+    // iOS share sheet offers "Save to Photo Library" natively
+    return shareContent({ url });
   }
 
-  // Android: <a download> is silently ignored in Capacitor WebView.
-  // Use Filesystem plugin to write to the device Downloads folder.
   if (isAndroid) {
     try {
       const res = await fetch(url);
@@ -25,17 +22,18 @@ export async function downloadImage(url: string): Promise<void> {
       const blob = await res.blob();
       const base64 = await blobToBase64(blob);
       const fileName = url.split('/').pop() ?? 'image.jpg';
+      // Directory.External = getExternalFilesDir() — app-specific external storage,
+      // accessible via Files app, no runtime permissions required on any Android version.
       await Filesystem.writeFile({
         path: fileName,
         data: base64,
-        directory: Directory.Documents,
+        directory: Directory.External,
       });
-      // Brief visual feedback could be added here via toast
-    } catch {
-      // Fallback: open in browser tab so user can long-press to save
-      window.open(url, '_blank', 'noopener');
+      return true;
+    } catch (err) {
+      console.warn('[downloadImage] Android save failed:', err);
+      return false;
     }
-    return;
   }
 
   // Web: fetch the image as a blob and trigger a download.
@@ -51,10 +49,61 @@ export async function downloadImage(url: string): Promise<void> {
     a.click();
     a.remove();
     URL.revokeObjectURL(objectUrl);
+    return true;
   } catch {
     // CORS or network error — open in new tab as last resort
     window.open(url, '_blank', 'noopener');
+    return false;
   }
+}
+
+/**
+ * Share an image via the native OS share sheet.
+ * iOS: passes the remote URL directly — iOS handles remote image URLs natively.
+ * Android: downloads to cache first, then shares the local file URI.
+ *          Passing a remote HTTPS URL to Share.share() crashes the Android bridge.
+ * Web: falls back to Web Share API.
+ */
+export async function shareImage(url: string): Promise<boolean> {
+  if (isIos) {
+    return shareContent({ url });
+  }
+
+  if (isAndroid) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const base64 = await blobToBase64(blob);
+      const fileName = url.split('/').pop() ?? 'image.jpg';
+      // Write to cache — no permissions needed, OS cleans it up automatically
+      const result = await Filesystem.writeFile({
+        path: fileName,
+        data: base64,
+        directory: Directory.Cache,
+      });
+      await Share.share({ files: [result.uri] });
+      return true;
+    } catch (err) {
+      // Capacitor throws "Share canceled" when the user dismisses the sheet — not an error
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/cancel/i.test(msg)) return true;
+      console.warn('[shareImage] Android share failed:', err);
+      return false;
+    }
+  }
+
+  // Web: use Web Share API if available
+  if (typeof navigator !== 'undefined' && navigator.share) {
+    try {
+      await navigator.share({ url });
+      return true;
+    } catch {
+      // User cancelled or browser error
+    }
+  }
+
+  return false;
 }
 
 /** Convert a Blob to a base64 string (without the data URL prefix). */
@@ -72,8 +121,8 @@ function blobToBase64(blob: Blob): Promise<string> {
 }
 
 /**
- * Open the native OS share sheet.
- * Falls back to Web Share API or copy-to-clipboard if not native.
+ * Open the native OS share sheet for a URL or text.
+ * Falls back to Web Share API if not native.
  */
 export async function shareContent(options: { title?: string; text?: string; url?: string }) {
   if (isNative) {
@@ -93,7 +142,7 @@ export async function shareContent(options: { title?: string; text?: string; url
     try {
       await navigator.share(options);
       return true;
-    } catch (err) {
+    } catch {
       // User cancelled or browser error
     }
   }
