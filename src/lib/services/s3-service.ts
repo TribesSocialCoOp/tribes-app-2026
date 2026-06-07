@@ -174,17 +174,20 @@ export async function uploadImage(
   // Ensure bucket exists (lazy-init, idempotent)
   await ensureBucketExists(bucketName);
 
-  // Sanitize filename and generate unique key
-  const uniqueId = crypto.randomUUID();
-  const sanitizedName = file.name
-    ? file.name.replace(/[^a-zA-Z0-9.-]/g, "_")
-    : 'upload.bin';
+  // Generate short opaque key: 4-byte timestamp + 8 random bytes (no original filename in URL)
+  const tsHex = Math.floor(Date.now() / 1000).toString(16).padStart(8, '0');
+  const randomBytes = new Uint8Array(8);
+  crypto.getRandomValues(randomBytes);
+  const uniqueId = tsHex + Array.from(randomBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  const ext = file.name && file.name.includes('.')
+    ? file.name.slice(file.name.lastIndexOf('.')).toLowerCase().replace(/[^a-z0-9.]/g, '')
+    : '';
 
   // Private files are namespaced under the user's folder
   const keyPrefix = bucket === 'private' && userId
     ? `users/${userId}/${folder}`
     : folder;
-  const s3Key = `${keyPrefix}/${uniqueId}-${sanitizedName}`;
+  const s3Key = `${keyPrefix}/${uniqueId}${ext}`;
 
   const command = new PutObjectCommand({
     Bucket: bucketName,
