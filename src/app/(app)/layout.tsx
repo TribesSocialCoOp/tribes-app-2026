@@ -18,11 +18,15 @@ import { NativeInitializer } from "@/components/providers/native-initializer";
 import { OverlayScrollGuard } from "@/components/providers/overlay-scroll-guard";
 import { PullToRefresh } from "@/components/layout/pull-to-refresh";
 import { useTheme } from "@/hooks/use-theme";
+import { installNavTrace } from "@/lib/nav-trace";
 import React, { useEffect } from "react";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Mount theme hook to ensure class is maintained after hydration
   useTheme();
+
+  // Install navigation tracer (exposes window.__navTrace for remote debugging)
+  useEffect(() => { installNavTrace(); }, []);
 
   // ── Synthetic history injection (web + Capacitor) ────────────────────────
   // Problem: the / → /your-comms server redirect, and direct deep-links to
@@ -86,6 +90,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handlePopState = (e: PopStateEvent) => {
       if (e.state?._tribesSentinel) {
+        (window as any).__navTrace?.recordSentinelGuard(window.location.pathname);
         History.prototype.pushState.call(window.history, null, '', '/your-comms');
       }
     };
