@@ -76,6 +76,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once on mount only
   }, []);
 
+  // ── Sentinel popstate guard (Firefox + non-Capacitor browsers) ───────────
+  // The Capacitor backButton handler already catches the sentinel and calls
+  // App.exitApp(). But on web/Firefox, the browser's native back button fires
+  // popstate directly — bypassing that handler — and can navigate past the
+  // sentinel into pre-app history (e.g. a /tribes visit before the app loaded).
+  // When we detect the sentinel in popstate, push /your-comms back onto the
+  // stack so the sentinel acts as a hard stop rather than a waypoint.
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state?._tribesSentinel) {
+        History.prototype.pushState.call(window.history, null, '', '/your-comms');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   // SidebarProvider will now manage its own open/collapsed state using cookies.
 
   // No need for AppLayout to maintain 'open' state for the sidebar.

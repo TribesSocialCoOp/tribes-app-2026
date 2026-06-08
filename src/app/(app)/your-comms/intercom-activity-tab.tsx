@@ -32,7 +32,9 @@ const ActivityItemCard: React.FC<ActivityItemCardProps> = ({ item, icon, badgeSl
     if (item.type === 'tribe_join_request') {
       sessionStorage.setItem('manage-members-origin', 'activity');
     }
-    
+    // Preserve tab context so back navigation restores Activity tab, not Feed
+    sessionStorage.setItem('intercom_return_tab', 'activity');
+
     router.push(url);
   };
 
