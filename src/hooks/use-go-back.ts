@@ -65,6 +65,11 @@ export function useGoBack() {
   const router = useRouter();
 
   return useCallback(() => {
+    (window as any).__navTrace?.recordGoBack(
+      window.location.pathname,
+      window.history.state,
+      window.history.length,
+    );
     // If we're on the sentinel entry, there's nowhere to go back to
     if (window.history.state?._tribesSentinel) {
       return;
