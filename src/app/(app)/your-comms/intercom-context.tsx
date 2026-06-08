@@ -15,6 +15,7 @@ type RingFilterValue = Ring | 'all' | 'streams';
 const RING_STORAGE_KEY = 'tribes_ring_filter';
 const MOOD_STORAGE_KEY = 'tribes_mood_filter';
 const TAB_STORAGE_KEY = 'tribes_intercom_tab';
+const RETURN_TAB_KEY = 'intercom_return_tab';
 
 interface IntercomState {
   isLoading: boolean;
@@ -122,9 +123,17 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_RING_FILTER', payload: storedRing });
     }
 
-    const storedTab = localStorage.getItem(TAB_STORAGE_KEY) as 'feed' | 'activity' | null;
-    if (storedTab) {
-      dispatch({ type: 'SET_ACTIVE_TAB', payload: storedTab });
+    // sessionStorage takes priority — set by activity items before navigating away
+    // so that back navigation always restores the correct tab
+    const returnTab = sessionStorage.getItem(RETURN_TAB_KEY) as 'feed' | 'activity' | null;
+    if (returnTab) {
+      dispatch({ type: 'SET_ACTIVE_TAB', payload: returnTab });
+      sessionStorage.removeItem(RETURN_TAB_KEY);
+    } else {
+      const storedTab = localStorage.getItem(TAB_STORAGE_KEY) as 'feed' | 'activity' | null;
+      if (storedTab) {
+        dispatch({ type: 'SET_ACTIVE_TAB', payload: storedTab });
+      }
     }
 
     try {
