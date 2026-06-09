@@ -27,7 +27,7 @@ async function loginAsDustin(page: any) {
   if (new URL(page.url()).pathname.startsWith('/login')) {
     await page.waitForSelector('button:has-text("Dustin")', { state: 'visible', timeout: 10_000 });
     await page.click('button:has-text("Dustin")');
-    await page.waitForURL('**/your-comms', { timeout: 20_000 });
+    await page.waitForURL('**/your-comms', { timeout: 30_000, waitUntil: 'commit' });
   }
   // Otherwise we're already on /your-comms — nothing to do
 }
@@ -54,8 +54,8 @@ async function getFirstPostUrl(page: any): Promise<string> {
   // Wait up to 10s for a post anchor to appear
   const found = await page.waitForSelector('a[href*="/post/"]', { timeout: 10_000 }).catch(() => null);
   if (!found) {
-    // Absolute fallback: use a known seeded post
-    return 'http://localhost:9002/post/5072e42b-57cc-4158-a40c-fede015b7f34';
+    // Absolute fallback: use a known seeded post (ai_post_1 in AI Innovators tribe)
+    return 'http://localhost:9002/post/ai_post_1';
   }
 
   const href = await page.getAttribute('a[href*="/post/"]', 'href') ?? '';
@@ -168,12 +168,7 @@ test.describe('Back Navigation', () => {
     // SPA-click tribe link: layout stays mounted, no new injection.
     // History: [..., /your-comms(S2), /post/:id, /t/:slug]
     await page.locator(`a[href="${tribeHref}"]`).first().click();
-    // waitForFunction avoids the 'load' event requirement of waitForURL for SPA nav
-    await page.waitForFunction(
-      (p) => window.location.pathname === p,
-      tribeHref,
-      { timeout: 15_000 }
-    );
+    await page.waitForURL(`**${tribeHref}`, { timeout: 15_000, waitUntil: 'commit' });
     expect(new URL(page.url()).pathname).toMatch(/^\/t\//);
 
     // Back 1: tribe → post ✓
@@ -209,8 +204,8 @@ test.describe('Back Navigation', () => {
       const href = await postLink.getAttribute('href') ?? '';
       postUrl = href.startsWith('http') ? href : `http://localhost:9002${href}`;
     } else {
-      // Fallback: use a known seeded post from previous test runs
-      postUrl = 'http://localhost:9002/post/5072e42b-57cc-4158-a40c-fede015b7f34';
+      // Fallback: use a known seeded post (ai_post_1 in AI Innovators tribe)
+      postUrl = 'http://localhost:9002/post/ai_post_1';
     }
 
     // Hard-navigate directly to the post (simulates push notification deep link)

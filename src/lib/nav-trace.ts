@@ -68,6 +68,8 @@ export function installNavTrace() {
 
   // Listen for popstate (back/forward)
   window.addEventListener('popstate', (e) => {
+    const isSentinel = !!(e.state?._tribesSentinel);
+    console.log('[nav-trace] popstate → ', window.location.pathname, '| sentinel:', isSentinel, '| histLen:', window.history.length);
     record(entries, {
       time: timestamp(),
       op: 'popstate',

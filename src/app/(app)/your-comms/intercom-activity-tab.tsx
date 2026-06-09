@@ -35,6 +35,11 @@ const ActivityItemCard: React.FC<ActivityItemCardProps> = ({ item, icon, badgeSl
     // Preserve tab context so back navigation restores Activity tab, not Feed
     sessionStorage.setItem('intercom_return_tab', 'activity');
 
+    // Next.js router.push() called after `await` (outside a synchronous React event)
+    // behaves as replaceState in Next.js 16 / React 19 concurrent mode, clobbering
+    // the /your-comms entry so back() skips past the feed to wherever you came from.
+    // Inject /your-comms first so back always lands here regardless of push vs. replace.
+    History.prototype.pushState.call(window.history, null, '', '/your-comms');
     router.push(url);
   };
 
