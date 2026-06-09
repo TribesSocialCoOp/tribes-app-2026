@@ -72,7 +72,7 @@ export const sampleEventsData: Event[] = [
   },
 ];
 
-const MOCK_POST_DATE_MS = new Date("2025-06-08T10:00:00.000Z").getTime();
+const MOCK_POST_DATE_MS = Date.now();
 export const initialSampleTribePosts: TribePost[] = [
   {
     id: "welcome_post_1", tribeId: "0", authorId: "dustin", authorName: "Dustin Moore", authorAvatarFallback: "DM",

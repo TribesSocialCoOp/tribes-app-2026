@@ -145,8 +145,8 @@ fi
 log "Starting app-${NEW_COLOR} container..."
 docker compose -f "$COMPOSE_FILE" --profile "$NEW_COLOR" up -d "app-$NEW_COLOR"
 
-log "Reloading Caddy reverse proxy..."
-docker exec tribes-caddy-1 caddy reload --config /etc/caddy/Caddyfile 2>/dev/null || warn "Caddy reload skipped"
+log "Restarting Caddy (rsync replaces files with new inodes; restart re-binds the mount)..."
+docker restart tribes-caddy-1 >/dev/null && ok "Caddy restarted" || warn "Caddy restart skipped"
 
 # ── Step 7: Wait for the NEW container to become healthy ──────
 log "Waiting for app-${NEW_COLOR} health check..."
