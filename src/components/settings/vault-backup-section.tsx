@@ -427,11 +427,13 @@ export const VaultBackupSection: React.FC = () => {
             </div>
             <p className="text-2xl font-bold mt-1">{(hasBackup || hasPrfVault) ? 'Active' : 'None'}</p>
             <p className="text-xs text-muted-foreground">
-              {hasBackup && backupDate
-                ? `Passphrase: ${backupDate.toLocaleDateString()}`
+              {hasBackup && backupDate && hasPrfVault
+                ? `Passkey + Passphrase (${backupDate.toLocaleDateString()})`
                 : hasPrfVault
                   ? 'Passkey vault active'
-                  : 'Not yet backed up'}
+                  : hasBackup && backupDate
+                    ? `Passphrase: ${backupDate.toLocaleDateString()}`
+                    : 'Not yet backed up'}
             </p>
           </div>
         </div>
