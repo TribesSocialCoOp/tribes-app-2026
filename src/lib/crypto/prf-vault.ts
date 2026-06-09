@@ -66,7 +66,8 @@ export async function isPrfSupported(): Promise<boolean> {
     try {
       const caps = await (pkc.getClientCapabilities as () => Promise<Record<string, boolean>>)();
       console.log('[prf] getClientCapabilities:', caps);
-      return !!caps.prf;
+      // Chrome reports PRF as 'extension:prf', Safari/standard as 'prf'
+      return !!(caps.prf || caps['extension:prf']);
     } catch (err) {
       console.log('[prf] getClientCapabilities threw:', err);
       // Fall through — capability check failed (e.g., browser throws on unknown caps)

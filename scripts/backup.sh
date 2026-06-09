@@ -26,7 +26,12 @@ RESTIC_REPO="/backups/restic-repo"
 RESTIC_PASSWORD_FILE="/etc/tribes/restic-password"
 LOG_PREFIX="[tribes-backup $(date '+%Y-%m-%d %H:%M:%S')]"
 
-# Optional remote SFTP target
+# Source offsite backup config (created by setup-offsite-backup.sh)
+if [[ -f /etc/tribes/backup.env ]]; then
+  # shellcheck source=/dev/null
+  source /etc/tribes/backup.env
+fi
+
 BACKUP_HOST="${BACKUP_HOST:-}"               # Set to backup server IP
 BACKUP_USER="${BACKUP_USER:-tribes}"
 BACKUP_REMOTE_PATH="${BACKUP_REMOTE_PATH:-/backups/tribes-restic}"
@@ -88,6 +93,8 @@ restic \
   --repo "$RESTIC_REPO" \
   --password-file "$RESTIC_PASSWORD_FILE" \
   forget \
+  --group-by host \
+  --tag tribes-nightly \
   --keep-daily 7 \
   --keep-weekly 4 \
   --keep-monthly 3 \

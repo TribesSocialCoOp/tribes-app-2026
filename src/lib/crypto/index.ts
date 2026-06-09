@@ -89,6 +89,9 @@ export {
   decryptAndRestoreVault,
 } from './prf-vault';
 
+// Session vault key — in-memory store for PRF wrapping key (Phase 3)
+export { sessionVaultKey } from './session-vault-key';
+
 // Tribe group encryption (Phase 3)
 export {
   generateTribeGroupKey,
