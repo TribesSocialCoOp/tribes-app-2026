@@ -188,8 +188,37 @@ export async function encryptVaultWithPrf(
   wrappingKey: CryptoKey,
   userId?: string,
 ): Promise<ArrayBuffer> {
-  const storedKeys = await getAllBondKeys();
+  let storedKeys = await getAllBondKeys();
   if (storedKeys.length === 0) throw new Error('No keys to backup');
+
+  // Pre-flight: detect locked (non-extractable) keys and attempt self-heal.
+  // If any key can't be exported, try restoring from the existing server vault
+  // first — this upgrades locked keys to extractable before we save.
+  const hasLockedKeys = storedKeys.some(k => !k.privateKey.extractable);
+  if (hasLockedKeys) {
+    console.warn('[prf-vault] Detected non-extractable keys — attempting self-heal from existing vault...');
+    try {
+      const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
+      const { sessionVaultKey } = await import('./session-vault-key');
+      const session = sessionVaultKey.get();
+      if (session) {
+        const vaultData = await getPrfVaultAction(session.credentialId);
+        if (vaultData) {
+          const encryptedVault = typeof vaultData.encryptedVaultBase64 === 'string'
+            ? new Uint8Array(Buffer.from(vaultData.encryptedVaultBase64, 'base64')).buffer
+            : null;
+          if (encryptedVault) {
+            await decryptAndRestoreVault(wrappingKey, encryptedVault, userId);
+            console.log('[prf-vault] Self-heal complete — locked keys upgraded from existing vault');
+          }
+        }
+      }
+    } catch (healErr) {
+      console.warn('[prf-vault] Self-heal failed (will proceed with exportable keys only):', healErr);
+    }
+    // Re-read keys after self-heal
+    storedKeys = await getAllBondKeys();
+  }
 
   const entries: VaultEntry[] = [];
   for (const stored of storedKeys) {
@@ -317,20 +346,30 @@ export async function decryptAndRestoreVault(
         const localPubHash = await hashPublicKeyJwk(existingKey.publicKeyJwk);
         const backupPubHash = await hashPublicKeyJwk(entry.publicKeyJwk);
 
-        if (localPubHash === backupPubHash) {
+        if (localPubHash === backupPubHash && existingKey.privateKey.extractable) {
+          // Same key pair AND extractable — no action needed
           skipped++;
           continue;
         }
 
-        // Different key pair — LOCAL WINS. This device generated its own key
-        // and published it to the server. The backup's key is from a different
-        // device. Overwriting would create a mismatch with the server record.
-        console.warn(
-          `[prf-vault] Bond ${entry.bondId.substring(0, 16)}... has different local key — ` +
-          `keeping local (local: ${localPubHash.substring(0, 8)}... backup: ${backupPubHash.substring(0, 8)}...)`
+        if (localPubHash !== backupPubHash) {
+          // Different key pair — LOCAL WINS. This device generated its own key
+          // and published it to the server. The backup's key is from a different
+          // device. Overwriting would create a mismatch with the server record.
+          console.warn(
+            `[prf-vault] Bond ${entry.bondId.substring(0, 16)}... has different local key — ` +
+            `keeping local (local: ${localPubHash.substring(0, 8)}... backup: ${backupPubHash.substring(0, 8)}...)`
+          );
+          skipped++;
+          continue;
+        }
+
+        // Same key but non-extractable (locked) — overwrite to unlock.
+        // This enables vault backup from this device.
+        console.log(
+          `[prf-vault] Bond ${entry.bondId.substring(0, 16)}... is locked — upgrading to extractable`
         );
-        skipped++;
-        continue;
+        // Fall through to import below
       }
 
       const key = await importPrivateKey(entry.privateKeyJwk);
@@ -341,19 +380,23 @@ export async function decryptAndRestoreVault(
     }
   }
 
-  // Restore identity key if present (skip-if-exists, same as password vault)
+  // Restore identity key if present.
+  // Overwrite if missing OR if the local key is non-extractable (locked),
+  // same pattern as bond key restore — see dev-post-multi-device-key-sync.md.
   if (payload.identityKey && userId) {
     try {
       const { importIdentityPrivateKey } = await import('./identity-keys');
       const { storeIdentityKey, getIdentityKey } = await import('./key-store');
 
       const existingIdentity = await getIdentityKey(userId);
-      if (!existingIdentity) {
+      const isLocked = existingIdentity && !existingIdentity.privateKey.extractable;
+
+      if (!existingIdentity || isLocked) {
         const privateKey = await importIdentityPrivateKey(payload.identityKey.privateKeyJwk);
         await storeIdentityKey(userId, privateKey, payload.identityKey.publicKeyJwk);
-        console.log(`[prf-vault] Restored identity key for user ${userId.substring(0, 8)}...`);
+        console.log(`[prf-vault] ${isLocked ? 'Upgraded locked' : 'Restored'} identity key for user ${userId.substring(0, 8)}...`);
       } else {
-        console.debug(`[prf-vault] Skipping identity key — local key exists for ${userId.substring(0, 8)}...`);
+        console.debug(`[prf-vault] Skipping identity key — local key exists and is extractable for ${userId.substring(0, 8)}...`);
       }
     } catch (err) {
       console.warn('[prf-vault] Failed to restore identity key:', err);

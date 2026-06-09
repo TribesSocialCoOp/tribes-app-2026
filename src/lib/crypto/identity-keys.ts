@@ -77,14 +77,15 @@ export async function importIdentityPublicKey(jwk: JsonWebKey): Promise<CryptoKe
 
 /**
  * Imports an identity private key from JWK format (for vault restore).
- * The imported key is non-extractable — it can only be used, never re-exported.
+ * Must be extractable so the device can re-export it for vault backup
+ * (same reasoning as bond keys — see dev-post-multi-device-key-sync.md).
  */
 export async function importIdentityPrivateKey(jwk: JsonWebKey): Promise<CryptoKey> {
   return crypto.subtle.importKey(
     'jwk',
     jwk,
     RSA_IMPORT_ALGORITHM,
-    false, // non-extractable after restore for security
+    true, // extractable: allow re-export for vault backup on other devices
     ['decrypt', 'unwrapKey']
   );
 }

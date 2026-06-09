@@ -129,8 +129,12 @@ export async function createVaultBackup(
     }
   }
 
+  const lockedCount = storedKeys.length - entries.length;
   if (entries.length === 0) {
     throw new Error('No exportable bond keys found. Keys may need to be regenerated.');
+  }
+  if (lockedCount > 0) {
+    console.warn(`[vault] ${lockedCount} of ${storedKeys.length} bond key(s) are non-extractable and excluded from backup. Restore from a good vault to upgrade them.`);
   }
 
   // MERGE: Union local keys with any existing server backup so we never
@@ -383,9 +387,9 @@ export async function restoreVaultBackup(
     }
   }
 
-  // Restore identity key if present (Version 2+)
-  // Identity key: skip-if-exists (identity keys are device-specific and
-  // changing them would invalidate all outstanding tribe key grants)
+  // Restore identity key if present (Version 2+).
+  // Overwrite if missing OR if local key is non-extractable (locked),
+  // same pattern as bond key restore above.
   if (payload.version >= 2 && payload.identityKey) {
     try {
       const { importIdentityPrivateKey } = await import('./identity-keys');
@@ -393,13 +397,14 @@ export async function restoreVaultBackup(
 
       const storeId = userId || 'unknown';
       const existingIdentity = await getIdentityKey(storeId);
+      const isLocked = existingIdentity && !existingIdentity.privateKey.extractable;
 
-      if (!existingIdentity) {
+      if (!existingIdentity || isLocked) {
         const privateKey = await importIdentityPrivateKey(payload.identityKey.privateKeyJwk);
         await storeIdentityKey(storeId, privateKey, payload.identityKey.publicKeyJwk);
-        console.log(`[vault] Restored identity key for user ${storeId.substring(0, 8)}...`);
+        console.log(`[vault] ${isLocked ? 'Upgraded locked' : 'Restored'} identity key for user ${storeId.substring(0, 8)}...`);
       } else {
-        console.debug(`[vault] Skipping identity key — local key exists for ${storeId.substring(0, 8)}...`);
+        console.debug(`[vault] Skipping identity key — local key exists and is extractable for ${storeId.substring(0, 8)}...`);
       }
     } catch (err) {
       console.warn('[vault] Failed to restore identity key:', err);
