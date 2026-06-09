@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/hooks/use-user';
+import { useKeySync } from '@/components/providers/key-sync-provider';
 import { getBonds, refreshBond, revokeBond, toggleInnerCircle, saveBondSettings, fetchPendingBondRequests, respondToBondRequest, blockUser, sendBondRequest, requestReconnect, respondToReconnect } from '@/lib/actions/bond-actions';
 import { getFeatureSummary } from '@/lib/actions/profile-actions';
 import type { Bond, BondRequest } from '@/lib/types';
@@ -192,6 +193,7 @@ export function useBonds() {
 export function BondsProvider({ children }: { children: React.ReactNode }) {
   const { role: userRole } = useUser();
   const { toast } = useToast();
+  const { triggerSync } = useKeySync();
   const [state, dispatch] = useReducer(reducer, initialState);
 
   const derived = useBondsDerived(state);
@@ -292,12 +294,13 @@ export function BondsProvider({ children }: { children: React.ReactNode }) {
         'digital_introduction'
       );
       toast({ title: "Introduction Sent", description: `An introduction request has been sent to ${bondToIntroduceTo.targetName} on behalf of ${from.targetName}.` });
+      triggerSync(); // Enter fast window so we're primed when the peer accepts
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to send introduction';
       toast({ variant: 'destructive', title: 'Introduction Failed', description: msg });
     }
     dispatch({ type: 'CLOSE_INTRODUCTION' });
-  }, [state.introductionDialog.bond, toast]);
+  }, [state.introductionDialog.bond, toast, triggerSync]);
 
   const calculateTimeProgress = useCallback((bond: Bond): number => {
     if (bond.passkeyStatus === 'expired' || bond.passkeyStatus === 'dormant') return 0;
@@ -329,12 +332,15 @@ export function BondsProvider({ children }: { children: React.ReactNode }) {
         description: accept ? `You are now bonded with ${fromUserName}.` : `Bond request from ${fromUserName} has been declined.`,
       });
       await reloadData();
+      if (accept) {
+        triggerSync(); // Kick off Phase A immediately so bond keys are ready for chat
+      }
     } catch (e: unknown) {
       toast({ title: 'Error', description: ((e instanceof Error) ? e.message : 'An error occurred'), variant: 'destructive' });
     } finally {
       dispatch({ type: 'SET_RESPONDING', payload: null });
     }
-  }, [reloadData, toast]);
+  }, [reloadData, toast, triggerSync]);
 
   const handleRequestReconnect = useCallback(async (bondId: string) => {
     try {

@@ -24,6 +24,7 @@
 
 import React, { useEffect, useRef, useCallback, createContext, useContext, useState } from 'react';
 import { useUser } from '@/hooks/use-user';
+import { useToast } from '@/hooks/use-toast';
 
 // ============================================================
 // CONTEXT — Exposes sync status to consumers
@@ -78,8 +79,10 @@ import { detectCurrentDeviceLabel } from '@/lib/utils/device';
 
 export function KeySyncProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
+  const { toast } = useToast();
   const syncLock = useRef(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const hasVaultBeenSavedRef = useRef(false);
 
   const [readyBondCount, setReadyBondCount] = useState(0);
   const [totalBondCount, setTotalBondCount] = useState(0);
@@ -92,6 +95,40 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
   const [isSyncing, setIsSyncing] = useState(false);
 
   /**
+   * Silently saves an updated PRF vault after new keys are generated.
+   * No-op if the session vault key is not available (no PRF support this session).
+   */
+  const maybeSaveVault = useCallback(async (generated: boolean) => {
+    if (!generated) return;
+
+    try {
+      const { sessionVaultKey, encryptVaultWithPrf } = await import('@/lib/crypto');
+      const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
+
+      const session = sessionVaultKey.get();
+      if (!session) return; // PRF not available this session
+
+      const encrypted = await encryptVaultWithPrf(session.wrappingKey, user?.id);
+      const b64 = Buffer.from(encrypted).toString('base64');
+      const isFirstSave = !hasVaultBeenSavedRef.current;
+
+      await savePrfVaultAction(b64, session.credentialId);
+      hasVaultBeenSavedRef.current = true;
+
+      if (isFirstSave) {
+        toast({
+          title: 'Key Sync Enabled',
+          description: 'Your encryption keys are automatically backed up to your passkey.',
+        });
+      }
+      console.debug('[key-sync] Vault auto-saved to PRF credential');
+    } catch (err) {
+      console.warn('[key-sync] Vault auto-save failed (non-fatal):', err);
+      // Silent failure — passphrase backup in Settings still works
+    }
+  }, [toast, user?.id]);
+
+  /**
    * Core sync function. Runs all four phases:
    * 0. Initialize RSA identity key pair (one-time per device)
    * 1. Generate ECDH key pairs and derive shared secrets for bonds (DMs)
@@ -102,6 +139,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
     if (syncLock.current || !user?.id) return;
     syncLock.current = true;
     setIsSyncing(true);
+    let newKeysGenerated = false;
 
     try {
       const {
@@ -164,6 +202,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
           // We won the race — store our key
           await storeIdentityKey(user.id, keyPair.privateKey, publicKeyJwk);
           identityKey = await getIdentityKey(user.id);
+          newKeysGenerated = true;
           console.debug('[key-sync] Published RSA identity public key to server');
         } else {
           // Another device already published — DON'T store the locally generated key.
@@ -304,6 +343,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
               await storeBondKey(bond.id, keyPair.privateKey, publicKeyJwk);
               await deleteSharedSecret(bond.id);
               storedKey = await getBondKey(bond.id);
+              newKeysGenerated = true;
               console.debug(`[key-sync] Generated keys for bond ${bond.id.substring(0, 16)}...`);
             } else {
               // Another device won the race — we're orphaned, need vault restore
@@ -604,6 +644,8 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       } catch (err) {
         console.warn('[key-sync] Phase C (tribe key distribution) failed:', err);
       }
+
+      await maybeSaveVault(newKeysGenerated);
     } catch (err) {
       console.error('[key-sync] Sync failed:', err);
     } finally {
@@ -616,7 +658,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
         window.dispatchEvent(new CustomEvent('tribes:key-sync-complete'));
       }
     }
-  }, [user?.id]);
+  }, [user?.id, maybeSaveVault]);
 
   // ── Adaptive sync lifecycle ──
   // Fast interval (15s) for the first 2 minutes after mount to quickly

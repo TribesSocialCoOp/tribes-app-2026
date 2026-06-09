@@ -120,30 +120,32 @@ function LoginForm() {
       const { authenticatePasskey } = await import('@/lib/auth/passkey-platform');
       const authResponse = await authenticatePasskey(optionsWithPrf, isNative);
 
-      await finishLoginAction(authResponse as any);
+      const loginResult = await finishLoginAction(authResponse as any);
+      const loggedInUserId = loginResult?.userId;
 
       try {
-        const { hasAnyKeys, derivePrfWrappingKey, decryptAndRestoreVault } = await import('@/lib/crypto');
+        const { hasAnyKeys, derivePrfWrappingKey, decryptAndRestoreVault, sessionVaultKey } = await import('@/lib/crypto');
         const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
-        
-        if (!(await hasAnyKeys())) {
-          console.log('[auth] Local keystore empty, attempting PRF recovery...');
-          
-          // @ts-expect-error — PRF extension results type not yet in @simplewebauthn/browser types
-          const rawPrf = authResponse.clientExtensionResults?.prf?.results?.first;
-          const prfOutput = rawPrf instanceof ArrayBuffer && rawPrf.byteLength >= 32 ? rawPrf : null;
 
-          if (prfOutput) {
+        // @ts-expect-error — PRF extension results type not yet in @simplewebauthn/browser types
+        const rawPrf = authResponse.clientExtensionResults?.prf?.results?.first;
+        const prfOutput = rawPrf instanceof ArrayBuffer && rawPrf.byteLength >= 32 ? rawPrf : null;
+
+        if (prfOutput) {
+          const wrappingKey = await derivePrfWrappingKey(prfOutput);
+          sessionVaultKey.set(authResponse.id, wrappingKey); // Store for auto-save writes in KeySyncProvider
+
+          if (!(await hasAnyKeys())) {
+            console.log('[auth] Local keystore empty, attempting PRF recovery...');
             const vaultData = await getPrfVaultAction(authResponse.id);
-            
+
             if (vaultData) {
               console.log('[auth] PRF vault found, decrypting...');
-              const wrappingKey = await derivePrfWrappingKey(prfOutput);
               const encryptedVault = Buffer.from(vaultData.encryptedVaultBase64, 'base64').buffer.slice(0);
-              
-              await decryptAndRestoreVault(wrappingKey, encryptedVault as ArrayBuffer);
+
+              await decryptAndRestoreVault(wrappingKey, encryptedVault as ArrayBuffer, loggedInUserId);
               console.log('[auth] E2E keys restored successfully.');
-              
+
               toast({
                 title: "Security Synced",
                 description: "Your E2E encryption keys have been restored from your passkey.",
@@ -152,8 +154,30 @@ function LoginForm() {
               console.log('[auth] No PRF vault found for this credential. New device?');
             }
           } else {
-            console.warn('[auth] Authenticator did not provide a valid PRF output. Cannot auto-recover keys.');
+            // Keys already exist locally. If no vault has been saved for this credential yet,
+            // do a one-time initial save so future devices can restore from PRF.
+            // This handles existing users who had keys before vault auto-save was deployed.
+            const existingVault = await getPrfVaultAction(authResponse.id);
+            if (!existingVault) {
+              console.log('[auth] Keys present but no vault yet — saving initial PRF vault...');
+              try {
+                const { encryptVaultWithPrf } = await import('@/lib/crypto');
+                const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
+                const encrypted = await encryptVaultWithPrf(wrappingKey, loggedInUserId);
+                const b64 = Buffer.from(encrypted).toString('base64');
+                await savePrfVaultAction(b64, authResponse.id);
+                console.log('[auth] Initial PRF vault saved.');
+                toast({
+                  title: "Key Sync Enabled",
+                  description: "Your encryption keys are automatically backed up to your passkey.",
+                });
+              } catch (vaultErr) {
+                console.warn('[auth] Initial vault save failed (non-fatal):', vaultErr);
+              }
+            }
           }
+        } else {
+          console.warn('[auth] Authenticator did not provide a valid PRF output. Cannot auto-recover keys.');
         }
       } catch (cryptoErr) {
         console.error('[auth] PRF recovery failed:', cryptoErr);

@@ -85,8 +85,9 @@ export function KeySyncBanner() {
     loadBackupInfo();
   }, []);
 
-  // Determine if we need a backup (healthy keys but stale vault)
-  const needsBackup = !orphanedBondCount && newestKeyDate && (!backupDate || backupDate < newestKeyDate);
+  // Determine if we need a backup (healthy keys but stale vault).
+  // PRF vault counts as an active backup — suppress the warning if one exists.
+  const needsBackup = !orphanedBondCount && !hasPrfVault && newestKeyDate && (!backupDate || backupDate < newestKeyDate);
 
   // Don't render if nothing to report, not yet synced, or dismissed
   if (!initialSyncDone || dismissed) return null;
