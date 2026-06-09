@@ -79,6 +79,7 @@ export const VaultBackupSection: React.FC = () => {
   // Passkey PRF support
   const [prfSupported, setPrfSupported] = useState(false);
   const [hasPrfVault, setHasPrfVault] = useState(false);
+  const [prfVaultDate, setPrfVaultDate] = useState<Date | null>(null);
   const [isPasskeyBacking, setIsPasskeyBacking] = useState(false);
   const [isPasskeyRestoring, setIsPasskeyRestoring] = useState(false);
 
@@ -123,7 +124,9 @@ export const VaultBackupSection: React.FC = () => {
         try {
           const { getVaultStatusAction } = await import('@/lib/actions/key-vault-actions');
           const status = await getVaultStatusAction();
-          setHasPrfVault(status.devices.some(d => d.vaultType === 'prf'));
+          const prfDevice = status.devices.find(d => d.vaultType === 'prf');
+          setHasPrfVault(!!prfDevice);
+          if (prfDevice?.updatedAt) setPrfVaultDate(new Date(prfDevice.updatedAt));
         } catch { /* No PRF vaults */ }
 
         // Check server for existing passphrase backup
@@ -307,6 +310,7 @@ export const VaultBackupSection: React.FC = () => {
       await savePrfVaultAction(encryptedVaultBase64, prfResult.credentialId);
 
       setHasPrfVault(true);
+      setPrfVaultDate(new Date());
       toast({ title: 'Passkey vault saved', description: 'Your keys are now synced to your passkey.' });
     } catch (err: unknown) {
       const message = (err instanceof Error) ? err.message : 'Passkey backup failed';
@@ -426,15 +430,15 @@ export const VaultBackupSection: React.FC = () => {
               Cloud Backup
             </div>
             <p className="text-2xl font-bold mt-1">{(hasBackup || hasPrfVault) ? 'Active' : 'None'}</p>
-            <p className="text-xs text-muted-foreground">
-              {hasBackup && backupDate && hasPrfVault
-                ? `Passkey + Passphrase (${backupDate.toLocaleDateString()})`
-                : hasPrfVault
-                  ? 'Passkey vault active'
-                  : hasBackup && backupDate
-                    ? `Passphrase: ${backupDate.toLocaleDateString()}`
-                    : 'Not yet backed up'}
-            </p>
+            <div className="text-xs text-muted-foreground">
+              {hasPrfVault && (
+                <p>Passkey: {prfVaultDate ? prfVaultDate.toLocaleDateString() : 'Active'}</p>
+              )}
+              {hasBackup && backupDate && (
+                <p>Passphrase: {backupDate.toLocaleDateString()}</p>
+              )}
+              {!hasPrfVault && !hasBackup && <p>Not yet backed up</p>}
+            </div>
           </div>
         </div>
 

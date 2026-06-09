@@ -125,6 +125,7 @@ export async function getVaultStatusAction() {
       credentialId: v.credentialId,
       vaultType: v.vaultType,
       createdAt: v.createdAt?.toISOString(),
+      updatedAt: v.updatedAt?.toISOString(),
     })),
   };
 }
