@@ -258,16 +258,18 @@ function SignupForm() {
 
         // 4. Initialize E2E Vault (Phase 3: PRF)
         try {
-          const { derivePrfWrappingKey, encryptVaultWithPrf } = await import('@/lib/crypto');
+          const { derivePrfWrappingKey, encryptVaultWithPrf, normalizePrfOutput } = await import('@/lib/crypto');
           const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
           const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
 
           console.log('[auth] Initializing E2E journal key...');
           await getOrCreateJournalKey();
 
+          // PRF result is an ArrayBuffer on web but a base64url string on native
+          // (Capacitor JSON bridge) — normalize both so iOS derives the key too.
           // @ts-expect-error — PRF extension results type not yet in @simplewebauthn/browser types
           const rawPrf = regResponse.clientExtensionResults?.prf?.results?.first;
-          const prfOutput = rawPrf instanceof ArrayBuffer && rawPrf.byteLength >= 32 ? rawPrf : null;
+          const prfOutput = normalizePrfOutput(rawPrf);
 
           if (prfOutput) {
             console.log('[auth] PRF extension found, creating initial vault...');

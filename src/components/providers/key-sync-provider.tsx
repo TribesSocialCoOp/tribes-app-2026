@@ -112,11 +112,14 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
     if (!shouldSave) return;
 
     try {
-      const { sessionVaultKey, encryptVaultWithPrf } = await import('@/lib/crypto');
+      const { sessionVaultKey, encryptVaultWithPrf, prfDebug } = await import('@/lib/crypto');
       const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
 
       const session = await sessionVaultKey.load(user?.id);
-      if (!session) return; // PRF not available on this device
+      if (!session) {
+        prfDebug('sync.save.noWrappingKey', { note: 'Wanted to push vault but no PRF wrapping key on this device.' });
+        return; // PRF not available on this device
+      }
 
       const encrypted = await encryptVaultWithPrf(session.wrappingKey, user?.id, session.credentialId);
       const b64 = Buffer.from(encrypted).toString('base64');
@@ -125,6 +128,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       await savePrfVaultAction(b64, session.credentialId);
       hasVaultBeenSavedRef.current = true;
       vaultPushPendingRef.current = false;
+      prfDebug('sync.save.ok', { credentialIdPrefix: session.credentialId.slice(0, 10), bytes: b64.length, firstSave: isFirstSave });
 
       if (isFirstSave) {
         toast({
@@ -135,6 +139,10 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       console.debug('[key-sync] Vault auto-saved to PRF credential');
     } catch (err) {
       console.warn('[key-sync] Vault auto-save failed (non-fatal):', err);
+      try {
+        const { prfDebug } = await import('@/lib/crypto');
+        prfDebug('sync.save.failed', { error: err instanceof Error ? err.message : String(err) });
+      } catch { /* ignore */ }
       // Retry on the next sync cycle — the "vault unchanged" pull marker
       // would otherwise suppress the counter-sync check until new keys appear.
       vaultPushPendingRef.current = true;
@@ -162,15 +170,19 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
     // manual-backup warnings) — having a wrapping key IS what "active" means.
     let haveSession = false;
     try {
-      const { sessionVaultKey, decryptAndRestoreVault } = await import('@/lib/crypto');
+      const { sessionVaultKey, decryptAndRestoreVault, prfDebug } = await import('@/lib/crypto');
       const session = await sessionVaultKey.load(user?.id);
-      if (!session) return { active: false, vaultBondIds: null };
+      if (!session) {
+        prfDebug('sync.pull.noWrappingKey', { note: 'No PRF wrapping key on this device — auto-sync inactive (login with a PRF-capable passkey to enable).' });
+        return { active: false, vaultBondIds: null };
+      }
       haveSession = true;
 
       const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
       const vault = await getPrfVaultAction(session.credentialId);
       if (!vault) {
         // No vault yet — still active; the push side will create it.
+        prfDebug('sync.pull.noVault', { credentialIdPrefix: session.credentialId.slice(0, 10), note: 'No PRF vault on server for THIS credential. If your other device used a different passkey, its vault is separate and cannot be pulled here.' });
         return { active: true, vaultBondIds: new Set() };
       }
 
@@ -178,6 +190,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       let lastPulled: string | null = null;
       try { lastPulled = localStorage.getItem(markerKey); } catch { /* private mode */ }
       if (lastPulled === vault.updatedAt) {
+        prfDebug('sync.pull.unchanged', { vaultUpdatedAt: vault.updatedAt });
         return { active: true, vaultBondIds: null }; // unchanged since last pull
       }
 
@@ -186,6 +199,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       const result = await decryptAndRestoreVault(session.wrappingKey, encrypted, user?.id);
 
       try { localStorage.setItem(markerKey, vault.updatedAt); } catch { /* private mode */ }
+      prfDebug('sync.pull.merged', { vaultUpdatedAt: vault.updatedAt, imported: result.imported, skipped: result.skipped, total: result.total });
 
       if (result.imported > 0) {
         console.log(`[key-sync] Auto-pulled ${result.imported} key(s) from passkey vault`);

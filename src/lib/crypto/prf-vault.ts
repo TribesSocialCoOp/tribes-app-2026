@@ -137,8 +137,44 @@ export async function getPrfSaltBytes(): Promise<Uint8Array> {
 // ============================================================
 
 /**
+ * Normalizes a PRF extension result into a >=32-byte ArrayBuffer, or null.
+ *
+ * The shape differs by platform:
+ * - Web (Safari/Chrome): `prf.results.first` is already an ArrayBuffer.
+ * - Native (Capacitor iOS/Android): the result crosses a JSON bridge, so it
+ *   arrives as a base64url (or base64) STRING. A bare `instanceof ArrayBuffer`
+ *   check rejected this, so the PRF wrapping key was never derived on mobile —
+ *   breaking auto-sync there. This accepts ArrayBuffer, typed arrays, and
+ *   base64url/base64 strings.
+ */
+export function normalizePrfOutput(raw: unknown): ArrayBuffer | null {
+  if (!raw) return null;
+  if (raw instanceof ArrayBuffer) {
+    return raw.byteLength >= 32 ? raw : null;
+  }
+  if (ArrayBuffer.isView(raw)) {
+    const view = raw as ArrayBufferView;
+    if (view.byteLength < 32) return null;
+    return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
+  }
+  if (typeof raw === 'string') {
+    try {
+      const base64 = raw.replace(/-/g, '+').replace(/_/g, '/');
+      const padding = '='.repeat((4 - (base64.length % 4)) % 4);
+      const binary = atob(base64 + padding);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.byteLength >= 32 ? (bytes.buffer as ArrayBuffer) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Derives a non-extractable AES-256-GCM wrapping key from a PRF output.
- * 
+ *
  * @param prfOutput The 32-byte secret returned by the authenticator's PRF extension.
  */
 export async function derivePrfWrappingKey(prfOutput: ArrayBuffer): Promise<CryptoKey> {
