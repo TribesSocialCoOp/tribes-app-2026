@@ -15,6 +15,7 @@ import React, { useEffect, useState } from 'react';
 import { FileIcon, ImageIcon, Download, Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { EncryptionMeta } from '@/lib/crypto/file-encryption';
+import { ImageLightbox } from '@/components/ui/image-lightbox';
 
 interface BondAttachmentProps {
   fileId: string;
@@ -47,6 +48,7 @@ export function BondAttachment({
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -120,13 +122,24 @@ export function BondAttachment({
           </div>
         )}
         {objectUrl && !error && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={objectUrl}
-            alt={fileName}
-            className="block w-full h-auto cursor-pointer rounded-lg"
-            onClick={handleDownload}
-          />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={objectUrl}
+              alt={fileName}
+              className="block w-full h-auto cursor-zoom-in rounded-lg"
+              onClick={() => setLightboxOpen(true)}
+            />
+            {/* Same full-screen viewer as posts (zoom / pan / swipe / save).
+                The blob is already decrypted client-side, so it's passed as a
+                plain image — not the postId-based EncryptedImage path. */}
+            <ImageLightbox
+              images={[objectUrl]}
+              open={lightboxOpen}
+              onOpenChange={setLightboxOpen}
+              isEncrypted={false}
+            />
+          </>
         )}
       </div>
     );
