@@ -145,7 +145,7 @@
     "vitest": "^4.1.2"
   },
   "overrides": {
-    "esbuild": ">=0.25.0",
+    "esbuild": ">=0.28.1",
     "postcss": "$postcss",
     "tmp": ">=0.2.6"
   }
