@@ -261,7 +261,7 @@ export default function PublicProfilePage({ userId: propUserId }: { userId?: str
                   variant="outline"
                   size="sm"
                   className="mt-2 border-primary/30 text-primary hover:bg-primary/10"
-                  onClick={() => router.push(`/bonds/${bondId}`)}
+                  onClick={() => router.push(`/chat/${bondId}`)}
                 >
                   <MessageSquareText className="mr-2 h-4 w-4" /> Message
                 </Button>

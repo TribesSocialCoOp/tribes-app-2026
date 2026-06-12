@@ -77,6 +77,13 @@ export function UserNav() {
             <ResponsiveMenuSeparator />
             <ResponsiveMenuItem 
               onClick={async () => {
+                // Drop the in-memory PRF wrapping key so it can't be reused by
+                // the next user in this JS session (SPA logout keeps module
+                // state alive). Persisted copies stay userId-scoped in IndexedDB.
+                try {
+                  const { sessionVaultKey } = await import('@/lib/crypto');
+                  sessionVaultKey.clearMemory();
+                } catch { /* non-critical */ }
                 await logoutAction();
                 router.push('/login');
                 router.refresh();

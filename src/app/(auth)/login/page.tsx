@@ -133,48 +133,57 @@ function LoginForm() {
 
         if (prfOutput) {
           const wrappingKey = await derivePrfWrappingKey(prfOutput);
-          sessionVaultKey.set(authResponse.id, wrappingKey); // Store for auto-save writes in KeySyncProvider
+          // Stored in memory AND persisted to IndexedDB so background vault
+          // sync keeps working across reloads without a new passkey ceremony.
+          sessionVaultKey.set(authResponse.id, wrappingKey, loggedInUserId);
 
-          if (!(await hasAnyKeys())) {
-            console.log('[auth] Local keystore empty, attempting PRF recovery...');
-            const vaultData = await getPrfVaultAction(authResponse.id);
+          const hadKeys = await hasAnyKeys();
+          const vaultData = await getPrfVaultAction(authResponse.id);
 
-            if (vaultData) {
-              console.log('[auth] PRF vault found, decrypting...');
-              const encryptedVault = Buffer.from(vaultData.encryptedVaultBase64, 'base64').buffer.slice(0);
+          if (vaultData) {
+            // Always merge-restore — even when local keys exist, the vault may
+            // hold keys created on other devices (and vice versa; the key-sync
+            // provider counter-syncs local-only keys back up after login).
+            console.log('[auth] PRF vault found, merging...');
+            // Decode base64 into an exactly-sized ArrayBuffer. (A Node Buffer's
+            // `.buffer` is a shared pool that may be larger than the data and
+            // start at a non-zero byteOffset, so `.buffer.slice(0)` would copy
+            // the wrong bytes and corrupt decryption — slice by offset instead.)
+            const vaultBuf = Buffer.from(vaultData.encryptedVaultBase64, 'base64');
+            const encryptedVault = vaultBuf.buffer.slice(
+              vaultBuf.byteOffset,
+              vaultBuf.byteOffset + vaultBuf.byteLength,
+            );
 
-              await decryptAndRestoreVault(wrappingKey, encryptedVault as ArrayBuffer, loggedInUserId);
-              console.log('[auth] E2E keys restored successfully.');
+            const result = await decryptAndRestoreVault(wrappingKey, encryptedVault as ArrayBuffer, loggedInUserId);
+            console.log(`[auth] E2E key merge complete (${result.imported} imported).`);
 
+            if (result.imported > 0 || !hadKeys) {
               toast({
                 title: "Security Synced",
                 description: "Your E2E encryption keys have been restored from your passkey.",
               });
-            } else {
-              console.log('[auth] No PRF vault found for this credential. New device?');
+            }
+          } else if (hadKeys) {
+            // Keys exist locally but no vault has been saved for this credential
+            // yet — do a one-time initial save so future devices can restore.
+            console.log('[auth] Keys present but no vault yet — saving initial PRF vault...');
+            try {
+              const { encryptVaultWithPrf } = await import('@/lib/crypto');
+              const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
+              const encrypted = await encryptVaultWithPrf(wrappingKey, loggedInUserId, authResponse.id);
+              const b64 = Buffer.from(encrypted).toString('base64');
+              await savePrfVaultAction(b64, authResponse.id);
+              console.log('[auth] Initial PRF vault saved.');
+              toast({
+                title: "Key Sync Enabled",
+                description: "Your encryption keys are automatically backed up to your passkey.",
+              });
+            } catch (vaultErr) {
+              console.warn('[auth] Initial vault save failed (non-fatal):', vaultErr);
             }
           } else {
-            // Keys already exist locally. If no vault has been saved for this credential yet,
-            // do a one-time initial save so future devices can restore from PRF.
-            // This handles existing users who had keys before vault auto-save was deployed.
-            const existingVault = await getPrfVaultAction(authResponse.id);
-            if (!existingVault) {
-              console.log('[auth] Keys present but no vault yet — saving initial PRF vault...');
-              try {
-                const { encryptVaultWithPrf } = await import('@/lib/crypto');
-                const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
-                const encrypted = await encryptVaultWithPrf(wrappingKey, loggedInUserId);
-                const b64 = Buffer.from(encrypted).toString('base64');
-                await savePrfVaultAction(b64, authResponse.id);
-                console.log('[auth] Initial PRF vault saved.');
-                toast({
-                  title: "Key Sync Enabled",
-                  description: "Your encryption keys are automatically backed up to your passkey.",
-                });
-              } catch (vaultErr) {
-                console.warn('[auth] Initial vault save failed (non-fatal):', vaultErr);
-              }
-            }
+            console.log('[auth] No PRF vault found for this credential. New device?');
           }
         } else {
           console.warn('[auth] Authenticator did not provide a valid PRF output. Cannot auto-recover keys.');

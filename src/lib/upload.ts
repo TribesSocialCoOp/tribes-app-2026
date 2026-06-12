@@ -70,8 +70,10 @@ export async function uploadFile(
     encryptionMeta = result.meta;
   }
 
-  // Client-side encryption for post images (CryptoKey)
-  if (options.encryptionKey && options.context === 'encrypted-post-image') {
+  // Client-side encryption with a CryptoKey — used for encrypted post images
+  // AND bond attachments (the chat passes the bond's derived shared secret as
+  // a non-extractable CryptoKey, so we can't take the ArrayBuffer path above).
+  if (options.encryptionKey && (options.context === 'encrypted-post-image' || options.context === 'bond-attachment')) {
     const { encryptFileWithKey } = await import('@/lib/crypto/file-encryption');
     const result = await encryptFileWithKey(file, options.encryptionKey);
     fileToUpload = result.encryptedFile;

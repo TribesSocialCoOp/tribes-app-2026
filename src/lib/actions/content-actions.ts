@@ -1613,6 +1613,7 @@ export async function sendMessage(
   bondId: string,
   ciphertextBase64: string,
   attachment?: { fileId: string; fileName: string; fileType: string; fileSize: number; encryptionMeta: string },
+  replyToId?: string,
 ) {
   const userId = await requireAuth();
   await postLimiter.check(userId);
@@ -1640,7 +1641,7 @@ export async function sendMessage(
   }
 
   const { sendMessage: fn } = await import('@/lib/services/message-service');
-  const row = await fn(bondId, userId, ciphertextBase64, attachment);
+  const row = await fn(bondId, userId, ciphertextBase64, attachment, replyToId);
   return {
     ...row,
     ciphertext: row.ciphertext ? Buffer.from(row.ciphertext).toString('base64') : null,
@@ -1661,8 +1662,25 @@ export async function getMessagesForBond(bondId: string, limit?: number, beforeT
 
 export async function markMessagesRead(bondId: string) {
   const userId = await requireAuth();
+  // Whether to expose the read receipt to the sender is decided server-side
+  // from the user's stored preference — it can't be spoofed by the client.
+  const { getPreferences } = await import('@/lib/services/notification-service');
+  const prefs = await getPreferences(userId);
   const { markRead: fn } = await import('@/lib/services/message-service');
-  return fn(bondId, userId);
+  return fn(bondId, userId, prefs.readReceiptsEnabled);
+}
+
+export async function editMessage(messageId: string, ciphertextBase64: string) {
+  const userId = await requireAuth();
+  await postLimiter.check(userId);
+  const { editMessage: fn } = await import('@/lib/services/message-service');
+  return fn(messageId, userId, ciphertextBase64);
+}
+
+export async function deleteMessage(messageId: string) {
+  const userId = await requireAuth();
+  const { deleteMessage: fn } = await import('@/lib/services/message-service');
+  return fn(messageId, userId);
 }
 
 export async function getUnreadMessageCount() {
@@ -1676,20 +1694,21 @@ export async function getUnreadMessageCount() {
  * Returns the user's recent conversations for the chat preview strip.
  * Only includes user bonds (not tribe bonds) with at least one message.
  */
-export async function getRecentConversations(limit = 10): Promise<Array<{
+export async function getRecentConversations(limit = 50): Promise<Array<{
   bondId: string;
   targetName: string;
   targetInitials: string;
   lastMessage: string;
   lastMessageAt: Date;
   isEncrypted: boolean;
+  unreadCount: number;
 }>> {
   const userId = await getCurrentUserId();
   if (!userId) return [];
 
   const { db } = await import('@/db');
   const { bonds, messages } = await import('@/db/schema');
-  const { eq, and, or, desc } = await import('drizzle-orm');
+  const { eq, and, or, desc, sql } = await import('drizzle-orm');
 
   // Get user bonds (person-to-person only)
   const userBonds = await db.select({
@@ -1710,6 +1729,7 @@ export async function getRecentConversations(limit = 10): Promise<Array<{
     lastMessage: string;
     lastMessageAt: Date;
     isEncrypted: boolean;
+    unreadCount: number;
   }> = [];
 
   for (const bond of userBonds) {
@@ -1735,6 +1755,16 @@ export async function getRecentConversations(limit = 10): Promise<Array<{
     if (latestMsg && latestMsg.sentAt) {
       const initials = bond.targetName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
       const isEnc = !!latestMsg.ciphertext;
+
+      // Count unread messages (sent by others, not yet seen). Uses seenAt
+      // (local view), not readAt (shared receipt), so the badge clears even
+      // when the user has read receipts disabled.
+      const { isNull, ne } = await import('drizzle-orm');
+      const [unreadRow] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(messages)
+        .where(and(bondFilter, ne(messages.senderId, userId), isNull(messages.seenAt))!);
+      const unreadCount = unreadRow?.count ?? 0;
+
       conversations.push({
         bondId: bond.id,
         targetName: bond.targetName,
@@ -1742,6 +1772,7 @@ export async function getRecentConversations(limit = 10): Promise<Array<{
         lastMessage: isEnc ? '🔒 Encrypted message' : (latestMsg.plaintext ?? ''),
         lastMessageAt: latestMsg.sentAt,
         isEncrypted: isEnc,
+        unreadCount,
       });
     }
   }
@@ -1749,6 +1780,51 @@ export async function getRecentConversations(limit = 10): Promise<Array<{
   // Sort by most recent and limit
   conversations.sort((a, b) => b.lastMessageAt.getTime() - a.lastMessageAt.getTime());
   return conversations.slice(0, limit);
+}
+
+/**
+ * Returns active person bonds where chat can be initiated but no messages exist yet.
+ * Used by the "New Chat" picker on the /chat page.
+ */
+export async function getChatEligibleBonds(): Promise<Array<{
+  bondId: string;
+  targetName: string;
+  targetInitials: string;
+}>> {
+  const userId = await getCurrentUserId();
+  if (!userId) return [];
+
+  const { db } = await import('@/db');
+  const { bonds } = await import('@/db/schema');
+  const { eq, and } = await import('drizzle-orm');
+
+  // "New Chat" is a contact picker: list every active person bond so the user
+  // can open a thread (new OR existing) with one tap.
+  //
+  // NOTE: we intentionally do NOT gate on `allowChatInitiation`. That column
+  // defaults to false, is never set true anywhere, and gates nothing about
+  // actual messaging (sending a message doesn't check it) — gating the picker
+  // on it just made this list permanently empty. We also no longer exclude
+  // bonds that already have messages: tapping one simply opens its thread,
+  // which is standard compose-picker behavior and avoids an empty dialog when
+  // all of a user's bonds already have conversations.
+  const userBonds = await db.select({
+    id: bonds.id,
+    targetName: bonds.targetName,
+    passkeyStatus: bonds.passkeyStatus,
+  }).from(bonds)
+    .where(and(
+      eq(bonds.userId, userId),
+      eq(bonds.targetType, 'user'),
+    ));
+
+  return userBonds
+    .filter(b => b.passkeyStatus !== 'dormant' && b.passkeyStatus !== 'expired')
+    .map(bond => ({
+      bondId: bond.id,
+      targetName: bond.targetName,
+      targetInitials: bond.targetName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase(),
+    }));
 }
 
 export async function getLatestMessagePreview(bondId: string) {
@@ -1814,6 +1890,8 @@ export async function saveNotificationPreferences(prefs: {
   tribeActivityEnabled?: boolean;
   eventRemindersEnabled?: boolean;
   governanceEnabled?: boolean;
+  readReceiptsEnabled?: boolean;
+  typingIndicatorsEnabled?: boolean;
 }) {
   const userId = await requireAuth();
   const { savePreferences: fn } = await import('@/lib/services/notification-service');

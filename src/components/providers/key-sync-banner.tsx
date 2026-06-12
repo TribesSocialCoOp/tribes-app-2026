@@ -28,7 +28,7 @@ import { ResetKeysDialog } from '@/components/dialogs/reset-keys-dialog';
 export function KeySyncBanner() {
   const {
     orphanedBondCount, orphanedBondNames, rekeyOrphanedBonds,
-    initialSyncDone, newestOrphanDate, newestKeyDate,
+    initialSyncDone, newestOrphanDate, newestKeyDate, prfSyncActive,
   } = useKeySync();
   const { toast } = useToast();
   const { user } = useUser();
@@ -86,8 +86,9 @@ export function KeySyncBanner() {
   }, []);
 
   // Determine if we need a backup (healthy keys but stale vault).
-  // PRF vault counts as an active backup — suppress the warning if one exists.
-  const needsBackup = !orphanedBondCount && !hasPrfVault && newestKeyDate && (!backupDate || backupDate < newestKeyDate);
+  // PRF vault counts as an active backup, and active PRF auto-sync pushes
+  // new keys up automatically — suppress the warning in either case.
+  const needsBackup = !orphanedBondCount && !hasPrfVault && !prfSyncActive && newestKeyDate && (!backupDate || backupDate < newestKeyDate);
 
   // Don't render if nothing to report, not yet synced, or dismissed
   if (!initialSyncDone || dismissed) return null;
@@ -190,6 +191,7 @@ export function KeySyncBanner() {
     try {
       const { authenticateWithPrf } = await import('@/lib/crypto/prf-webauthn-helpers');
       const { derivePrfWrappingKey, decryptAndRestoreVault } = await import('@/lib/crypto/prf-vault');
+      const { sessionVaultKey } = await import('@/lib/crypto');
 
       // Get the PRF output from the passkey
       const prfResult = await authenticateWithPrf();
@@ -198,8 +200,9 @@ export function KeySyncBanner() {
         return;
       }
 
-      // Derive wrapping key
+      // Derive wrapping key and persist it for background vault auto-sync
       const wrappingKey = await derivePrfWrappingKey(prfResult.prfOutput);
+      sessionVaultKey.set(prfResult.credentialId, wrappingKey, user?.id);
 
       // Fetch vault from server
       const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');

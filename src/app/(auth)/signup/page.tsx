@@ -272,7 +272,10 @@ function SignupForm() {
           if (prfOutput) {
             console.log('[auth] PRF extension found, creating initial vault...');
             const wrappingKey = await derivePrfWrappingKey(prfOutput);
-            const encryptedVault = await encryptVaultWithPrf(wrappingKey);
+            // Persist for background vault auto-sync (memory + IndexedDB)
+            const { sessionVaultKey } = await import('@/lib/crypto');
+            sessionVaultKey.set(regResponse.id, wrappingKey, userId);
+            const encryptedVault = await encryptVaultWithPrf(wrappingKey, userId, regResponse.id);
             const base64Vault = Buffer.from(encryptedVault).toString('base64');
 
             await savePrfVaultAction(base64Vault, regResponse.id);

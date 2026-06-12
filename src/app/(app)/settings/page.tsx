@@ -64,7 +64,7 @@ function SettingsContent() {
   const [notifPrefs, setNotifPrefs] = useState<NotifPrefsState>({
     pushEnabled: true, emailEnabled: true, mentionsEnabled: true,
     bondMessagesEnabled: true, tribeActivityEnabled: true, eventRemindersEnabled: true,
-    governanceEnabled: true,
+    governanceEnabled: true, readReceiptsEnabled: true, typingIndicatorsEnabled: true,
   });
   const [isSavingNotifPrefs, setIsSavingNotifPrefs] = useState(false);
 

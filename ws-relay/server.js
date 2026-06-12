@@ -42,7 +42,7 @@ const MAX_CONNS_PER_IP = 10;
 const CONN_WINDOW_MS = 60_000;
 
 /** Valid message types (reject anything else) */
-const VALID_MSG_TYPES = new Set(['message', 'typing', 'presence', 'read', 'feed-update', 'activity']);
+const VALID_MSG_TYPES = new Set(['message', 'typing', 'presence', 'read', 'reaction', 'edit', 'delete', 'feed-update', 'activity']);
 
 // ============================================================
 // SERVER
@@ -126,6 +126,7 @@ wss.on('connection', (ws, req) => {
               senderId: userId,
               ciphertext: msg.ciphertext,
               messageId: msg.messageId,
+              replyToId: msg.replyToId,
               sentAt: Date.now(),
             });
             for (const sock of targetSockets) {
@@ -181,6 +182,60 @@ wss.on('connection', (ws, req) => {
               for (const sock of socks) {
                 if (sock.readyState === WebSocket.OPEN) sock.send(presencePayload);
               }
+            }
+          }
+          break;
+        }
+
+        case 'reaction': {
+          // Emoji reaction update: { type: 'reaction', bondId, messageId, emoji, targetUserId }
+          // emoji is null when the sender removed their reaction
+          const targetSockets = connections.get(msg.targetUserId);
+          if (targetSockets) {
+            const payload = JSON.stringify({
+              type: 'reaction',
+              bondId: msg.bondId,
+              messageId: msg.messageId,
+              emoji: msg.emoji ?? null,
+              userId,
+            });
+            for (const sock of targetSockets) {
+              if (sock.readyState === WebSocket.OPEN) sock.send(payload);
+            }
+          }
+          break;
+        }
+
+        case 'edit': {
+          // Edited message: { type: 'edit', bondId, messageId, ciphertext, targetUserId }
+          const targetSockets = connections.get(msg.targetUserId);
+          if (targetSockets) {
+            const payload = JSON.stringify({
+              type: 'edit',
+              bondId: msg.bondId,
+              messageId: msg.messageId,
+              ciphertext: msg.ciphertext,
+              senderId: userId,
+            });
+            for (const sock of targetSockets) {
+              if (sock.readyState === WebSocket.OPEN) sock.send(payload);
+            }
+          }
+          break;
+        }
+
+        case 'delete': {
+          // Deleted message: { type: 'delete', bondId, messageId, targetUserId }
+          const targetSockets = connections.get(msg.targetUserId);
+          if (targetSockets) {
+            const payload = JSON.stringify({
+              type: 'delete',
+              bondId: msg.bondId,
+              messageId: msg.messageId,
+              senderId: userId,
+            });
+            for (const sock of targetSockets) {
+              if (sock.readyState === WebSocket.OPEN) sock.send(payload);
             }
           }
           break;

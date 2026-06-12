@@ -19,11 +19,20 @@ import { OverlayScrollGuard } from "@/components/providers/overlay-scroll-guard"
 import { PullToRefresh } from "@/components/layout/pull-to-refresh";
 import { useTheme } from "@/hooks/use-theme";
 import { installNavTrace } from "@/lib/nav-trace";
+import { usePathname } from "next/navigation";
 import React, { useEffect } from "react";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   // Mount theme hook to ensure class is maintained after hydration
   useTheme();
+
+  // A bond chat thread (/chat/<bondId>) renders as a fixed full-window shell:
+  // the message list is the only scroll region and the composer is anchored to
+  // the bottom of the window. The conversation LIST (/chat) keeps normal page
+  // chrome. Matched here so the layout can drop padding / footer / pull-to-
+  // refresh and lock the main area to the viewport height for the thread only.
+  const pathname = usePathname();
+  const isChatThread = /^\/chat\/[^/]+$/.test(pathname);
 
   // Install navigation tracer (exposes window.__navTrace for remote debugging)
   useEffect(() => { installNavTrace(); }, []);
@@ -113,6 +122,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <AppSidebar />
               <SidebarRail />
               <SidebarInset className="flex flex-col flex-1 min-h-screen">
+            {isChatThread ? (
+              // Full-window chat thread: fixed viewport-height shell, no page
+              // padding/footer, composer anchored to the bottom. On mobile the
+              // content reserves space for the fixed tab bar so the composer
+              // nests directly on top of it.
+              <main data-app-ready className="flex h-[100dvh] flex-col overflow-hidden bg-background">
+                <AppHeader />
+                <div className="flex min-h-0 flex-1 flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
+                  {children}
+                </div>
+              </main>
+            ) : (
             <main data-app-ready className="flex-1 overflow-y-auto overflow-x-hidden bg-background flex flex-col">
               <AppHeader />
               <PullToRefresh>
@@ -124,6 +145,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     <PlatformFooter />
                   </PullToRefresh>
                 </main>
+            )}
               </SidebarInset>
 
               <MobileTabBar />

@@ -50,6 +50,34 @@
       "when": 1780158532565,
       "tag": "0006_dashing_zarek",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781115375945,
+      "tag": "0007_reflective_slipstream",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781195042334,
+      "tag": "0008_remarkable_loa",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781200261658,
+      "tag": "0009_daily_arclight",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781211347013,
+      "tag": "0010_parched_dragon_lord",
+      "breakpoints": true
     }
   ]
 }

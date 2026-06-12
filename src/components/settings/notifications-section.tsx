@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Bell, BellRing, Loader2, Smartphone } from "lucide-react";
+import { Bell, BellRing, Loader2, MessageCircle, Smartphone } from "lucide-react";
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { isNative } from '@/lib/capacitor/platform';
 
@@ -19,6 +19,8 @@ export interface NotifPrefsState {
   tribeActivityEnabled: boolean;
   eventRemindersEnabled: boolean;
   governanceEnabled: boolean;
+  readReceiptsEnabled: boolean;
+  typingIndicatorsEnabled: boolean;
 }
 
 interface NotificationsSectionProps {
@@ -124,6 +126,18 @@ export function NotificationsSection({ notifPrefs, setNotifPrefs, isSaving, onSa
           checked={notifPrefs.eventRemindersEnabled} onChange={(v) => setNotifPrefs(p => ({ ...p, eventRemindersEnabled: v }))} />
         <NotifToggle id="governanceVoting" label="🏛️ Governance & Voting" description="New proposals, vote results, and discussion updates"
           checked={notifPrefs.governanceEnabled} onChange={(v) => setNotifPrefs(p => ({ ...p, governanceEnabled: v }))} />
+
+        {/* ── Chat Preferences ─────────────────────────────── */}
+        <div className="pt-2">
+          <p className="text-sm font-semibold flex items-center gap-2">
+            <MessageCircle className="h-4 w-4 text-primary" /> Chat
+          </p>
+          <p className="text-xs text-muted-foreground">Control what others can see in encrypted chats.</p>
+        </div>
+        <NotifToggle id="readReceipts" label="Read Receipts" description="Let others see when you've read their messages"
+          checked={notifPrefs.readReceiptsEnabled} onChange={(v) => setNotifPrefs(p => ({ ...p, readReceiptsEnabled: v }))} />
+        <NotifToggle id="typingIndicators" label="Typing Indicators" description="Let others see when you're typing"
+          checked={notifPrefs.typingIndicatorsEnabled} onChange={(v) => setNotifPrefs(p => ({ ...p, typingIndicatorsEnabled: v }))} />
       </CardContent>
       <CardFooter>
         <Button className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={onSave} disabled={isSaving}>

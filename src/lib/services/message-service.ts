@@ -23,8 +23,12 @@ export interface MessageRow {
   attachmentType: string | null;
   attachmentSize: number | null;
   attachmentEncryptionMeta: string | null;
+  replyToId: string | null;
   sentAt: Date | null;
   readAt: Date | null;
+  seenAt: Date | null;
+  editedAt: Date | null;
+  deletedAt: Date | null;
 }
 
 export interface AttachmentData {
@@ -86,6 +90,7 @@ export async function sendMessage(
   senderId: string,
   ciphertextBase64: string,
   attachment?: AttachmentData,
+  replyToId?: string,
 ): Promise<MessageRow> {
   const id = crypto.randomUUID();
   const ciphertext = Buffer.from(ciphertextBase64, 'base64');
@@ -102,6 +107,7 @@ export async function sendMessage(
     attachmentType: attachment?.fileType ?? null,
     attachmentSize: attachment?.fileSize ?? null,
     attachmentEncryptionMeta: attachment?.encryptionMeta ?? null,
+    replyToId: replyToId ?? null,
   });
 
   // Fire push notification to bond partner (fire-and-forget)
@@ -141,13 +147,67 @@ export async function sendMessage(
   }).catch(() => {});
 
   return {
-    id, bondId, senderId, ciphertext, plaintext: null, sentAt, readAt: null,
+    id, bondId, senderId, ciphertext, plaintext: null, sentAt, readAt: null, seenAt: null,
+    editedAt: null, deletedAt: null,
     attachmentFileId: attachment?.fileId ?? null,
     attachmentName: attachment?.fileName ?? null,
     attachmentType: attachment?.fileType ?? null,
     attachmentSize: attachment?.fileSize ?? null,
     attachmentEncryptionMeta: attachment?.encryptionMeta ?? null,
+    replyToId: replyToId ?? null,
   };
+}
+
+/**
+ * Edits a message's encrypted body. Only the original sender may edit, and
+ * only non-deleted messages. Stamps editedAt so the UI can show "(edited)".
+ */
+export async function editMessage(
+  messageId: string,
+  userId: string,
+  ciphertextBase64: string,
+): Promise<{ editedAt: Date }> {
+  const [msg] = await db.select({ senderId: messages.senderId, deletedAt: messages.deletedAt })
+    .from(messages).where(eq(messages.id, messageId)).limit(1);
+  if (!msg) throw new Error('Message not found.');
+  if (msg.senderId !== userId) throw new Error('You can only edit your own messages.');
+  if (msg.deletedAt) throw new Error('Cannot edit a deleted message.');
+
+  const editedAt = new Date();
+  await db.update(messages)
+    .set({ ciphertext: Buffer.from(ciphertextBase64, 'base64'), editedAt })
+    .where(eq(messages.id, messageId));
+  return { editedAt };
+}
+
+/**
+ * Soft-deletes a message. Only the original sender may delete. The row is kept
+ * as a tombstone (so reply references survive) but all content — ciphertext,
+ * plaintext, and attachment metadata — is cleared.
+ */
+export async function deleteMessage(
+  messageId: string,
+  userId: string,
+): Promise<{ deletedAt: Date }> {
+  const [msg] = await db.select({ senderId: messages.senderId })
+    .from(messages).where(eq(messages.id, messageId)).limit(1);
+  if (!msg) throw new Error('Message not found.');
+  if (msg.senderId !== userId) throw new Error('You can only delete your own messages.');
+
+  const deletedAt = new Date();
+  await db.update(messages)
+    .set({
+      deletedAt,
+      ciphertext: null,
+      plaintext: null,
+      attachmentFileId: null,
+      attachmentName: null,
+      attachmentType: null,
+      attachmentSize: null,
+      attachmentEncryptionMeta: null,
+    })
+    .where(eq(messages.id, messageId));
+  return { deletedAt };
 }
 
 /**
@@ -181,23 +241,48 @@ export async function getMessages(
 }
 
 /**
- * Marks all unread messages in a bond as read for the given user.
- * Only marks messages sent by OTHER users (not your own).
+ * Marks messages from the OTHER party as read for the given user.
  * Marks across both bond IDs so read receipts work correctly.
+ *
+ * Two distinct signals are tracked:
+ *  - seenAt is ALWAYS set — it drives the recipient's own unread badge, so
+ *    it must clear regardless of the read-receipt preference.
+ *  - readAt is the receipt SHARED with the sender (drives their ✓✓ ticks);
+ *    it's only set when `shareReceipt` is true (recipient has them enabled).
  */
-export async function markRead(bondId: string, userId: string): Promise<number> {
+export async function markRead(
+  bondId: string,
+  userId: string,
+  shareReceipt: boolean = true,
+): Promise<number> {
   const [myBondId, peerBondId] = await resolveBondPair(bondId, userId);
   const filter = bondIdFilter(myBondId, peerBondId);
+  const now = new Date();
 
-  const result = await db.update(messages)
-    .set({ readAt: new Date() })
+  // Always clear the recipient's own unread state.
+  await db.update(messages)
+    .set({ seenAt: now })
     .where(
       and(
         filter,
         ne(messages.senderId, userId),
-        isNull(messages.readAt),
+        isNull(messages.seenAt),
       )
     );
+
+  // Only expose the read receipt to the sender when enabled.
+  if (shareReceipt) {
+    await db.update(messages)
+      .set({ readAt: now })
+      .where(
+        and(
+          filter,
+          ne(messages.senderId, userId),
+          isNull(messages.readAt),
+        )
+      );
+  }
+
   return 0; // SQLite doesn't return update count easily
 }
 
@@ -237,10 +322,12 @@ export async function getUnreadCount(userId: string): Promise<number> {
         and(
           filter,
           ne(messages.senderId, userId),
-          isNull(messages.readAt),
+          // Unread badge tracks seenAt (local view), not readAt (shared receipt),
+          // so disabling read receipts never leaves a stuck badge.
+          isNull(messages.seenAt),
         )
       );
-    totalUnread += result?.count ?? 0;
+    totalUnread += Number(result?.count ?? 0);
   }
 
   return totalUnread;

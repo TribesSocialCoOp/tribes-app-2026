@@ -1,5 +1,6 @@
 import type { NextConfig } from 'next';
 import os from 'os';
+import path from 'path';
 
 // Get all non-internal local IPv4 addresses to automate allowed origins in dev
 function getLocalIPs(): string[] {
@@ -189,10 +190,14 @@ const nextConfig: NextConfig = {
       } : {}),
     },
   },
-  // Next.js 16 defaults to Turbopack; this empty config acknowledges we
-  // intentionally keep the webpack() override below for production builds
-  // (crypto chunk isolation for SRI verification).
-  turbopack: {},
+  // Next.js 16 defaults to Turbopack. Pin the workspace root to THIS project
+  // dir — otherwise multiple lockfiles under ~/Sites make Turbopack infer the
+  // parent ~/Sites as root and recursively watch every sibling project
+  // (including cai-hobbes/target, ~26GB of Rust build artifacts), which pegs
+  // the CPU at 800%+ and starves the dev server so localhost won't respond.
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   async headers() {
     return [
       {

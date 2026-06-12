@@ -49,6 +49,13 @@ interface KeySyncState {
   initialSyncDone: boolean;
   /** Whether a sync is currently in progress */
   isSyncing: boolean;
+  /**
+   * Whether PRF passkey vault auto-sync is active this session — the
+   * wrapping key is available and the last vault pull succeeded. When true,
+   * manual backup warnings are unnecessary: keys flow to/from the vault
+   * automatically.
+   */
+  prfSyncActive: boolean;
   /** Trigger an immediate sync (e.g., after accepting a bond) */
   triggerSync: () => void;
   /** Re-generate keys for bonds stuck without local keys. Old posts encrypted with previous keys will be unreadable. */
@@ -65,6 +72,7 @@ const KeySyncContext = createContext<KeySyncState>({
   tribeKeysReady: 0,
   initialSyncDone: false,
   isSyncing: false,
+  prfSyncActive: false,
   triggerSync: () => { },
   rekeyOrphanedBonds: async () => { },
 });
@@ -83,6 +91,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
   const syncLock = useRef(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasVaultBeenSavedRef = useRef(false);
+  const vaultPushPendingRef = useRef(false);
 
   const [readyBondCount, setReadyBondCount] = useState(0);
   const [totalBondCount, setTotalBondCount] = useState(0);
@@ -93,27 +102,29 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
   const [tribeKeysReady, setTribeKeysReady] = useState(0);
   const [initialSyncDone, setInitialSyncDone] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [prfSyncActive, setPrfSyncActive] = useState(false);
 
   /**
-   * Silently saves an updated PRF vault after new keys are generated.
-   * No-op if the session vault key is not available (no PRF support this session).
+   * Silently saves an updated PRF vault (merging with the server copy first).
+   * No-op if no wrapping key is available (no PRF this session/device).
    */
-  const maybeSaveVault = useCallback(async (generated: boolean) => {
-    if (!generated) return;
+  const maybeSaveVault = useCallback(async (shouldSave: boolean) => {
+    if (!shouldSave) return;
 
     try {
       const { sessionVaultKey, encryptVaultWithPrf } = await import('@/lib/crypto');
       const { savePrfVaultAction } = await import('@/lib/actions/key-vault-actions');
 
-      const session = sessionVaultKey.get();
-      if (!session) return; // PRF not available this session
+      const session = await sessionVaultKey.load(user?.id);
+      if (!session) return; // PRF not available on this device
 
-      const encrypted = await encryptVaultWithPrf(session.wrappingKey, user?.id);
+      const encrypted = await encryptVaultWithPrf(session.wrappingKey, user?.id, session.credentialId);
       const b64 = Buffer.from(encrypted).toString('base64');
       const isFirstSave = !hasVaultBeenSavedRef.current;
 
       await savePrfVaultAction(b64, session.credentialId);
       hasVaultBeenSavedRef.current = true;
+      vaultPushPendingRef.current = false;
 
       if (isFirstSave) {
         toast({
@@ -124,7 +135,72 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       console.debug('[key-sync] Vault auto-saved to PRF credential');
     } catch (err) {
       console.warn('[key-sync] Vault auto-save failed (non-fatal):', err);
+      // Retry on the next sync cycle — the "vault unchanged" pull marker
+      // would otherwise suppress the counter-sync check until new keys appear.
+      vaultPushPendingRef.current = true;
       // Silent failure — passphrase backup in Settings still works
+    }
+  }, [toast, user?.id]);
+
+  /**
+   * Pulls the PRF vault from the server and merges any keys this device is
+   * missing (newest server copy wins on conflicts that match the server's
+   * published bond key). Decryption is skipped when the vault's updatedAt
+   * hasn't changed since the last pull on this device.
+   *
+   * Returns:
+   * - active: a wrapping key is available and the pull didn't fail
+   * - vaultBondIds: bond ids in the vault when it was decrypted this cycle,
+   *   or null when the vault was unchanged (no counter-sync check needed)
+   */
+  const pullPrfVault = useCallback(async (): Promise<{
+    active: boolean;
+    vaultBondIds: Set<string> | null;
+  }> => {
+    // Resolve the session up front so a transient pull/network error below
+    // doesn't incorrectly report sync as inactive (which would un-suppress the
+    // manual-backup warnings) — having a wrapping key IS what "active" means.
+    let haveSession = false;
+    try {
+      const { sessionVaultKey, decryptAndRestoreVault } = await import('@/lib/crypto');
+      const session = await sessionVaultKey.load(user?.id);
+      if (!session) return { active: false, vaultBondIds: null };
+      haveSession = true;
+
+      const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
+      const vault = await getPrfVaultAction(session.credentialId);
+      if (!vault) {
+        // No vault yet — still active; the push side will create it.
+        return { active: true, vaultBondIds: new Set() };
+      }
+
+      const markerKey = `tribes:prf-vault-pulled:${session.credentialId}`;
+      let lastPulled: string | null = null;
+      try { lastPulled = localStorage.getItem(markerKey); } catch { /* private mode */ }
+      if (lastPulled === vault.updatedAt) {
+        return { active: true, vaultBondIds: null }; // unchanged since last pull
+      }
+
+      const raw = Buffer.from(vault.encryptedVaultBase64, 'base64');
+      const encrypted = raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength) as ArrayBuffer;
+      const result = await decryptAndRestoreVault(session.wrappingKey, encrypted, user?.id);
+
+      try { localStorage.setItem(markerKey, vault.updatedAt); } catch { /* private mode */ }
+
+      if (result.imported > 0) {
+        console.log(`[key-sync] Auto-pulled ${result.imported} key(s) from passkey vault`);
+        toast({
+          title: 'Keys Synced',
+          description: `${result.imported} encryption key${result.imported !== 1 ? 's' : ''} synced from your other devices.`,
+        });
+      }
+
+      return { active: true, vaultBondIds: new Set(result.bondIds) };
+    } catch (err) {
+      console.warn('[key-sync] PRF vault auto-pull failed (non-fatal):', err);
+      // A wrapping key exists — sync is still "active", this pull just failed.
+      // Returning null vaultBondIds skips the counter-sync check this cycle.
+      return { active: haveSession, vaultBondIds: null };
     }
   }, [toast, user?.id]);
 
@@ -184,6 +260,16 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
         console.warn('[key-sync] Crypto or IndexedDB not available, skipping');
         return;
       }
+
+      // ========================================
+      // PHASE V: PRF vault auto-pull
+      // ========================================
+      // Merge keys created on other devices BEFORE the generative phases run,
+      // so orphaned bonds heal automatically and we never generate a competing
+      // identity key when the vault already holds one.
+
+      const vaultSync = await pullPrfVault();
+      setPrfSyncActive(vaultSync.active);
 
       // ========================================
       // PHASE 0: Identity Key Initialization
@@ -645,7 +731,25 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
         console.warn('[key-sync] Phase C (tribe key distribution) failed:', err);
       }
 
-      await maybeSaveVault(newKeysGenerated);
+      // ========================================
+      // COUNTER-SYNC: push merged vault back up
+      // ========================================
+      // Push when this cycle generated new keys, or when the freshly pulled
+      // vault is missing keys this device holds (so other devices can pull them).
+      let shouldPushVault = newKeysGenerated || vaultPushPendingRef.current;
+      if (!shouldPushVault && vaultSync.active && vaultSync.vaultBondIds) {
+        try {
+          const { getAllBondKeyIds } = await import('@/lib/crypto/key-store');
+          const localIds = await getAllBondKeyIds();
+          shouldPushVault = localIds.some(id => !vaultSync.vaultBondIds!.has(id));
+          if (shouldPushVault) {
+            console.log('[key-sync] Local keys missing from passkey vault — counter-syncing up');
+          }
+        } catch (err) {
+          console.warn('[key-sync] Counter-sync check failed:', err);
+        }
+      }
+      await maybeSaveVault(shouldPushVault);
     } catch (err) {
       console.error('[key-sync] Sync failed:', err);
     } finally {
@@ -658,7 +762,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
         window.dispatchEvent(new CustomEvent('tribes:key-sync-complete'));
       }
     }
-  }, [user?.id, maybeSaveVault]);
+  }, [user?.id, maybeSaveVault, pullPrfVault]);
 
   // ── Adaptive sync lifecycle ──
   // Fast interval (15s) for the first 2 minutes after mount to quickly
@@ -781,6 +885,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       tribeKeysReady,
       initialSyncDone,
       isSyncing,
+      prfSyncActive,
       triggerSync,
       rekeyOrphanedBonds,
     }}>

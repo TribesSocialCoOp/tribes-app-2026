@@ -187,38 +187,37 @@ export async function derivePrfWrappingKey(prfOutput: ArrayBuffer): Promise<Cryp
 export async function encryptVaultWithPrf(
   wrappingKey: CryptoKey,
   userId?: string,
+  credentialId?: string,
 ): Promise<ArrayBuffer> {
   let storedKeys = await getAllBondKeys();
   if (storedKeys.length === 0) throw new Error('No keys to backup');
 
-  // Pre-flight: detect locked (non-extractable) keys and attempt self-heal.
-  // If any key can't be exported, try restoring from the existing server vault
-  // first — this upgrades locked keys to extractable before we save.
-  const hasLockedKeys = storedKeys.some(k => !k.privateKey.extractable);
-  if (hasLockedKeys) {
-    console.warn('[prf-vault] Detected non-extractable keys — attempting self-heal from existing vault...');
-    try {
-      const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
-      const { sessionVaultKey } = await import('./session-vault-key');
-      const session = sessionVaultKey.get();
-      if (session) {
-        const vaultData = await getPrfVaultAction(session.credentialId);
-        if (vaultData) {
-          const encryptedVault = typeof vaultData.encryptedVaultBase64 === 'string'
-            ? new Uint8Array(Buffer.from(vaultData.encryptedVaultBase64, 'base64')).buffer
-            : null;
-          if (encryptedVault) {
-            await decryptAndRestoreVault(wrappingKey, encryptedVault, userId);
-            console.log('[prf-vault] Self-heal complete — locked keys upgraded from existing vault');
-          }
+  // Pre-flight: ALWAYS merge the existing server vault into the local store
+  // before exporting. Without this, a device holding fewer keys would clobber
+  // a richer vault saved by another device (the save path is delete+insert).
+  // This also self-heals locked (non-extractable) local keys by upgrading them
+  // from the vault copy.
+  try {
+    const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
+    const { sessionVaultKey } = await import('./session-vault-key');
+    const credId = credentialId ?? sessionVaultKey.get()?.credentialId;
+    if (credId) {
+      const vaultData = await getPrfVaultAction(credId);
+      if (vaultData?.encryptedVaultBase64) {
+        const encryptedVault = new Uint8Array(
+          Buffer.from(vaultData.encryptedVaultBase64, 'base64')
+        ).buffer;
+        const merged = await decryptAndRestoreVault(wrappingKey, encryptedVault, userId);
+        if (merged.imported > 0) {
+          console.log(`[prf-vault] Merged ${merged.imported} key(s) from existing vault before save`);
         }
       }
-    } catch (healErr) {
-      console.warn('[prf-vault] Self-heal failed (will proceed with exportable keys only):', healErr);
     }
-    // Re-read keys after self-heal
-    storedKeys = await getAllBondKeys();
+  } catch (mergeErr) {
+    console.warn('[prf-vault] Pre-save merge with existing vault failed (saving local keys only):', mergeErr);
   }
+  // Re-read keys after merge
+  storedKeys = await getAllBondKeys();
 
   const entries: VaultEntry[] = [];
   for (const stored of storedKeys) {
@@ -312,7 +311,7 @@ export async function decryptAndRestoreVault(
   wrappingKey: CryptoKey,
   encryptedVault: ArrayBuffer,
   userId?: string,
-): Promise<{ imported: number; skipped: number; total: number }> {
+): Promise<{ imported: number; skipped: number; total: number; bondIds: string[] }> {
   const packed = new Uint8Array(encryptedVault);
   if (packed.length < 12) throw new Error('Invalid vault blob');
 
@@ -330,10 +329,28 @@ export async function decryptAndRestoreVault(
     throw new Error(`Unsupported vault version: ${payload.version}`);
   }
 
-  // Smart merge: same semantics as password vault restore.
+  // Resolve key-pair conflicts against the server's published key per bond:
+  // the key the server has on record is the one peers derive secrets from,
+  // so it is the source of truth when local and vault disagree.
+  const serverKeyHashes = new Map<string, string>();
+  try {
+    const { getBonds } = await import('@/lib/actions/bond-actions');
+    const bonds = await getBonds();
+    for (const b of bonds) {
+      if (b.targetType === 'user' && b.publicKeyJwk) {
+        try {
+          serverKeyHashes.set(b.id, await hashPublicKeyJwk(JSON.parse(b.publicKeyJwk)));
+        } catch { /* unparseable server key — ignore */ }
+      }
+    }
+  } catch (err) {
+    console.warn('[prf-vault] Could not fetch server keys for merge resolution (defaulting to local-wins):', err);
+  }
+
+  // Smart merge:
   // - New bonds: import directly
   // - Same public key: skip (already in sync)
-  // - Different public key: backup wins + invalidate shared secret cache
+  // - Different public key: whichever side matches the server's published key wins
   let imported = 0;
   let skipped = 0;
 
@@ -353,22 +370,36 @@ export async function decryptAndRestoreVault(
         }
 
         if (localPubHash !== backupPubHash) {
-          // Different key pair — LOCAL WINS. This device generated its own key
-          // and published it to the server. The backup's key is from a different
-          // device. Overwriting would create a mismatch with the server record.
-          console.warn(
-            `[prf-vault] Bond ${entry.bondId.substring(0, 16)}... has different local key — ` +
-            `keeping local (local: ${localPubHash.substring(0, 8)}... backup: ${backupPubHash.substring(0, 8)}...)`
-          );
-          skipped++;
-          continue;
+          const serverHash = serverKeyHashes.get(entry.bondId);
+
+          if (serverHash && serverHash === backupPubHash && serverHash !== localPubHash) {
+            // The vault's key matches the server record and the local one
+            // doesn't — the local key is the orphan. Vault wins; the cached
+            // shared secret was derived from the wrong pair, so drop it.
+            console.warn(
+              `[prf-vault] Bond ${entry.bondId.substring(0, 16)}... local key doesn't match server — ` +
+              `restoring vault key (server: ${serverHash.substring(0, 8)}...)`
+            );
+            await deleteSharedSecret(entry.bondId);
+            // Fall through to import below
+          } else {
+            // Local matches the server (or the server key is unknown) — keep local.
+            console.warn(
+              `[prf-vault] Bond ${entry.bondId.substring(0, 16)}... has different local key — ` +
+              `keeping local (local: ${localPubHash.substring(0, 8)}... backup: ${backupPubHash.substring(0, 8)}...)`
+            );
+            skipped++;
+            continue;
+          }
         }
 
-        // Same key but non-extractable (locked) — overwrite to unlock.
-        // This enables vault backup from this device.
-        console.log(
-          `[prf-vault] Bond ${entry.bondId.substring(0, 16)}... is locked — upgrading to extractable`
-        );
+        if (localPubHash === backupPubHash) {
+          // Same key but non-extractable (locked) — overwrite to unlock.
+          // This enables vault backup from this device.
+          console.log(
+            `[prf-vault] Bond ${entry.bondId.substring(0, 16)}... is locked — upgrading to extractable`
+          );
+        }
         // Fall through to import below
       }
 
@@ -433,5 +464,10 @@ export async function decryptAndRestoreVault(
 
   console.log(`[prf-vault] Restore complete: ${imported} imported, ${skipped} unchanged, ${payload.entries.length} total`);
 
-  return { imported, skipped, total: payload.entries.length };
+  return {
+    imported,
+    skipped,
+    total: payload.entries.length,
+    bondIds: payload.entries.map(e => e.bondId),
+  };
 }

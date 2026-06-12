@@ -54,7 +54,7 @@ export async function saveKeyVault(
 export async function getKeyVault(
   userId: string,
   credentialId: string | null,
-): Promise<{ encryptedVault: ArrayBuffer; salt: string; vaultType: string; createdAt: Date } | null> {
+): Promise<{ encryptedVault: ArrayBuffer; salt: string; vaultType: string; createdAt: Date; updatedAt: Date } | null> {
   const [row] = await db.select().from(keyVaults)
     .where(
       and(
@@ -78,6 +78,7 @@ export async function getKeyVault(
     salt: row.salt,
     vaultType: row.vaultType,
     createdAt: row.createdAt ?? new Date(),
+    updatedAt: row.updatedAt ?? row.createdAt ?? new Date(),
   };
 }
 
