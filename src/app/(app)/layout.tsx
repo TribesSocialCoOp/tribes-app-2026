@@ -123,13 +123,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <SidebarRail />
               <SidebarInset className="flex flex-col flex-1 min-h-screen">
             {isChatThread ? (
-              // Full-window chat thread: fixed viewport-height shell, no page
-              // padding/footer, composer anchored to the bottom. On mobile the
-              // content reserves space for the fixed tab bar so the composer
-              // nests directly on top of it.
-              <main data-app-ready className="flex h-[100dvh] flex-col overflow-hidden bg-background">
+              // Full-window chat thread: same flex-1 main as the rest of the app
+              // (so the global `html.capacitor-native main` bottom padding keeps
+              // the composer above the tab bar), but overflow-hidden so the page
+              // doesn't scroll — only the message list does. No page
+              // padding/footer/pull-to-refresh, and a flex-1/min-h-0 chain (not
+              // h-full) so the message area expands correctly on iOS WebKit.
+              <main data-app-ready className="flex flex-1 min-h-0 flex-col overflow-hidden overflow-x-hidden bg-background">
                 <AppHeader />
-                <div className="flex min-h-0 flex-1 flex-col pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] md:pb-0">
+                <div className="flex flex-1 min-h-0 flex-col">
                   {children}
                 </div>
               </main>
