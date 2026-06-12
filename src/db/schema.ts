@@ -717,11 +717,35 @@ export const messages = pgTable('messages', {
   attachmentType: text('attachment_type'),             // MIME type
   attachmentSize: integer('attachment_size'),          // Original file size in bytes
   attachmentEncryptionMeta: text('attachment_encryption_meta'), // JSON: EncryptionMeta for client-side decryption
+  // Soft self-reference to messages.id — no FK so replies survive deletion of the original
+  replyToId: text('reply_to_id'),
   sentAt: timestamp('sent_at', { withTimezone: true }),
+  // readAt = read receipt SHARED with the sender (drives their ✓✓ ticks).
+  // Only set when the recipient has read receipts enabled.
   readAt: timestamp('read_at', { withTimezone: true }),
+  // seenAt = recipient has locally viewed the message (drives THEIR own unread
+  // badge). Always set on view, regardless of the read-receipt preference, so
+  // turning off read receipts never leaves a stuck unread badge.
+  seenAt: timestamp('seen_at', { withTimezone: true }),
+  // editedAt = last time the sender edited the message (re-encrypted ciphertext).
+  editedAt: timestamp('edited_at', { withTimezone: true }),
+  // deletedAt = soft-delete tombstone. Content is cleared but the row remains
+  // so reply references stay intact.
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
 }, (table) => [
   index('idx_messages_bond').on(table.bondId, table.sentAt),
   index('idx_messages_sender').on(table.senderId)
+]);
+
+export const messageReactions = pgTable('message_reactions', {
+  id: text('id').primaryKey(),
+  messageId: text('message_id').notNull().references(() => messages.id, { onDelete: 'cascade' }),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  emoji: text('emoji').notNull(), // raw emoji string, e.g. '❤️'
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+}, (table) => [
+  index('idx_message_reactions_message').on(table.messageId),
+  uniqueIndex('idx_message_reactions_user_message').on(table.userId, table.messageId),
 ]);
 
 // ============================================================
@@ -737,6 +761,8 @@ export const notificationPreferences = pgTable('notification_preferences', {
   tribeActivityEnabled: boolean('tribe_activity_enabled').default(true),
   eventRemindersEnabled: boolean('event_reminders_enabled').default(true),
   governanceEnabled: boolean('governance_enabled').default(true),
+  readReceiptsEnabled: boolean('read_receipts_enabled').default(true),
+  typingIndicatorsEnabled: boolean('typing_indicators_enabled').default(true),
   lastActivityViewedAt: timestamp('last_activity_viewed_at', { withTimezone: true }),
   readActivityIds: jsonb('read_activity_ids').$type<string[]>().default([]),
   updatedAt: timestamp('updated_at', { withTimezone: true }),
@@ -988,6 +1014,22 @@ export const connectedAccounts = pgTable('connected_accounts', {
   platformFeePercent: integer('platform_fee_percent').default(5), // Default 5% for Base
   createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
 });
+
+// ============================================================
+// USER FAVORITES (sidebar pins)
+// ============================================================
+
+export const userFavorites = pgTable('user_favorites', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  targetType: text('target_type').notNull(), // 'bond' | 'tribe'
+  targetId: text('target_id').notNull(),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+}, (table) => [
+  uniqueIndex('idx_user_favorites_unique').on(table.userId, table.targetType, table.targetId),
+  index('idx_user_favorites_user').on(table.userId, table.sortOrder),
+]);
 
 /** Records every payment transaction through the platform */
 export const transactions = pgTable('transactions', {

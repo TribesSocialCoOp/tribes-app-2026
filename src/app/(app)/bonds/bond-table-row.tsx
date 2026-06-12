@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { TableCell, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,7 +13,7 @@ import {
   ResponsiveMenuTrigger,
 } from "@/components/ui/responsive-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { User, Users, Ticket, AtSign, UserCheck, UserCog, Star, MoreVertical, RefreshCw, Share2, ShieldCheck, Settings, Ban, Trash2, Rss, Moon, RotateCcw, MessageSquareText } from "lucide-react";
+import { User, Users, Ticket, AtSign, UserCheck, UserCog, Star, MoreVertical, RefreshCw, Share2, ShieldCheck, Settings, Ban, Trash2, Rss, Moon, RotateCcw, MessageSquareText, Pin, PinOff } from "lucide-react";
 import { cn, formatDate } from '@/lib/utils';
 import type { Bond } from '@/lib/types';
 import { getBondTypeDisplay, getBondTypeBadgeStyle, PasskeyStatusIcon, ConnectVibeIcon } from '@/lib/bond-utils';
@@ -36,6 +36,30 @@ export const BondTableRow: React.FC<BondTableRowProps> = ({ bond }) => {
   const isEncryptionOrphaned = bond.targetType === 'user' && orphanedBondNames.includes(bond.targetName);
 
   const canChat = bond.targetType === 'user' && bond.passkeyStatus !== 'expired';
+
+  const [isPinned, setIsPinned] = useState(false);
+  useEffect(() => {
+    const targetType = bond.targetType === 'user' ? 'bond' : 'tribe';
+    import('@/lib/actions/favorite-actions').then(({ isFavorite }) => {
+      isFavorite(targetType as 'bond' | 'tribe', bond.id).then(setIsPinned).catch(() => {});
+    });
+  }, [bond.id, bond.targetType]);
+
+  async function handleTogglePin() {
+    const targetType = bond.targetType === 'user' ? 'bond' : 'tribe';
+    try {
+      if (isPinned) {
+        const { removeFavoriteByTarget } = await import('@/lib/actions/favorite-actions');
+        await removeFavoriteByTarget(targetType as 'bond' | 'tribe', bond.id);
+        setIsPinned(false);
+      } else {
+        const { addFavorite } = await import('@/lib/actions/favorite-actions');
+        await addFavorite(targetType as 'bond' | 'tribe', bond.id);
+        setIsPinned(true);
+      }
+      window.dispatchEvent(new CustomEvent('favorites-changed'));
+    } catch { }
+  }
 
   const timeBasedProgress = calculateTimeProgress(bond);
   const canToggleInnerCircle = bond.targetType === 'user' && bond.keyType === 'standard';
@@ -152,10 +176,17 @@ export const BondTableRow: React.FC<BondTableRowProps> = ({ bond }) => {
           </ResponsiveMenuTrigger>
           <ResponsiveMenuContent align="end">
             {canChat && (
-              <ResponsiveMenuItem onClick={() => router.push(`/bonds/${bond.id}`)}>
+              <ResponsiveMenuItem onClick={() => router.push(`/chat/${bond.id}`)}>
                 <MessageSquareText className="mr-2 h-4 w-4 text-primary" /> Chat
               </ResponsiveMenuItem>
             )}
+            <ResponsiveMenuItem onClick={handleTogglePin}>
+              {isPinned ? (
+                <><PinOff className="mr-2 h-4 w-4 text-muted-foreground" /> Unpin from Sidebar</>
+              ) : (
+                <><Pin className="mr-2 h-4 w-4 text-primary" /> Pin to Sidebar</>
+              )}
+            </ResponsiveMenuItem>
             <ResponsiveMenuItem
               onClick={() => handleRefreshBond(bond.id)}
               disabled={(bond.passkeyStatus === 'active' && timeBasedProgress > 90 && bond.keyType === 'standard') || isDormant}

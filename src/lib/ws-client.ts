@@ -13,7 +13,7 @@
  */
 
 type MessageHandler = (data: any) => void;
-type WSMessageType = 'message' | 'typing' | 'presence' | 'read' | 'feed-update' | 'activity';
+type WSMessageType = 'message' | 'typing' | 'presence' | 'read' | 'reaction' | 'edit' | 'delete' | 'feed-update' | 'activity';
 
 class TribesWebSocket {
   private static instance: TribesWebSocket | null = null;
@@ -134,13 +134,14 @@ class TribesWebSocket {
   /**
    * Send an encrypted message to a bond partner.
    */
-  sendEncryptedMessage(bondId: string, ciphertext: string, targetUserId?: string, messageId?: string): void {
+  sendEncryptedMessage(bondId: string, ciphertext: string, targetUserId?: string, messageId?: string, replyToId?: string): void {
     this.send({
       type: 'message',
       bondId,
       targetUserId,
       ciphertext,
       messageId,
+      replyToId,
     });
   }
 
@@ -164,6 +165,45 @@ class TribesWebSocket {
       type: 'presence',
       bondId,
       action,
+    });
+  }
+
+  /**
+   * Send an emoji reaction update for a message.
+   * `emoji` is null when the reaction was removed (toggle off).
+   */
+  sendReaction(bondId: string, messageId: string, emoji: string | null, targetUserId?: string): void {
+    this.send({
+      type: 'reaction',
+      bondId,
+      messageId,
+      emoji,
+      targetUserId,
+    });
+  }
+
+  /**
+   * Broadcast an edited message (new ciphertext) to the bond partner.
+   */
+  sendEdit(bondId: string, messageId: string, ciphertext: string, targetUserId?: string): void {
+    this.send({
+      type: 'edit',
+      bondId,
+      messageId,
+      ciphertext,
+      targetUserId,
+    });
+  }
+
+  /**
+   * Broadcast a message deletion to the bond partner.
+   */
+  sendDelete(bondId: string, messageId: string, targetUserId?: string): void {
+    this.send({
+      type: 'delete',
+      bondId,
+      messageId,
+      targetUserId,
     });
   }
 

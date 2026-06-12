@@ -21,7 +21,7 @@ import type { EmojiAutocompleteRef } from "@/components/compose/emoji-autocomple
  *   <EmojiAutocomplete ref={emojiRef} query={emojiQuery} onSelect={handleSelectEmoji} />
  */
 export function useEmojiAutocomplete(
-  textareaRef: RefObject<HTMLTextAreaElement | null>,
+  textareaRef: RefObject<HTMLTextAreaElement | HTMLInputElement | null>,
   content: string,
   setContent: (val: string) => void,
 ) {
@@ -88,7 +88,7 @@ export function useEmojiAutocomplete(
   );
 
   const handleEmojiKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => {
       if (emojiQuery !== null && emojiRef.current) {
         const handled = emojiRef.current.handleKeyDown(e);
         if (handled) {

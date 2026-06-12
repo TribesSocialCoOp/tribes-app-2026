@@ -63,6 +63,8 @@ export interface NotificationPrefs {
   tribeActivityEnabled: boolean;
   eventRemindersEnabled: boolean;
   governanceEnabled: boolean;
+  readReceiptsEnabled: boolean;
+  typingIndicatorsEnabled: boolean;
 }
 
 const DEFAULT_PREFS: NotificationPrefs = {
@@ -73,6 +75,8 @@ const DEFAULT_PREFS: NotificationPrefs = {
   tribeActivityEnabled: true,
   eventRemindersEnabled: true,
   governanceEnabled: true,
+  readReceiptsEnabled: true,
+  typingIndicatorsEnabled: true,
 };
 
 // ============================================================
@@ -94,6 +98,8 @@ export async function getPreferences(userId: string): Promise<NotificationPrefs>
     tribeActivityEnabled: row.tribeActivityEnabled ?? true,
     eventRemindersEnabled: row.eventRemindersEnabled ?? true,
     governanceEnabled: row.governanceEnabled ?? true,
+    readReceiptsEnabled: row.readReceiptsEnabled ?? true,
+    typingIndicatorsEnabled: row.typingIndicatorsEnabled ?? true,
   };
 }
 
@@ -201,7 +207,7 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
         .where(and(
           bondIdCondition,
           ne(messages.senderId, userId),
-          isNull(messages.readAt),
+          isNull(messages.seenAt),
         ));
 
       const count = unread?.count ?? 0;
@@ -212,7 +218,7 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
           title: `${count} unread message${count > 1 ? 's' : ''}`,
           description: `from ${bond.targetName}`,
           timestamp: new Date(), // approximate
-          actionUrl: `/bonds/${bond.id}`,
+          actionUrl: `/chat/${bond.id}`,
           read: false,
         });
       }

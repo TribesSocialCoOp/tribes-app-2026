@@ -114,7 +114,7 @@ export function PullToRefresh({ children }: PullToRefreshProps) {
       </div>
       
       {/* Main Content */}
-      <div className="w-full flex-1">
+      <div className="w-full flex-1 flex flex-col">
         {children}
       </div>
     </div>

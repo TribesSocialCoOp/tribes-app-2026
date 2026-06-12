@@ -29,6 +29,8 @@ import {
   Link2,
   SquarePen,
   Scale,
+  MessageSquareText,
+  PinOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -39,6 +41,7 @@ import { useUser } from "@/hooks/use-user";
 
 const navItems: { href: string; icon: React.ElementType; label: string; tooltip: string; roles?: UserRole[] }[] = [
   { href: "/your-comms", icon: Rss, label: "Feed", tooltip: "Your Feed" },
+  { href: "/chat", icon: MessageSquareText, label: "Chat", tooltip: "Your Chats" },
   { href: "/tribes", icon: Tent, label: "Tribes", tooltip: "Your Tribes" },
   { href: "/bonds", icon: Link2, label: "Bonds", tooltip: "Your Bonds" },
   { href: "/discover", icon: Compass, label: "Discover", tooltip: "Explore" },
@@ -78,6 +81,15 @@ export function AppSidebar() {
   // Notification badge — event-driven via WS + custom events, no polling
   const [unreadCount, setUnreadCount] = useState(0);
   const [activeProposalCount, setActiveProposalCount] = useState(0);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
+  const [favorites, setFavorites] = useState<Array<{
+    id: string;
+    targetType: 'bond' | 'tribe';
+    targetId: string;
+    targetName: string;
+    targetAvatar: string | null;
+    sortOrder: number;
+  }>>([]);
 
   // Active proposals badge fetch
   useEffect(() => {
@@ -98,6 +110,39 @@ export function AppSidebar() {
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isGuest, pathname]);
+
+  // Chat unread badge + favorites
+  useEffect(() => {
+    if (isGuest) return;
+    async function fetchChatAndFavorites() {
+      try {
+        const [{ getUnreadMessageCount }, { getFavorites }] = await Promise.all([
+          import('@/lib/actions/content-actions'),
+          import('@/lib/actions/favorite-actions'),
+        ]);
+        const [count, favs] = await Promise.all([
+          getUnreadMessageCount(),
+          getFavorites(),
+        ]);
+        setChatUnreadCount(count);
+        setFavorites(favs);
+      } catch { } // silent fail
+    }
+    fetchChatAndFavorites();
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchChatAndFavorites();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    const handleFavoritesChanged = () => fetchChatAndFavorites();
+    window.addEventListener('favorites-changed', handleFavoritesChanged);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('favorites-changed', handleFavoritesChanged);
     };
   }, [isGuest, pathname]);
 
@@ -273,6 +318,57 @@ export function AppSidebar() {
             </div>
           )}
 
+          {!isGuest && favorites.length > 0 && (
+            <>
+              <li className="px-2 pt-3 pb-1">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground group-data-[collapsible=icon]:hidden">
+                  Favorites
+                </span>
+              </li>
+              {favorites.map(fav => (
+                <SidebarMenuItem key={fav.id}>
+                  <SidebarMenuButton
+                    asChild
+                    onClick={handleLinkClick}
+                    isActive={
+                      fav.targetType === 'bond'
+                        ? pathname === `/chat/${fav.targetId}`
+                        : pathname === `/tribes/${fav.targetId}`
+                    }
+                    tooltip={fav.targetName}
+                    className="justify-start group-data-[collapsible=icon]:justify-center"
+                  >
+                    <Link href={fav.targetType === 'bond' ? `/chat/${fav.targetId}` : `/tribes/${fav.targetId}`}>
+                      <span className="h-5 w-5 mr-2 group-data-[collapsible=icon]:mr-0 inline-flex items-center justify-center rounded-full bg-muted text-[10px] font-semibold shrink-0">
+                        {fav.targetName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
+                      </span>
+                      <span className="group-data-[collapsible=icon]:hidden truncate">{fav.targetName}</span>
+                      <button
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          try {
+                            const { removeFavorite } = await import('@/lib/actions/favorite-actions');
+                            await removeFavorite(fav.id);
+                            setFavorites(prev => prev.filter(f => f.id !== fav.id));
+                            window.dispatchEvent(new CustomEvent('favorites-changed'));
+                          } catch { }
+                        }}
+                        className="ml-auto opacity-0 group-hover/menu-button:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted group-data-[collapsible=icon]:hidden"
+                        title="Unpin"
+                      >
+                        <PinOff className="h-3 w-3 text-muted-foreground" />
+                      </button>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+              <li className="px-2 py-1">
+                <div className="border-b border-border/50" />
+              </li>
+            </>
+          )}
+
           {visibleNavItems.map((item) => (
             <SidebarMenuItem key={item.href}>
               <SidebarMenuButton
@@ -291,6 +387,11 @@ export function AppSidebar() {
                   {item.href === '/your-comms' && unreadCount > 0 && (
                     <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-0 group-data-[collapsible=icon]:right-0 group-data-[collapsible=icon]:h-3 group-data-[collapsible=icon]:min-w-[12px] group-data-[collapsible=icon]:text-[10px]">
                       {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                  {item.href === '/chat' && chatUnreadCount > 0 && (
+                    <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-0 group-data-[collapsible=icon]:right-0 group-data-[collapsible=icon]:h-3 group-data-[collapsible=icon]:min-w-[12px] group-data-[collapsible=icon]:text-[10px]">
+                      {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
                     </span>
                   )}
                   {item.href === '/voting' && activeProposalCount > 0 && (

@@ -26,7 +26,7 @@ function ChatCard({ convo }: { convo: Conversation }) {
 
   return (
     <Link
-      href={`/bonds/${convo.bondId}`}
+      href={`/chat/${convo.bondId}`}
       className={cn(
         "flex flex-col items-center gap-1.5 p-3 rounded-xl min-w-[90px] max-w-[100px]",
         "bg-card border border-border/50 hover:border-primary/30",

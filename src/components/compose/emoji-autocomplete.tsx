@@ -23,7 +23,7 @@ export interface EmojiAutocompleteProps {
 }
 
 export interface EmojiAutocompleteRef {
-  handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  handleKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) => boolean;
 }
 
 export const EmojiAutocomplete = forwardRef<EmojiAutocompleteRef, EmojiAutocompleteProps>(
@@ -53,7 +53,7 @@ export const EmojiAutocomplete = forwardRef<EmojiAutocompleteRef, EmojiAutocompl
     };
 
     useImperativeHandle(ref, () => ({
-      handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+      handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) {
         if (!query || suggestions.length === 0) return false;
 
         switch (e.key) {

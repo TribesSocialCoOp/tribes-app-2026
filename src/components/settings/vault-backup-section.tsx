@@ -68,7 +68,7 @@ function getStrengthScore(pass: string): number {
 export const VaultBackupSection: React.FC = () => {
   const { toast } = useToast();
   const { user } = useUser();
-  const { triggerSync } = useKeySync();
+  const { triggerSync, prfSyncActive } = useKeySync();
 
   // State
   const [hasBackup, setHasBackup] = useState(false);
@@ -297,12 +297,15 @@ export const VaultBackupSection: React.FC = () => {
     try {
       const { authenticateWithPrf } = await import('@/lib/crypto/prf-webauthn-helpers');
       const { derivePrfWrappingKey, encryptVaultWithPrf } = await import('@/lib/crypto/prf-vault');
+      const { sessionVaultKey } = await import('@/lib/crypto');
 
       const prfResult = await authenticateWithPrf();
       if (!prfResult) return; // cancelled
 
       const wrappingKey = await derivePrfWrappingKey(prfResult.prfOutput);
-      const encryptedVault = await encryptVaultWithPrf(wrappingKey, user?.id);
+      // Persist for background vault auto-sync (memory + IndexedDB)
+      sessionVaultKey.set(prfResult.credentialId, wrappingKey, user?.id);
+      const encryptedVault = await encryptVaultWithPrf(wrappingKey, user?.id, prfResult.credentialId);
 
       const encryptedVaultBase64 = btoa(String.fromCharCode(...new Uint8Array(encryptedVault)));
 
@@ -328,11 +331,14 @@ export const VaultBackupSection: React.FC = () => {
     try {
       const { authenticateWithPrf } = await import('@/lib/crypto/prf-webauthn-helpers');
       const { derivePrfWrappingKey, decryptAndRestoreVault } = await import('@/lib/crypto/prf-vault');
+      const { sessionVaultKey } = await import('@/lib/crypto');
 
       const prfResult = await authenticateWithPrf();
       if (!prfResult) return;
 
       const wrappingKey = await derivePrfWrappingKey(prfResult.prfOutput);
+      // Persist for background vault auto-sync (memory + IndexedDB)
+      sessionVaultKey.set(prfResult.credentialId, wrappingKey, user?.id);
 
       const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
       const vault = await getPrfVaultAction(prfResult.credentialId);
@@ -438,12 +444,17 @@ export const VaultBackupSection: React.FC = () => {
                 <p>Passphrase: {backupDate.toLocaleDateString()}</p>
               )}
               {!hasPrfVault && !hasBackup && <p>Not yet backed up</p>}
+              {prfSyncActive && (
+                <p className="text-green-600 dark:text-green-400 font-medium">
+                  Auto-sync active on this device
+                </p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Warning for no backup */}
-        {!hasBackup && !hasPrfVault && localKeyCount > 0 && (
+        {/* Warning for no backup — suppressed while PRF auto-sync is healthy */}
+        {!hasBackup && !hasPrfVault && !prfSyncActive && localKeyCount > 0 && (
           <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700">
             <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
             <div>

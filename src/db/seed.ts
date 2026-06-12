@@ -7,6 +7,19 @@ import * as dotenv from 'dotenv';
 dotenv.config({ path: '.env.local' });
 import * as schema from './schema';
 import { sql } from 'drizzle-orm';
+import { slugify } from '@/lib/utils/slugify';
+
+// Tracks slugs assigned during this seed run so synthetic users can't collide
+// on the unique users.slug constraint (real signups dedupe at runtime).
+const _seededSlugs = new Set<string>();
+function uniqueSeedSlug(name: string, id: string): string {
+  const base = slugify(name) || id;
+  let candidate = base;
+  let n = 1;
+  while (_seededSlugs.has(candidate)) candidate = `${base}-${n++}`;
+  _seededSlugs.add(candidate);
+  return candidate;
+}
 
 // ---- Import seed fixtures ----
 import {
@@ -79,6 +92,7 @@ async function seed() {
   await db.insert(schema.users).values({
     id: mockUserProfile.id,
     name: mockUserProfile.name,
+    slug: uniqueSeedSlug(mockUserProfile.name, mockUserProfile.id),
     email: mockUserProfile.email,
     role: mockUserProfile.role,
     bio: mockUserProfile.bio,
@@ -137,6 +151,7 @@ async function seed() {
     await db.insert(schema.users).values({
       id: u.id,
       name: u.name,
+      slug: uniqueSeedSlug(u.name, u.id),
       email: `${u.id}@example.com`,
       role: u.role,
       emailVerified: true,

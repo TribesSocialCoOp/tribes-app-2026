@@ -51,16 +51,26 @@ export interface StoredIdentityKey {
   createdAt: number;
 }
 
+export interface StoredVaultWrappingKey {
+  credentialId: string;
+  /** Non-extractable AES-256-GCM PRF-derived wrapping key */
+  wrappingKey: CryptoKey;
+  /** Owner — the key must never be used for a different logged-in user */
+  userId: string;
+  savedAt: number;
+}
+
 // ============================================================
 // DATABASE SETUP
 // ============================================================
 
 const DB_NAME = 'tribes_keystore';
-const DB_VERSION = 4; // 1: bond_keys, 2: shared_secrets, 3: identity_keys, 4: multi-version shared_secrets
+const DB_VERSION = 5; // 1: bond_keys, 2: shared_secrets, 3: identity_keys, 4: multi-version shared_secrets, 5: vault_keys
 const BOND_KEYS_STORE = 'bond_keys';
 const SHARED_SECRETS_STORE = 'shared_secrets';
 const TRIBE_KEYS_STORE = 'tribe_keys';
 const IDENTITY_KEYS_STORE = 'identity_keys';
+const VAULT_KEYS_STORE = 'vault_keys';
 
 
 /**
@@ -98,6 +108,12 @@ function openDatabase(): Promise<IDBDatabase> {
       // V3: identity_keys store (RSA identity keys)
       if (!db.objectStoreNames.contains(IDENTITY_KEYS_STORE)) {
         db.createObjectStore(IDENTITY_KEYS_STORE, { keyPath: 'userId' });
+      }
+
+      // V5: vault_keys store (PRF-derived vault wrapping keys, persisted so
+      // background vault sync works across sessions without re-auth)
+      if (!db.objectStoreNames.contains(VAULT_KEYS_STORE)) {
+        db.createObjectStore(VAULT_KEYS_STORE, { keyPath: 'credentialId' });
       }
     };
 
@@ -673,6 +689,89 @@ export async function getIdentityKey(userId: string): Promise<StoredIdentityKey 
 
     request.onsuccess = () => resolve(request.result ?? null);
     request.onerror = () => reject(new Error(`Failed to get identity key for ${userId}`));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+// ============================================================
+// VAULT WRAPPING KEY STORE (PRF auto-sync)
+// ============================================================
+
+/**
+ * Persists the PRF-derived vault wrapping key so background vault sync
+ * keeps working after page reloads / app restarts without a new passkey
+ * ceremony. The key is non-extractable — IndexedDB stores an opaque handle,
+ * the same protection level as the bond private keys stored alongside it.
+ */
+export async function storeVaultWrappingKey(
+  credentialId: string,
+  wrappingKey: CryptoKey,
+  userId: string,
+): Promise<void> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(VAULT_KEYS_STORE, 'readwrite');
+    const store = tx.objectStore(VAULT_KEYS_STORE);
+
+    const entry: StoredVaultWrappingKey = {
+      credentialId,
+      wrappingKey,
+      userId,
+      savedAt: Date.now(),
+    };
+
+    const request = store.put(entry);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error('Failed to store vault wrapping key'));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * Returns the most recently saved vault wrapping key for the given user, or null.
+ * Entries belonging to other users (e.g., a previous login on a shared browser)
+ * are never returned — using them would leak keys across accounts.
+ */
+export async function getVaultWrappingKey(userId: string): Promise<StoredVaultWrappingKey | null> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(VAULT_KEYS_STORE, 'readonly');
+    const store = tx.objectStore(VAULT_KEYS_STORE);
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const all = ((request.result ?? []) as StoredVaultWrappingKey[])
+        .filter(k => k.userId === userId);
+      if (all.length === 0) {
+        resolve(null);
+        return;
+      }
+      all.sort((a, b) => b.savedAt - a.savedAt);
+      resolve(all[0]);
+    };
+    request.onerror = () => reject(new Error('Failed to get vault wrapping key'));
+
+    tx.oncomplete = () => db.close();
+  });
+}
+
+/**
+ * Removes all persisted vault wrapping keys (e.g., on logout).
+ */
+export async function clearVaultWrappingKeys(): Promise<void> {
+  const db = await openDatabase();
+
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(VAULT_KEYS_STORE, 'readwrite');
+    const store = tx.objectStore(VAULT_KEYS_STORE);
+    const request = store.clear();
+
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(new Error('Failed to clear vault wrapping keys'));
 
     tx.oncomplete = () => db.close();
   });

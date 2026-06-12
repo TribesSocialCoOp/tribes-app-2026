@@ -54,6 +54,7 @@ export async function getPrfVaultAction(credentialId: string) {
     encryptedVaultBase64: Buffer.from(result.encryptedVault).toString('base64'),
     salt: result.salt,
     createdAt: result.createdAt.toISOString(),
+    updatedAt: result.updatedAt.toISOString(),
   };
 }
 

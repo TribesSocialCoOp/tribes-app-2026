@@ -83,7 +83,7 @@ export async function notifyBondMessage(
   await notifyUser(targetUserId, {
     title: 'New Message',
     body: `${senderName} sent you a message`,
-    url: `/bonds/${bondId}`,
+    url: `/chat/${bondId}`,
     tag: `bond-msg-${bondId}`,
   });
 }
