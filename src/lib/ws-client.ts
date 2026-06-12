@@ -48,6 +48,14 @@ class TribesWebSocket {
 
     this.token = token;
     this.isIntentionallyClosed = false;
+
+    // Idempotent: the global WebSocketProvider already opens one shared socket
+    // on app mount. Callers like the chat page also call connect() — if a socket
+    // is already open or in-flight, DON'T tear it down and start a new one, or
+    // we drop messages during the reconnect window (the singleton is shared).
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
     this.doConnect();
   }
 
