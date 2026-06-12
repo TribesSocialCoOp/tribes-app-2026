@@ -584,7 +584,7 @@ function BondChatContent() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full min-h-0">
+    <div className="flex flex-col flex-1 w-full min-h-0">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b bg-background/95 backdrop-blur-sm">
         <Button variant="ghost" size="icon" onClick={goBack}>
@@ -667,7 +667,7 @@ function BondChatContent() {
       )}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl p-4 space-y-3">
         {/* Load More button — only when older messages actually remain */}
         {messages.length > 0 && isExchangeComplete && hasMoreMessages && (
