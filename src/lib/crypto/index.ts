@@ -85,9 +85,12 @@ export {
   isPrfSupported,
   getPrfSaltBytes,
   derivePrfWrappingKey,
+  normalizePrfOutput,
   encryptVaultWithPrf,
   decryptAndRestoreVault,
 } from './prf-vault';
+
+export { prfDebug, getPrfDebug, describeShape } from './prf-debug';
 
 // Session vault key — in-memory store for PRF wrapping key (Phase 3)
 export { sessionVaultKey } from './session-vault-key';

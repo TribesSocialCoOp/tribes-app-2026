@@ -124,21 +124,46 @@ function LoginForm() {
       const loggedInUserId = loginResult?.userId;
 
       try {
-        const { hasAnyKeys, derivePrfWrappingKey, decryptAndRestoreVault, sessionVaultKey } = await import('@/lib/crypto');
+        const { hasAnyKeys, derivePrfWrappingKey, decryptAndRestoreVault, sessionVaultKey, normalizePrfOutput, prfDebug, describeShape } = await import('@/lib/crypto');
         const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
 
+        // ── PRF ceremony trace (browser-vs-native, FF-vs-Chrome) ──
+        // Logs only SHAPE/metadata, never the PRF secret itself.
+        const clientExt = (authResponse as any).clientExtensionResults;
         // @ts-expect-error — PRF extension results type not yet in @simplewebauthn/browser types
         const rawPrf = authResponse.clientExtensionResults?.prf?.results?.first;
-        const prfOutput = rawPrf instanceof ArrayBuffer && rawPrf.byteLength >= 32 ? rawPrf : null;
+        prfDebug('login.ceremony', {
+          isNative,
+          ua: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+          credentialIdPrefix: typeof authResponse.id === 'string' ? authResponse.id.slice(0, 10) : null,
+          clientExtKeys: clientExt ? Object.keys(clientExt) : null,
+          prfKeys: clientExt?.prf ? Object.keys(clientExt.prf) : null,
+          prfEnabled: clientExt?.prf?.enabled ?? null,
+          prfResultsKeys: clientExt?.prf?.results ? Object.keys(clientExt.prf.results) : null,
+          rawFirstShape: describeShape(rawPrf),
+        });
+
+        // PRF result is an ArrayBuffer on web but a base64url string on native
+        // (Capacitor JSON bridge) — normalize both so iOS/Android derive the key too.
+        const prfOutput = normalizePrfOutput(rawPrf);
+        if (!prfOutput) {
+          prfDebug('login.prf.unusable', {
+            reason: rawPrf == null ? 'absent' : 'unrecognized-shape',
+            shape: describeShape(rawPrf),
+            note: 'No PRF wrapping key — auto-sync inactive on this device/browser. Likely Firefox lacks PRF, or the authenticator did not evaluate it.',
+          });
+        }
 
         if (prfOutput) {
           const wrappingKey = await derivePrfWrappingKey(prfOutput);
           // Stored in memory AND persisted to IndexedDB so background vault
           // sync keeps working across reloads without a new passkey ceremony.
           sessionVaultKey.set(authResponse.id, wrappingKey, loggedInUserId);
+          prfDebug('login.prf.keyDerived', { credentialIdPrefix: authResponse.id?.slice(0, 10) });
 
           const hadKeys = await hasAnyKeys();
           const vaultData = await getPrfVaultAction(authResponse.id);
+          prfDebug('login.vault.fetch', { hadLocalKeys: hadKeys, vaultFound: !!vaultData, vaultUpdatedAt: vaultData?.updatedAt ?? null });
 
           if (vaultData) {
             // Always merge-restore — even when local keys exist, the vault may
@@ -157,6 +182,7 @@ function LoginForm() {
 
             const result = await decryptAndRestoreVault(wrappingKey, encryptedVault as ArrayBuffer, loggedInUserId);
             console.log(`[auth] E2E key merge complete (${result.imported} imported).`);
+            prfDebug('login.vault.merged', { imported: result.imported, skipped: result.skipped, total: result.total });
 
             if (result.imported > 0 || !hadKeys) {
               toast({
