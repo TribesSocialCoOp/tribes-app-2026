@@ -47,11 +47,15 @@ export function getPrfDebug(): PrfDebugEntry[] {
  * browsers (Firefox vs Chrome) and platforms (web vs Capacitor native).
  */
 export function describeShape(v: unknown): Record<string, unknown> {
-  if (v === undefined) return { kind: 'undefined' };
-  if (v === null) return { kind: 'null' };
-  if (typeof v === 'string') return { kind: 'string', length: v.length };
-  if (v instanceof ArrayBuffer) return { kind: 'ArrayBuffer', byteLength: v.byteLength };
-  if (ArrayBuffer.isView(v)) return { kind: 'ArrayBufferView', byteLength: (v as ArrayBufferView).byteLength };
-  if (typeof v === 'object') return { kind: 'object', keys: Object.keys(v as object) };
-  return { kind: typeof v };
+  // `tag` is the realm-safe descriptor (Object.prototype.toString), which still
+  // reads "[object ArrayBuffer]" for a cross-realm buffer where `instanceof`
+  // (and Object.keys) would mislead — critical for diagnosing Firefox.
+  const tag = (() => { try { return Object.prototype.toString.call(v); } catch { return '?'; } })();
+  if (v === undefined) return { kind: 'undefined', tag };
+  if (v === null) return { kind: 'null', tag };
+  if (typeof v === 'string') return { kind: 'string', length: v.length, tag };
+  if (v instanceof ArrayBuffer) return { kind: 'ArrayBuffer', byteLength: v.byteLength, tag };
+  if (ArrayBuffer.isView(v)) return { kind: 'ArrayBufferView', byteLength: (v as ArrayBufferView).byteLength, tag };
+  if (typeof v === 'object') return { kind: 'object', tag, keys: Object.keys(v as object).slice(0, 12), byteLength: (v as { byteLength?: number }).byteLength ?? null };
+  return { kind: typeof v, tag };
 }
