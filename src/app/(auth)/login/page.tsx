@@ -140,6 +140,9 @@ function LoginForm() {
           prfKeys: clientExt?.prf ? Object.keys(clientExt.prf) : null,
           prfEnabled: clientExt?.prf?.enabled ?? null,
           prfResultsKeys: clientExt?.prf?.results ? Object.keys(clientExt.prf.results) : null,
+          // Flat string so it survives console-export collapsing — this is the
+          // realm-safe type tag (e.g. "[object ArrayBuffer]" even cross-realm).
+          rawFirstTag: (() => { try { return Object.prototype.toString.call(rawPrf); } catch { return '?'; } })(),
           rawFirstShape: describeShape(rawPrf),
         });
 

@@ -139,24 +139,23 @@ export async function getPrfSaltBytes(): Promise<Uint8Array> {
 /**
  * Normalizes a PRF extension result into a >=32-byte ArrayBuffer, or null.
  *
- * The shape differs by platform:
- * - Web (Safari/Chrome): `prf.results.first` is already an ArrayBuffer.
- * - Native (Capacitor iOS/Android): the result crosses a JSON bridge, so it
- *   arrives as a base64url (or base64) STRING. A bare `instanceof ArrayBuffer`
- *   check rejected this, so the PRF wrapping key was never derived on mobile —
- *   breaking auto-sync there. This accepts ArrayBuffer, typed arrays, and
- *   base64url/base64 strings.
+ * The shape differs across browsers/platforms — this tolerates all of them:
+ * - Chrome/Safari (web): `prf.results.first` is a same-realm ArrayBuffer.
+ * - Firefox (web): the ArrayBuffer can come from a DIFFERENT JS realm, so
+ *   `instanceof ArrayBuffer` is false even though it IS one — we detect it via
+ *   `Object.prototype.toString` (realm-safe) and copy it with `new Uint8Array`,
+ *   which reads the internal buffer slot regardless of realm.
+ * - Native (Capacitor iOS/Android): crosses a JSON bridge → base64url string,
+ *   or occasionally an array-like object of byte values.
+ *
+ * Always returns a fresh, same-realm ArrayBuffer so downstream
+ * `crypto.subtle.importKey('raw', ...)` and the `instanceof` guard in
+ * derivePrfWrappingKey both succeed.
  */
 export function normalizePrfOutput(raw: unknown): ArrayBuffer | null {
-  if (!raw) return null;
-  if (raw instanceof ArrayBuffer) {
-    return raw.byteLength >= 32 ? raw : null;
-  }
-  if (ArrayBuffer.isView(raw)) {
-    const view = raw as ArrayBufferView;
-    if (view.byteLength < 32) return null;
-    return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
-  }
+  if (raw == null) return null;
+
+  // base64url / base64 string (native bridge)
   if (typeof raw === 'string') {
     try {
       const base64 = raw.replace(/-/g, '+').replace(/_/g, '/');
@@ -169,6 +168,38 @@ export function normalizePrfOutput(raw: unknown): ArrayBuffer | null {
       return null;
     }
   }
+
+  // Typed array / DataView — ArrayBuffer.isView() is realm-safe (internal slot).
+  if (ArrayBuffer.isView(raw)) {
+    const view = raw as ArrayBufferView;
+    if (view.byteLength < 32) return null;
+    return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
+  }
+
+  // ArrayBuffer — including same-realm (instanceof) AND cross-realm (Firefox),
+  // where instanceof fails but the toString tag and `new Uint8Array` still work.
+  const tag = Object.prototype.toString.call(raw);
+  if (raw instanceof ArrayBuffer || tag === '[object ArrayBuffer]' || tag === '[object SharedArrayBuffer]') {
+    try {
+      const copy = new Uint8Array(raw as ArrayBuffer); // realm-safe read
+      return copy.byteLength >= 32 ? copy.slice().buffer : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Array-like object of byte values (defensive — some bridges JSON-ify bytes).
+  if (typeof raw === 'object') {
+    try {
+      const values = Array.isArray(raw) ? raw : Object.values(raw as Record<string, unknown>);
+      if (values.length >= 32 && values.every((v) => typeof v === 'number')) {
+        return Uint8Array.from(values as number[]).buffer;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+
   return null;
 }
 
