@@ -240,6 +240,20 @@ html.capacitor-android {
   --keyboard-height: 0px !important;
 }
 
+/* Chat thread: the composer is the last flex child of an overflow-hidden <main>,
+   so tracking the keyboard via main's padding-bottom makes the message list
+   shrink and the composer ride up to sit exactly on top of the keyboard —
+   same mechanism as our Drawer/Sheet (bottom:var(--keyboard-height)), without
+   needing position:fixed. max() picks whichever is larger:
+   - keyboard closed: --keyboard-height is 0 → reserve tab bar (5rem + safe-area)
+   - keyboard open:   --keyboard-height (~300px) wins → composer at keyboard top
+   On Android --keyboard-height is force-zeroed above and the WebView resizes
+   natively, so this resolves to the tab-bar reservation just like before. */
+html.capacitor-native main.chat-thread-main {
+  padding-bottom: max(calc(5rem + env(safe-area-inset-bottom)), var(--keyboard-height, 0px));
+  transition: padding-bottom 0.2s ease;
+}
+
 /* Touch targets — Apple HIG 44px minimum, mobile only */
 .touch-target-44 {
   min-width: 44px;

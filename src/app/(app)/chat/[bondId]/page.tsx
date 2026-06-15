@@ -382,6 +382,24 @@ function BondChatContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Native iOS: when the keyboard opens the message list shrinks (main's
+  // padding-bottom tracks --keyboard-height). Re-pin to the latest message so
+  // it stays visible just above the composer instead of being scrolled out.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !(window as any).Capacitor?.isNativePlatform?.()) return;
+    let cleanup: (() => void) | null = null;
+    import('@capacitor/keyboard').then(({ Keyboard }) => {
+      const handle = Keyboard.addListener('keyboardWillShow', () => {
+        // Wait a frame for the layout reflow before scrolling.
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        });
+      });
+      cleanup = () => { handle.then(h => h.remove()); };
+    }).catch(() => {});
+    return () => { cleanup?.(); };
+  }, []);
+
   // Send typing indicator — throttled to 1 send per 2 seconds, respects preference
   const handleTyping = useCallback(() => {
     if (!wsConnected || !bondTargetIdRef.current || !chatPrefsRef.current.typingIndicatorsEnabled) return;
