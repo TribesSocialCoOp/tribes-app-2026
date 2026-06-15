@@ -129,7 +129,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               // doesn't scroll — only the message list does. No page
               // padding/footer/pull-to-refresh, and a flex-1/min-h-0 chain (not
               // h-full) so the message area expands correctly on iOS WebKit.
-              <main data-app-ready className="flex flex-1 min-h-0 flex-col overflow-hidden overflow-x-hidden bg-background">
+              <main data-app-ready className="chat-thread-main flex flex-1 min-h-0 flex-col overflow-hidden overflow-x-hidden bg-background">
                 <AppHeader />
                 <div className="flex flex-1 min-h-0 flex-col">
                   {children}
