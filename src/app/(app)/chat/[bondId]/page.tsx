@@ -382,22 +382,36 @@ function BondChatContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Native iOS: when the keyboard opens the message list shrinks (main's
-  // padding-bottom tracks --keyboard-height). Re-pin to the latest message so
-  // it stays visible just above the composer instead of being scrolled out.
+  // Native iOS: keep the composer flush with the keyboard. We can't trust the
+  // Capacitor keyboardHeight here — it over-reports the on-screen occlusion and
+  // leaves a gap. Instead measure the *actual* obscured height at the bottom via
+  // the visualViewport API and expose it as --chat-kb, which the chat-thread
+  // <main> uses for its padding-bottom. Re-pin to the latest message on change
+  // so it stays visible above the composer after the reflow.
   useEffect(() => {
-    if (typeof window === 'undefined' || !(window as any).Capacitor?.isNativePlatform?.()) return;
-    let cleanup: (() => void) | null = null;
-    import('@capacitor/keyboard').then(({ Keyboard }) => {
-      const handle = Keyboard.addListener('keyboardWillShow', () => {
-        // Wait a frame for the layout reflow before scrolling.
-        requestAnimationFrame(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        });
-      });
-      cleanup = () => { handle.then(h => h.remove()); };
-    }).catch(() => {});
-    return () => { cleanup?.(); };
+    if (typeof window === 'undefined') return;
+    const cap = (window as any).Capacitor;
+    if (!cap?.isNativePlatform?.() || cap.getPlatform?.() !== 'ios') return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const root = document.documentElement;
+    let last = -1;
+    const update = () => {
+      const overlap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      root.style.setProperty('--chat-kb', `${overlap}px`);
+      if (overlap !== last && overlap > 0) {
+        requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
+      }
+      last = overlap;
+    };
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    update();
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      root.style.removeProperty('--chat-kb');
+    };
   }, []);
 
   // Send typing indicator — throttled to 1 send per 2 seconds, respects preference
