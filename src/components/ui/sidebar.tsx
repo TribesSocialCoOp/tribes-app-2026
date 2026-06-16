@@ -156,7 +156,12 @@ const SidebarProvider = React.forwardRef<
       } else {
         setDesktopOpen((current) => !current);
       }
-    }, [isMobileClient, setDesktopOpen]);
+      // setOpenMobile must be in the deps: it's memoized on [openMobile] and
+      // resolves functional updaters against its own captured openMobile. Omit it
+      // and toggleSidebar freezes the first-render setOpenMobile (openMobile=false
+      // forever), so tapping the trigger to CLOSE computes !false=true and the
+      // drawer never closes (swipe works because it passes a plain boolean).
+    }, [isMobileClient, setDesktopOpen, setOpenMobile]);
 
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
