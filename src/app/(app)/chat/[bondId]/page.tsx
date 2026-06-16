@@ -382,22 +382,33 @@ function BondChatContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Native: when the keyboard opens the message list shrinks (main's
-  // padding-bottom tracks --keyboard-height). Re-pin to the latest message so
-  // it stays visible just above the composer instead of being scrolled out.
+  // iOS native: drive the composer's keyboard offset with a PAGE-OWNED var
+  // (--composer-kb) instead of the shared --keyboard-height. The shared var
+  // lives on <html> and persists across client-side navigation (and isn't
+  // guaranteed to reset if keyboardWillHide is missed), so the composer would
+  // inherit a stale keyboard height with no keyboard present — a huge dead gap
+  // below the composer when inactive. We reset --composer-kb to 0 on mount and
+  // unmount and only set it while THIS page's keyboard is actually shown.
+  // (iOS only: Android resizes the WebView natively, so no padding is needed.)
   useEffect(() => {
-    if (typeof window === 'undefined' || !(window as any).Capacitor?.isNativePlatform?.()) return;
+    if (typeof window === 'undefined') return;
+    const cap = (window as any).Capacitor;
+    if (!cap?.isNativePlatform?.() || cap.getPlatform?.() !== 'ios') return;
+    const root = document.documentElement;
+    root.style.setProperty('--composer-kb', '0px'); // clear any stale value
     let cleanup: (() => void) | null = null;
     import('@capacitor/keyboard').then(({ Keyboard }) => {
-      const handle = Keyboard.addListener('keyboardWillShow', () => {
-        // Wait a frame for the layout reflow before scrolling.
-        requestAnimationFrame(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        });
+      const show = Keyboard.addListener('keyboardWillShow', (info) => {
+        root.style.setProperty('--composer-kb', `${info.keyboardHeight}px`);
+        // Wait a frame for the reflow, then re-pin to the latest message.
+        requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
       });
-      cleanup = () => { handle.then(h => h.remove()); };
+      const hide = Keyboard.addListener('keyboardWillHide', () => {
+        root.style.setProperty('--composer-kb', '0px');
+      });
+      cleanup = () => { show.then(h => h.remove()); hide.then(h => h.remove()); };
     }).catch(() => {});
-    return () => { cleanup?.(); };
+    return () => { cleanup?.(); root.style.setProperty('--composer-kb', '0px'); };
   }, []);
 
   // Send typing indicator — throttled to 1 send per 2 seconds, respects preference

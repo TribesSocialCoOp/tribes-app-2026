@@ -243,19 +243,22 @@ html.capacitor-android {
 /* Chat thread: the composer is the last flex child of an overflow-hidden <main>,
    so tracking the keyboard via main's padding-bottom makes the message list
    shrink and the composer ride up to sit on top of the keyboard — without
-   needing position:fixed. max() picks whichever is larger:
-   - keyboard closed: --keyboard-height is 0 → reserve tab bar (5rem + safe-area)
+   needing position:fixed. We use --composer-kb, a PAGE-OWNED var (set by the
+   chat page, reset to 0 on mount/unmount) rather than the shared --keyboard-height,
+   which persists on <html> across navigation and would leave a stale gap below
+   the composer when no keyboard is present. max() picks whichever is larger:
+   - keyboard closed: --composer-kb is 0 → reserve only the tab bar (5rem + safe-area)
    - keyboard open:   the keyboard branch wins → composer sits on the keyboard.
    The Capacitor keyboardHeight is the FULL keyboard frame, which extends to the
    physical screen bottom and so includes the home-indicator safe area. The
    composer doesn't need to clear that inset (the keyboard already covers it), so
    we subtract it — otherwise the composer floats up by exactly that amount.
-   On Android --keyboard-height is force-zeroed above and the WebView resizes
-   natively, so this resolves to the tab-bar reservation just like before. */
+   --composer-kb is only set on iOS; Android resizes the WebView natively, so this
+   resolves to the tab-bar reservation just like before. */
 html.capacitor-native main.chat-thread-main {
   padding-bottom: max(
     calc(5rem + env(safe-area-inset-bottom)),
-    calc(var(--keyboard-height, 0px) - env(safe-area-inset-bottom))
+    calc(var(--composer-kb, 0px) - env(safe-area-inset-bottom))
   );
   transition: padding-bottom 0.2s ease;
 }
