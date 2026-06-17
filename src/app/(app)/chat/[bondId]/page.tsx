@@ -38,43 +38,6 @@ import { AuthGuard } from '@/components/providers/auth-guard';
 /** Messages fetched per page (initial load + each "load older" click). */
 const PAGE_SIZE = 50;
 
-/** TEMPORARY layout diagnostic — logs the chat composer/main/tab-bar geometry
- *  so we can RCA the dead-space-below-composer bug from device logs (no UI).
- *  Read the `[KBDIAG]` lines in Xcode's console or Console.app. Remove after. */
-function kbDiag(label: string) {
-  try {
-    const rect = (el: Element | null) =>
-      el ? (r => ({ t: Math.round(r.top), b: Math.round(r.bottom), h: Math.round(r.height) }))(el.getBoundingClientRect()) : null;
-    const main = document.querySelector('main.chat-thread-main');
-    const composer = main?.querySelector('.border-t') ?? null;
-    const tab = document.querySelector('nav.fixed.bottom-0') ?? document.querySelector('nav');
-    const root = getComputedStyle(document.documentElement);
-    const probe = document.createElement('div');
-    probe.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom);width:0';
-    document.body.appendChild(probe);
-    const payload = {
-      label,
-      innerH: window.innerHeight,
-      vvH: Math.round(window.visualViewport?.height || 0),
-      vvOffTop: Math.round(window.visualViewport?.offsetTop || 0),
-      docClientH: document.documentElement.clientHeight,
-      bodyPos: getComputedStyle(document.body).position,
-      bodyPadTop: getComputedStyle(document.body).paddingTop,
-      main: rect(main),
-      mainPadB: main ? getComputedStyle(main).paddingBottom : null,
-      composer: rect(composer),
-      tab: rect(tab),
-      composerKb: root.getPropertyValue('--composer-kb').trim() || '(unset)',
-      kbHeight: root.getPropertyValue('--keyboard-height').trim() || '(unset)',
-      safeBottom: probe.offsetHeight,
-    };
-    probe.remove();
-    // eslint-disable-next-line no-console
-    console.log('[KBDIAG] ' + label, JSON.stringify(payload));
-    // Also POST so we can read it remotely without device logs.
-    fetch('/api/kbdiag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), keepalive: true }).catch(() => {});
-  } catch { /* diagnostic only */ }
-}
 
 export default function BondChatPage() {
   return (
@@ -457,15 +420,11 @@ function BondChatContent() {
       const show = Keyboard.addListener('keyboardWillShow', (info) => {
         kbHeightRef.current = info.keyboardHeight;
         applyPad();
-        requestAnimationFrame(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-          kbDiag(`show(kh=${info.keyboardHeight})`); // TEMPORARY diagnostic
-        });
+        requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
       });
       const hide = Keyboard.addListener('keyboardWillHide', () => {
         kbHeightRef.current = 0;
         applyPad();
-        requestAnimationFrame(() => kbDiag('hide'));
       });
       cleanup = () => { show.then(h => h.remove()); hide.then(h => h.remove()); };
     }).catch(() => {});
@@ -476,7 +435,7 @@ function BondChatContent() {
     // Apply once the layout has settled.
     const t0 = requestAnimationFrame(applyPad);
     const t1 = setTimeout(applyPad, 300);
-    const t2 = setTimeout(() => { applyPad(); kbDiag('mount'); }, 800);
+    const t2 = setTimeout(applyPad, 800);
     return () => {
       cancelAnimationFrame(t0); clearTimeout(t1); clearTimeout(t2); cleanup?.();
       window.removeEventListener('resize', onResize);
