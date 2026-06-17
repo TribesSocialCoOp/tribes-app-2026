@@ -420,39 +420,68 @@ function BondChatContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // iOS native: drive the composer's keyboard offset with a PAGE-OWNED var
-  // (--composer-kb) instead of the shared --keyboard-height. The shared var
-  // lives on <html> and persists across client-side navigation (and isn't
-  // guaranteed to reset if keyboardWillHide is missed), so the composer would
-  // inherit a stale keyboard height with no keyboard present — a huge dead gap
-  // below the composer when inactive. We reset --composer-kb to 0 on mount and
-  // unmount and only set it while THIS page's keyboard is actually shown.
-  // (iOS only: Android resizes the WebView natively, so no padding is needed.)
+  // iOS native: size the composer's bottom padding from MEASURED geometry.
+  //
+  // Two things make a static CSS guard wrong here (confirmed via on-device data):
+  //   1. <main> does NOT reach the viewport bottom — it ends ~55px above it
+  //      (innerH 852, main.bottom 797). That offset is constant regardless of
+  //      padding (main.bottom is a flex height; padding is internal), so we can
+  //      measure it safely and it isn't circular.
+  //   2. With Keyboard.resize=None the WebView never resizes; the only keyboard
+  //      signal is keyboardWillShow/Hide.
+  //
+  // We want the composer's bottom edge to land exactly on the tab bar (closed)
+  // or the keyboard (open). Since composer.bottom = main.bottom - paddingBottom:
+  //   paddingBottom = max(tabBarHeight, keyboardHeight) - mainOffset
+  // where mainOffset = innerH - main.bottom, tabBarHeight = innerH - tab.top.
+  // (Android resizes natively, so this is iOS-only; CSS keeps the static guard.)
+  const kbHeightRef = useRef(0);
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const cap = (window as any).Capacitor;
     if (!cap?.isNativePlatform?.() || cap.getPlatform?.() !== 'ios') return;
-    const root = document.documentElement;
-    root.style.setProperty('--composer-kb', '0px'); // clear any stale value
+
+    const applyPad = () => {
+      const main = document.querySelector('main.chat-thread-main') as HTMLElement | null;
+      if (!main) return;
+      const tab = document.querySelector('nav.fixed.bottom-0') as HTMLElement | null;
+      const innerH = window.innerHeight;
+      const mainOffset = Math.max(0, innerH - main.getBoundingClientRect().bottom);
+      const tabH = tab ? Math.max(0, innerH - tab.getBoundingClientRect().top) : 0;
+      const pad = Math.max(0, Math.max(tabH, kbHeightRef.current) - mainOffset);
+      main.style.paddingBottom = `${pad}px`;
+    };
+
     let cleanup: (() => void) | null = null;
     import('@capacitor/keyboard').then(({ Keyboard }) => {
       const show = Keyboard.addListener('keyboardWillShow', (info) => {
-        root.style.setProperty('--composer-kb', `${info.keyboardHeight}px`);
-        // Wait a frame for the reflow, then re-pin to the latest message.
+        kbHeightRef.current = info.keyboardHeight;
+        applyPad();
         requestAnimationFrame(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
           kbDiag(`show(kh=${info.keyboardHeight})`); // TEMPORARY diagnostic
         });
       });
       const hide = Keyboard.addListener('keyboardWillHide', () => {
-        root.style.setProperty('--composer-kb', '0px');
+        kbHeightRef.current = 0;
+        applyPad();
         requestAnimationFrame(() => kbDiag('hide'));
       });
       cleanup = () => { show.then(h => h.remove()); hide.then(h => h.remove()); };
     }).catch(() => {});
-    // Log the closed-state geometry shortly after mount.
-    const t = setTimeout(() => kbDiag('mount'), 800);
-    return () => { clearTimeout(t); cleanup?.(); root.style.setProperty('--composer-kb', '0px'); };
+
+    const onResize = () => applyPad();
+    window.addEventListener('resize', onResize);
+    window.visualViewport?.addEventListener('resize', onResize);
+    // Apply once the layout has settled.
+    const t0 = requestAnimationFrame(applyPad);
+    const t1 = setTimeout(applyPad, 300);
+    const t2 = setTimeout(() => { applyPad(); kbDiag('mount'); }, 800);
+    return () => {
+      cancelAnimationFrame(t0); clearTimeout(t1); clearTimeout(t2); cleanup?.();
+      window.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('resize', onResize);
+    };
   }, []);
 
   // Send typing indicator — throttled to 1 send per 2 seconds, respects preference
@@ -965,7 +994,6 @@ function BondChatContent() {
                 placeholder={editing ? "Edit message..." : pendingFile ? "Add a message (optional)..." : "Type a message..."}
                 disabled={isSending}
                 className="w-full"
-                autoFocus
               />
             </div>
             <Button
