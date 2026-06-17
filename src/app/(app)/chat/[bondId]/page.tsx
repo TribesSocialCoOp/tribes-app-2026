@@ -52,8 +52,8 @@ function kbDiag(label: string) {
     const probe = document.createElement('div');
     probe.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom);width:0';
     document.body.appendChild(probe);
-    // eslint-disable-next-line no-console
-    console.log('[KBDIAG] ' + label, JSON.stringify({
+    const payload = {
+      label,
       innerH: window.innerHeight,
       vvH: Math.round(window.visualViewport?.height || 0),
       vvOffTop: Math.round(window.visualViewport?.offsetTop || 0),
@@ -67,8 +67,12 @@ function kbDiag(label: string) {
       composerKb: root.getPropertyValue('--composer-kb').trim() || '(unset)',
       kbHeight: root.getPropertyValue('--keyboard-height').trim() || '(unset)',
       safeBottom: probe.offsetHeight,
-    }));
+    };
     probe.remove();
+    // eslint-disable-next-line no-console
+    console.log('[KBDIAG] ' + label, JSON.stringify(payload));
+    // Also POST so we can read it remotely without device logs.
+    fetch('/api/kbdiag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), keepalive: true }).catch(() => {});
   } catch { /* diagnostic only */ }
 }
 
