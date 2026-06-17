@@ -10,7 +10,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Users, Image as ImageIcon, Globe, Lock, Tag, Link2 } from "lucide-react";
+import { Users, Image as ImageIcon, Globe, Lock, Tag, Link2, ShieldAlert } from "lucide-react";
 import Image from "next/image";
 import React from "react";
 import { useRouter } from "next/navigation";
@@ -33,6 +33,7 @@ const createTribeFormSchema = z.object({
     .max(3, { message: "You can select a maximum of 3 moods." }),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
   isPublic: z.boolean().default(true),
+  isNsfw: z.boolean().default(false),
   coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`),
 });
 
@@ -63,8 +64,16 @@ function CreateTribeContent() {
       moods: [],
       description: "",
       isPublic: true,
+      isNsfw: false,
     },
   });
+
+  // NSFW tribes are permanently Private (policy §3). When NSFW is toggled on, force
+  // visibility to Private and lock the visibility switch.
+  const isNsfw = form.watch("isNsfw");
+  React.useEffect(() => {
+    if (isNsfw) form.setValue("isPublic", false);
+  }, [isNsfw, form]);
 
   async function onSubmit(values: CreateTribeFormValues) {
     setIsLoading(true);
@@ -299,6 +308,33 @@ function CreateTribeContent() {
                             Private: Invite-only.
                           </>
                         )}
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={isNsfw}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="isNsfw"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border border-destructive/40 p-4 shadow-sm">
+                    <div className="space-y-0.5 pr-4">
+                      <FormLabel className="text-base font-semibold">
+                        <ShieldAlert className="inline-block mr-1 h-4 w-4 text-destructive" />
+                        Adult (18+) Tribe
+                      </FormLabel>
+                      <FormDescription>
+                        Mark this Tribe as NSFW. It will be permanently <strong>Private</strong> and
+                        end-to-end encrypted, hidden from feeds and search, and joinable only by
+                        age-verified (18+) members. <strong>This cannot be undone.</strong>
                       </FormDescription>
                     </div>
                     <FormControl>

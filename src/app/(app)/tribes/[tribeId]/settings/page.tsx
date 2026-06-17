@@ -42,6 +42,7 @@ const tribeSettingsFormSchema = z.object({
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
   homepageUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   isPublic: z.boolean().default(true),
+  isNsfw: z.boolean().optional(),
   moods: z.array(z.string())
     .max(3, { message: "You can select a maximum of 3 moods." })
     .optional()
@@ -129,6 +130,7 @@ function TribeSettingsContent() {
       description: "",
       homepageUrl: "",
       isPublic: true,
+      isNsfw: false,
       moods: [],
       joinMechanism: 'instant',
       minimumReputation: "None",
@@ -137,6 +139,13 @@ function TribeSettingsContent() {
       brandLogo: "",
     },
   });
+
+  // NSFW tribes are permanently Private (policy §3). Once flagged on, force visibility
+  // to Private and lock the visibility switch.
+  const isNsfwSelected = form.watch("isNsfw");
+  useEffect(() => {
+    if (isNsfwSelected) form.setValue("isPublic", false);
+  }, [isNsfwSelected, form]);
 
   useEffect(() => {
     if (tribeId) {
@@ -152,6 +161,7 @@ function TribeSettingsContent() {
             slug: currentTribeData.slug || "",
             description: currentTribeData.description,
             isPublic: currentTribeData.isPublic,
+            isNsfw: currentTribeData.isNsfw ?? false,
             moods: currentTribeData.moods || [],
             homepageUrl: currentTribeData.homepageUrl || "",
             joinMechanism: currentTribeData.joinMechanism || 'instant',
@@ -632,6 +642,40 @@ function TribeSettingsContent() {
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
+                          disabled={isNsfwSelected}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="isNsfw"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border border-destructive/40 p-4 shadow-sm">
+                      <div className="space-y-0.5 pr-4">
+                        <FormLabel className="text-base font-semibold">
+                          <ShieldAlert className="inline-block mr-1 h-4 w-4 text-destructive" />
+                          Adult (18+) Tribe
+                        </FormLabel>
+                        <FormDescription>
+                          {tribe?.isNsfw ? (
+                            <>This Tribe is flagged NSFW. It is permanently Private, end-to-end
+                            encrypted, hidden from feeds/search, and limited to age-verified (18+)
+                            members. This flag is permanent and cannot be removed.</>
+                          ) : (
+                            <>Mark this Tribe as NSFW. It will become permanently <strong>Private</strong>{" "}
+                            and end-to-end encrypted, hidden from feeds and search, and joinable only
+                            by age-verified (18+) members. <strong>This cannot be undone.</strong></>
+                          )}
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value ?? false}
+                          onCheckedChange={field.onChange}
+                          disabled={tribe?.isNsfw ?? false}
                         />
                       </FormControl>
                     </FormItem>

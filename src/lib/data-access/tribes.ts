@@ -19,6 +19,7 @@ function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
     description: row.description,
     members: row.memberCount ?? 0,
     isPublic: row.isPublic ?? true,
+    isNsfw: row.isNsfw ?? false,
     cover: row.cover ?? '',
     coverPosition: row.coverPosition ?? undefined,
     dataAiHint: row.dataAiHint ?? '',
