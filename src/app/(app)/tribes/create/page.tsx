@@ -24,6 +24,8 @@ import { createTribe } from '@/lib/actions/tribe-actions';
 import { uploadFile } from '@/lib/upload';
 import { useActionError } from '@/hooks/use-action-error';
 import { AuthGuard } from "@/components/providers/auth-guard";
+import { useAgeGate } from "@/components/providers/age-gate-provider";
+import { isAgeGateError } from "@/lib/age-gate";
 
 const createTribeFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
@@ -56,7 +58,8 @@ function CreateTribeContent() {
   const [coverPreview, setCoverPreview] = React.useState<string | null>(null);
   
   const { handleError } = useActionError();
-  
+  const { openAgeGate } = useAgeGate();
+
   const form = useForm<CreateTribeFormValues>({
     resolver: zodResolver(createTribeFormSchema),
     defaultValues: {
@@ -109,6 +112,12 @@ function CreateTribeContent() {
 
       router.push(`/t/${newTribe.slug}`);
     } catch (error) {
+       // NSFW tribe creation requires 18+ verification — launch the gate, then retry.
+       if (isAgeGateError(error)) {
+         setIsLoading(false);
+         openAgeGate({ onVerified: () => onSubmit(values) });
+         return;
+       }
        console.error("Failed to create tribe:", error);
        handleError(error, "Creation Failed");
     } finally {

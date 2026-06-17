@@ -530,7 +530,7 @@ export async function checkPendingMembership(userId: string, tribeId: string): P
  * 
  * Bot friction: new/bot accounts with low reputation cannot join gated tribes.
  */
-export async function requestToJoinTribe(userId: string, tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending'> {
+export async function requestToJoinTribe(userId: string, tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending' | 'age_required'> {
   const { users } = await import('@/db/schema');
 
   // 1. Load tribe and user
@@ -575,9 +575,9 @@ export async function requestToJoinTribe(userId: string, tribeId: string, aliasN
   }
 
   // 5b. GATE: NSFW age verification (policy §5 / ToS — participation limited to verified 18+).
-  // Thrown as a sentinel so the client can intercept and launch the verification flow.
+  // Returned as a status (not thrown) so the client can cleanly launch the verification flow.
   if (tribe.isNsfw && !user.ageVerifiedAt) {
-    throw new Error('AGE_VERIFICATION_REQUIRED');
+    return 'age_required';
   }
 
   // 6. GATE: Tribe member cap

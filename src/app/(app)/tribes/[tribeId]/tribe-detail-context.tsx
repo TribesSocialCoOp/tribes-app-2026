@@ -4,6 +4,7 @@ import React, { createContext, useContext, useReducer, useCallback, useEffect, u
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useActionError } from '@/hooks/use-action-error';
+import { useAgeGate } from '@/components/providers/age-gate-provider';
 import { useUser } from '@/hooks/use-user';
 import { getTribeById, getTribeBySlug, getTribeMembers, leaveTribe, getMyTribeIds, requestToJoinTribe, checkTribeAccess, checkPendingMembership } from '@/lib/actions/tribe-actions';
 import { getEventsForTribe } from '@/lib/actions/event-actions';
@@ -228,6 +229,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
   const tribeId = resolvedTribeId || tribeIdParam || '';
   const { toast } = useToast();
   const { handleError } = useActionError();
+  const { openAgeGate } = useAgeGate();
   const { role, user } = useUser();
   const { triggerSync } = useKeySync();
   const isLoggedIn = !!role;
@@ -455,6 +457,8 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       } else if (result === 'already_pending') {
         dispatch({ type: 'SET_PENDING', payload: true });
         toast({ title: 'Request Already Sent', description: `Your request to join ${state.tribe.name} is still pending approval.` });
+      } else if (result === 'age_required') {
+        openAgeGate({ onVerified: () => handleConfirmJoinTribe(tribe, selectedAlias, aliasAvatar) });
       } else {
         toast({ title: 'Cannot Join', description: `Your request to join ${state.tribe.name} was rejected.`, variant: 'destructive' });
       }
@@ -466,7 +470,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     } finally {
       dispatch({ type: 'SET_JOINING', payload: false });
     }
-  }, [state.tribe, toast, syncAllData]);
+  }, [state.tribe, toast, syncAllData, handleError, openAgeGate]);
 
   const handleOpenPromoteDialog = useCallback((post: TribePost) => {
     if (state.promotedPostIds.has(post.id)) {
