@@ -28,6 +28,11 @@ export const users = pgTable('users', {
   hasPiiAccess: boolean('has_pii_access').default(false), // Restricted dev/system flag for viewing full emails
   encryptionPublicKey: text('encryption_public_key'), // RSA-OAEP JWK (JSON string)
   ageConfirmedAt: timestamp('age_confirmed_at', { withTimezone: true }), // App Store compliance — records 13+ age confirmation
+  // 18+ age verification (issue #32) — distinct from ageConfirmedAt (13+ self-confirm).
+  // null = unverified. We store ONLY the pass/fail outcome + method; never a birthdate,
+  // name, or credential. All v1 methods are high-assurance / cryptographically verifiable.
+  ageVerifiedAt: timestamp('age_verified_at', { withTimezone: true }),
+  ageVerificationMethod: text('age_verification_method'), // 'google_zkp' | 'apple_wallet_mdl' | 'apple_wallet_passport' | 'vendor'
   slug: text('slug').unique(),
   username: text('username').unique(),
   passwordHash: text('password_hash'),
@@ -271,6 +276,10 @@ export const tribes = pgTable('tribes', {
   description: text('description').notNull(),
   memberCount: integer('member_count').default(0),
   isPublic: boolean('is_public').default(true),
+  // NSFW flag (issue #119). Immutable once true. When true, the tribe is
+  // permanently forced to isPublic=false (E2EE, zero-knowledge) per NSFW policy §3,
+  // and is excluded from feeds/search/discovery for non-members (policy §2 opacity).
+  isNsfw: boolean('is_nsfw').default(false),
   cover: text('cover'),
   coverPosition: text('cover_position'),           // CSS object-position, e.g. '50% 30%'
   dataAiHint: text('data_ai_hint'),

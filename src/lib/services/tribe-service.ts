@@ -17,6 +17,7 @@ const createTribeFormSchema = z.object({
   moods: z.array(z.string()).min(1).max(3),
   description: z.string().min(10).max(500),
   isPublic: z.boolean(),
+  isNsfw: z.boolean().optional(),
   coverImage: z.any().optional(),
 });
 type CreateTribePayload = z.infer<typeof createTribeFormSchema> & { 
@@ -52,13 +53,19 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
   };
   const brandColor = hslToHex(h, s, l);
 
+  // NSFW policy §3: an NSFW tribe is permanently locked to Private (E2EE). The flag
+  // forces isPublic=false regardless of what the client requested.
+  const isNsfw = payload.isNsfw ?? false;
+  const isPublic = isNsfw ? false : payload.isPublic;
+
   await db.insert(tribes).values({
     id,
     slug,
     name: payload.name,
     description: payload.description,
     memberCount: 1,
-    isPublic: payload.isPublic,
+    isPublic,
+    isNsfw,
     cover: payload.coverPreview || tribeCoverSvg(payload.name, brandColor),
     dataAiHint: 'community group',
     homepageUrl: payload.homepageUrl || null,
@@ -96,7 +103,7 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
     name: payload.name,
     description: payload.description,
     members: 1,
-    isPublic: payload.isPublic,
+    isPublic,
     cover: payload.coverPreview || '',
     dataAiHint: 'community group',
     moods: payload.moods,
@@ -112,6 +119,7 @@ const tribeSettingsFormSchema = z.object({
   description: z.string().min(10).max(500),
   homepageUrl: z.string().url().optional().or(z.literal('')),
   isPublic: z.boolean(),
+  isNsfw: z.boolean().optional(),
   moods: z.array(z.string()).max(3).optional().default([]),
   joinMechanism: z.enum(['instant', 'approval']),
   minimumReputation: z.enum(['Newcomer', 'Active', 'Trusted', 'Veteran', 'Elder']).optional(),
@@ -148,6 +156,14 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
     }
   }
 
+  // NSFW flag is one-way (issue #119): once a tribe is NSFW it stays NSFW (and Private).
+  // Founders may flag a tribe NSFW, but cannot un-flag it. NSFW forces isPublic=false.
+  if (existing.isNsfw && payload.isNsfw === false) {
+    throw new Error('An NSFW tribe cannot be un-flagged. This setting is permanent.');
+  }
+  const isNsfw = existing.isNsfw || (payload.isNsfw ?? false);
+  const isPublic = isNsfw ? false : payload.isPublic;
+
   const newBrandColor = payload.brandColor ?? existing.brandColor;
   let newCover = payload.cover ?? existing.cover;
   
@@ -161,7 +177,8 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
     slug: newSlug,
     description: payload.description,
     homepageUrl: payload.homepageUrl || null,
-    isPublic: payload.isPublic,
+    isPublic,
+    isNsfw,
     joinMechanism: payload.joinMechanism,
     minimumReputation: payload.minimumReputation ?? null,
     minimumAccountAgeDays: payload.minimumAccountAgeDays ?? null,

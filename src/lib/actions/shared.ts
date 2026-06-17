@@ -86,3 +86,30 @@ export async function requireVerifiedEmail(): Promise<string> {
   return userId;
 }
 
+/**
+ * Guard: requires authenticated user with verified 18+ age (issue #32).
+ *
+ * Distinct from the 13+ `ageConfirmedAt` self-confirmation. This requires a
+ * high-assurance, cryptographically verifiable wallet attestation (one-and-done
+ * per account). Applied to: create / join / view NSFW Tribes and their content.
+ *
+ * Throws the sentinel 'AGE_VERIFICATION_REQUIRED' so the client can intercept it
+ * and launch the platform-appropriate verification flow (web Digital Credentials
+ * API, or the native Capacitor AgeVerification plugin) rather than showing a raw
+ * error. See docs/plan-wallet-age-verification.md §6.
+ */
+export async function requireAgeVerified(): Promise<string> {
+  const userId = await requireAuth();
+  const { db } = await import('@/db');
+  const { users } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [user] = await db.select({ ageVerifiedAt: users.ageVerifiedAt })
+    .from(users).where(eq(users.id, userId)).limit(1);
+
+  if (!user?.ageVerifiedAt) {
+    throw new PublicError('AGE_VERIFICATION_REQUIRED');
+  }
+
+  return userId;
+}
+
