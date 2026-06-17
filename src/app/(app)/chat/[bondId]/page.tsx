@@ -38,6 +38,40 @@ import { AuthGuard } from '@/components/providers/auth-guard';
 /** Messages fetched per page (initial load + each "load older" click). */
 const PAGE_SIZE = 50;
 
+/** TEMPORARY layout diagnostic — logs the chat composer/main/tab-bar geometry
+ *  so we can RCA the dead-space-below-composer bug from device logs (no UI).
+ *  Read the `[KBDIAG]` lines in Xcode's console or Console.app. Remove after. */
+function kbDiag(label: string) {
+  try {
+    const rect = (el: Element | null) =>
+      el ? (r => ({ t: Math.round(r.top), b: Math.round(r.bottom), h: Math.round(r.height) }))(el.getBoundingClientRect()) : null;
+    const main = document.querySelector('main.chat-thread-main');
+    const composer = main?.querySelector('.border-t') ?? null;
+    const tab = document.querySelector('nav.fixed.bottom-0') ?? document.querySelector('nav');
+    const root = getComputedStyle(document.documentElement);
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom);width:0';
+    document.body.appendChild(probe);
+    // eslint-disable-next-line no-console
+    console.log('[KBDIAG] ' + label, JSON.stringify({
+      innerH: window.innerHeight,
+      vvH: Math.round(window.visualViewport?.height || 0),
+      vvOffTop: Math.round(window.visualViewport?.offsetTop || 0),
+      docClientH: document.documentElement.clientHeight,
+      bodyPos: getComputedStyle(document.body).position,
+      bodyPadTop: getComputedStyle(document.body).paddingTop,
+      main: rect(main),
+      mainPadB: main ? getComputedStyle(main).paddingBottom : null,
+      composer: rect(composer),
+      tab: rect(tab),
+      composerKb: root.getPropertyValue('--composer-kb').trim() || '(unset)',
+      kbHeight: root.getPropertyValue('--keyboard-height').trim() || '(unset)',
+      safeBottom: probe.offsetHeight,
+    }));
+    probe.remove();
+  } catch { /* diagnostic only */ }
+}
+
 export default function BondChatPage() {
   return (
     <AuthGuard message="Sign in to access your end-to-end encrypted chats.">
@@ -401,14 +435,20 @@ function BondChatContent() {
       const show = Keyboard.addListener('keyboardWillShow', (info) => {
         root.style.setProperty('--composer-kb', `${info.keyboardHeight}px`);
         // Wait a frame for the reflow, then re-pin to the latest message.
-        requestAnimationFrame(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }));
+        requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          kbDiag(`show(kh=${info.keyboardHeight})`); // TEMPORARY diagnostic
+        });
       });
       const hide = Keyboard.addListener('keyboardWillHide', () => {
         root.style.setProperty('--composer-kb', '0px');
+        requestAnimationFrame(() => kbDiag('hide'));
       });
       cleanup = () => { show.then(h => h.remove()); hide.then(h => h.remove()); };
     }).catch(() => {});
-    return () => { cleanup?.(); root.style.setProperty('--composer-kb', '0px'); };
+    // Log the closed-state geometry shortly after mount.
+    const t = setTimeout(() => kbDiag('mount'), 800);
+    return () => { clearTimeout(t); cleanup?.(); root.style.setProperty('--composer-kb', '0px'); };
   }, []);
 
   // Send typing indicator — throttled to 1 send per 2 seconds, respects preference
