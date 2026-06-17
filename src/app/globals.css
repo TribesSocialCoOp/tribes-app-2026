@@ -256,10 +256,9 @@ html.capacitor-android {
    --composer-kb is only set on iOS; Android resizes the WebView natively, so this
    resolves to the tab-bar reservation just like before. */
 html.capacitor-native main.chat-thread-main {
-  padding-bottom: max(
-    calc(5rem + env(safe-area-inset-bottom)),
-    calc(var(--composer-kb, 0px) - env(safe-area-inset-bottom))
-  );
+  /* Static default (Android + pre-JS on iOS). On iOS the chat page overrides
+     padding-bottom inline from measured geometry — see the page's applyPad(). */
+  padding-bottom: calc(5rem + env(safe-area-inset-bottom));
   transition: padding-bottom 0.2s ease;
 }
 
