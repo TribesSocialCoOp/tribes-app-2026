@@ -18,6 +18,7 @@ const createTribeFormSchema = z.object({
   description: z.string().min(10).max(500),
   isPublic: z.boolean(),
   isNsfw: z.boolean().optional(),
+  isListed: z.boolean().optional(),
   coverImage: z.any().optional(),
 });
 type CreateTribePayload = z.infer<typeof createTribeFormSchema> & { 
@@ -57,6 +58,17 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
   // forces isPublic=false regardless of what the client requested.
   const isNsfw = payload.isNsfw ?? false;
   const isPublic = isNsfw ? false : payload.isPublic;
+  // Discoverability: NSFW tribes are LISTED by default (founder may unlist). All other
+  // tribes derive discoverability from isPublic, so isListed stays false for them.
+  const isListed = isNsfw ? (payload.isListed ?? true) : false;
+
+  // NSFW age gate (policy §5 / ToS): creating an NSFW tribe requires verified 18+.
+  if (isNsfw && payload.createdBy) {
+    const { users: usersTable } = await import('@/db/schema');
+    const [u] = await db.select({ ageVerifiedAt: usersTable.ageVerifiedAt })
+      .from(usersTable).where(eq(usersTable.id, payload.createdBy)).limit(1);
+    if (!u?.ageVerifiedAt) throw new Error('AGE_VERIFICATION_REQUIRED');
+  }
 
   await db.insert(tribes).values({
     id,
@@ -66,6 +78,7 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
     memberCount: 1,
     isPublic,
     isNsfw,
+    isListed,
     cover: payload.coverPreview || tribeCoverSvg(payload.name, brandColor),
     dataAiHint: 'community group',
     homepageUrl: payload.homepageUrl || null,
@@ -104,6 +117,8 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
     description: payload.description,
     members: 1,
     isPublic,
+    isNsfw,
+    isListed,
     cover: payload.coverPreview || '',
     dataAiHint: 'community group',
     moods: payload.moods,
@@ -120,6 +135,7 @@ const tribeSettingsFormSchema = z.object({
   homepageUrl: z.string().url().optional().or(z.literal('')),
   isPublic: z.boolean(),
   isNsfw: z.boolean().optional(),
+  isListed: z.boolean().optional(),
   moods: z.array(z.string()).max(3).optional().default([]),
   joinMechanism: z.enum(['instant', 'approval']),
   minimumReputation: z.enum(['Newcomer', 'Active', 'Trusted', 'Veteran', 'Elder']).optional(),
@@ -163,6 +179,9 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
   }
   const isNsfw = existing.isNsfw || (payload.isNsfw ?? false);
   const isPublic = isNsfw ? false : payload.isPublic;
+  // NSFW tribes are listable (founder option, default listed); non-NSFW derive
+  // discoverability from isPublic, so isListed is forced false for them.
+  const isListed = isNsfw ? (payload.isListed ?? existing.isListed ?? true) : false;
 
   const newBrandColor = payload.brandColor ?? existing.brandColor;
   let newCover = payload.cover ?? existing.cover;
@@ -179,6 +198,7 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
     homepageUrl: payload.homepageUrl || null,
     isPublic,
     isNsfw,
+    isListed,
     joinMechanism: payload.joinMechanism,
     minimumReputation: payload.minimumReputation ?? null,
     minimumAccountAgeDays: payload.minimumAccountAgeDays ?? null,
@@ -552,6 +572,12 @@ export async function requestToJoinTribe(userId: string, tribeId: string, aliasN
         throw new Error(`This tribe requires accounts to be at least ${tribe.minimumAccountAgeDays} days old. Your account is ${accountAgeDays} days old.`);
       }
     }
+  }
+
+  // 5b. GATE: NSFW age verification (policy §5 / ToS — participation limited to verified 18+).
+  // Thrown as a sentinel so the client can intercept and launch the verification flow.
+  if (tribe.isNsfw && !user.ageVerifiedAt) {
+    throw new Error('AGE_VERIFICATION_REQUIRED');
   }
 
   // 6. GATE: Tribe member cap

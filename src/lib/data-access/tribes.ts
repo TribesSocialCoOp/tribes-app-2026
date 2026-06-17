@@ -8,7 +8,7 @@
 
 import { db } from '@/db';
 import { tribes, tribeMoodTags, tribeMembers, users } from '@/db/schema';
-import { eq, like, inArray } from 'drizzle-orm';
+import { eq, like, inArray, or } from 'drizzle-orm';
 import type { Tribe } from '@/lib/types';
 
 function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
@@ -20,6 +20,7 @@ function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
     members: row.memberCount ?? 0,
     isPublic: row.isPublic ?? true,
     isNsfw: row.isNsfw ?? false,
+    isListed: row.isListed ?? false,
     cover: row.cover ?? '',
     coverPosition: row.coverPosition ?? undefined,
     dataAiHint: row.dataAiHint ?? '',
@@ -48,9 +49,13 @@ async function getMoodsForTribe(tribeId: string): Promise<string[]> {
  * - Guests (no userId) see public tribes only.
  */
 async function getViewerTribeIds(viewerUserId?: string | null): Promise<'all' | Set<string>> {
+  // Discoverable = public OR explicitly listed (e.g. NSFW tribes that opt to be listed).
+  // Listed private tribes expose only metadata here; their post content stays members-only.
+  const discoverable = or(eq(tribes.isPublic, true), eq(tribes.isListed, true));
+
   if (!viewerUserId) {
-    // Guest — only public tribes
-    const publicRows = await db.select({ id: tribes.id }).from(tribes).where(eq(tribes.isPublic, true));
+    // Guest — public + listed tribes (metadata only)
+    const publicRows = await db.select({ id: tribes.id }).from(tribes).where(discoverable);
     return new Set(publicRows.map(r => r.id));
   }
 
@@ -58,9 +63,9 @@ async function getViewerTribeIds(viewerUserId?: string | null): Promise<'all' | 
   const [userRow] = await db.select({ role: users.role }).from(users).where(eq(users.id, viewerUserId)).limit(1);
   if (userRow?.role === 'Admin') return 'all'; // Admins see everything
 
-  // Collect public tribe IDs + private tribes the viewer is a member of
+  // Collect discoverable tribe IDs + private tribes the viewer is a member of
   const [publicRows, memberRows] = await Promise.all([
-    db.select({ id: tribes.id }).from(tribes).where(eq(tribes.isPublic, true)),
+    db.select({ id: tribes.id }).from(tribes).where(discoverable),
     db.select({ tribeId: tribeMembers.tribeId }).from(tribeMembers).where(eq(tribeMembers.userId, viewerUserId)),
   ]);
 
@@ -107,8 +112,9 @@ export async function getTribeById(tribeId: string, viewerUserId?: string | null
   const row = rows[0];
   if (!row) return null;
 
-  // Access control: private tribes are invisible to non-members
-  if (!row.isPublic) {
+  // Access control: unlisted private tribes are invisible to non-members.
+  // Listed private tribes (e.g. NSFW) expose metadata for discovery; post content is gated separately.
+  if (!row.isPublic && !row.isListed) {
     const visibleIds = await getViewerTribeIds(viewerUserId);
     const canSee = visibleIds === 'all' || visibleIds.has(tribeId);
     if (!canSee) return null;
@@ -127,8 +133,9 @@ export async function findTribeByName(name: string, viewerUserId?: string | null
   const row = rows[0];
   if (!row) return null;
 
-  // Access control: private tribes are invisible to non-members
-  if (!row.isPublic) {
+  // Access control: unlisted private tribes are invisible to non-members.
+  // Listed private tribes (e.g. NSFW) expose metadata for discovery; post content is gated separately.
+  if (!row.isPublic && !row.isListed) {
     const visibleIds = await getViewerTribeIds(viewerUserId);
     const canSee = visibleIds === 'all' || visibleIds.has(row.id);
     if (!canSee) return null;
@@ -154,8 +161,9 @@ export async function getTribeBySlug(slug: string, viewerUserId?: string | null)
     return getTribeBySlug(currentSlug, viewerUserId);
   }
 
-  // Access control: private tribes are invisible to non-members
-  if (!row.isPublic) {
+  // Access control: unlisted private tribes are invisible to non-members.
+  // Listed private tribes (e.g. NSFW) expose metadata for discovery; post content is gated separately.
+  if (!row.isPublic && !row.isListed) {
     const visibleIds = await getViewerTribeIds(viewerUserId);
     const canSee = visibleIds === 'all' || visibleIds.has(row.id);
     if (!canSee) return null;

@@ -1186,6 +1186,19 @@ export async function getPostsForTribe(
     throw new Error('Tribe not found or access denied.');
   }
 
+  // SECURITY: A private tribe may now be publicly LISTED (e.g. NSFW tribes opt in to
+  // discovery), so getTribeById returns its metadata to non-members. Post content must
+  // still be members-only — enforce membership independently here (policy §2: zero
+  // content leaks to non-members).
+  if (!tribe.isPublic) {
+    if (!userId) throw new Error('Tribe not found or access denied.');
+    const { getTribeAccessLevel } = await import('@/lib/services/tribe-auth');
+    const level = await getTribeAccessLevel(userId, tribeId);
+    if (level === 'guest') {
+      throw new Error('Tribe not found or access denied.');
+    }
+  }
+
   const { getPostsForTribe: fn } = await import('@/lib/services/post-service');
   return fn(tribeId, userId ?? undefined, options);
 }

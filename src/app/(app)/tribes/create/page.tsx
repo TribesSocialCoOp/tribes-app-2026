@@ -34,6 +34,7 @@ const createTribeFormSchema = z.object({
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
   isPublic: z.boolean().default(true),
   isNsfw: z.boolean().default(false),
+  isListed: z.boolean().default(true),
   coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`),
 });
 
@@ -65,6 +66,7 @@ function CreateTribeContent() {
       description: "",
       isPublic: true,
       isNsfw: false,
+      isListed: true,
     },
   });
 
@@ -346,6 +348,33 @@ function CreateTribeContent() {
                   </FormItem>
                 )}
               />
+
+              {isNsfw && (
+                <FormField
+                  control={form.control}
+                  name="isListed"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                      <div className="space-y-0.5 pr-4">
+                        <FormLabel className="text-base font-semibold">
+                          List in discovery
+                        </FormLabel>
+                        <FormDescription>
+                          {field.value
+                            ? "Listed: people can find this Tribe in search and Discover (name only — content stays private)."
+                            : "Unlisted: only people with a direct invite link can find this Tribe."}
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              )}
             </CardContent>
             <CardFooter>
               <Button type="submit" disabled={isLoading} className="w-full md:w-auto bg-primary hover:bg-primary/90 text-lg py-3 px-6">

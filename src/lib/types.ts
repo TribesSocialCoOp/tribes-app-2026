@@ -300,6 +300,7 @@ export interface Tribe {
   members: number;
   isPublic: boolean;
   isNsfw?: boolean;              // NSFW tribe (issue #119) — forces isPublic=false, immutable once set
+  isListed?: boolean;           // discoverable in search/feed even while private (NSFW default true)
   cover: string;
   coverPosition?: string;        // CSS object-position, e.g. '50% 30%'
   dataAiHint: string;

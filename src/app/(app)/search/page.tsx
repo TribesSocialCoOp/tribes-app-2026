@@ -26,7 +26,7 @@ import { searchAll } from '@/lib/actions/content-actions';
 import { format } from 'date-fns';
 
 type SearchResults = {
-  tribes: { id: string; slug: string; name: string; description: string; memberCount: number; isPublic: boolean }[];
+  tribes: { id: string; slug: string; name: string; description: string; memberCount: number; isPublic: boolean; isNsfw?: boolean }[];
   events: { id: string; name: string; description: string; eventDate: Date | null; locationName: string; coverImage?: string; slug?: string | null }[];
   users: { id: string; name: string; avatarUrl?: string; slug?: string | null }[];
 };
@@ -151,6 +151,9 @@ export default function SearchPage() {
                             <Badge variant="outline" className="text-xs shrink-0">
                               {tribe.isPublic ? <><Globe className="h-3 w-3 mr-1" />Public</> : <><Lock className="h-3 w-3 mr-1" />Private</>}
                             </Badge>
+                            {tribe.isNsfw && (
+                              <Badge variant="destructive" className="text-xs shrink-0">18+</Badge>
+                            )}
                           </div>
                           <p className="text-sm text-muted-foreground truncate">{tribe.description}</p>
                           <span className="text-xs text-muted-foreground/60">{tribe.memberCount} members</span>

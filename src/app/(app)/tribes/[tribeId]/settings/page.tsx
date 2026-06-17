@@ -43,6 +43,7 @@ const tribeSettingsFormSchema = z.object({
   homepageUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   isPublic: z.boolean().default(true),
   isNsfw: z.boolean().optional(),
+  isListed: z.boolean().optional(),
   moods: z.array(z.string())
     .max(3, { message: "You can select a maximum of 3 moods." })
     .optional()
@@ -131,6 +132,7 @@ function TribeSettingsContent() {
       homepageUrl: "",
       isPublic: true,
       isNsfw: false,
+      isListed: true,
       moods: [],
       joinMechanism: 'instant',
       minimumReputation: "None",
@@ -162,6 +164,7 @@ function TribeSettingsContent() {
             description: currentTribeData.description,
             isPublic: currentTribeData.isPublic,
             isNsfw: currentTribeData.isNsfw ?? false,
+            isListed: currentTribeData.isListed ?? true,
             moods: currentTribeData.moods || [],
             homepageUrl: currentTribeData.homepageUrl || "",
             joinMechanism: currentTribeData.joinMechanism || 'instant',
@@ -681,6 +684,33 @@ function TribeSettingsContent() {
                     </FormItem>
                   )}
                 />
+
+                {isNsfwSelected && (
+                  <FormField
+                    control={form.control}
+                    name="isListed"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
+                        <div className="space-y-0.5 pr-4">
+                          <FormLabel className="text-base font-semibold">
+                            List in discovery
+                          </FormLabel>
+                          <FormDescription>
+                            {field.value
+                              ? "Listed: people can find this Tribe in search and Discover (name only — content stays private)."
+                              : "Unlisted: only people with a direct invite link can find this Tribe."}
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value ?? true}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <FormField
                   control={form.control}
                   name="joinMechanism"

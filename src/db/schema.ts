@@ -277,9 +277,15 @@ export const tribes = pgTable('tribes', {
   memberCount: integer('member_count').default(0),
   isPublic: boolean('is_public').default(true),
   // NSFW flag (issue #119). Immutable once true. When true, the tribe is
-  // permanently forced to isPublic=false (E2EE, zero-knowledge) per NSFW policy §3,
-  // and is excluded from feeds/search/discovery for non-members (policy §2 opacity).
+  // permanently forced to isPublic=false (E2EE, zero-knowledge) per NSFW policy §3.
   isNsfw: boolean('is_nsfw').default(false),
+  // Discoverability of the tribe LISTING (not its content). Decoupled from isPublic:
+  // - public tribes are discoverable via isPublic; isListed stays false for them.
+  // - regular private tribes default unlisted (isListed=false) — hidden from search/feed.
+  // - NSFW tribes (always private) default LISTED (isListed=true) but founders may unlist.
+  // A listed private tribe exposes only its metadata (name/desc/flag) for discovery + join;
+  // post content remains members-only (policy §2: flagged to outsiders, zero content leaks).
+  isListed: boolean('is_listed').default(false),
   cover: text('cover'),
   coverPosition: text('cover_position'),           // CSS object-position, e.g. '50% 30%'
   dataAiHint: text('data_ai_hint'),

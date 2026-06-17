@@ -4,10 +4,10 @@
  */
 import { db } from '@/db';
 import { tribes, events, users, blockedUsers } from '@/db/schema';
-import { like, or, sql, and, notInArray } from 'drizzle-orm';
+import { like, or, sql, and, notInArray, eq } from 'drizzle-orm';
 
 export interface SearchResults {
-  tribes: { id: string; slug: string; name: string; description: string; memberCount: number; isPublic: boolean }[];
+  tribes: { id: string; slug: string; name: string; description: string; memberCount: number; isPublic: boolean; isNsfw: boolean }[];
   events: { id: string; name: string; description: string; eventDate: Date | null; locationName: string; coverImage?: string; slug?: string | null }[];
   users: { id: string; name: string; avatarUrl?: string; slug?: string | null }[];
 }
@@ -46,11 +46,17 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
       description: tribes.description,
       memberCount: tribes.memberCount,
       isPublic: tribes.isPublic,
+      isNsfw: tribes.isNsfw,
     })
       .from(tribes)
-      .where(or(
-        like(tribes.name, pattern),
-        like(tribes.description, pattern),
+      .where(and(
+        or(
+          like(tribes.name, pattern),
+          like(tribes.description, pattern),
+        ),
+        // Only surface discoverable tribes: public OR explicitly listed (e.g. NSFW).
+        // Unlisted private tribes never appear in search.
+        or(eq(tribes.isPublic, true), eq(tribes.isListed, true)),
       ))
       .limit(limit),
 
@@ -94,6 +100,7 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
       description: t.description ?? '',
       memberCount: t.memberCount ?? 0,
       isPublic: t.isPublic ?? true,
+      isNsfw: t.isNsfw ?? false,
     })),
     events: eventResults.map(e => ({
       id: e.id,

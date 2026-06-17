@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tent, Users, ArrowRight, Globe, Lock } from 'lucide-react';
+import { Tent, Users, ArrowRight, Globe, Lock, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface TribeCardData {
@@ -15,6 +15,7 @@ export interface TribeCardData {
   description?: string | null;
   cover?: string | null;
   isPublic?: boolean;
+  isNsfw?: boolean;
   members?: number;
   brandColor?: string | null;
 }
@@ -55,6 +56,9 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">{tribe.name}</p>
                 <div className="flex items-center gap-2 mt-0.5">
+                  {tribe.isNsfw && (
+                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">18+</Badge>
+                  )}
                   {tribe.isPublic !== undefined && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                       {tribe.isPublic ? 'Public' : 'Private'}
@@ -95,6 +99,11 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
                 </Badge>
               </div>
             )}
+            {tribe.isNsfw && (
+              <div className="absolute top-2 right-3">
+                <Badge variant="destructive" className="text-[10px]"><ShieldAlert className="h-3 w-3 mr-1" /> 18+</Badge>
+              </div>
+            )}
           </div>
         ) : (
           <div
@@ -111,6 +120,11 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
                 <Badge variant="secondary" className="text-[10px]">
                   {tribe.isPublic ? 'Public' : 'Private'}
                 </Badge>
+              </div>
+            )}
+            {tribe.isNsfw && (
+              <div className="absolute top-2 right-3">
+                <Badge variant="destructive" className="text-[10px]"><ShieldAlert className="h-3 w-3 mr-1" /> 18+</Badge>
               </div>
             )}
           </div>

@@ -273,7 +273,7 @@ export default function TribesPage() {
     const myTribesList = isLoggedIn
       ? allTribes.filter(t => myTribeIds.includes(t.id) && matchesSearch(t))
       : [];
-    const discoverTribesList = allTribes.filter(t => !myTribeIds.includes(t.id) && t.isPublic && t.id !== '0' && matchesSearch(t));
+    const discoverTribesList = allTribes.filter(t => !myTribeIds.includes(t.id) && (t.isPublic || t.isListed) && t.id !== '0' && matchesSearch(t));
     return { myTribes: myTribesList, discoverTribes: discoverTribesList };
   }, [allTribes, myTribeIds, isClient, searchTerm, isLoggedIn]);
 
