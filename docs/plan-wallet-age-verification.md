@@ -157,10 +157,16 @@ This is arguably its own issue; recommend a small companion issue so #32 has a t
 **Phase 2 — Android native:**
 - Custom `AgeVerification` Capacitor plugin → CredentialManager / Digital Credentials → Google Wallet ZKP. Reuse the Phase-1 server verifier.
 
-**Phase 3 — iOS native:**
-- Same plugin, iOS side: **Apple ID-in-Wallet** presentment (mDL **or US passport**) via OpenID4VP, selective-disclosure `age_over_18`. Reuse the Phase-1 server verifier.
-- **Native release build required** (the one piece that needs an App Store build, unlike the WebView-served web changes). Verify exact entitlement/Info.plist requirements for Wallet presentment during build.
-- DeclaredAgeRange explicitly **out of scope** (high-assurance decision).
+**Phase 3 — iOS (Capacitor / WKWebView):**
+- **Key finding (June 2026):** iOS 26 ships the **W3C Digital Credentials API in WebKit** (`navigator.credentials.get({ digital })`, protocol `org-iso-mdoc`). Capacitor's WebView *is* WebKit, so the app inherits the API — **the web client flow (Phase 1) is the iOS path; no custom Swift presenter is needed.** Apple explicitly routes *verifier* apps through the web DC API (the native APIs are for wallet/document *providers*, not consumers).
+- Client is platform-aware (`src/lib/age-verification/client.ts`): it gates on the `DigitalCredential` global, so it lights up inside the iOS 26 WebView automatically, with iOS-specific messaging when unavailable.
+- **Apple ID-in-Wallet** (state mDL **or nationwide US-passport Digital ID**) is presented through that same DC API; verified by the shared OID4VP/mdoc verifier.
+- **DeclaredAgeRange** explicitly out of scope (high-assurance decision).
+
+  **Open iOS validation items (need a device + the sandbox):**
+  1. Confirm WKWebView (not just Safari) exposes the DC API on iOS 26, and whether it requires a web-browser-class **entitlement** (passkeys here needed `com.apple.developer.web-browser.public-key-credential` + a native shim — DC API may be similar, or may be open to any WKWebView). If an entitlement is required, add it to `ios/App/App/App.entitlements` and the provisioning profile. If WKWebView turns out to be gated to real browsers, the fallback is a native shim plugin (as passkeys did) — but only if Apple exposes a consumer-side native API.
+  2. One live Google/Apple sandbox round-trip on-device to confirm the request/response handshake.
+  - **A native release build is required** to pick up any new entitlement; the web/server logic ships via the WebView without one.
 
 **Phase 4 — Coverage fallback:**
 - Pluggable third-party verifiable-credential vendor for users with no wallet credential; **deny + geo-block** until then.

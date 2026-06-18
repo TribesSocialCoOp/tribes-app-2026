@@ -9,14 +9,34 @@
  * navigator.credentials; the server verification path is identical.
  */
 import { createAgeVerificationRequest, submitAgeVerification } from '@/lib/actions/age-actions';
+import { isNative, isIos, isAndroid } from '@/lib/capacitor/platform';
 
 export type WalletProvider = 'google_wallet' | 'apple_wallet';
 
-/** True if this browser exposes the Digital Credentials API. */
+/**
+ * True if the current runtime exposes the W3C Digital Credentials API.
+ *
+ * This is the same on web and inside the Capacitor WKWebView: on iOS 26 WebKit ships
+ * the API (it's a WebKit feature, so the app's WKWebView inherits it), and on Android
+ * Chrome/WebView via Credential Manager. We gate purely on the `DigitalCredential`
+ * global rather than platform sniffing, so it lights up wherever the OS actually
+ * provides it. See docs/plan-wallet-age-verification.md (iOS section).
+ */
 export function isDigitalCredentialsSupported(): boolean {
   return typeof window !== 'undefined'
     && 'credentials' in navigator
     && typeof (window as unknown as { DigitalCredential?: unknown }).DigitalCredential !== 'undefined';
+}
+
+/** Platform-appropriate message when the wallet flow can't run here. */
+function unsupportedMessage(): string {
+  if (isNative && isIos) {
+    return 'Wallet verification needs iOS 26 or later with a digital ID in Apple Wallet. Please update iOS, then try again.';
+  }
+  if (isNative && isAndroid) {
+    return 'Wallet verification needs Google Wallet with a digital ID on this device.';
+  }
+  return 'This browser cannot present a wallet credential yet. Try Chrome on Android, Safari on iOS 26, or the mobile app.';
 }
 
 function unwrap<T>(result: T | { serverError: string }): T {
@@ -36,9 +56,10 @@ export async function runWalletVerification(provider: WalletProvider): Promise<{
   // 1. Server builds the signed OpenID4VP request + sealed verifier state.
   const { request, verifierState } = unwrap(await createAgeVerificationRequest(provider, origin));
 
-  // 2. Browser presents the wallet picker and returns the (encrypted) response.
+  // 2. Browser / WKWebView presents the wallet picker and returns the (encrypted)
+  //    response. On iOS 26 the app's WebKit WebView exposes this natively.
   if (!isDigitalCredentialsSupported()) {
-    throw new Error('This browser cannot present a wallet credential. Try Chrome on Android, or the mobile app.');
+    throw new Error(unsupportedMessage());
   }
   const credential = await (navigator.credentials.get as (o: unknown) => Promise<unknown>)({
     mediation: 'required',

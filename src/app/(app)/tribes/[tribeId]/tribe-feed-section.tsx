@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Edit3, MessageSquareText, CalendarDays, MapPin, LockKeyhole } from "lucide-react";
+import { Edit3, MessageSquareText, CalendarDays, MapPin, LockKeyhole, ShieldAlert } from "lucide-react";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
 import type { Event, TribePost } from '@/lib/types';
 import { TribePostCard } from './tribe-post-card';
@@ -58,7 +58,7 @@ type FeedItem =
 // ─── TribeFeedSection ────────────────────────────────────────────────────────
 
 export function TribeFeedSection() {
-  const { state, dispatch, isLoggedIn, currentUserId, syncAllData, hasTribeKey, isTribeAdmin, hasMorePosts, isLoadingMorePosts, loadMorePosts } = useTribeDetail();
+  const { state, dispatch, isLoggedIn, currentUserId, syncAllData, hasTribeKey, isTribeAdmin, hasMorePosts, isLoadingMorePosts, loadMorePosts, handleInitiateJoinTribe } = useTribeDetail();
   const { tribe, posts, events, isMember, promotedPostIds, reportedPostIds } = state;
 
   const combinedFeedItems = useMemo(() => {
@@ -102,7 +102,7 @@ export function TribeFeedSection() {
     <section className="space-y-4">
       <div className="flex items-center justify-between px-1">
         <h2 className="text-xl font-semibold text-foreground tracking-normal">
-          {(isMember || tribe?.isPublic) ? "Feed" : "Featured Posts in Mood Streams"}
+          {(isMember || tribe?.isPublic) ? "Feed" : (tribe?.isNsfw ? "Members Only · 18+" : "Members Only")}
         </h2>
       </div>
 
@@ -125,7 +125,31 @@ export function TribeFeedSection() {
           />
         </div>
       )}
-      {combinedFeedItems.length > 0 ? (
+      {!isMember && !tribe.isPublic ? (
+        // Non-member viewing a private/listed tribe (e.g. an NSFW tribe found via search).
+        // The listing is visible, but content is members-only — invite them to join. For
+        // NSFW tribes, joining triggers the 18+ verification gate.
+        <Card className="text-center py-12 shadow-md">
+          <CardContent className="flex flex-col items-center justify-center gap-3">
+            {tribe.isNsfw
+              ? <ShieldAlert className="h-14 w-14 text-destructive opacity-80" />
+              : <LockKeyhole className="h-14 w-14 text-muted-foreground opacity-60" />}
+            <h3 className="text-xl font-semibold text-foreground">
+              {tribe.isNsfw ? 'This is an adult (18+) Tribe' : 'This is a private Tribe'}
+            </h3>
+            <p className="text-muted-foreground max-w-sm">
+              {tribe.isNsfw
+                ? 'Its content is end-to-end encrypted and visible to verified 18+ members only. Join to verify your age and see what’s inside.'
+                : 'Its content is visible to members only. Join to see what’s inside.'}
+            </p>
+            {isLoggedIn && (
+              <Button onClick={handleInitiateJoinTribe} className="mt-2">
+                {tribe.isNsfw ? 'Verify age & join' : 'Join this Tribe'}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : combinedFeedItems.length > 0 ? (
         combinedFeedItems.map(item => {
           if (item.type === 'event') {
             return <EventHighlightCard key={item.id} event={item.data as Event} />;
