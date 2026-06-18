@@ -1,28 +1,37 @@
 /**
- * Google Wallet age-verification provider (Digital Credentials API / OpenID4VP).
+ * Google Wallet age-verification provider — OpenID4VP / mso_mdoc over the Digital
+ * Credentials API, verified server-side against IACA trust anchors (issue #32).
  *
- * STUB — not yet configured. This is where the real high-assurance verification goes:
- *   1. Decrypt the OpenID4VP JWE response with our private key.
- *   2. Rebuild the ISO 18013-5 session transcript from our nonce + key thumbprint.
- *   3. Validate the issuer cert chain against IACA roots; verify MSO + device signatures.
- *   4. For ZKP mode (mso_mdoc_zk): verify the proof with longfellow-zk.
- *   5. Confirm the asserted claim is exactly age_over_18 = true; discard everything else.
+ * Enabled once the Google Wallet *sandbox* RP credentials are in env (GOOGLE_WALLET_*).
+ * Those are issued by Google's sandbox and are drop-in — see ./config and
+ * https://developers.google.com/wallet/identity/verify/sandbox
  *
- * Becomes available once GOOGLE_WALLET_RP_* env (RP id, decryption key, IACA trust store)
- * is configured. Until then isAvailable() returns false so the client won't offer it.
+ * Selective disclosure of age_over_18 (privacy-preserving). ZKP mode (mso_mdoc_zk /
+ * longfellow-zk) is a future enhancement layered on the same flow.
  */
 import type { AgeVerificationProvider, AgeVerificationRequest, AgeVerificationResult } from '../types';
 import { ProviderUnavailableError } from '../types';
+import { loadWalletConfig } from '../config';
 
 export const googleWalletProvider: AgeVerificationProvider = {
   id: 'google_wallet',
   label: 'Verify with Google Wallet',
   isAvailable() {
-    // Requires RP onboarding + decryption key + IACA trust store. Not yet wired.
-    return Boolean(process.env.GOOGLE_WALLET_RP_ID && process.env.GOOGLE_WALLET_DECRYPT_KEY);
+    return loadWalletConfig('GOOGLE_WALLET') !== null;
   },
-  async verify(_req: AgeVerificationRequest): Promise<AgeVerificationResult> {
-    // TODO(#32): implement OpenID4VP/mdoc + ZKP (longfellow-zk) verification.
-    throw new ProviderUnavailableError('google_wallet');
+  async verify(req: AgeVerificationRequest): Promise<AgeVerificationResult> {
+    const cfg = loadWalletConfig('GOOGLE_WALLET');
+    if (!cfg) throw new ProviderUnavailableError('google_wallet');
+
+    const data = req.attestation as { verifierState?: string; origin?: string; response?: unknown } | undefined;
+    if (!data?.verifierState || !data?.origin) throw new Error('Missing attestation envelope.');
+
+    const { verifyAgeResponse } = await import('../oid4vp');
+    const verified = await verifyAgeResponse(cfg, {
+      attestation: data.response ?? data,
+      verifierState: data.verifierState,
+      origin: data.origin,
+    });
+    return { verified, method: 'google_zkp' };
   },
 };

@@ -1,28 +1,36 @@
 /**
- * Apple Wallet age-verification provider (ID-in-Wallet: mDL or US passport).
+ * Apple Wallet age-verification provider — ID-in-Wallet (state mDL or the nationwide
+ * US-passport Digital ID) presented over OpenID4VP, verified the same way as Google
+ * (issue #32). On native iOS the attestation comes from a Capacitor plugin; on web it
+ * comes from the Digital Credentials API. Shares the OID4VP/mdoc verifier.
  *
- * STUB — not yet configured. Real flow mirrors the Google provider: an OpenID4VP
- * presentment of a selective-disclosure age_over_18 claim from Apple Wallet's Digital ID
- * (state mDL where available, or the nationwide US-passport Digital ID), verified
- * server-side against IACA roots + device signature.
- *
- * Native iOS triggers presentment through a custom Capacitor plugin; the resulting
- * attestation is POSTed here for verification. Method is recorded as apple_wallet_mdl
- * or apple_wallet_passport based on the credential doctype.
- *
- * Becomes available once APPLE_WALLET_RP_* env is configured.
+ * Enabled once APPLE_WALLET_* sandbox/RP credentials are in env. See ./config.
  */
 import type { AgeVerificationProvider, AgeVerificationRequest, AgeVerificationResult } from '../types';
 import { ProviderUnavailableError } from '../types';
+import { loadWalletConfig } from '../config';
 
 export const appleWalletProvider: AgeVerificationProvider = {
   id: 'apple_wallet',
   label: 'Verify with Apple Wallet',
   isAvailable() {
-    return Boolean(process.env.APPLE_WALLET_RP_ID && process.env.APPLE_WALLET_DECRYPT_KEY);
+    return loadWalletConfig('APPLE_WALLET') !== null;
   },
-  async verify(_req: AgeVerificationRequest): Promise<AgeVerificationResult> {
-    // TODO(#32): implement OpenID4VP/mdoc verification; map doctype → method.
-    throw new ProviderUnavailableError('apple_wallet');
+  async verify(req: AgeVerificationRequest): Promise<AgeVerificationResult> {
+    const cfg = loadWalletConfig('APPLE_WALLET');
+    if (!cfg) throw new ProviderUnavailableError('apple_wallet');
+
+    const data = req.attestation as { verifierState?: string; origin?: string; response?: unknown; doctype?: string } | undefined;
+    if (!data?.verifierState || !data?.origin) throw new Error('Missing attestation envelope.');
+
+    const { verifyAgeResponse } = await import('../oid4vp');
+    const verified = await verifyAgeResponse(cfg, {
+      attestation: data.response ?? data,
+      verifierState: data.verifierState,
+      origin: data.origin,
+    });
+    // doctype distinguishes a state mDL from the US-passport Digital ID.
+    const method = data.doctype?.includes('passport') ? 'apple_wallet_passport' : 'apple_wallet_mdl';
+    return { verified, method };
   },
 };

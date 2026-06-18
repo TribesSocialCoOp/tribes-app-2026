@@ -35,6 +35,30 @@ export async function getAgeVerificationStatus(): Promise<AgeVerificationStatus>
 }
 
 /**
+ * Build a signed OpenID4VP request for a wallet provider. The client passes the result
+ * to navigator.credentials.get(); the returned verifierState is echoed back to
+ * submitAgeVerification along with the wallet response. `origin` is the caller's
+ * window.location.origin (bound into the session transcript).
+ */
+export const createAgeVerificationRequest = withPublicErrors(async (
+  provider: 'google_wallet' | 'apple_wallet',
+  origin: string,
+): Promise<{ request: unknown; verifierState: string }> => {
+  await requireAuth();
+  const prefix = provider === 'google_wallet' ? 'GOOGLE_WALLET' : 'APPLE_WALLET';
+  const { loadWalletConfig } = await import('@/lib/services/age-verification/config');
+  const cfg = loadWalletConfig(prefix);
+  if (!cfg) throw new PublicError('That verification method is not available right now.');
+
+  // Origin allowlist (defense-in-depth): if APP_ORIGIN is set, require a match.
+  const allowed = process.env.APP_ORIGIN;
+  if (allowed && origin !== allowed) throw new PublicError('Unrecognized request origin.');
+
+  const { buildAgeRequest } = await import('@/lib/services/age-verification/oid4vp');
+  return buildAgeRequest(cfg, origin);
+});
+
+/**
  * Submit a wallet attestation for verification. On success, permanently marks the
  * account 18+ verified (one-and-done per policy v2). Returns the resolved method.
  */

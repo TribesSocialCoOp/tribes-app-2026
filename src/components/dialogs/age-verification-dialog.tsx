@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ShieldCheck, Loader2, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { getAgeVerificationStatus, submitAgeVerification } from '@/lib/actions/age-actions';
+import { runWalletVerification, type WalletProvider } from '@/lib/age-verification/client';
 
 interface AgeVerificationDialogProps {
   open: boolean;
@@ -38,13 +39,15 @@ export function AgeVerificationDialog({ open, onOpenChange, onVerified }: AgeVer
   const runProvider = async (providerId: string) => {
     setLoading(providerId);
     try {
-      // NOTE: wallet providers will first run the platform attestation step (web
-      // Digital Credentials API, or the native Capacitor plugin) and pass the
-      // resulting vp_token as `attestation`. Until those are wired, only the dev
-      // provider resolves; wallet providers report unavailable from the server.
-      const result = await submitAgeVerification({ provider: providerId as 'dev' | 'google_wallet' | 'apple_wallet' });
-      if (result && 'serverError' in (result as object)) {
-        throw new Error((result as { serverError: string }).serverError);
+      if (providerId === 'dev') {
+        // Dev provider: no wallet round-trip — submit directly through the same verifier.
+        const result = await submitAgeVerification({ provider: 'dev' });
+        if (result && 'serverError' in (result as object)) {
+          throw new Error((result as { serverError: string }).serverError);
+        }
+      } else {
+        // Wallet providers: full Digital Credentials API round-trip, then server verify.
+        await runWalletVerification(providerId as WalletProvider);
       }
       toast({ title: 'Age verified', description: "You're verified as 18+. NSFW Tribes are now unlocked." });
       onOpenChange(false);
