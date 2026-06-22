@@ -34,7 +34,6 @@ export {
   getAllBondKeyIds,
   getAllBondKeys,
   markKeyRotated,
-  clearAllKeys,
   isKeyStoreAvailable,
   hasAnyKeys,
   // Shared secret cache (Phase 2)

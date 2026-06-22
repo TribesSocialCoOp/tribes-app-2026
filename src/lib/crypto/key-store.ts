@@ -291,25 +291,6 @@ export async function markKeyRotated(bondId: string): Promise<void> {
 }
 
 /**
- * Clears ALL keys from the store.
- * Used for account deletion or full key reset.
- */
-export async function clearAllKeys(): Promise<void> {
-  const db = await openDatabase();
-
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(BOND_KEYS_STORE, 'readwrite');
-    const store = tx.objectStore(BOND_KEYS_STORE);
-    const request = store.clear();
-
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(new Error('Failed to clear keystore'));
-
-    tx.oncomplete = () => db.close();
-  });
-}
-
-/**
  * Checks if IndexedDB is available.
  */
 export function isKeyStoreAvailable(): boolean {
@@ -590,6 +571,10 @@ export async function storeTribeKey(
   key: CryptoKey,
   version: number,
 ): Promise<void> {
+  // The cache is user-scoped; a write with no user has no valid scope and would
+  // corrupt the store (and could surface to a different account). Fail loud — a
+  // missing userId here is a programming error, never an expected runtime state.
+  if (!userId) throw new Error('storeTribeKey requires a userId (user-scoped cache)');
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
@@ -622,6 +607,11 @@ export async function storeTribeKey(
  * user-scoping migration non-destructive — a cached key is never lost.
  */
 export async function getTribeKey(userId: string, tribeId: string): Promise<StoredTribeKey | null> {
+  // No user → no scope. Return null rather than falling back to the legacy store
+  // (which would adopt the key under an empty scope and, on a shared browser,
+  // briefly expose another account's legacy key). Callers re-render with a real
+  // userId once auth resolves; the key-sync provider handles legacy adoption.
+  if (!userId) return null;
   const db = await openDatabase();
   const hasLegacy = db.objectStoreNames.contains(LEGACY_TRIBE_KEYS_STORE);
 
@@ -667,6 +657,7 @@ export async function getTribeKey(userId: string, tribeId: string): Promise<Stor
  * to this user). Used for vault backup.
  */
 export async function getAllTribeKeys(userId: string): Promise<StoredTribeKey[]> {
+  if (!userId) return []; // user-scoped: nothing to return without a user
   const db = await openDatabase();
   const hasLegacy = db.objectStoreNames.contains(LEGACY_TRIBE_KEYS_STORE);
 
@@ -712,6 +703,7 @@ export async function getAllTribeKeys(userId: string): Promise<StoredTribeKey[]>
  * Called when the user leaves a tribe or the key is rotated.
  */
 export async function deleteTribeKey(userId: string, tribeId: string): Promise<void> {
+  if (!userId) return; // user-scoped: no scope to delete without a user
   const db = await openDatabase();
   const hasLegacy = db.objectStoreNames.contains(LEGACY_TRIBE_KEYS_STORE);
 
