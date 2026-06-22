@@ -1,6 +1,15 @@
 # Plan: Reliable, Observable Tribe Key Distribution
 
-**Status:** For review
+## Implementation status (this branch)
+- ✅ **WS-5** user-scoped tribe-key cache (`tribe_keys_v2`, composite `userId::tribeId`).
+- ✅ **Non-destructive migration** (legacy store kept + lazy-adopt; proven by `tests/keystore-migration.spec.ts`).
+- ✅ **WS-1** phase isolation + lock watchdog + surfaced failures + `tribeKeyRestoreNeeded` signal.
+- ✅ **Multi-device identity** — each device keeps/registers its own key and self-onboards via device-targeted grants (no vault restore to participate). Proven by `tests/multi-device-key-sync.spec.ts`.
+- ✅ **WS-2** socket-driven distribution (`tribe-key-request` / `tribe-key-available` pushes) — near-instant when a granter is online; polling is the safety net.
+- ✅ **WS-3** offline-granter push nudge + member "restore/waiting" banner (WS-4 member side).
+- ⬜ Optional remaining: admin "N members waiting / Grant now" indicator (founders auto-grant on login, so not required for correctness); user-scope `bond_keys`/`shared_secrets` (deferred, tracked in memory).
+
+**Original status:** For review
 **Branch:** `feat/nsfw-age-gate-phase0` (or a dedicated `feat/tribe-key-sync` branch)
 **Author:** Dustin
 **Context:** Private/NSFW tribes use client-side E2E group keys. A founder holding the key,
