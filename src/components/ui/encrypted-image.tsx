@@ -51,7 +51,7 @@ export function EncryptedImage({ fileId, postId, ring, tribeId, alt, className }
         if (ring === 'tribes' && tribeId) {
           // TRIBE PATH: Try tribe group key first, then fall back to key grants
           const { getTribeKey } = await import('@/lib/crypto/key-store');
-          const cachedTribeKey = await getTribeKey(user?.id ?? '', tribeId);
+          const cachedTribeKey = user?.id ? await getTribeKey(user.id, tribeId) : null;
 
           if (cachedTribeKey) {
             // Direct tribe key decryption — no key grant unwrapping needed

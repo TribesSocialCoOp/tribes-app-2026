@@ -117,7 +117,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
       try {
         if (!tribeId) { if (active) setDecryptionStatus('missing_key'); return; }
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(user?.id ?? '', tribeId);
+        const cachedTribeKey = user?.id ? await getTribeKey(user.id, tribeId) : null;
         if (!cachedTribeKey) { if (active) setDecryptionStatus('missing_key'); return; }
         const { decryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
         const { fromBase64 } = await import('@/lib/crypto/encoding');
@@ -142,7 +142,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
     async function backfill() {
       try {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(user?.id ?? '', tribeId!);
+        const cachedTribeKey = user?.id ? await getTribeKey(user.id, tribeId!) : null;
         if (!cachedTribeKey) return;
 
         const { encryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');

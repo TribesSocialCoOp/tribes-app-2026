@@ -100,7 +100,7 @@ export function usePostDecryption(items: CommunicationItem[]) {
 
           for (const item of tribeItems) {
             try {
-              const cachedTribeKey = await getTribeKey(user?.id ?? '', item.tribeId!);
+              const cachedTribeKey = user?.id ? await getTribeKey(user.id, item.tribeId!) : null;
               if (cachedTribeKey) {
                 const { fromBase64 } = await import('@/lib/crypto/encoding');
               const ciphertextBuffer = fromBase64(item.ciphertextBase64!);
