@@ -43,6 +43,8 @@ export interface BuiltAgeRequest {
   request: unknown;
   /** Opaque, encrypted state echoed back with the response (nonce + decrypt key). */
   verifierState: string;
+  /** The server-issued nonce — persisted server-side for single-use replay protection. */
+  nonce: string;
 }
 
 /**
@@ -100,6 +102,7 @@ export async function buildAgeRequest(cfg: WalletProviderConfig, origin: string,
   return {
     request: { protocol: 'openid4vp-v1-signed', data: signedRequest },
     verifierState,
+    nonce,
   };
 }
 
@@ -120,6 +123,8 @@ export interface AgeResponseResult {
   /** The verified document's docType (e.g. mDL vs passport) — derived from the
    *  cryptographically verified mdoc, NOT from any client-supplied envelope. */
   docType?: string;
+  /** The nonce recovered from the sealed state — the caller consumes it (single-use). */
+  nonce: string;
 }
 
 /** Verify a wallet's OpenID4VP DC-API response and return whether age_over_18 holds. */
@@ -160,7 +165,7 @@ export async function verifyAgeResponse(cfg: WalletProviderConfig, input: AgeRes
   const doc = decoded.documents?.find((d) => d.docType === cfg.doctype) ?? decoded.documents?.[0];
   if (!doc) throw new Error('No document in device response.');
   const claims = (doc.issuerSigned.getPrettyClaims(cfg.namespace) ?? {}) as Record<string, unknown>;
-  return { verified: claims.age_over_18 === true, docType: doc.docType };
+  return { verified: claims.age_over_18 === true, docType: doc.docType, nonce };
 }
 
 // Indirection so the Verifier import stays isolated and easy to mock in future tests.

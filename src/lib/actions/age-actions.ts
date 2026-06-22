@@ -55,7 +55,15 @@ export const createAgeVerificationRequest = withPublicErrors(async (
   if (allowed && origin !== allowed) throw new PublicError('Unrecognized request origin.');
 
   const { buildAgeRequest } = await import('@/lib/services/age-verification/oid4vp');
-  return buildAgeRequest(cfg, origin, userId);
+  const built = await buildAgeRequest(cfg, origin, userId);
+
+  // Record the issued nonce (Valkey TTL in prod, in-memory in dev) bound to this
+  // user, for SINGLE-USE replay protection — consumed in submitAgeVerification.
+  const { issueNonce } = await import('@/lib/services/age-verification/nonce-store');
+  await issueNonce(built.nonce, userId, 10 * 60); // matches STATE_TTL ('10m')
+
+  // Never return the bare nonce to the client — it stays sealed inside verifierState.
+  return { request: built.request, verifierState: built.verifierState };
 });
 
 /**
@@ -78,6 +86,18 @@ export const submitAgeVerification = withPublicErrors(async (
   }
   if (!result.verified) {
     throw new PublicError('Age verification did not succeed. Please try again.');
+  }
+
+  // SINGLE-USE: atomically consume the server-issued nonce BEFORE stamping the
+  // account, so a wallet response can't be replayed within its TTL. Only the first
+  // valid submission wins; a replay returns false. Wallet providers carry a nonce;
+  // the dev provider has none.
+  if (result.nonce) {
+    const { consumeNonce } = await import('@/lib/services/age-verification/nonce-store');
+    const ok = await consumeNonce(result.nonce, userId);
+    if (!ok) {
+      throw new PublicError('This verification request has expired or already been used. Please start again.');
+    }
   }
 
   const { db } = await import('@/db');

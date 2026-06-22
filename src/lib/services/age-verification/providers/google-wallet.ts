@@ -27,12 +27,12 @@ export const googleWalletProvider: AgeVerificationProvider = {
     if (!data?.verifierState || !data?.origin) throw new Error('Missing attestation envelope.');
 
     const { verifyAgeResponse } = await import('../oid4vp');
-    const { verified } = await verifyAgeResponse(cfg, {
+    const { verified, nonce } = await verifyAgeResponse(cfg, {
       attestation: data.response ?? data,
       verifierState: data.verifierState,
       origin: data.origin,
       expectedUserId: ctx.expectedUserId,
     });
-    return { verified, method: 'google_zkp' };
+    return { verified, method: 'google_zkp', nonce };
   },
 };

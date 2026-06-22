@@ -24,7 +24,7 @@ export const appleWalletProvider: AgeVerificationProvider = {
     if (!data?.verifierState || !data?.origin) throw new Error('Missing attestation envelope.');
 
     const { verifyAgeResponse } = await import('../oid4vp');
-    const { verified, docType } = await verifyAgeResponse(cfg, {
+    const { verified, docType, nonce } = await verifyAgeResponse(cfg, {
       attestation: data.response ?? data,
       verifierState: data.verifierState,
       origin: data.origin,
@@ -33,6 +33,6 @@ export const appleWalletProvider: AgeVerificationProvider = {
     // Derive the method from the CRYPTOGRAPHICALLY VERIFIED docType, not a client
     // envelope field — the recorded method must reflect what was actually proven.
     const method = docType?.toLowerCase().includes('passport') ? 'apple_wallet_passport' : 'apple_wallet_mdl';
-    return { verified, method };
+    return { verified, method, nonce };
   },
 };

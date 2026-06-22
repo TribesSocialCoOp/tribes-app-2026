@@ -30,6 +30,9 @@ export interface AgeVerificationRequest {
 export interface AgeVerificationResult {
   verified: boolean;
   method: AgeVerificationMethod;
+  /** Server-issued nonce that scoped this attestation. The action consumes it
+   *  (single-use) before stamping the account. Absent for the dev provider. */
+  nonce?: string;
 }
 
 export interface AgeVerificationProvider {
