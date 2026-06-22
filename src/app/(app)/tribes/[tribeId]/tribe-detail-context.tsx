@@ -296,7 +296,11 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
 
     const [membersData, postsData, reportedIds, tribeReports] = await Promise.all([
       getTribeMembers(effectiveTribeId),
-      getPostsForTribe(effectiveTribeId),
+      // Posts are access-gated server-side: guests / non-members of a private or
+      // NSFW tribe get a thrown access error. That's expected — swallow it so the
+      // tribe shell still loads and the "join to view" card can render (otherwise
+      // the whole load rejects and the page spins forever).
+      getPostsForTribe(effectiveTribeId).catch(() => ({ items: [], nextCursor: null })),
       getActiveReportedPostIds(),
       // Only speakers/founders/admins can view moderation reports — skip for guests/members
       isSpeakerOrAbove

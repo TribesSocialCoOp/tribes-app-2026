@@ -142,10 +142,26 @@ export function TribeFeedSection() {
                 ? 'Its content is end-to-end encrypted and visible to verified 18+ members only. Join to verify your age and see what’s inside.'
                 : 'Its content is visible to members only. Join to see what’s inside.'}
             </p>
-            {isLoggedIn && (
+            {isLoggedIn ? (
               <Button onClick={handleInitiateJoinTribe} className="mt-2">
                 {tribe.isNsfw ? 'Verify age & join' : 'Join this Tribe'}
               </Button>
+            ) : (
+              <div className="mt-2 flex flex-col items-center gap-2">
+                <p className="text-sm text-muted-foreground">
+                  {tribe.isNsfw
+                    ? 'Log in or sign up to verify your age and join.'
+                    : 'Log in or sign up to join.'}
+                </p>
+                <div className="flex gap-2">
+                  <Link href="/login" passHref>
+                    <Button variant="outline">Log in</Button>
+                  </Link>
+                  <Link href="/signup" passHref>
+                    <Button>Sign up</Button>
+                  </Link>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>

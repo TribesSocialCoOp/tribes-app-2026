@@ -12,6 +12,7 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { avatarSvg } from "@/lib/placeholder-svg";
 import type { UserProfile } from '@/lib/types';
 import { getUserProfile } from '@/lib/actions/profile-actions';
+import { getAgeVerificationStatus } from '@/lib/actions/age-actions';
 import { useUser } from '@/hooks/use-user';
 import {
   ResponsiveDialog, ResponsiveDialogHeader, ResponsiveDialogTitle,
@@ -37,6 +38,8 @@ export function JoinTribeDialog({
   const { user: sessionUser, isLoading: isUserLoading } = useUser();
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  // For NSFW tribes, whether this user still needs to clear the 18+ gate.
+  const [needsAgeGate, setNeedsAgeGate] = useState(false);
 
   useEffect(() => {
     if (isOpen && sessionUser) {
@@ -50,6 +53,19 @@ export function JoinTribeDialog({
       setSelectedIdentity("main_profile");
     }
   }, [isOpen, sessionUser]);
+
+  // Resolve whether the age gate will fire on join (NSFW tribe + unverified user),
+  // so we can label the confirm button as a "verify age" step rather than a plain join.
+  useEffect(() => {
+    if (isOpen && tribe?.isNsfw) {
+      setNeedsAgeGate(true); // assume gated until proven otherwise (safer label)
+      getAgeVerificationStatus()
+        .then(status => setNeedsAgeGate(!status.verified))
+        .catch(() => setNeedsAgeGate(true));
+    } else {
+      setNeedsAgeGate(false);
+    }
+  }, [isOpen, tribe?.isNsfw]);
 
   if (!tribe) return null;
 
@@ -116,7 +132,11 @@ export function JoinTribeDialog({
           </RadioGroup>
         )}
         <p className="text-xs text-muted-foreground px-1">
-          {tribe.joinMechanism === 'approval' ? 'Your request to join will be sent to the tribe admins for approval.' : 'You will join this tribe immediately.'}
+          {needsAgeGate
+            ? "Next, you'll verify you're 18+ with your wallet. We store only a yes/no — never your ID or birthdate."
+            : tribe.joinMechanism === 'approval'
+              ? 'Your request to join will be sent to the tribe admins for approval.'
+              : 'You will join this tribe immediately.'}
         </p>
       </div>
 
@@ -128,7 +148,11 @@ export function JoinTribeDialog({
           className="bg-primary hover:bg-primary/90 text-primary-foreground"
         >
           {isJoining ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-          {isJoining ? "Joining..." : "Confirm & Join"}
+          {isJoining
+            ? "Joining..."
+            : needsAgeGate
+              ? "Continue to age verification"
+              : "Confirm & Join"}
         </Button>
       </ResponsiveDialogFooter>
     </ResponsiveDialog>
