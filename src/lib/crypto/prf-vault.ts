@@ -314,13 +314,12 @@ export async function encryptVaultWithPrf(
   if (userId) {
     try {
       const { getIdentityKey } = await import('./key-store');
-      const { exportIdentityPrivateKey, exportIdentityPublicKey } = await import('./identity-keys');
+      const { exportIdentityPrivateKey } = await import('./identity-keys');
       const identityEntry = await getIdentityKey(userId);
       if (identityEntry) {
-        const pubKey = await (await import('./identity-keys')).importIdentityPublicKey(identityEntry.publicKeyJwk);
         payload.identityKey = {
           privateKeyJwk: await exportIdentityPrivateKey(identityEntry.privateKey),
-          publicKeyJwk: await exportIdentityPublicKey(pubKey),
+          publicKeyJwk: identityEntry.publicKeyJwk, // already a JWK — no re-import needed
         };
       }
     } catch (err) {

@@ -657,6 +657,8 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
             // Cache locally in IndexedDB
             await storeTribeKey(user!.id, grant.tribeId, tribeKey, grant.keyVersion);
             tribeReady++;
+            // A newly received tribe key should be backed up on the next vault push.
+            newKeysGenerated = true;
             console.debug(`[key-sync] Cached tribe key for ${grant.tribeId.substring(0, 12)}... (v${grant.keyVersion})`);
           } catch (err) {
             // OperationError = RSA key mismatch (grant wrapped with a different key pair).
