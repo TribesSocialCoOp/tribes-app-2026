@@ -31,7 +31,10 @@ const STATE_TTL = '10m';
 function stateKey(): Uint8Array {
   const secret = process.env.SESSION_SECRET || '';
   if (secret.length < 16) throw new Error('SESSION_SECRET is required for age-verification state.');
-  return new Uint8Array(createHash('sha256').update(secret).digest()); // 32 bytes for A256GCM
+  // Domain-separate from session signing: derive a DISTINCT key for sealing the
+  // age-verification verifier state so the two purposes never share key material
+  // (a single SESSION_SECRET, but never the same derived key). 32 bytes for A256GCM.
+  return new Uint8Array(createHash('sha256').update(`age-verification-state|v1|${secret}`).digest());
 }
 
 function pemToDerBase64(pem: string): string {

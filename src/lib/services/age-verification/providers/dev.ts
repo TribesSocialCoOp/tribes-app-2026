@@ -14,8 +14,11 @@ export const devProvider: AgeVerificationProvider = {
   id: 'dev',
   label: 'Dev: simulate 18+ verification',
   isAvailable() {
-    if (process.env.AGE_VERIFICATION_ALLOW_DEV === 'true') return true;
-    return process.env.NODE_ENV !== 'production';
+    // SECURITY: a simulated "always 18+" provider must NEVER be reachable in
+    // production, regardless of any env flag — hard-off in prod. (Staging that
+    // needs it must not run with NODE_ENV=production.)
+    if (process.env.NODE_ENV === 'production') return false;
+    return true;
   },
   async verify(): Promise<AgeVerificationResult> {
     return { verified: true, method: 'dev' };
