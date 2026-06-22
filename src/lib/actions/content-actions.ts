@@ -1186,6 +1186,16 @@ export async function getPostsForTribe(
     throw new Error('Tribe not found or access denied.');
   }
 
+  // SECURITY: NSFW tribes require high-assurance 18+ verification to VIEW content
+  // (issue #32), enforced at the content boundary — independent of membership. This
+  // closes the gap where a tribe flipped to NSFW, a public NSFW tribe, or any
+  // un-gated membership path would otherwise serve NSFW content to an unverified
+  // user. Throws AGE_VERIFICATION_REQUIRED so the client launches the verify flow.
+  if (tribe.isNsfw) {
+    const { requireAgeVerified } = await import('./shared');
+    await requireAgeVerified();
+  }
+
   // SECURITY: A private tribe may now be publicly LISTED (e.g. NSFW tribes opt in to
   // discovery), so getTribeById returns its metadata to non-members. Post content must
   // still be members-only — enforce membership independently here (policy §2: zero
