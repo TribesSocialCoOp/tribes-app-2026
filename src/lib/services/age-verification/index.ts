@@ -7,6 +7,7 @@ import type {
   AgeVerificationProvider,
   AgeVerificationRequest,
   AgeVerificationResult,
+  AgeVerificationContext,
 } from './types';
 import { ProviderUnavailableError } from './types';
 import { devProvider } from './providers/dev';
@@ -26,11 +27,17 @@ export function availableAgeProviders(): { id: string; label: string }[] {
     .map((p) => ({ id: p.id, label: p.label }));
 }
 
-/** Validate an attestation via its provider. Throws if the provider is unavailable. */
-export async function verifyAge(req: AgeVerificationRequest): Promise<AgeVerificationResult> {
+/**
+ * Validate an attestation via its provider. Throws if the provider is unavailable.
+ * `expectedUserId` is the authenticated caller; wallet providers bind the attestation
+ * to it so a response can only verify the account that requested it.
+ */
+export async function verifyAge(req: AgeVerificationRequest, expectedUserId: string): Promise<AgeVerificationResult> {
+  if (!expectedUserId) throw new Error('verifyAge requires the authenticated userId.');
   const provider = REGISTRY[req.provider];
   if (!provider || !provider.isAvailable()) {
     throw new ProviderUnavailableError(req.provider);
   }
-  return provider.verify(req);
+  const ctx: AgeVerificationContext = { expectedUserId };
+  return provider.verify(req, ctx);
 }

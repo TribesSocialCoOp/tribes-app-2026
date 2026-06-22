@@ -9,7 +9,7 @@
  * Selective disclosure of age_over_18 (privacy-preserving). ZKP mode (mso_mdoc_zk /
  * longfellow-zk) is a future enhancement layered on the same flow.
  */
-import type { AgeVerificationProvider, AgeVerificationRequest, AgeVerificationResult } from '../types';
+import type { AgeVerificationProvider, AgeVerificationRequest, AgeVerificationResult, AgeVerificationContext } from '../types';
 import { ProviderUnavailableError } from '../types';
 import { loadWalletConfig } from '../config';
 
@@ -19,7 +19,7 @@ export const googleWalletProvider: AgeVerificationProvider = {
   isAvailable() {
     return loadWalletConfig('GOOGLE_WALLET') !== null;
   },
-  async verify(req: AgeVerificationRequest): Promise<AgeVerificationResult> {
+  async verify(req: AgeVerificationRequest, ctx: AgeVerificationContext): Promise<AgeVerificationResult> {
     const cfg = loadWalletConfig('GOOGLE_WALLET');
     if (!cfg) throw new ProviderUnavailableError('google_wallet');
 
@@ -27,10 +27,11 @@ export const googleWalletProvider: AgeVerificationProvider = {
     if (!data?.verifierState || !data?.origin) throw new Error('Missing attestation envelope.');
 
     const { verifyAgeResponse } = await import('../oid4vp');
-    const verified = await verifyAgeResponse(cfg, {
+    const { verified } = await verifyAgeResponse(cfg, {
       attestation: data.response ?? data,
       verifierState: data.verifierState,
       origin: data.origin,
+      expectedUserId: ctx.expectedUserId,
     });
     return { verified, method: 'google_zkp' };
   },

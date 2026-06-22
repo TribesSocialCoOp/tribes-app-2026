@@ -44,7 +44,7 @@ export const createAgeVerificationRequest = withPublicErrors(async (
   provider: 'google_wallet' | 'apple_wallet',
   origin: string,
 ): Promise<{ request: unknown; verifierState: string }> => {
-  await requireAuth();
+  const userId = await requireAuth();
   const prefix = provider === 'google_wallet' ? 'GOOGLE_WALLET' : 'APPLE_WALLET';
   const { loadWalletConfig } = await import('@/lib/services/age-verification/config');
   const cfg = loadWalletConfig(prefix);
@@ -55,7 +55,7 @@ export const createAgeVerificationRequest = withPublicErrors(async (
   if (allowed && origin !== allowed) throw new PublicError('Unrecognized request origin.');
 
   const { buildAgeRequest } = await import('@/lib/services/age-verification/oid4vp');
-  return buildAgeRequest(cfg, origin);
+  return buildAgeRequest(cfg, origin, userId);
 });
 
 /**
@@ -70,7 +70,9 @@ export const submitAgeVerification = withPublicErrors(async (
   const { verifyAge } = await import('@/lib/services/age-verification');
   let result;
   try {
-    result = await verifyAge(req);
+    // Pass the authenticated userId so the verifier enforces that the wallet
+    // response was issued to THIS account (binding sealed in the verifier state).
+    result = await verifyAge(req, userId);
   } catch {
     throw new PublicError('That verification method is not available right now.');
   }

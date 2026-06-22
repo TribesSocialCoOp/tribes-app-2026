@@ -45,8 +45,13 @@ export interface BuiltAgeRequest {
   verifierState: string;
 }
 
-/** Build a signed OpenID4VP DC-API request for a selective-disclosure age_over_18 claim. */
-export async function buildAgeRequest(cfg: WalletProviderConfig, origin: string): Promise<BuiltAgeRequest> {
+/**
+ * Build a signed OpenID4VP DC-API request for a selective-disclosure age_over_18 claim.
+ * `userId` is the authenticated account the request is issued to; it is sealed into the
+ * verifier state so the eventual response can ONLY mark that same account verified.
+ */
+export async function buildAgeRequest(cfg: WalletProviderConfig, origin: string, userId: string): Promise<BuiltAgeRequest> {
+  if (!userId) throw new Error('buildAgeRequest requires the requesting userId.');
   const nonce = Buffer.from(nodeMdocContext.crypto.random(32)).toString('base64url');
 
   // Ephemeral key for the encrypted wallet response (ECDH-ES / A256GCM).
@@ -83,8 +88,10 @@ export async function buildAgeRequest(cfg: WalletProviderConfig, origin: string)
     .setProtectedHeader({ alg: 'ES256', typ: 'oauth-authz-req+jwt', x5c: [pemToDerBase64(cfg.readerCertPem)] })
     .sign(readerKey);
 
-  // Stateless verifier state: nonce + ephemeral private key + origin, AEAD-sealed.
-  const verifierState = await new EncryptJWT({ nonce, origin, privateJwk: privateJwk as unknown as Record<string, unknown> })
+  // Stateless verifier state: nonce + ephemeral private key + origin + bound userId,
+  // AEAD-sealed. Binding the userId here is what prevents one wallet response from
+  // verifying a different account (the verify path requires sealed userId === caller).
+  const verifierState = await new EncryptJWT({ nonce, origin, userId, privateJwk: privateJwk as unknown as Record<string, unknown> })
     .setProtectedHeader({ alg: 'dir', enc: 'A256GCM' })
     .setIssuedAt()
     .setExpirationTime(STATE_TTL)
@@ -103,17 +110,34 @@ export interface AgeResponseInput {
   verifierState: string;
   /** The web origin that made the request (must match the sealed origin). */
   origin: string;
+  /** The authenticated caller; MUST equal the userId sealed into the verifier state. */
+  expectedUserId: string;
+}
+
+export interface AgeResponseResult {
+  /** Whether the verified credential asserts age_over_18 === true. */
+  verified: boolean;
+  /** The verified document's docType (e.g. mDL vs passport) — derived from the
+   *  cryptographically verified mdoc, NOT from any client-supplied envelope. */
+  docType?: string;
 }
 
 /** Verify a wallet's OpenID4VP DC-API response and return whether age_over_18 holds. */
-export async function verifyAgeResponse(cfg: WalletProviderConfig, input: AgeResponseInput): Promise<boolean> {
-  // 1. Recover sealed state (nonce + decrypt key) and bind to origin.
+export async function verifyAgeResponse(cfg: WalletProviderConfig, input: AgeResponseInput): Promise<AgeResponseResult> {
+  // 1. Recover sealed state (nonce + decrypt key) and bind to origin + user.
   const { payload } = await jwtDecrypt(input.verifierState, stateKey());
   const nonce = payload.nonce as string;
   const sealedOrigin = payload.origin as string;
+  const sealedUserId = payload.userId as string;
   const privateJwk = payload.privateJwk as JWK;
   if (!nonce || !privateJwk) throw new Error('Invalid verifier state.');
   if (sealedOrigin !== input.origin) throw new Error('Origin mismatch.');
+  // User binding: the response can only verify the SAME account the request was
+  // issued to. Without this, a captured/forwarded response (or one real credential)
+  // could mark arbitrary accounts 18+.
+  if (!sealedUserId || sealedUserId !== input.expectedUserId) {
+    throw new Error('Verifier state is not bound to this user.');
+  }
 
   // 2. Pull the (possibly encrypted) vp_token out of the DC-API response.
   const vpToken = await extractVpToken(input.attestation, privateJwk);
@@ -136,7 +160,7 @@ export async function verifyAgeResponse(cfg: WalletProviderConfig, input: AgeRes
   const doc = decoded.documents?.find((d) => d.docType === cfg.doctype) ?? decoded.documents?.[0];
   if (!doc) throw new Error('No document in device response.');
   const claims = (doc.issuerSigned.getPrettyClaims(cfg.namespace) ?? {}) as Record<string, unknown>;
-  return claims.age_over_18 === true;
+  return { verified: claims.age_over_18 === true, docType: doc.docType };
 }
 
 // Indirection so the Verifier import stays isolated and easy to mock in future tests.

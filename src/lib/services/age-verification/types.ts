@@ -43,8 +43,18 @@ export interface AgeVerificationProvider {
    * Validate the attestation and return pass/fail. Implementations MUST do real
    * cryptographic verification (IACA chain, device signature, ZKP) for the wallet
    * providers — never trust a client-asserted boolean.
+   *
+   * `ctx.expectedUserId` is the authenticated caller; wallet providers MUST ensure
+   * the attestation is bound to that same user (the verifier state seals it) so a
+   * response cannot verify a different account.
    */
-  verify(req: AgeVerificationRequest): Promise<AgeVerificationResult>;
+  verify(req: AgeVerificationRequest, ctx: AgeVerificationContext): Promise<AgeVerificationResult>;
+}
+
+/** Server-supplied context for a verification attempt (never from the client). */
+export interface AgeVerificationContext {
+  /** The authenticated user this verification will mark 18+ on success. */
+  expectedUserId: string;
 }
 
 /** Thrown when a provider is selected but not configured/available. */

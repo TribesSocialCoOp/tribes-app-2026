@@ -6,7 +6,7 @@
  *
  * Enabled once APPLE_WALLET_* sandbox/RP credentials are in env. See ./config.
  */
-import type { AgeVerificationProvider, AgeVerificationRequest, AgeVerificationResult } from '../types';
+import type { AgeVerificationProvider, AgeVerificationRequest, AgeVerificationResult, AgeVerificationContext } from '../types';
 import { ProviderUnavailableError } from '../types';
 import { loadWalletConfig } from '../config';
 
@@ -16,21 +16,23 @@ export const appleWalletProvider: AgeVerificationProvider = {
   isAvailable() {
     return loadWalletConfig('APPLE_WALLET') !== null;
   },
-  async verify(req: AgeVerificationRequest): Promise<AgeVerificationResult> {
+  async verify(req: AgeVerificationRequest, ctx: AgeVerificationContext): Promise<AgeVerificationResult> {
     const cfg = loadWalletConfig('APPLE_WALLET');
     if (!cfg) throw new ProviderUnavailableError('apple_wallet');
 
-    const data = req.attestation as { verifierState?: string; origin?: string; response?: unknown; doctype?: string } | undefined;
+    const data = req.attestation as { verifierState?: string; origin?: string; response?: unknown } | undefined;
     if (!data?.verifierState || !data?.origin) throw new Error('Missing attestation envelope.');
 
     const { verifyAgeResponse } = await import('../oid4vp');
-    const verified = await verifyAgeResponse(cfg, {
+    const { verified, docType } = await verifyAgeResponse(cfg, {
       attestation: data.response ?? data,
       verifierState: data.verifierState,
       origin: data.origin,
+      expectedUserId: ctx.expectedUserId,
     });
-    // doctype distinguishes a state mDL from the US-passport Digital ID.
-    const method = data.doctype?.includes('passport') ? 'apple_wallet_passport' : 'apple_wallet_mdl';
+    // Derive the method from the CRYPTOGRAPHICALLY VERIFIED docType, not a client
+    // envelope field — the recorded method must reflect what was actually proven.
+    const method = docType?.toLowerCase().includes('passport') ? 'apple_wallet_passport' : 'apple_wallet_mdl';
     return { verified, method };
   },
 };
