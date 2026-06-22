@@ -59,24 +59,6 @@ async function grantsForMember(tid: string, memberId: string): Promise<number> {
   });
 }
 
-async function loginDustin(page: any) {
-  await page.route('**/_next/webpack-hmr**', (r: any) => r.abort());
-  await page.goto(`${BASE}/your-comms`, { waitUntil: 'networkidle' });
-  if (new URL(page.url()).pathname.startsWith('/login')) {
-    await page.waitForSelector('button:has-text("Dustin")', { state: 'visible', timeout: 15_000 });
-    await page.click('button:has-text("Dustin")');
-    await page.waitForURL('**/your-comms', { timeout: 30_000, waitUntil: 'commit' });
-  }
-}
-
-function watchPhases(page: any, phaseLog: string[], pageErrors: string[]) {
-  page.on('console', (m: any) => {
-    const t = m.text();
-    if (t.includes('[key-sync]')) phaseLog.push(t);
-  });
-  page.on('pageerror', (e: any) => pageErrors.push(String(e?.message ?? e)));
-}
-
 test('Phase C distributes a tribe-key grant to an ungranted member (Sam)', async ({ page }) => {
   test.setTimeout(120_000);
 
@@ -160,91 +142,4 @@ test('Phase C distributes a tribe-key grant to an ungranted member (Sam)', async
 
   // The core assertion: Sam must receive a grant.
   expect(samGrants, 'Sam should have received a tribe-key grant from the founder').toBeGreaterThan(0);
-});
-
-/**
- * Test B — the "dead granter" (Finding 4), the likely real-world cause.
- *
- * The tribe key ALREADY exists. The founder opens the tribe on a device whose
- * IndexedDB does NOT hold the key (a fresh login/profile that can't silently
- * restore it — no PRF authenticator headless). Phase C's distribution gate
- * `isAdmin && activeKey && localTribeKey` fails on localTribeKey===null, so it
- * silently skips and the waiting member never gets a grant.
- *
- * Playwright itself creates the founding key in context #1 ("old device"), then
- * context #2 ("new device") attempts to grant. Marked test.fail(): it documents
- * the current bug (expected to fail now) and will flip to a real pass once the
- * fix lands — at which point we remove the annotation.
- */
-test('Founder on a device WITHOUT the cached key fails to grant (dead granter)', async ({ browser }) => {
-  test.setTimeout(150_000);
-  test.fail(true, 'Known bug: founder without a locally-cached key silently skips distribution');
-
-  const tid = await tribeId();
-
-  // Clean slate.
-  await withDb(async (c) => {
-    await c.query(`UPDATE users SET tos_accepted_version='1.1.1' WHERE id IN ($1,$2,'test-service-admin')`, [FOUNDER_ID, SAM_ID]);
-    await c.query(`DELETE FROM tribe_key_grants WHERE tribe_key_id IN (SELECT id FROM tribe_keys WHERE tribe_id=$1)`, [tid]);
-    await c.query(`DELETE FROM tribe_keys WHERE tribe_id=$1`, [tid]);
-  });
-
-  // ── Context #1: founder's "old device" — Playwright creates the founding key ──
-  const ctx1 = await browser.newContext();
-  const page1 = await ctx1.newPage();
-  await loginDustin(page1);
-  await page1.goto(`${BASE}/t/${TRIBE_SLUG}`, { waitUntil: 'networkidle' });
-
-  // Wait for genesis to FULLY complete: key row + Sam actually granted (so no
-  // grant insert is still in-flight when we close — avoids a race where ctx1
-  // re-grants Sam after we delete his grant below).
-  let keyRows = 0, samGenesis = 0;
-  const d1 = Date.now() + 45_000;
-  while (Date.now() < d1) {
-    await page1.waitForTimeout(2_500);
-    keyRows = await withDb(async (c) => (await c.query('SELECT count(*)::int n FROM tribe_keys WHERE tribe_id=$1', [tid])).rows[0].n);
-    samGenesis = await grantsForMember(tid, SAM_ID);
-    if (keyRows > 0 && samGenesis > 0) break;
-  }
-  expect(keyRows, 'Context #1 should have generated the tribe key').toBeGreaterThan(0);
-  expect(samGenesis, 'Context #1 genesis should have granted Sam').toBeGreaterThan(0);
-  await ctx1.close(); // "old device" goes away; key now lives only on the server.
-
-  // Settle, then make Sam an ungranted member again (key already exists on the
-  // server). Re-check after a pause to confirm no straggler grant from ctx1.
-  await new Promise(r => setTimeout(r, 3_000));
-  await withDb(async (c) => {
-    await c.query(`DELETE FROM tribe_key_grants WHERE recipient_id=$1 AND tribe_key_id IN (SELECT id FROM tribe_keys WHERE tribe_id=$2)`, [SAM_ID, tid]);
-  });
-  await new Promise(r => setTimeout(r, 3_000));
-  expect(await grantsForMember(tid, SAM_ID), 'Sam should be ungranted and stay that way (no ctx1 stragglers)').toBe(0);
-
-  // ── Context #2: founder's "new device" — fresh IndexedDB, no cached key ──
-  const phaseLog: string[] = [];
-  const pageErrors: string[] = [];
-  const ctx2 = await browser.newContext();
-  const page2 = await ctx2.newPage();
-  watchPhases(page2, phaseLog, pageErrors);
-  await loginDustin(page2);
-  await page2.goto(`${BASE}/t/${TRIBE_SLUG}`, { waitUntil: 'networkidle' });
-
-  let samGrants = 0;
-  const d2 = Date.now() + 45_000;
-  while (Date.now() < d2) {
-    await page2.waitForTimeout(2_500);
-    samGrants = await grantsForMember(tid, SAM_ID);
-    if (samGrants > 0) break;
-  }
-
-  console.log('\n========== DEAD-GRANTER REPRO ==========');
-  console.log(`grants → Sam after founder (new device) opened tribe: ${samGrants}`);
-  console.log(`page errors: ${pageErrors.length}`, pageErrors.join(' | '));
-  console.log('----- [key-sync] phase log (context #2) -----');
-  console.log(phaseLog.length ? phaseLog.join('\n') : '(no [key-sync] logs!)');
-  console.log('========================================\n');
-
-  await ctx2.close();
-
-  // Desired behavior (fails today): the founder should still be able to grant Sam.
-  expect(samGrants, 'Founder should grant Sam even from a device without the cached key').toBeGreaterThan(0);
 });

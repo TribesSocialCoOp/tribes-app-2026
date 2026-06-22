@@ -10,6 +10,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CommunicationItem } from '@/lib/types';
+import { useUser } from '@/hooks/use-user';
 
 interface DecryptionCache {
   [postId: string]: string; // postId → decrypted plaintext
@@ -24,6 +25,7 @@ export function usePostDecryption(items: CommunicationItem[]) {
   const [isDecrypting, setIsDecrypting] = useState(false);
   const cacheRef = useRef<DecryptionCache>({});
   const pendingRef = useRef<Set<string>>(new Set());
+  const { user } = useUser();
 
   const decryptItems = useCallback(async (encryptedItems: CommunicationItem[]) => {
     // Filter to items that need decryption and aren't already cached/pending
@@ -98,7 +100,7 @@ export function usePostDecryption(items: CommunicationItem[]) {
 
           for (const item of tribeItems) {
             try {
-              const cachedTribeKey = await getTribeKey(item.tribeId!);
+              const cachedTribeKey = await getTribeKey(user?.id ?? '', item.tribeId!);
               if (cachedTribeKey) {
                 const { fromBase64 } = await import('@/lib/crypto/encoding');
               const ciphertextBuffer = fromBase64(item.ciphertextBase64!);
@@ -187,7 +189,7 @@ export function usePostDecryption(items: CommunicationItem[]) {
         pendingRef.current.delete(item.id);
       }
     }
-  }, []);
+  }, [user?.id]);
 
   // Trigger decryption when items change
   useEffect(() => {

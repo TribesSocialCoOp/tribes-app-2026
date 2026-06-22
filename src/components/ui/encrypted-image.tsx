@@ -4,6 +4,7 @@ import { getPostKeyGrants } from '@/lib/actions/content-actions';
 import { unwrapPostKey } from '@/lib/crypto/post-encryption';
 import { Loader2, Lock } from 'lucide-react';
 import type { Ring } from '@/lib/types';
+import { useUser } from '@/hooks/use-user';
 
 interface EncryptedImageProps {
   fileId: string;
@@ -20,6 +21,7 @@ export function EncryptedImage({ fileId, postId, ring, tribeId, alt, className }
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const { user } = useUser();
 
   useEffect(() => {
     let active = true;
@@ -49,7 +51,7 @@ export function EncryptedImage({ fileId, postId, ring, tribeId, alt, className }
         if (ring === 'tribes' && tribeId) {
           // TRIBE PATH: Try tribe group key first, then fall back to key grants
           const { getTribeKey } = await import('@/lib/crypto/key-store');
-          const cachedTribeKey = await getTribeKey(tribeId);
+          const cachedTribeKey = await getTribeKey(user?.id ?? '', tribeId);
 
           if (cachedTribeKey) {
             // Direct tribe key decryption — no key grant unwrapping needed
@@ -98,7 +100,7 @@ export function EncryptedImage({ fileId, postId, ring, tribeId, alt, className }
       active = false;
       if (urlToRevoke) URL.revokeObjectURL(urlToRevoke);
     };
-  }, [fileId, postId, ring, tribeId]);
+  }, [fileId, postId, ring, tribeId, user?.id]);
 
   if (loading) {
     return (

@@ -38,10 +38,20 @@ export interface CachedSharedSecret {
 }
 
 export interface StoredTribeKey {
+  /** Composite primary key: `${userId}::${tribeId}` — scopes the cache per user
+   *  so a different logged-in user on the same browser/origin can't read (or
+   *  self-grant from) another user's cached tribe key. */
+  scope: string;
+  userId: string;
   tribeId: string;
   key: CryptoKey; // AES-256-GCM symmetric key (extractable for wrapping)
   version: number;
   receivedAt: number; // timestamp ms
+}
+
+/** Builds the composite keyPath value for a tribe key cache entry. */
+function tribeKeyScope(userId: string, tribeId: string): string {
+  return `${userId}::${tribeId}`;
 }
 
 export interface StoredIdentityKey {
@@ -65,7 +75,7 @@ export interface StoredVaultWrappingKey {
 // ============================================================
 
 const DB_NAME = 'tribes_keystore';
-const DB_VERSION = 5; // 1: bond_keys, 2: shared_secrets, 3: identity_keys, 4: multi-version shared_secrets, 5: vault_keys
+const DB_VERSION = 6; // 1: bond_keys, 2: shared_secrets, 3: identity_keys, 4: multi-version shared_secrets, 5: vault_keys, 6: user-scoped tribe_keys
 const BOND_KEYS_STORE = 'bond_keys';
 const SHARED_SECRETS_STORE = 'shared_secrets';
 const TRIBE_KEYS_STORE = 'tribe_keys';
@@ -101,8 +111,16 @@ function openDatabase(): Promise<IDBDatabase> {
       }
 
       // V2: tribe_keys store (group symmetric keys)
+      // V6: Recreate with a user-scoped composite keyPath (`${userId}::${tribeId}`).
+      // Old entries (keyPath 'tribeId') are dropped — tribe keys are recoverable
+      // from server grants + the vault, so they simply re-sync on next cycle.
+      if (oldVersion < 6 && db.objectStoreNames.contains(TRIBE_KEYS_STORE)) {
+        db.deleteObjectStore(TRIBE_KEYS_STORE);
+      }
       if (!db.objectStoreNames.contains(TRIBE_KEYS_STORE)) {
-        db.createObjectStore(TRIBE_KEYS_STORE, { keyPath: 'tribeId' });
+        const store = db.createObjectStore(TRIBE_KEYS_STORE, { keyPath: 'scope' });
+        store.createIndex('userId', 'userId', { unique: false });
+        store.createIndex('tribeId', 'tribeId', { unique: false });
       }
 
       // V3: identity_keys store (RSA identity keys)
@@ -563,6 +581,7 @@ export async function deleteSharedSecret(bondId: string): Promise<void> {
  * Stores a tribe's group symmetric key.
  */
 export async function storeTribeKey(
+  userId: string,
   tribeId: string,
   key: CryptoKey,
   version: number,
@@ -574,6 +593,8 @@ export async function storeTribeKey(
     const store = tx.objectStore(TRIBE_KEYS_STORE);
 
     const entry: StoredTribeKey = {
+      scope: tribeKeyScope(userId, tribeId),
+      userId,
       tribeId,
       key,
       version,
@@ -589,15 +610,15 @@ export async function storeTribeKey(
 }
 
 /**
- * Retrieves a tribe's group symmetric key.
+ * Retrieves a tribe's group symmetric key for a specific user.
  */
-export async function getTribeKey(tribeId: string): Promise<StoredTribeKey | null> {
+export async function getTribeKey(userId: string, tribeId: string): Promise<StoredTribeKey | null> {
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(TRIBE_KEYS_STORE, 'readonly');
     const store = tx.objectStore(TRIBE_KEYS_STORE);
-    const request = store.get(tribeId);
+    const request = store.get(tribeKeyScope(userId, tribeId));
 
     request.onsuccess = () => resolve(request.result ?? null);
     request.onerror = () => reject(new Error(`Failed to get tribe key for ${tribeId}`));
@@ -607,15 +628,16 @@ export async function getTribeKey(tribeId: string): Promise<StoredTribeKey | nul
 }
 
 /**
- * Retrieves all stored tribe keys.
+ * Retrieves all tribe keys cached for a specific user.
  */
-export async function getAllTribeKeys(): Promise<StoredTribeKey[]> {
+export async function getAllTribeKeys(userId: string): Promise<StoredTribeKey[]> {
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(TRIBE_KEYS_STORE, 'readonly');
     const store = tx.objectStore(TRIBE_KEYS_STORE);
-    const request = store.getAll();
+    const index = store.index('userId');
+    const request = index.getAll(userId);
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(new Error('Failed to list tribe keys'));
@@ -628,13 +650,13 @@ export async function getAllTribeKeys(): Promise<StoredTribeKey[]> {
  * Deletes a tribe's group key from local storage.
  * Called when the user leaves a tribe or the key is rotated.
  */
-export async function deleteTribeKey(tribeId: string): Promise<void> {
+export async function deleteTribeKey(userId: string, tribeId: string): Promise<void> {
   const db = await openDatabase();
 
   return new Promise((resolve, reject) => {
     const tx = db.transaction(TRIBE_KEYS_STORE, 'readwrite');
     const store = tx.objectStore(TRIBE_KEYS_STORE);
-    const request = store.delete(tribeId);
+    const request = store.delete(tribeKeyScope(userId, tribeId));
 
     request.onsuccess = () => resolve();
     request.onerror = () => reject(new Error(`Failed to delete tribe key for ${tribeId}`));

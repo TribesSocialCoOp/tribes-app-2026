@@ -83,7 +83,7 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
       setNewImageFiles([]);
       setNewPreviewUrls([]);
     }
-  }, [open, post]);
+  }, [open, post, user?.id]);
 
   const handleDecryptPost = async (encryptedPost: TribePost) => {
     setIsDecrypting(true);
@@ -98,7 +98,7 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
       // group key — not per-bond key grants.
       if (encryptedPost.ring === 'tribes' && encryptedPost.tribeId) {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const storedKey = await getTribeKey(encryptedPost.tribeId);
+        const storedKey = await getTribeKey(user?.id ?? '', encryptedPost.tribeId);
         if (!storedKey) {
           throw new Error('Tribe encryption key not found. You may need to sync your keys in Settings.');
         }

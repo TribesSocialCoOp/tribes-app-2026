@@ -586,7 +586,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
         for (const grant of grants) {
           try {
             // Check if we already have this tribe key cached at this version
-            const cached = await getTribeKey(grant.tribeId);
+            const cached = await getTribeKey(user!.id, grant.tribeId);
             if (cached && cached.version === grant.keyVersion) {
               tribeReady++;
               continue;
@@ -604,7 +604,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
             );
 
             // Cache locally in IndexedDB
-            await storeTribeKey(grant.tribeId, tribeKey, grant.keyVersion);
+            await storeTribeKey(user!.id, grant.tribeId, tribeKey, grant.keyVersion);
             tribeReady++;
             console.debug(`[key-sync] Cached tribe key for ${grant.tribeId.substring(0, 12)}... (v${grant.keyVersion})`);
           } catch (err) {
@@ -661,7 +661,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
             const access = await checkTribeAccess(tribe.id);
 
             let activeKey = await getActiveTribeKeyForTribe(tribe.id);
-            let localTribeKey = await getTribeKey(tribe.id);
+            let localTribeKey = await getTribeKey(user!.id, tribe.id);
 
             const isAdmin = access === 'founder' || access === 'speaker' || access === 'platform_admin';
 
@@ -680,8 +680,8 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
               }
 
               // Cache locally
-              await storeTribeKey(tribe.id, newKey, 1);
-              localTribeKey = { tribeId: tribe.id, key: newKey, version: 1, receivedAt: Date.now() };
+              await storeTribeKey(user!.id, tribe.id, newKey, 1);
+              localTribeKey = { scope: `${user!.id}::${tribe.id}`, userId: user!.id, tribeId: tribe.id, key: newKey, version: 1, receivedAt: Date.now() };
               activeKey = await getActiveTribeKeyForTribe(tribe.id);
             }
 

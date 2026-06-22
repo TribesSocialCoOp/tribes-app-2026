@@ -183,7 +183,7 @@ export const VaultBackupSection: React.FC = () => {
         }
       }
 
-      const { encryptedVault, salt } = await createVaultBackup(password, identityKeyParam);
+      const { encryptedVault, salt } = await createVaultBackup(password, user?.id ?? '', identityKeyParam);
       setBackupProgress(60);
 
       const encryptedVaultBase64 = btoa(String.fromCharCode(...new Uint8Array(encryptedVault)));

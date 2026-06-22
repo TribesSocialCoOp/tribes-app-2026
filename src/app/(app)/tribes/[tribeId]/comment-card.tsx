@@ -117,7 +117,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
       try {
         if (!tribeId) { if (active) setDecryptionStatus('missing_key'); return; }
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(tribeId);
+        const cachedTribeKey = await getTribeKey(user?.id ?? '', tribeId);
         if (!cachedTribeKey) { if (active) setDecryptionStatus('missing_key'); return; }
         const { decryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
         const { fromBase64 } = await import('@/lib/crypto/encoding');
@@ -132,7 +132,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
 
     decryptComment();
     return () => { active = false; };
-  }, [comment.id, comment.isEncrypted, comment.ciphertextBase64, comment.encryptionIv, tribeId]);
+  }, [comment.id, comment.isEncrypted, comment.ciphertextBase64, comment.encryptionIv, tribeId, user?.id]);
 
   // ── Opportunistic backfill: encrypt legacy plaintext comments ──
   useEffect(() => {
@@ -142,7 +142,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
     async function backfill() {
       try {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(tribeId!);
+        const cachedTribeKey = await getTribeKey(user?.id ?? '', tribeId!);
         if (!cachedTribeKey) return;
 
         const { encryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
@@ -161,7 +161,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
 
     backfill();
     return () => { active = false; };
-  }, [comment.id, comment.isEncrypted, comment.content, isPublic, tribeId]);
+  }, [comment.id, comment.isEncrypted, comment.content, isPublic, tribeId, user?.id]);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingComment, setIsDeletingComment] = useState(false);
