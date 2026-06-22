@@ -316,7 +316,15 @@ export async function issueTribeKeyGrant(
 ): Promise<void> {
   const userId = await requireAuth();
   const { createTribeKeyGrant } = await import('@/lib/services/tribe-key-service');
-  return createTribeKeyGrant(tribeKeyId, recipientId, wrappedKey, wrapIv, userId, deviceKeyId);
+  await createTribeKeyGrant(tribeKeyId, recipientId, wrappedKey, wrapIv, userId, deviceKeyId);
+
+  // WS-2: tell the recipient their grant is ready so they pull + unwrap it
+  // immediately instead of on their next polling cycle. Skip self-grants.
+  if (recipientId !== userId) {
+    import('@/lib/services/realtime-dispatch').then(({ notifyTribeKeyAvailable }) => {
+      notifyTribeKeyAvailable(recipientId);
+    }).catch(() => {});
+  }
 }
 
 /**

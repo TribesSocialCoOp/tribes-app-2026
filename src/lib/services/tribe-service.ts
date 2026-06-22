@@ -584,6 +584,14 @@ export async function requestToJoinTribe(userId: string, tribeId: string, aliasN
   const { createTribeBond } = await import('@/lib/services/bond-service');
   await createTribeBond(userId, tribeId, 'tribe', tribe.name);
 
+  // WS-2: for a private tribe, nudge the key-holders to distribute the tribe key
+  // to this new member immediately (instead of waiting for their polling cycle).
+  if (!tribe.isPublic) {
+    import('@/lib/services/realtime-dispatch').then(({ notifyTribeKeyGranters }) => {
+      notifyTribeKeyGranters(tribeId);
+    }).catch(() => {});
+  }
+
   return 'joined';
 }
 

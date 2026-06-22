@@ -889,6 +889,25 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
     performSync();
   }, [performSync]);
 
+  // WS-2: socket-driven distribution. React immediately to server pushes:
+  //  - 'tribe-key-request'   → we're a key-holder; run a sync so Phase C grants the new member.
+  //  - 'tribe-key-available' → a grant for us was just issued; run a sync so Phase B pulls it.
+  // The polling loop remains as a safety net for when the socket is down.
+  useEffect(() => {
+    if (!user?.id || typeof window === 'undefined') return;
+    if (!process.env.NEXT_PUBLIC_WS_RELAY_URL) return;
+    let unsubReq: (() => void) | undefined;
+    let unsubAvail: (() => void) | undefined;
+    try {
+      const { TribesWebSocket } = require('@/lib/ws-client');
+      const ws = TribesWebSocket.getInstance();
+      const onEvent = () => { triggerSync(); };
+      unsubReq = ws.subscribe('tribe-key-request', onEvent);
+      unsubAvail = ws.subscribe('tribe-key-available', onEvent);
+    } catch { /* WS optional */ }
+    return () => { unsubReq?.(); unsubAvail?.(); };
+  }, [user?.id, triggerSync]);
+
   /**
    * Re-generate ECDH keys for bonds that have server-side keys but no local key.
    * This is the "escape hatch" when no vault backup is available.

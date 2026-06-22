@@ -585,7 +585,7 @@ export async function notifyProposalComment(
  */
 export async function pushToUserSocket(
   userId: string,
-  payload: { type: 'feed-update' | 'activity'; [key: string]: any }
+  payload: { type: 'feed-update' | 'activity' | 'tribe-key-request' | 'tribe-key-available'; [key: string]: any }
 ): Promise<void> {
   const internalSecret = process.env.INTERNAL_API_SECRET || 'tribes-internal-super-secret-123';
   const url = process.env.WS_RELAY_INTERNAL_URL || 'http://localhost:9004';
@@ -606,4 +606,36 @@ export async function pushToUserSocket(
   } catch (err) {
     console.warn(`[realtime-dispatch] Error pushing to socket for user ${userId}:`, err);
   }
+}
+
+/**
+ * WS-2: Nudge a tribe's key-holders (founder / admin / speaker) to run an
+ * immediate key-sync cycle so a newly-joined member is granted the tribe key
+ * without waiting for the granter's 15–60s polling interval. Fire-and-forget.
+ */
+export async function notifyTribeKeyGranters(tribeId: string): Promise<void> {
+  try {
+    const { db } = await import('@/db');
+    const { tribeMembers } = await import('@/db/schema');
+    const { eq, and, inArray } = await import('drizzle-orm');
+    const granters = await db.select({ userId: tribeMembers.userId })
+      .from(tribeMembers)
+      .where(and(
+        eq(tribeMembers.tribeId, tribeId),
+        inArray(tribeMembers.role, ['founder', 'admin', 'speaker']),
+      ));
+    await Promise.all(
+      granters.map(g => pushToUserSocket(g.userId, { type: 'tribe-key-request', tribeId }).catch(() => {})),
+    );
+  } catch (err) {
+    console.warn(`[realtime-dispatch] notifyTribeKeyGranters failed for ${tribeId}:`, err);
+  }
+}
+
+/**
+ * WS-2: Tell a recipient their tribe-key grant is ready, so their client pulls
+ * and unwraps it immediately instead of on the next polling cycle. Fire-and-forget.
+ */
+export async function notifyTribeKeyAvailable(recipientId: string, tribeId?: string): Promise<void> {
+  await pushToUserSocket(recipientId, { type: 'tribe-key-available', tribeId }).catch(() => {});
 }
