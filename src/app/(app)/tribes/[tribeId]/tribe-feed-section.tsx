@@ -16,6 +16,7 @@ import { TribePostCard } from './tribe-post-card';
 import { useTribeDetail } from './tribe-detail-context';
 import { ComposeBox } from '@/components/compose/compose-box';
 import { useScrollToPost } from '@/hooks/use-scroll-to-post';
+import { useKeySync } from '@/components/providers/key-sync-provider';
 
 // ─── EventHighlightCard ──────────────────────────────────────────────────────
 
@@ -60,6 +61,7 @@ type FeedItem =
 export function TribeFeedSection() {
   const { state, dispatch, isLoggedIn, currentUserId, syncAllData, hasTribeKey, isTribeAdmin, hasMorePosts, isLoadingMorePosts, loadMorePosts } = useTribeDetail();
   const { tribe, posts, events, isMember, promotedPostIds, reportedPostIds } = state;
+  const { tribeKeyRestoreNeeded } = useKeySync();
 
   const combinedFeedItems = useMemo(() => {
     if (!tribe) return [];
@@ -107,13 +109,31 @@ export function TribeFeedSection() {
       </div>
 
       {isMember && !tribe.isPublic && hasTribeKey === false && !isTribeAdmin && (
-        <Alert variant="default" className="bg-amber-500/10 border-amber-500/50 text-amber-600 dark:text-amber-400 mb-6">
-          <LockKeyhole className="h-5 w-5 !text-amber-500" />
-          <AlertTitle className="font-semibold text-amber-700 dark:text-amber-500">Cryptographic Sync Pending</AlertTitle>
-          <AlertDescription className="text-sm mt-1 leading-relaxed">
-            You have joined this tribe, but your device is waiting to receive the encryption keys. Posts will remain locked until a tribe admin comes online to securely distribute the keys.
-          </AlertDescription>
-        </Alert>
+        tribeKeyRestoreNeeded ? (
+          // This device holds a grant it can't unwrap (no identity key here) →
+          // the only fix is a vault restore. Tell the user, don't spin forever.
+          <Alert variant="default" className="bg-amber-500/10 border-amber-500/50 text-amber-600 dark:text-amber-400 mb-6">
+            <LockKeyhole className="h-5 w-5 !text-amber-500" />
+            <AlertTitle className="font-semibold text-amber-700 dark:text-amber-500">This device can’t unlock this Tribe yet</AlertTitle>
+            <AlertDescription className="text-sm mt-1 leading-relaxed">
+              Your access is granted, but the encryption keys live on another device you’ve used.
+              Restore your secure vault on this device to unlock the content.
+              <span className="mt-2 block">
+                <Link href="/settings" className="font-semibold underline underline-offset-2">
+                  Restore from Settings →
+                </Link>
+              </span>
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert variant="default" className="bg-amber-500/10 border-amber-500/50 text-amber-600 dark:text-amber-400 mb-6">
+            <LockKeyhole className="h-5 w-5 !text-amber-500" />
+            <AlertTitle className="font-semibold text-amber-700 dark:text-amber-500">Cryptographic Sync Pending</AlertTitle>
+            <AlertDescription className="text-sm mt-1 leading-relaxed">
+              You have joined this tribe, but your device is waiting to receive the encryption keys. Posts will remain locked until a tribe admin comes online to securely distribute the keys.
+            </AlertDescription>
+          </Alert>
+        )
       )}
 
       {isMember && isLoggedIn && (

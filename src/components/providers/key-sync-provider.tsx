@@ -325,20 +325,28 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
 
           const identityResult = await publishEncryptionPublicKey(publicKeyJwk);
 
+          // ALWAYS keep this device's own key pair locally. Each device has its
+          // OWN identity key and registers itself in user_device_keys (Phase 0.5),
+          // so it receives DEVICE-TARGETED tribe key grants and can unwrap them on
+          // its own — no vault restore required to participate. (Multi-device.)
+          await storeIdentityKey(user.id, keyPair.privateKey, publicKeyJwk);
+          identityKey = await getIdentityKey(user.id);
+
           if (identityResult.accepted) {
-            // We won the race — store our key
-            await storeIdentityKey(user.id, keyPair.privateKey, publicKeyJwk);
-            identityKey = await getIdentityKey(user.id);
+            // This device won the legacy single-identity slot (users.encryption_public_key).
+            // Push to the vault so other devices can recover this canonical identity.
             newKeysGenerated = true;
-            console.debug('[key-sync] Published RSA identity public key to server');
+            console.debug('[key-sync] Published RSA identity public key (primary identity for this user)');
           } else {
-            // Another device already published — DON'T store the locally generated key.
-            // Vault restore is needed to recover the identity private key from the other device.
-            console.warn(
-              '[key-sync] Identity key already published by another device. ' +
-              'Vault restore needed for tribe key operations.'
+            // Another device owns the shared legacy identity slot. That's fine —
+            // this device uses its OWN key for device-targeted grants. We do NOT
+            // push to the vault (so we don't clobber the canonical identity).
+            // A vault restore is only needed to read OLD content (bonds / tribe
+            // posts) that was granted before this device existed.
+            console.info(
+              '[key-sync] Legacy identity slot held by another device — this device ' +
+              'will use its own device key for new tribe-key grants (no restore needed to participate).'
             );
-            // identityKey remains null — tribe key operations will be skipped this cycle
           }
         }
       } catch (err) {
@@ -652,20 +660,27 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
             console.debug(`[key-sync] Cached tribe key for ${grant.tribeId.substring(0, 12)}... (v${grant.keyVersion})`);
           } catch (err) {
             // OperationError = RSA key mismatch (grant wrapped with a different key pair).
-            // This happens when the user cleared browser data or switched devices,
-            // generating a new RSA identity key pair while old grants remain on the server.
-            // Fix: delete the stale grant so Phase C (admin-side) re-issues with our current key.
             if (err instanceof DOMException && err.name === 'OperationError') {
-              console.warn(`[key-sync] Stale grant detected for ${grant.tribeId.substring(0, 12)}... — deleting for re-issue`);
-              try {
-                const { deleteTribeKeyGrantForSelf } = await import('@/lib/actions/tribe-actions');
-                await deleteTribeKeyGrantForSelf(grant.grantId);
-                // Re-publish our current identity public key to ensure admin has the latest
-                if (identityKey) {
-                  await publishEncryptionPublicKey(identityKey.publicKeyJwk);
+              const isOurDeviceGrant = !!currentDeviceKeyId && grant.deviceKeyId === currentDeviceKeyId;
+              if (isOurDeviceGrant) {
+                // A grant explicitly targeted at THIS device that we can't unwrap is
+                // genuinely stale (our key changed). Delete it so an admin re-issues
+                // to our current device key.
+                console.warn(`[key-sync] Stale device grant for ${grant.tribeId.substring(0, 12)}... — deleting for re-issue`);
+                try {
+                  const { deleteTribeKeyGrantForSelf } = await import('@/lib/actions/tribe-actions');
+                  await deleteTribeKeyGrantForSelf(grant.grantId);
+                  if (identityKey) await publishEncryptionPublicKey(identityKey.publicKeyJwk);
+                } catch (cleanupErr) {
+                  console.warn(`[key-sync] Failed to clean up stale device grant:`, cleanupErr);
                 }
-              } catch (cleanupErr) {
-                console.warn(`[key-sync] Failed to clean up stale grant:`, cleanupErr);
+              } else {
+                // A LEGACY (deviceKeyId=null) grant wrapped to the canonical identity
+                // that this (secondary) device can't unwrap. It belongs to another
+                // device — do NOT delete it. We rely on our own device-targeted grant
+                // (issued by Phase C). If we don't have one yet, we're simply waiting
+                // for an admin to distribute it.
+                console.debug(`[key-sync] Skipping legacy grant for ${grant.tribeId.substring(0, 12)}... (not for this device)`);
               }
             } else {
               console.warn(`[key-sync] Error processing tribe key for ${grant.tribeId.substring(0, 12)}...:`, err);
