@@ -56,6 +56,13 @@ interface KeySyncState {
    * automatically.
    */
   prfSyncActive: boolean;
+  /**
+   * True when this device has pending tribe-key grant(s) it CANNOT unwrap because
+   * it holds no usable RSA identity private key (e.g. a new device/profile that
+   * lost the publish race and never restored its vault). The fix is a vault
+   * restore — surfaced so the UI can tell the user instead of spinning forever.
+   */
+  tribeKeyRestoreNeeded: boolean;
   /** Trigger an immediate sync (e.g., after accepting a bond) */
   triggerSync: () => void;
   /** Re-generate keys for bonds stuck without local keys. Old posts encrypted with previous keys will be unreadable. */
@@ -73,6 +80,7 @@ const KeySyncContext = createContext<KeySyncState>({
   initialSyncDone: false,
   isSyncing: false,
   prfSyncActive: false,
+  tribeKeyRestoreNeeded: false,
   triggerSync: () => { },
   rekeyOrphanedBonds: async () => { },
 });
@@ -89,6 +97,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
   const { toast } = useToast();
   const syncLock = useRef(false);
+  const syncLockAt = useRef(0); // when the lock was taken (ms) — watchdog against a hung cycle
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasVaultBeenSavedRef = useRef(false);
   const vaultPushPendingRef = useRef(false);
@@ -103,6 +112,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
   const [initialSyncDone, setInitialSyncDone] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [prfSyncActive, setPrfSyncActive] = useState(false);
+  const [tribeKeyRestoreNeeded, setTribeKeyRestoreNeeded] = useState(false);
 
   /**
    * Silently saves an updated PRF vault (merging with the server copy first).
@@ -226,8 +236,13 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
    * 3. Generate and distribute tribe keys to members using RSA public keys
    */
   const performSync = useCallback(async () => {
-    if (syncLock.current || !user?.id) return;
+    if (!user?.id) return;
+    // Watchdog: normally the lock is released in finally, but if a cycle ever
+    // wedges on a hung await, don't let it block sync forever — allow a new run
+    // after 90s so tribe-key distribution can recover.
+    if (syncLock.current && Date.now() - syncLockAt.current < 90_000) return;
     syncLock.current = true;
+    syncLockAt.current = Date.now();
     setIsSyncing(true);
     let newKeysGenerated = false;
 
@@ -282,37 +297,60 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       // so orphaned bonds heal automatically and we never generate a competing
       // identity key when the vault already holds one.
 
-      const vaultSync = await pullPrfVault();
-      setPrfSyncActive(vaultSync.active);
+      // PHASE ISOLATION (WS-1): each phase runs in its own try/catch so a failure
+      // in an early phase (vault pull, identity, bonds) can NEVER abort the later
+      // tribe-key phases (B: pull grants, C: distribute). Previously an unhandled
+      // throw here silently starved tribe-key distribution. Failures are surfaced
+      // (warn) instead of swallowed at debug level.
+      let vaultSync: { active: boolean; vaultBondIds: Set<string> | null } = { active: false, vaultBondIds: null };
+      try {
+        vaultSync = await pullPrfVault();
+        setPrfSyncActive(vaultSync.active);
+      } catch (err) {
+        console.warn('[key-sync] Phase V (vault auto-pull) failed (non-fatal; later phases continue):', err);
+      }
 
       // ========================================
       // PHASE 0: Identity Key Initialization
       // ========================================
       // Ensure this browser has an RSA identity key pair for tribe key distribution.
 
-      let identityKey = await getIdentityKey(user.id);
-      if (!identityKey) {
-        console.debug('[key-sync] Generating new RSA identity key pair...');
-        const keyPair = await generateIdentityKeyPair();
-        const publicKeyJwk = await exportIdentityPublicKey(keyPair.publicKey);
+      let identityKey: Awaited<ReturnType<typeof getIdentityKey>> | null = null;
+      try {
+        identityKey = await getIdentityKey(user.id);
+        if (!identityKey) {
+          console.debug('[key-sync] Generating new RSA identity key pair...');
+          const keyPair = await generateIdentityKeyPair();
+          const publicKeyJwk = await exportIdentityPublicKey(keyPair.publicKey);
 
-        const identityResult = await publishEncryptionPublicKey(publicKeyJwk);
+          const identityResult = await publishEncryptionPublicKey(publicKeyJwk);
 
-        if (identityResult.accepted) {
-          // We won the race — store our key
+          // ALWAYS keep this device's own key pair locally. Each device has its
+          // OWN identity key and registers itself in user_device_keys (Phase 0.5),
+          // so it receives DEVICE-TARGETED tribe key grants and can unwrap them on
+          // its own — no vault restore required to participate. (Multi-device.)
           await storeIdentityKey(user.id, keyPair.privateKey, publicKeyJwk);
           identityKey = await getIdentityKey(user.id);
-          newKeysGenerated = true;
-          console.debug('[key-sync] Published RSA identity public key to server');
-        } else {
-          // Another device already published — DON'T store the locally generated key.
-          // Vault restore is needed to recover the identity private key from the other device.
-          console.warn(
-            '[key-sync] Identity key already published by another device. ' +
-            'Vault restore needed for tribe key operations.'
-          );
-          // identityKey remains null — tribe key operations will be skipped this cycle
+
+          if (identityResult.accepted) {
+            // This device won the legacy single-identity slot (users.encryption_public_key).
+            // Push to the vault so other devices can recover this canonical identity.
+            newKeysGenerated = true;
+            console.debug('[key-sync] Published RSA identity public key (primary identity for this user)');
+          } else {
+            // Another device owns the shared legacy identity slot. That's fine —
+            // this device uses its OWN key for device-targeted grants. We do NOT
+            // push to the vault (so we don't clobber the canonical identity).
+            // A vault restore is only needed to read OLD content (bonds / tribe
+            // posts) that was granted before this device existed.
+            console.info(
+              '[key-sync] Legacy identity slot held by another device — this device ' +
+              'will use its own device key for new tribe-key grants (no restore needed to participate).'
+            );
+          }
         }
+      } catch (err) {
+        console.warn('[key-sync] Phase 0 (identity key) failed (non-fatal; later phases continue):', err);
       }
 
       // ========================================
@@ -398,8 +436,15 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       // PHASE A: Bond shared secret sync
       // ========================================
 
-      const allBonds = await getBonds();
-      const userBonds = allBonds.filter(b => b.targetType === 'user');
+      // Guard the bonds fetch (network): a failure here must not abort tribe-key
+      // phases B/C. On failure we proceed with no bonds this cycle.
+      let userBonds: Awaited<ReturnType<typeof getBonds>> = [];
+      try {
+        const allBonds = await getBonds();
+        userBonds = allBonds.filter(b => b.targetType === 'user');
+      } catch (err) {
+        console.warn('[key-sync] Phase A (getBonds) failed (non-fatal; tribe-key phases continue):', err);
+      }
       setTotalBondCount(userBonds.length);
 
       let ready = 0;
@@ -576,6 +621,9 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       // Fetch incoming grants and unwrap them using our RSA identity key.
 
       let tribeReady = 0;
+      // True if we end this phase holding grant(s) we cannot unwrap (no usable
+      // identity private key) — surfaced so the UI can prompt a vault restore.
+      let restoreNeeded = false;
 
       try {
         const { getMyTribeKeyGrants } = await import('@/lib/actions/tribe-actions');
@@ -586,14 +634,17 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
         for (const grant of grants) {
           try {
             // Check if we already have this tribe key cached at this version
-            const cached = await getTribeKey(grant.tribeId);
+            const cached = await getTribeKey(user!.id, grant.tribeId);
             if (cached && cached.version === grant.keyVersion) {
               tribeReady++;
               continue;
             }
 
             if (!identityKey) {
-              console.warn(`[key-sync] Cannot unwrap tribe key for ${grant.tribeId} — Identity private key missing`);
+              // We have a grant but no identity key to unwrap it with → the only
+              // recovery is restoring this user's vault on this device.
+              restoreNeeded = true;
+              console.warn(`[key-sync] Cannot unwrap tribe key for ${grant.tribeId} — no identity private key on this device (vault restore needed)`);
               continue;
             }
 
@@ -604,25 +655,34 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
             );
 
             // Cache locally in IndexedDB
-            await storeTribeKey(grant.tribeId, tribeKey, grant.keyVersion);
+            await storeTribeKey(user!.id, grant.tribeId, tribeKey, grant.keyVersion);
             tribeReady++;
+            // A newly received tribe key should be backed up on the next vault push.
+            newKeysGenerated = true;
             console.debug(`[key-sync] Cached tribe key for ${grant.tribeId.substring(0, 12)}... (v${grant.keyVersion})`);
           } catch (err) {
             // OperationError = RSA key mismatch (grant wrapped with a different key pair).
-            // This happens when the user cleared browser data or switched devices,
-            // generating a new RSA identity key pair while old grants remain on the server.
-            // Fix: delete the stale grant so Phase C (admin-side) re-issues with our current key.
             if (err instanceof DOMException && err.name === 'OperationError') {
-              console.warn(`[key-sync] Stale grant detected for ${grant.tribeId.substring(0, 12)}... — deleting for re-issue`);
-              try {
-                const { deleteTribeKeyGrantForSelf } = await import('@/lib/actions/tribe-actions');
-                await deleteTribeKeyGrantForSelf(grant.grantId);
-                // Re-publish our current identity public key to ensure admin has the latest
-                if (identityKey) {
-                  await publishEncryptionPublicKey(identityKey.publicKeyJwk);
+              const isOurDeviceGrant = !!currentDeviceKeyId && grant.deviceKeyId === currentDeviceKeyId;
+              if (isOurDeviceGrant) {
+                // A grant explicitly targeted at THIS device that we can't unwrap is
+                // genuinely stale (our key changed). Delete it so an admin re-issues
+                // to our current device key.
+                console.warn(`[key-sync] Stale device grant for ${grant.tribeId.substring(0, 12)}... — deleting for re-issue`);
+                try {
+                  const { deleteTribeKeyGrantForSelf } = await import('@/lib/actions/tribe-actions');
+                  await deleteTribeKeyGrantForSelf(grant.grantId);
+                  if (identityKey) await publishEncryptionPublicKey(identityKey.publicKeyJwk);
+                } catch (cleanupErr) {
+                  console.warn(`[key-sync] Failed to clean up stale device grant:`, cleanupErr);
                 }
-              } catch (cleanupErr) {
-                console.warn(`[key-sync] Failed to clean up stale grant:`, cleanupErr);
+              } else {
+                // A LEGACY (deviceKeyId=null) grant wrapped to the canonical identity
+                // that this (secondary) device can't unwrap. It belongs to another
+                // device — do NOT delete it. We rely on our own device-targeted grant
+                // (issued by Phase C). If we don't have one yet, we're simply waiting
+                // for an admin to distribute it.
+                console.debug(`[key-sync] Skipping legacy grant for ${grant.tribeId.substring(0, 12)}... (not for this device)`);
               }
             } else {
               console.warn(`[key-sync] Error processing tribe key for ${grant.tribeId.substring(0, 12)}...:`, err);
@@ -634,6 +694,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       }
 
       setTribeKeysReady(tribeReady);
+      setTribeKeyRestoreNeeded(restoreNeeded);
 
       // ========================================
       // PHASE C: Tribe key generation & distribution
@@ -661,7 +722,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
             const access = await checkTribeAccess(tribe.id);
 
             let activeKey = await getActiveTribeKeyForTribe(tribe.id);
-            let localTribeKey = await getTribeKey(tribe.id);
+            let localTribeKey = await getTribeKey(user!.id, tribe.id);
 
             const isAdmin = access === 'founder' || access === 'speaker' || access === 'platform_admin';
 
@@ -680,8 +741,8 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
               }
 
               // Cache locally
-              await storeTribeKey(tribe.id, newKey, 1);
-              localTribeKey = { tribeId: tribe.id, key: newKey, version: 1, receivedAt: Date.now() };
+              await storeTribeKey(user!.id, tribe.id, newKey, 1);
+              localTribeKey = { scope: `${user!.id}::${tribe.id}`, userId: user!.id, tribeId: tribe.id, key: newKey, version: 1, receivedAt: Date.now() };
               activeKey = await getActiveTribeKeyForTribe(tribe.id);
             }
 
@@ -830,6 +891,25 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
     performSync();
   }, [performSync]);
 
+  // WS-2: socket-driven distribution. React immediately to server pushes:
+  //  - 'tribe-key-request'   → we're a key-holder; run a sync so Phase C grants the new member.
+  //  - 'tribe-key-available' → a grant for us was just issued; run a sync so Phase B pulls it.
+  // The polling loop remains as a safety net for when the socket is down.
+  useEffect(() => {
+    if (!user?.id || typeof window === 'undefined') return;
+    if (!process.env.NEXT_PUBLIC_WS_RELAY_URL) return;
+    let unsubReq: (() => void) | undefined;
+    let unsubAvail: (() => void) | undefined;
+    try {
+      const { TribesWebSocket } = require('@/lib/ws-client');
+      const ws = TribesWebSocket.getInstance();
+      const onEvent = () => { triggerSync(); };
+      unsubReq = ws.subscribe('tribe-key-request', onEvent);
+      unsubAvail = ws.subscribe('tribe-key-available', onEvent);
+    } catch { /* WS optional */ }
+    return () => { unsubReq?.(); unsubAvail?.(); };
+  }, [user?.id, triggerSync]);
+
   /**
    * Re-generate ECDH keys for bonds that have server-side keys but no local key.
    * This is the "escape hatch" when no vault backup is available.
@@ -900,6 +980,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
       initialSyncDone,
       isSyncing,
       prfSyncActive,
+      tribeKeyRestoreNeeded,
       triggerSync,
       rekeyOrphanedBonds,
     }}>

@@ -260,7 +260,7 @@ export function ComposeBox({
             // Private tribe — encryption is ALWAYS required regardless of member count
             const { getTribeKey } = await import('@/lib/crypto/key-store');
             const primaryTribeId = selectedTribeIds[0];
-            const cachedTribeKey = primaryTribeId ? await getTribeKey(primaryTribeId) : null;
+            const cachedTribeKey = (primaryTribeId && user?.id) ? await getTribeKey(user.id, primaryTribeId) : null;
 
             if (!cachedTribeKey) {
               // No tribe key available — block the post entirely

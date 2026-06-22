@@ -137,7 +137,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
       let encPayload: { ciphertextBase64: string; iv: string } | undefined;
       if (tribeId && state.tribe && !state.tribe.isPublic) {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(tribeId);
+        const cachedTribeKey = user?.id ? await getTribeKey(user.id, tribeId) : null;
         if (!cachedTribeKey) {
           throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
         }
@@ -184,7 +184,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
         if (effectiveTribeId) {
           // TRIBE PATH: try tribe group key first
           const { getTribeKey } = await import('@/lib/crypto/key-store');
-          const cachedTribeKey = await getTribeKey(effectiveTribeId);
+          const cachedTribeKey = user?.id ? await getTribeKey(user.id, effectiveTribeId) : null;
 
           if (cachedTribeKey) {
             const { decryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
@@ -265,7 +265,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
     decryptText();
     return () => { active = false; };
-  }, [post.id, post.isEncrypted, post.ciphertextBase64, post.encryptionIv, post.tribeId, tribeId]);
+  }, [post.id, post.isEncrypted, post.ciphertextBase64, post.encryptionIv, post.tribeId, tribeId, user?.id]);
 
   // Display content: decrypted text for encrypted posts, raw content for public
   const displayContent = post.isEncrypted ? (decryptedContent ?? '') : post.content;

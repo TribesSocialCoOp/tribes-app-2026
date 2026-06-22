@@ -365,7 +365,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     const checkKey = async () => {
       try {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const key = await getTribeKey(tribeId);
+        const key = currentUserId ? await getTribeKey(currentUserId, tribeId) : null;
         if (active) {
           dispatch({ type: 'SET_HAS_TRIBE_KEY', payload: !!key });
         }
@@ -383,7 +383,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       active = false;
       clearInterval(interval);
     };
-  }, [tribeId, state.isMember, state.hasTribeKey]);
+  }, [tribeId, state.isMember, state.hasTribeKey, currentUserId]);
 
   // ── Immediate key generation for founders of private tribes ──
   // When a founder/admin enters a private tribe without a cached key,
@@ -408,7 +408,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       const recheckTimeout = setTimeout(async () => {
         try {
           const { getTribeKey } = await import('@/lib/crypto/key-store');
-          const key = await getTribeKey(tribeId);
+          const key = currentUserId ? await getTribeKey(currentUserId, tribeId) : null;
           if (key) {
             dispatch({ type: 'SET_HAS_TRIBE_KEY', payload: true });
           }
@@ -416,7 +416,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       }, 3000);
       return () => clearTimeout(recheckTimeout);
     }
-  }, [tribeId, state.isMember, state.hasTribeKey, isTribeAdmin, state.tribe, triggerSync, dispatch]);
+  }, [tribeId, state.isMember, state.hasTribeKey, isTribeAdmin, state.tribe, triggerSync, dispatch, currentUserId]);
 
   // ── Handlers ──
   const handleInitiateJoinTribe = useCallback(() => {
@@ -558,7 +558,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       let encPayload: { ciphertextBase64: string; iv: string } | undefined;
       if (state.tribe && !state.tribe.isPublic) {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(state.tribe.id);
+        const cachedTribeKey = currentUserId ? await getTribeKey(currentUserId, state.tribe.id) : null;
         if (!cachedTribeKey) {
           throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
         }
@@ -585,7 +585,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     } catch (e: unknown) {
       handleError(e, 'Comment Failed');
     }
-  }, [state.commentDialog.target, state.tribe, toast]);
+  }, [state.commentDialog.target, state.tribe, toast, currentUserId]);
 
   const handleCreatePost = useCallback(async (values: PostFormValues) => {
     if (!state.tribe) return;

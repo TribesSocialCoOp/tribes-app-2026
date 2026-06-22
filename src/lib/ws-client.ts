@@ -13,7 +13,7 @@
  */
 
 type MessageHandler = (data: any) => void;
-type WSMessageType = 'message' | 'typing' | 'presence' | 'read' | 'reaction' | 'edit' | 'delete' | 'feed-update' | 'activity';
+type WSMessageType = 'message' | 'typing' | 'presence' | 'read' | 'reaction' | 'edit' | 'delete' | 'feed-update' | 'activity' | 'tribe-key-request' | 'tribe-key-available';
 
 class TribesWebSocket {
   private static instance: TribesWebSocket | null = null;

@@ -155,7 +155,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
       let encPayload: { ciphertextBase64: string; iv: string } | undefined;
       if (item.isEncrypted && item.tribeId) {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(item.tribeId);
+        const cachedTribeKey = user?.id ? await getTribeKey(user.id, item.tribeId) : null;
         if (!cachedTribeKey) {
           throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
         }
@@ -623,7 +623,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
               let encPayload: { ciphertextBase64: string; iv: string } | undefined;
               if (item.isEncrypted && item.tribeId) {
                 const { getTribeKey } = await import('@/lib/crypto/key-store');
-                const cachedTribeKey = await getTribeKey(item.tribeId);
+                const cachedTribeKey = user?.id ? await getTribeKey(user.id, item.tribeId) : null;
                 if (!cachedTribeKey) {
                   throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
                 }
