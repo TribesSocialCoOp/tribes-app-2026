@@ -613,20 +613,55 @@ export async function pushToUserSocket(
  * immediate key-sync cycle so a newly-joined member is granted the tribe key
  * without waiting for the granter's 15–60s polling interval. Fire-and-forget.
  */
+// Throttle the granter PUSH (not the socket nudge) so a burst of joins doesn't
+// spam admins. Key = tribeId. The socket nudge below is always sent (cheap, only
+// reaches already-open tabs).
+const tribeKeyGranterPushThrottle = new Map<string, number>();
+const TRIBE_KEY_GRANTER_PUSH_THROTTLE_MS = 5 * 60 * 1000;
+
 export async function notifyTribeKeyGranters(tribeId: string): Promise<void> {
   try {
     const { db } = await import('@/db');
-    const { tribeMembers } = await import('@/db/schema');
+    const { tribeMembers, tribes } = await import('@/db/schema');
     const { eq, and, inArray } = await import('drizzle-orm');
+
     const granters = await db.select({ userId: tribeMembers.userId })
       .from(tribeMembers)
       .where(and(
         eq(tribeMembers.tribeId, tribeId),
         inArray(tribeMembers.role, ['founder', 'admin', 'speaker']),
       ));
+    if (granters.length === 0) return;
+
+    // 1. Socket nudge: instantly tells ONLINE granters to run a sync (Phase C).
     await Promise.all(
       granters.map(g => pushToUserSocket(g.userId, { type: 'tribe-key-request', tribeId }).catch(() => {})),
     );
+
+    // 2. Push nudge: for OFFLINE granters, so they come online and grant. Throttled.
+    const last = tribeKeyGranterPushThrottle.get(tribeId);
+    if (last && Date.now() - last < TRIBE_KEY_GRANTER_PUSH_THROTTLE_MS) return;
+    tribeKeyGranterPushThrottle.set(tribeId, Date.now());
+
+    const [tribe] = await db.select({ name: tribes.name }).from(tribes).where(eq(tribes.id, tribeId)).limit(1);
+    const tribeName = tribe?.name ?? 'your Tribe';
+    const { getPreferences } = await import('./notification-service');
+    const { sendPushToMultiple } = await import('./push-service');
+    const eligible: string[] = [];
+    for (const g of granters) {
+      try {
+        const prefs = await getPreferences(g.userId);
+        if (prefs.tribeActivityEnabled && prefs.pushEnabled) eligible.push(g.userId);
+      } catch { eligible.push(g.userId); }
+    }
+    if (eligible.length > 0) {
+      await sendPushToMultiple(eligible, {
+        title: 'A member is waiting for access',
+        body: `Someone joined ${tribeName} and needs encryption keys. Open Tribes to grant access.`,
+        url: '/tribes',
+        tag: `tribe-key-wait-${tribeId}`,
+      }).catch(() => {});
+    }
   } catch (err) {
     console.warn(`[realtime-dispatch] notifyTribeKeyGranters failed for ${tribeId}:`, err);
   }
