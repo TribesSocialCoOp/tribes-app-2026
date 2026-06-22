@@ -75,10 +75,15 @@ export interface StoredVaultWrappingKey {
 // ============================================================
 
 const DB_NAME = 'tribes_keystore';
-const DB_VERSION = 6; // 1: bond_keys, 2: shared_secrets, 3: identity_keys, 4: multi-version shared_secrets, 5: vault_keys, 6: user-scoped tribe_keys
+const DB_VERSION = 7; // 1: bond_keys, 2: shared_secrets, 3: identity_keys, 4: multi-version shared_secrets, 5: vault_keys, 6: (removed) destructive tribe rescope, 7: user-scoped tribe_keys (non-destructive, new store)
 const BOND_KEYS_STORE = 'bond_keys';
 const SHARED_SECRETS_STORE = 'shared_secrets';
-const TRIBE_KEYS_STORE = 'tribe_keys';
+// Canonical, user-scoped tribe-key store (keyPath 'scope' = `${userId}::${tribeId}`).
+const TRIBE_KEYS_STORE = 'tribe_keys_v2';
+// Legacy tribe-key store (keyPath 'tribeId', pre-user-scoping). NEVER deleted —
+// read as a fallback and lazily adopted into the scoped store, so migrations
+// never drop a cached tribe key.
+const LEGACY_TRIBE_KEYS_STORE = 'tribe_keys';
 const IDENTITY_KEYS_STORE = 'identity_keys';
 const VAULT_KEYS_STORE = 'vault_keys';
 
@@ -110,13 +115,12 @@ function openDatabase(): Promise<IDBDatabase> {
         store.createIndex('bondId', 'bondId', { unique: false });
       }
 
-      // V2: tribe_keys store (group symmetric keys)
-      // V6: Recreate with a user-scoped composite keyPath (`${userId}::${tribeId}`).
-      // Old entries (keyPath 'tribeId') are dropped — tribe keys are recoverable
-      // from server grants + the vault, so they simply re-sync on next cycle.
-      if (oldVersion < 6 && db.objectStoreNames.contains(TRIBE_KEYS_STORE)) {
-        db.deleteObjectStore(TRIBE_KEYS_STORE);
-      }
+      // V7: user-scoped tribe-key store (keyPath 'scope' = `${userId}::${tribeId}`).
+      // NON-DESTRUCTIVE: we create a NEW store and leave the legacy `tribe_keys`
+      // store untouched. getTribeKey() reads the legacy store as a fallback and
+      // lazily adopts entries into the scoped store, so an upgrade NEVER drops a
+      // cached tribe key. (A previous v6 attempt deleted the store — that was a
+      // bug and has been removed.)
       if (!db.objectStoreNames.contains(TRIBE_KEYS_STORE)) {
         const store = db.createObjectStore(TRIBE_KEYS_STORE, { keyPath: 'scope' });
         store.createIndex('userId', 'userId', { unique: false });
@@ -611,58 +615,124 @@ export async function storeTribeKey(
 
 /**
  * Retrieves a tribe's group symmetric key for a specific user.
+ *
+ * Reads the user-scoped store first. On a miss, falls back to the LEGACY
+ * (pre-user-scoping) `tribe_keys` store keyed by tribeId and, if found, lazily
+ * ADOPTS it into the scoped store for the current user. This makes the
+ * user-scoping migration non-destructive — a cached key is never lost.
  */
 export async function getTribeKey(userId: string, tribeId: string): Promise<StoredTribeKey | null> {
   const db = await openDatabase();
+  const hasLegacy = db.objectStoreNames.contains(LEGACY_TRIBE_KEYS_STORE);
 
-  return new Promise((resolve, reject) => {
+  // 1. Canonical user-scoped store.
+  const scoped = await new Promise<StoredTribeKey | null>((resolve, reject) => {
     const tx = db.transaction(TRIBE_KEYS_STORE, 'readonly');
-    const store = tx.objectStore(TRIBE_KEYS_STORE);
-    const request = store.get(tribeKeyScope(userId, tribeId));
-
+    const request = tx.objectStore(TRIBE_KEYS_STORE).get(tribeKeyScope(userId, tribeId));
     request.onsuccess = () => resolve(request.result ?? null);
     request.onerror = () => reject(new Error(`Failed to get tribe key for ${tribeId}`));
-
-    tx.oncomplete = () => db.close();
   });
+  if (scoped) { db.close(); return scoped; }
+
+  // 2. Legacy fallback (keyPath 'tribeId').
+  let legacy: StoredTribeKey | null = null;
+  if (hasLegacy) {
+    legacy = await new Promise<StoredTribeKey | null>((resolve) => {
+      try {
+        const tx = db.transaction(LEGACY_TRIBE_KEYS_STORE, 'readonly');
+        const request = tx.objectStore(LEGACY_TRIBE_KEYS_STORE).get(tribeId);
+        request.onsuccess = () => resolve(request.result ?? null);
+        request.onerror = () => resolve(null);
+      } catch { resolve(null); }
+    });
+  }
+  db.close();
+  if (!legacy || !legacy.key) return null;
+
+  // Adopt the legacy key into the scoped store for this user.
+  const adopted: StoredTribeKey = {
+    scope: tribeKeyScope(userId, tribeId),
+    userId,
+    tribeId,
+    key: legacy.key,
+    version: legacy.version ?? 1,
+    receivedAt: legacy.receivedAt ?? Date.now(),
+  };
+  try { await storeTribeKey(userId, tribeId, adopted.key, adopted.version); } catch { /* best-effort */ }
+  return adopted;
 }
 
 /**
- * Retrieves all tribe keys cached for a specific user.
+ * Retrieves all tribe keys for a user (scoped store + legacy fallback, attributed
+ * to this user). Used for vault backup.
  */
 export async function getAllTribeKeys(userId: string): Promise<StoredTribeKey[]> {
   const db = await openDatabase();
+  const hasLegacy = db.objectStoreNames.contains(LEGACY_TRIBE_KEYS_STORE);
 
-  return new Promise((resolve, reject) => {
+  const scoped = await new Promise<StoredTribeKey[]>((resolve, reject) => {
     const tx = db.transaction(TRIBE_KEYS_STORE, 'readonly');
-    const store = tx.objectStore(TRIBE_KEYS_STORE);
-    const index = store.index('userId');
-    const request = index.getAll(userId);
-
-    request.onsuccess = () => resolve(request.result);
+    const request = tx.objectStore(TRIBE_KEYS_STORE).index('userId').getAll(userId);
+    request.onsuccess = () => resolve(request.result ?? []);
     request.onerror = () => reject(new Error('Failed to list tribe keys'));
-
-    tx.oncomplete = () => db.close();
   });
+
+  let legacyAll: StoredTribeKey[] = [];
+  if (hasLegacy) {
+    legacyAll = await new Promise<StoredTribeKey[]>((resolve) => {
+      try {
+        const tx = db.transaction(LEGACY_TRIBE_KEYS_STORE, 'readonly');
+        const request = tx.objectStore(LEGACY_TRIBE_KEYS_STORE).getAll();
+        request.onsuccess = () => resolve(request.result ?? []);
+        request.onerror = () => resolve([]);
+      } catch { resolve([]); }
+    });
+  }
+  db.close();
+
+  const haveTribeIds = new Set(scoped.map(s => s.tribeId));
+  const merged = [...scoped];
+  for (const l of legacyAll) {
+    if (l && l.tribeId && l.key && !haveTribeIds.has(l.tribeId)) {
+      merged.push({
+        scope: tribeKeyScope(userId, l.tribeId),
+        userId,
+        tribeId: l.tribeId,
+        key: l.key,
+        version: l.version ?? 1,
+        receivedAt: l.receivedAt ?? Date.now(),
+      });
+    }
+  }
+  return merged;
 }
 
 /**
- * Deletes a tribe's group key from local storage.
+ * Deletes a tribe's group key from local storage (scoped + legacy).
  * Called when the user leaves a tribe or the key is rotated.
  */
 export async function deleteTribeKey(userId: string, tribeId: string): Promise<void> {
   const db = await openDatabase();
+  const hasLegacy = db.objectStoreNames.contains(LEGACY_TRIBE_KEYS_STORE);
 
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const tx = db.transaction(TRIBE_KEYS_STORE, 'readwrite');
-    const store = tx.objectStore(TRIBE_KEYS_STORE);
-    const request = store.delete(tribeKeyScope(userId, tribeId));
-
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(new Error(`Failed to delete tribe key for ${tribeId}`));
-
-    tx.oncomplete = () => db.close();
+    tx.objectStore(TRIBE_KEYS_STORE).delete(tribeKeyScope(userId, tribeId));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(new Error(`Failed to delete tribe key for ${tribeId}`));
   });
+
+  if (hasLegacy) {
+    await new Promise<void>((resolve) => {
+      try {
+        const tx = db.transaction(LEGACY_TRIBE_KEYS_STORE, 'readwrite');
+        tx.objectStore(LEGACY_TRIBE_KEYS_STORE).delete(tribeId);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      } catch { resolve(); }
+    });
+  }
+  db.close();
 }
 
 // ============================================================
