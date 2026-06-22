@@ -165,6 +165,10 @@ export const VaultBackupSection: React.FC = () => {
       toast({ variant: 'destructive', title: 'Mismatch', description: 'Passphrases don\'t match.' });
       return;
     }
+    if (!user?.id) {
+      toast({ variant: 'destructive', title: 'Not signed in', description: 'Please sign in again before backing up your keys.' });
+      return;
+    }
 
     setIsBackingUp(true);
     setBackupProgress(10);
@@ -183,7 +187,7 @@ export const VaultBackupSection: React.FC = () => {
         }
       }
 
-      const { encryptedVault, salt } = await createVaultBackup(password, user?.id ?? '', identityKeyParam);
+      const { encryptedVault, salt } = await createVaultBackup(password, user.id, identityKeyParam);
       setBackupProgress(60);
 
       const encryptedVaultBase64 = btoa(String.fromCharCode(...new Uint8Array(encryptedVault)));

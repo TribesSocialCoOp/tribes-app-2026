@@ -105,6 +105,11 @@ export async function createVaultBackup(
   if (!passphrase || passphrase.length < 12) {
     throw new Error('Recovery passphrase must be at least 12 characters');
   }
+  // Tribe keys are user-scoped; a backup without a real user would silently
+  // omit (or mis-scope) them. Require an explicit userId instead of guessing.
+  if (!userId) {
+    throw new Error('Cannot create a vault backup without a signed-in user');
+  }
 
   // Collect all stored bond keys
   const storedKeys = await getAllBondKeys();
