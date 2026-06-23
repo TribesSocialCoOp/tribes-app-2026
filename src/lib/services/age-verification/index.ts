@@ -13,10 +13,12 @@ import { ProviderUnavailableError } from './types';
 import { devProvider } from './providers/dev';
 import { googleWalletProvider } from './providers/google-wallet';
 import { appleWalletProvider } from './providers/apple-wallet';
+import { privatelyProvider } from './providers/privately';
 
 const REGISTRY: Record<string, AgeVerificationProvider> = {
   google_wallet: googleWalletProvider,
   apple_wallet: appleWalletProvider,
+  privately: privatelyProvider,
   dev: devProvider,
 };
 

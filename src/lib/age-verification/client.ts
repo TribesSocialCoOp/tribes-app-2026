@@ -75,3 +75,14 @@ export async function runWalletVerification(provider: WalletProvider): Promise<{
     attestation: { verifierState, origin, response },
   }));
 }
+
+/**
+ * Run on-device (Privately) age verification — the universal path that also works
+ * on iOS (no wallet / DC-API). The device produces a signed credential; the server
+ * validates it. Resolves to the verified method on success; throws otherwise.
+ */
+export async function runOnDeviceVerification(userId: string): Promise<{ verified: boolean; method: string }> {
+  const { runOnDeviceAgeCheck } = await import('./on-device-age');
+  const attestation = await runOnDeviceAgeCheck(userId);
+  return unwrap(await submitAgeVerification({ provider: 'privately', attestation }));
+}
