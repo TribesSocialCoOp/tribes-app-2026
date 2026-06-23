@@ -32,7 +32,11 @@ export const users = pgTable('users', {
   // null = unverified. We store ONLY the pass/fail outcome + method; never a birthdate,
   // name, or credential. All v1 methods are high-assurance / cryptographically verifiable.
   ageVerifiedAt: timestamp('age_verified_at', { withTimezone: true }),
-  ageVerificationMethod: text('age_verification_method'), // 'google_zkp' | 'apple_wallet_mdl' | 'apple_wallet_passport' | 'vendor'
+  ageVerificationMethod: text('age_verification_method'), // 'google_zkp' | 'apple_wallet_mdl' | 'apple_wallet_passport' | 'privately' | 'vendor'
+  // Self-attested 18+ "show adult content" opt-in (issue #32). WEB-SET ONLY (Apple
+  // Reddit-pattern: no in-app toggle). null = NSFW hidden everywhere. Holds no PII —
+  // it's just the moment the user attested 18+ and chose to see adult content.
+  showAdultContentAt: timestamp('show_adult_content_at', { withTimezone: true }),
   slug: text('slug').unique(),
   username: text('username').unique(),
   passwordHash: text('password_hash'),
