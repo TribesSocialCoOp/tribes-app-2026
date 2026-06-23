@@ -65,10 +65,14 @@ async function main() {
   // 4. RP_ID sanity (informational — Google specifies the exact client_id).
   if (cert) {
     const sha = createHash('sha256').update(cert.raw).digest();
-    if (cfg.rpId === sha.toString('base64url') || cfg.rpId === sha.toString('hex')) {
-      console.log('✓ RP_ID matches sha256(cert) (base64url/hex)');
+    // Google's client_id is "x509_hash:" + base64url(sha256(DER)) with no padding.
+    const rid = cfg.rpId.replace(/^x509_hash:/, '');
+    const expected = sha.toString('base64url'); // Node base64url is already unpadded
+    if (rid === expected || rid === sha.toString('hex')) {
+      console.log('✓ RP_ID matches x509_hash(cert) (sha256 DER, base64url)');
     } else {
-      console.log(`• RP_ID = ${cfg.rpId.slice(0, 24)}… does not match sha256(cert) — may be fine, just confirm it's exactly the client_id Google issued.`);
+      console.log(`• RP_ID = ${cfg.rpId.slice(0, 28)}… does not match x509_hash(cert).`);
+      console.log(`  expected: x509_hash:${expected}`);
     }
   }
 
