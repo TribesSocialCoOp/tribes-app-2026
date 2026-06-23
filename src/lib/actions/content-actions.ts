@@ -1186,14 +1186,15 @@ export async function getPostsForTribe(
     throw new Error('Tribe not found or access denied.');
   }
 
-  // SECURITY: NSFW tribes require high-assurance 18+ verification to VIEW content
-  // (issue #32), enforced at the content boundary — independent of membership. This
-  // closes the gap where a tribe flipped to NSFW, a public NSFW tribe, or any
-  // un-gated membership path would otherwise serve NSFW content to an unverified
-  // user. Throws AGE_VERIFICATION_REQUIRED so the client launches the verify flow.
+  // SECURITY: NSFW tribes are gated at the content boundary (issue #32) — independent
+  // of membership. The geo-policy gate: geo-blocked region → blocked; otherwise the
+  // user needs the web-set 18+ self-attest opt-in (or an optional wallet verify).
+  // Sentinels let the client show the right thing (blocked screen vs opt-in prompt).
   if (tribe.isNsfw) {
-    const { requireAgeVerified } = await import('./shared');
-    await requireAgeVerified();
+    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
+    const gate = await resolveNsfwGate({ isNsfw: true, userId });
+    if (gate.decision === 'blocked') throw new Error('NSFW_REGION_BLOCKED');
+    if (gate.decision === 'needs_optin') throw new Error('NSFW_OPT_IN_REQUIRED');
   }
 
   // SECURITY: A private tribe may now be publicly LISTED (e.g. NSFW tribes opt in to

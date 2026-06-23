@@ -248,6 +248,10 @@ export default function TribesPage() {
         toast({ title: "Request Already Sent", description: `Your request to join ${tribeToJoin.name} is still pending approval.` });
       } else if (result === 'age_required') {
         openAgeGate({ onVerified: () => handleConfirmJoin(tribeToJoin, selectedAlias, aliasAvatar) });
+      } else if (result === 'opt_in_required') {
+        toast({ title: "Enable adult content", description: `Turn on "Show adult content" in Settings on the web (tribes.app) to join ${tribeToJoin.name}.` });
+      } else if (result === 'region_blocked') {
+        toast({ title: "Not available in your region", description: "Adult content can't be shown where you are due to local law.", variant: "destructive" });
       } else {
         toast({ title: "Cannot Join", description: `Your request to join ${tribeToJoin.name} was rejected.`, variant: "destructive" });
       }

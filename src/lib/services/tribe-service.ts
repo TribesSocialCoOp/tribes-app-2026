@@ -62,12 +62,12 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
   // tribes derive discoverability from isPublic, so isListed stays false for them.
   const isListed = isNsfw ? (payload.isListed ?? true) : false;
 
-  // NSFW age gate (policy §5 / ToS): creating an NSFW tribe requires verified 18+.
+  // NSFW gate (issue #32): geo-block region, else require the web-set 18+ opt-in.
   if (isNsfw && payload.createdBy) {
-    const { users: usersTable } = await import('@/db/schema');
-    const [u] = await db.select({ ageVerifiedAt: usersTable.ageVerifiedAt })
-      .from(usersTable).where(eq(usersTable.id, payload.createdBy)).limit(1);
-    if (!u?.ageVerifiedAt) throw new Error('AGE_VERIFICATION_REQUIRED');
+    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
+    const gate = await resolveNsfwGate({ isNsfw: true, userId: payload.createdBy });
+    if (gate.decision === 'blocked') throw new Error('NSFW_REGION_BLOCKED');
+    if (gate.decision !== 'allow') throw new Error('NSFW_OPT_IN_REQUIRED');
   }
 
   await db.insert(tribes).values({
@@ -530,7 +530,7 @@ export async function checkPendingMembership(userId: string, tribeId: string): P
  * 
  * Bot friction: new/bot accounts with low reputation cannot join gated tribes.
  */
-export async function requestToJoinTribe(userId: string, tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending' | 'age_required'> {
+export async function requestToJoinTribe(userId: string, tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending' | 'age_required' | 'region_blocked' | 'opt_in_required'> {
   const { users } = await import('@/db/schema');
 
   // 1. Load tribe and user
@@ -574,10 +574,14 @@ export async function requestToJoinTribe(userId: string, tribeId: string, aliasN
     }
   }
 
-  // 5b. GATE: NSFW age verification (policy §5 / ToS — participation limited to verified 18+).
-  // Returned as a status (not thrown) so the client can cleanly launch the verification flow.
-  if (tribe.isNsfw && !user.ageVerifiedAt) {
-    return 'age_required';
+  // 5b. GATE: NSFW (issue #32). Returned as a status (not thrown) so the client can
+  // react: geo-blocked region → 'region_blocked'; otherwise needs the web-set 18+
+  // self-attest opt-in → 'opt_in_required'. Verified/opted-in users pass through.
+  if (tribe.isNsfw) {
+    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
+    const gate = await resolveNsfwGate({ isNsfw: true, userId });
+    if (gate.decision === 'blocked') return 'region_blocked';
+    if (gate.decision === 'needs_optin') return 'opt_in_required';
   }
 
   // 6. GATE: Tribe member cap
@@ -656,10 +660,10 @@ export async function joinTribeDirectly(userId: string, tribeId: string): Promis
   const [tribeRow] = await db.select({ isNsfw: tribes.isNsfw }).from(tribes)
     .where(eq(tribes.id, tribeId)).limit(1);
   if (tribeRow?.isNsfw) {
-    const { users: usersTable } = await import('@/db/schema');
-    const [u] = await db.select({ ageVerifiedAt: usersTable.ageVerifiedAt }).from(usersTable)
-      .where(eq(usersTable.id, userId)).limit(1);
-    if (!u?.ageVerifiedAt) throw new Error('AGE_VERIFICATION_REQUIRED');
+    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
+    const gate = await resolveNsfwGate({ isNsfw: true, userId });
+    if (gate.decision === 'blocked') throw new Error('NSFW_REGION_BLOCKED');
+    if (gate.decision !== 'allow') throw new Error('NSFW_OPT_IN_REQUIRED');
   }
 
   await db.insert(tribeMembers).values({

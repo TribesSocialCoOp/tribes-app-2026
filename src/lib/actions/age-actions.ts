@@ -34,6 +34,36 @@ export async function getAgeVerificationStatus(): Promise<AgeVerificationStatus>
   return { verified: Boolean(u?.ageVerifiedAt), providers };
 }
 
+/** Current user's web-set "show adult content" 18+ self-attest opt-in state. */
+export async function getAdultContentOptIn(): Promise<{ enabled: boolean }> {
+  const userId = await getCurrentUserId();
+  if (!userId) return { enabled: false };
+  const { db } = await import('@/db');
+  const { users } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [u] = await db.select({ showAdultContentAt: users.showAdultContentAt })
+    .from(users).where(eq(users.id, userId)).limit(1);
+  return { enabled: !!u?.showAdultContentAt };
+}
+
+/**
+ * Set/clear the 18+ "show adult content" self-attestation opt-in. WEB-ONLY by
+ * design (Apple Reddit-pattern: the enable switch must live on the website, never
+ * an in-app toggle). Holds no PII — just the opt-in timestamp.
+ */
+export const setAdultContentOptIn = withPublicErrors(async (enabled: boolean): Promise<{ enabled: boolean }> => {
+  const userId = await requireAuth();
+  const { getSurface } = await import('@/lib/geo/resolve-region');
+  if ((await getSurface()) !== 'web') {
+    throw new PublicError('Please enable adult content from the website (tribes.app), not the app.');
+  }
+  const { db } = await import('@/db');
+  const { users } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  await db.update(users).set({ showAdultContentAt: enabled ? new Date() : null }).where(eq(users.id, userId));
+  return { enabled };
+});
+
 /**
  * Build a signed OpenID4VP request for a wallet provider. The client passes the result
  * to navigator.credentials.get(); the returned verifierState is echoed back to

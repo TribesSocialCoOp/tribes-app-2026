@@ -92,14 +92,12 @@ export async function checkTribeAccess(tribeId: string): Promise<TribeAccessLeve
 
 export const createTribe = withPublicErrors(async (payload: Parameters<typeof import('@/lib/services/tribe-service').createTribe>[0]): Promise<Tribe> => {
   const userId = await requireVerifiedEmail();
-  // NSFW age gate (policy §5 / ToS): creating an NSFW tribe requires verified 18+.
+  // NSFW gate (issue #32): geo-block region, else require the web-set 18+ opt-in.
   if (payload?.isNsfw) {
-    const { db } = await import('@/db');
-    const { users } = await import('@/db/schema');
-    const { eq } = await import('drizzle-orm');
-    const [u] = await db.select({ ageVerifiedAt: users.ageVerifiedAt })
-      .from(users).where(eq(users.id, userId)).limit(1);
-    if (!u?.ageVerifiedAt) throw new PublicError('AGE_VERIFICATION_REQUIRED');
+    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
+    const gate = await resolveNsfwGate({ isNsfw: true, userId });
+    if (gate.decision === 'blocked') throw new PublicError('NSFW_REGION_BLOCKED');
+    if (gate.decision !== 'allow') throw new PublicError('NSFW_OPT_IN_REQUIRED');
   }
   // Subscription guard: check if user can create another tribe
   const { canCreateTribe } = await import('@/lib/services/subscription-guard');
@@ -221,7 +219,7 @@ export async function deleteTribe(tribeId: string): Promise<void> {
   return fn(userId, tribeId);
 }
 
-export async function requestToJoinTribe(tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending' | 'age_required'> {
+export async function requestToJoinTribe(tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending' | 'age_required' | 'region_blocked' | 'opt_in_required'> {
   const userId = await requireAuth();
   const { requestToJoinTribe: fn } = await import('@/lib/services/tribe-service');
   return fn(userId, tribeId, aliasName, aliasAvatar);

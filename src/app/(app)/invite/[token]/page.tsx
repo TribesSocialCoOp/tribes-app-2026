@@ -70,6 +70,12 @@ export default function InvitePage() {
       } else if (result === 'age_required') {
         setJoining(false);
         openAgeGate({ onVerified: () => handleConfirmJoin(selectedTribe, selectedAlias, aliasAvatar) });
+      } else if (result === 'opt_in_required') {
+        setJoining(false);
+        toast({ title: 'Enable adult content', description: 'Turn on "Show adult content" in Settings on the web (tribes.app) to join this tribe.' });
+      } else if (result === 'region_blocked') {
+        setJoining(false);
+        toast({ title: 'Not available in your region', description: "Adult content can't be shown where you are due to local law.", variant: 'destructive' });
       } else {
         toast({ title: 'Cannot Join', description: 'You do not meet the requirements to join this tribe.', variant: 'destructive' });
         setJoining(false);

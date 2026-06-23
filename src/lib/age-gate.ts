@@ -5,15 +5,24 @@
  * latter from whatever shape the error surfaces as (Error, {serverError}, string).
  */
 export const AGE_GATE_SENTINEL = 'AGE_VERIFICATION_REQUIRED';
+/** NSFW needs the web-set self-attest opt-in (the user hasn't enabled adult content). */
+export const NSFW_OPT_IN_SENTINEL = 'NSFW_OPT_IN_REQUIRED';
+/** NSFW is geo-blocked in the caller's region (KS/WY/SD/UK). */
+export const NSFW_BLOCKED_SENTINEL = 'NSFW_REGION_BLOCKED';
 
-export function isAgeGateError(error: unknown): boolean {
+/** True if `error` (Error | {serverError|message|error} | string) carries `sentinel`. */
+export function errorCarries(error: unknown, sentinel: string): boolean {
   if (!error) return false;
-  if (typeof error === 'string') return error.includes(AGE_GATE_SENTINEL);
-  if (error instanceof Error) return error.message.includes(AGE_GATE_SENTINEL);
+  if (typeof error === 'string') return error.includes(sentinel);
+  if (error instanceof Error) return error.message.includes(sentinel);
   if (typeof error === 'object') {
     const anyErr = error as Record<string, unknown>;
-    const candidates = [anyErr.serverError, anyErr.message, anyErr.error];
-    return candidates.some((c) => typeof c === 'string' && c.includes(AGE_GATE_SENTINEL));
+    return [anyErr.serverError, anyErr.message, anyErr.error]
+      .some((c) => typeof c === 'string' && c.includes(sentinel));
   }
   return false;
 }
+
+export const isAgeGateError = (error: unknown) => errorCarries(error, AGE_GATE_SENTINEL);
+export const isNsfwOptInError = (error: unknown) => errorCarries(error, NSFW_OPT_IN_SENTINEL);
+export const isNsfwBlockedError = (error: unknown) => errorCarries(error, NSFW_BLOCKED_SENTINEL);

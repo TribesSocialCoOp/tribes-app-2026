@@ -25,7 +25,7 @@ import { uploadFile } from '@/lib/upload';
 import { useActionError } from '@/hooks/use-action-error';
 import { AuthGuard } from "@/components/providers/auth-guard";
 import { useAgeGate } from "@/components/providers/age-gate-provider";
-import { isAgeGateError } from "@/lib/age-gate";
+import { isAgeGateError, isNsfwBlockedError, isNsfwOptInError } from "@/lib/age-gate";
 
 const createTribeFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
@@ -112,7 +112,18 @@ function CreateTribeContent() {
 
       router.push(`/t/${newTribe.slug}`);
     } catch (error) {
-       // NSFW tribe creation requires 18+ verification — launch the gate, then retry.
+       // NSFW gate (issue #32).
+       if (isNsfwBlockedError(error)) {
+         setIsLoading(false);
+         toast({ title: "Not available in your region", description: "Adult content can't be created where you are due to local law.", variant: "destructive" });
+         return;
+       }
+       if (isNsfwOptInError(error)) {
+         setIsLoading(false);
+         toast({ title: "Enable adult content", description: 'Turn on "Show adult content" in Settings on the web before creating an adult tribe.' });
+         return;
+       }
+       // Optional wallet-verify path may still surface the verify gate — launch then retry.
        if (isAgeGateError(error)) {
          setIsLoading(false);
          openAgeGate({ onVerified: () => onSubmit(values) });
