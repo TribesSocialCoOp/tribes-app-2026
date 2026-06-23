@@ -27,6 +27,7 @@ import { SecuritySection } from '@/components/settings/security-section';
 import { SessionsSection } from '@/components/settings/sessions-section';
 import { VaultBackupSection } from '@/components/settings/vault-backup-section';
 import { AppearanceSection, BillingSection, AccountActionsSection } from '@/components/settings/minor-sections';
+import { AdultContentSection } from '@/components/settings/adult-content-section';
 import { useScrollToHash } from '@/hooks/use-scroll-to-hash';
 import { AuthGuard } from '@/components/providers/auth-guard';
 
@@ -616,6 +617,9 @@ function SettingsContent() {
 
       <Separator />
       <AppearanceSection />
+
+      <Separator />
+      <AdultContentSection />
 
       <Separator />
 
