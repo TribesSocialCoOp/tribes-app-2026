@@ -38,3 +38,12 @@ export async function resolveNsfwGate(opts: {
     surface,
   });
 }
+
+/**
+ * Resolve once whether the current request + user may see NSFW content — for
+ * filtering NSFW tribes out of discovery/search when blocked or not opted in.
+ */
+export async function canSeeNsfw(userId: string | null): Promise<boolean> {
+  const gate = await resolveNsfwGate({ isNsfw: true, userId });
+  return gate.decision === 'allow';
+}

@@ -8,7 +8,7 @@
 
 import { db } from '@/db';
 import { tribes, tribeMoodTags, tribeMembers, users } from '@/db/schema';
-import { eq, like, inArray, or } from 'drizzle-orm';
+import { eq, like, inArray, or, and } from 'drizzle-orm';
 import type { Tribe } from '@/lib/types';
 
 function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
@@ -51,7 +51,15 @@ async function getMoodsForTribe(tribeId: string): Promise<string[]> {
 async function getViewerTribeIds(viewerUserId?: string | null): Promise<'all' | Set<string>> {
   // Discoverable = public OR explicitly listed (e.g. NSFW tribes that opt to be listed).
   // Listed private tribes expose only metadata here; their post content stays members-only.
-  const discoverable = or(eq(tribes.isPublic, true), eq(tribes.isListed, true));
+  // NSFW (issue #32): hidden from discovery unless this request+viewer may see it
+  // (not geo-blocked, opted-in/verified). Members still reach their own NSFW tribes
+  // via membership below; the content gate protects the actual posts regardless.
+  const { canSeeNsfw } = await import('@/lib/age-verification/nsfw-gate');
+  const showNsfw = await canSeeNsfw(viewerUserId ?? null);
+  const discoverable = and(
+    or(eq(tribes.isPublic, true), eq(tribes.isListed, true)),
+    showNsfw ? undefined : eq(tribes.isNsfw, false),
+  );
 
   if (!viewerUserId) {
     // Guest — public + listed tribes (metadata only)
