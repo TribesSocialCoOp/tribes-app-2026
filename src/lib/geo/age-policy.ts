@@ -25,7 +25,13 @@ export interface NsfwAccess {
  * (they exempt a platform under one-third → self-attest there).
  *
  * Codes are ISO 3166-1 alpha-2 country, or `<country>-<subdivision>` (ISO 3166-2).
- * ⚠️ Tune with counsel; reversible once we add a privacy-clean verification method.
+ *
+ * Verified June 2026 (26 US states have AV laws): ~23 use the 1/3 threshold and
+ * EXEMPT a sub-1/3 platform (TX/LA/FL/VA/AZ + WV, effective 2026-06-12 — all 1/3 →
+ * self-attest). LA's law was permanently enjoined Dec 2025. The no/low-threshold
+ * outliers that apply regardless of ratio are the only blocks below.
+ * ⚠️ Fast-moving — review with counsel each quarter. Reversible once we add a
+ * privacy-clean verification method. Holds only while we remain under 1/3.
  */
 export const BLOCKED_REGIONS: readonly string[] = [
   'US-KS', // Kansas — 25% threshold measured by page-views (+ $50k statutory private damages)
