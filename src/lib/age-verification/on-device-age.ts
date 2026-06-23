@@ -1,13 +1,19 @@
 /**
  * Client-side bridge for on-device age estimation (issue #32) — Privately.
  *
- * The check runs ON THE DEVICE: on native (Capacitor iOS/Android) via a native
- * plugin wrapping the Privately SDK; the device returns a SIGNED credential that
- * the server validates (see services/age-verification/providers/privately.ts).
- * No image ever leaves the device.
+ * The check runs ON THE DEVICE and returns a SIGNED credential the server
+ * validates (see services/age-verification/providers/privately.ts). No image
+ * leaves the device.
  *
- * Until the native plugin + SDK are wired in, a DEV STUB (non-production only)
- * returns a fake pass so the gate → verify → unlock flow is testable via cap.
+ * NOTE: `AgeEstimation` below is OUR Capacitor plugin name — a thin wrapper we
+ * build around Privately's actual SDK (`PrivatelyCore` / `privately-sdk:*` on
+ * native; Privately's browser SDK on web). It is NOT a plugin Privately ships.
+ *
+ * Environment patterns:
+ *   - SDK present (dev OR prod) → REAL Privately flow runs (this is the goal:
+ *     full local testing without deploying, once the SDK + keys are installed).
+ *   - SDK absent + non-production → DEV STUB (fake pass) for wiring/CI only.
+ *   - production + stub → HARD-REJECTED server-side. The stub can never ship.
  */
 
 /** Attestation handed to submitAgeVerification({ provider: 'privately', attestation }). */
