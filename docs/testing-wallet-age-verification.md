@@ -157,25 +157,35 @@ only the attestation is simulated.
 `-----BEGIN/END-----` lines and quote them:
 
 ```bash
-GOOGLE_WALLET_RP_ID="<x509 hash / client_id>"
-GOOGLE_WALLET_READER_KEY_PEM="-----BEGIN EC PRIVATE KEY-----
-...sandbox private key...
------END EC PRIVATE KEY-----"
+GOOGLE_WALLET_RP_ID="<x509 hash / client_id exactly as Google issued it>"
+# ⚠️ Reader key MUST be PKCS#8 ("BEGIN PRIVATE KEY") — the server uses importPKCS8().
+# Google often issues a SEC1 key ("BEGIN EC PRIVATE KEY"); convert it first:
+#   openssl pkcs8 -topk8 -nocrypt -in google-key.pem -out google-key.pkcs8.pem
+GOOGLE_WALLET_READER_KEY_PEM="-----BEGIN PRIVATE KEY-----
+...sandbox private key (PKCS#8)...
+-----END PRIVATE KEY-----"
 GOOGLE_WALLET_READER_CERT_PEM="-----BEGIN CERTIFICATE-----
 ...sandbox RP cert...
 -----END CERTIFICATE-----"
 GOOGLE_WALLET_IACA_PEM="-----BEGIN CERTIFICATE-----
-...sandbox IACA root...
+...sandbox IACA root (concatenate multiple CERTIFICATE blocks if given several)...
 -----END CERTIFICATE-----"
 # optional
 GOOGLE_WALLET_RP_METADATA="<base64url CBOR>"
 GOOGLE_WALLET_DOCTYPE="org.iso.18013.5.1.mDL"   # default; change if the test ID differs
 GOOGLE_WALLET_NAMESPACE="org.iso.18013.5.1"     # default
-APP_ORIGIN="https://<the origin you test from>" # must match exactly
+APP_ORIGIN="http://localhost:9002"              # must match the origin you test from, exactly
 ```
 
-When set, `getAgeVerificationStatus()` reports `google_wallet` available and the dialog shows
-a **"Verify with Google Wallet"** button.
+**Validate the keys before the wallet round-trip** (parses them exactly as the server does —
+catches the PKCS#8 gotcha and any missing field):
+
+```bash
+npm run check:wallet
+```
+
+When the keys are valid, `getAgeVerificationStatus()` reports `google_wallet` available and the
+dialog shows a **"Verify with Google Wallet"** button.
 
 ### Step 4 — Run the flow & verify
 
