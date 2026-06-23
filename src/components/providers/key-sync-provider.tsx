@@ -98,6 +98,7 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast();
   const syncLock = useRef(false);
   const syncLockAt = useRef(0); // when the lock was taken (ms) — watchdog against a hung cycle
+  const syncRunId = useRef(0); // monotonic per-cycle token so a hung cycle can't free a live lock
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const hasVaultBeenSavedRef = useRef(false);
   const vaultPushPendingRef = useRef(false);
@@ -241,6 +242,11 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
     // wedges on a hung await, don't let it block sync forever — allow a new run
     // after 90s so tribe-key distribution can recover.
     if (syncLock.current && Date.now() - syncLockAt.current < 90_000) return;
+    // Run token: if the watchdog (above) lets a new cycle start while an earlier
+    // one is still hung, the earlier cycle must NOT release the lock when its
+    // finally finally runs — that would free a lock the live cycle holds and allow
+    // a third concurrent run. Only the current owner releases (see finally).
+    const myRun = ++syncRunId.current;
     syncLock.current = true;
     syncLockAt.current = Date.now();
     setIsSyncing(true);
@@ -828,7 +834,8 @@ export function KeySyncProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('[key-sync] Sync failed:', err);
     } finally {
-      syncLock.current = false;
+      // Only release if no newer cycle took over via the watchdog bypass.
+      if (syncRunId.current === myRun) syncLock.current = false;
       setIsSyncing(false);
       setInitialSyncDone(true);
 

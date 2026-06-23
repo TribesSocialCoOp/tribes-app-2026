@@ -587,7 +587,16 @@ export async function pushToUserSocket(
   userId: string,
   payload: { type: 'feed-update' | 'activity' | 'tribe-key-request' | 'tribe-key-available'; [key: string]: any }
 ): Promise<void> {
-  const internalSecret = process.env.INTERNAL_API_SECRET || 'tribes-internal-super-secret-123';
+  // App↔relay shared secret. In production it is REQUIRED — never fall back to a
+  // known default (that would let anyone who can reach the relay's internal port
+  // spoof socket events). Dev uses a clearly-labeled local-only value so the
+  // relay co-started by `npm run dev` authenticates without extra setup.
+  const internalSecret = process.env.INTERNAL_API_SECRET
+    || (process.env.NODE_ENV !== 'production' ? 'dev-only-internal-secret' : '');
+  if (!internalSecret) {
+    console.warn('[realtime-dispatch] INTERNAL_API_SECRET not set — skipping socket push. Set it (same value on app + ws-relay) to enable real-time delivery.');
+    return;
+  }
   const url = process.env.WS_RELAY_INTERNAL_URL || 'http://localhost:9004';
 
   try {
