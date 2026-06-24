@@ -13,6 +13,7 @@ import { Edit3, MessageSquareText, CalendarDays, MapPin, LockKeyhole, ShieldAler
 import { LoadMoreButton } from "@/components/ui/load-more-button";
 import type { Event, TribePost } from '@/lib/types';
 import { TribePostCard } from './tribe-post-card';
+import { NsfwGateCard } from './nsfw-gate-card';
 import { useTribeDetail } from './tribe-detail-context';
 import { ComposeBox } from '@/components/compose/compose-box';
 import { useScrollToPost } from '@/hooks/use-scroll-to-post';
@@ -145,7 +146,10 @@ export function TribeFeedSection() {
           />
         </div>
       )}
-      {!isMember && !tribe.isPublic ? (
+      {state.gateError ? (
+        // NSFW gate (issue #32): posts were withheld — show why + the way forward.
+        <NsfwGateCard gate={state.gateError} onResolved={() => syncAllData(true)} />
+      ) : !isMember && !tribe.isPublic ? (
         // Non-member viewing a private/listed tribe (e.g. an NSFW tribe found via search).
         // The listing is visible, but content is members-only — invite them to join. For
         // NSFW tribes, joining triggers the 18+ verification gate.

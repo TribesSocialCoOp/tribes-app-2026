@@ -1,0 +1,87 @@
+'use client';
+
+/**
+ * NSFW gate screens (issue #32) shown in the tribe feed when the content boundary
+ * withholds posts. Three variants map to the policy decisions:
+ *   blocked → region where we have no trusted method (cite local policy NEUTRALLY)
+ *   verify  → law region: verify privately with Google Wallet (reuses the age gate)
+ *   optin   → no-law region: enable the web-set self-attest opt-in
+ */
+import Link from 'next/link';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { ShieldAlert, BadgeCheck, Globe2 } from 'lucide-react';
+import { useAgeGate } from '@/components/providers/age-gate-provider';
+import { isNative } from '@/lib/capacitor/platform';
+
+export function NsfwGateCard({
+  gate,
+  onResolved,
+}: {
+  gate: 'blocked' | 'verify' | 'optin';
+  onResolved?: () => void;
+}) {
+  const { openAgeGate } = useAgeGate();
+
+  if (gate === 'blocked') {
+    return (
+      <Card className="text-center py-12 shadow-md">
+        <CardContent className="flex flex-col items-center justify-center gap-3">
+          <Globe2 className="h-14 w-14 text-muted-foreground opacity-70" />
+          <h3 className="text-xl font-semibold text-foreground">Not available in your region</h3>
+          <p className="text-muted-foreground max-w-sm">
+            Adult content isn’t available where you are right now. Some regions require
+            age-verification methods we don’t currently support. This reflects local law,
+            not a judgment — and it may change as those options improve.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (gate === 'verify') {
+    return (
+      <Card className="text-center py-12 shadow-md">
+        <CardContent className="flex flex-col items-center justify-center gap-3">
+          <BadgeCheck className="h-14 w-14 text-primary opacity-80" />
+          <h3 className="text-xl font-semibold text-foreground">Verify your age to continue</h3>
+          <p className="text-muted-foreground max-w-sm">
+            Your region requires age verification for adult content. You can verify privately
+            with Google Wallet — we only learn that you’re over 18, never your ID or birthdate.
+          </p>
+          <Button className="mt-2" onClick={() => openAgeGate({ onVerified: onResolved })}>
+            Verify with Google Wallet
+          </Button>
+          <p className="text-xs text-muted-foreground max-w-sm">
+            On iPhone, verify in a browser at tribes.app — it unlocks the app automatically.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // optin
+  return (
+    <Card className="text-center py-12 shadow-md">
+      <CardContent className="flex flex-col items-center justify-center gap-3">
+        <ShieldAlert className="h-14 w-14 text-muted-foreground opacity-70" />
+        <h3 className="text-xl font-semibold text-foreground">Enable adult content to view</h3>
+        <p className="text-muted-foreground max-w-sm">
+          Adult content is hidden by default. Turn on “Show adult content” (confirming you’re
+          18 or older) to see this Tribe.
+        </p>
+        {isNative ? (
+          <p className="text-sm text-muted-foreground max-w-sm mt-1">
+            For App Store rules, enable it on the website at{' '}
+            <span className="font-medium">tribes.app</span> → Settings → Adult Content. It’ll
+            then appear here.
+          </p>
+        ) : (
+          <Link href="/settings" className="mt-2">
+            <Button>Go to Settings</Button>
+          </Link>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

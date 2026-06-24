@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useActionError } from '@/hooks/use-action-error';
 import { useAgeGate } from '@/components/providers/age-gate-provider';
+import { isAgeGateError, isNsfwBlockedError, isNsfwOptInError } from '@/lib/age-gate';
 import { useUser } from '@/hooks/use-user';
 import { getTribeById, getTribeBySlug, getTribeMembers, leaveTribe, getMyTribeIds, requestToJoinTribe, checkTribeAccess, checkPendingMembership } from '@/lib/actions/tribe-actions';
 import { getEventsForTribe } from '@/lib/actions/event-actions';
@@ -46,6 +47,8 @@ interface TribeDetailState {
   isOwnerVerified: boolean;
   hasTribeKey: boolean | null;
   reportReason: string;
+  /** NSFW gate outcome from loading posts (issue #32) — drives the gate screen. */
+  gateError: 'blocked' | 'verify' | 'optin' | null;
 
   // Pagination state for posts feed
   hasMorePosts: boolean;
@@ -72,6 +75,7 @@ type Action =
       reportedPostIds: Set<string>; reportedPosts: ReportedPost[];
       events: Event[]; isMember: boolean; isOwnerVerified: boolean;
       hasMorePosts: boolean; postsCursor: string | null;
+      gateError?: 'blocked' | 'verify' | 'optin' | null;
     }}
   | { type: 'SET_POSTS'; payload: { posts: TribePost[]; hasMorePosts: boolean; postsCursor: string | null } }
   | { type: 'APPEND_POSTS'; payload: { posts: TribePost[]; hasMorePosts: boolean; postsCursor: string | null } }
@@ -104,7 +108,7 @@ type Action =
 const initialState: TribeDetailState = {
   tribe: null, posts: [], events: [], members: [],
   reportedPostIds: new Set(), reportedPosts: [], promotedPostIds: new Set(),
-  isMember: false, isPending: false, isLoading: true, isJoining: false, isOwnerVerified: false, hasTribeKey: null, reportReason: '',
+  isMember: false, isPending: false, isLoading: true, isJoining: false, isOwnerVerified: false, hasTribeKey: null, reportReason: '', gateError: null,
   hasMorePosts: false, postsCursor: null, isLoadingMorePosts: false,
   promoteDialog: { open: false, target: null },
   reportPostDialog: { open: false, target: null },
@@ -294,13 +298,21 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
 
     const isSpeakerOrAbove = accessLevel === 'platform_admin' || accessLevel === 'founder' || accessLevel === 'speaker';
 
+    // NSFW gate (issue #32): capture WHY posts were withheld so the feed can render
+    // the right gate screen (region-blocked / verify / opt-in) instead of "no posts".
+    let gateError: 'blocked' | 'verify' | 'optin' | null = null;
     const [membersData, postsData, reportedIds, tribeReports] = await Promise.all([
       getTribeMembers(effectiveTribeId),
       // Posts are access-gated server-side: guests / non-members of a private or
       // NSFW tribe get a thrown access error. That's expected — swallow it so the
-      // tribe shell still loads and the "join to view" card can render (otherwise
+      // tribe shell still loads and the gate/"join to view" card can render (otherwise
       // the whole load rejects and the page spins forever).
-      getPostsForTribe(effectiveTribeId).catch(() => ({ items: [], nextCursor: null })),
+      getPostsForTribe(effectiveTribeId).catch((e) => {
+        if (isNsfwBlockedError(e)) gateError = 'blocked';
+        else if (isAgeGateError(e)) gateError = 'verify';
+        else if (isNsfwOptInError(e)) gateError = 'optin';
+        return { items: [], nextCursor: null };
+      }),
       getActiveReportedPostIds(),
       // Only speakers/founders/admins can view moderation reports — skip for guests/members
       isSpeakerOrAbove
@@ -323,6 +335,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
           isOwnerVerified: false, // Resolved below
           hasMorePosts: postsData.nextCursor !== null,
           postsCursor: postsData.nextCursor,
+          gateError,
         },
       });
 
