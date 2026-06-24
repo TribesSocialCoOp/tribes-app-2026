@@ -69,10 +69,16 @@ Expect e.g. `129.7.0.1 → US-TX [verify]`, `212.58.224.0 → GB [blocked]`,
    appear in search or the tribe list; with it on (open region), they do.
 
 ## 4. Android emulator
+One command boots an emulator (if none is running) + runs the app via **live-reload**
+against your dev server (so the WebView loads localhost and you can iterate):
 ```
-npm run android:build   # or: npx cap run android
+npm run dev                          # in one terminal (relay + next)
+./scripts/run-native.sh android      # boots emulator + cap run --live-reload
+#   ANDROID_AVD=Pixel_8_API_35 ./scripts/run-native.sh android   # pick an AVD
+#   CAP_HOST=192.168.1.50 ./scripts/run-native.sh android        # force host IP
 ```
-What this proves that web can't:
+Log in with the **dev login button (email/password)** — passkeys won't work over
+live-reload (origin-bound to tribes.app). What this proves that web can't:
 - **`X-Tribes-Surface: android` header** — the Settings adult-content toggle is hidden
   in-app and the server rejects an in-app opt-in attempt ("enable on the website").
 - Native rendering of the gate screens + blur.
@@ -81,7 +87,8 @@ What this proves that web can't:
 
 ## 5. iOS simulator
 ```
-npm run ios:build:dev   # or: npx cap run ios
+npm run dev                       # in one terminal
+./scripts/run-native.sh ios       # needs a booted Simulator (open one in Xcode)
 ```
 - **`X-Tribes-Surface: ios` header** → same web-only opt-in enforcement + native
   render/blur.
