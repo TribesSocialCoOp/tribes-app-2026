@@ -8,69 +8,82 @@
  */
 
 export type Surface = 'web' | 'ios' | 'android';
-export type NsfwDecision = 'allow' | 'needs_optin' | 'blocked';
+export type NsfwDecision = 'allow' | 'needs_optin' | 'needs_verify' | 'blocked';
 
 export interface NsfwAccess {
   decision: NsfwDecision;
   /** Machine reason code (for logging / client branching). */
-  reason: 'not_nsfw' | 'self_attested' | 'verified' | 'opt_in_required' | 'region_law';
+  reason: 'not_nsfw' | 'self_attested' | 'verified' | 'opt_in_required' | 'verify_required' | 'region_law';
   /** Hint for the client UI on how to lead the user to a solution. */
-  remediation?: 'enable_on_web_here' | 'enable_on_web_elsewhere' | 'unavailable_in_region';
+  remediation?: 'enable_on_web_here' | 'enable_on_web_elsewhere' | 'verify_with_wallet' | 'unavailable_in_region';
 }
 
 /**
- * Jurisdictions where self-attestation is NOT lawful for us and we don't yet verify,
- * so NSFW is geo-blocked. These are the no/low-threshold laws that apply regardless
- * of our (sub-1/3) content ratio. The ~1/3-threshold states are intentionally absent
- * (they exempt a platform under one-third → self-attest there).
+ * Three region tiers (codes are ISO 3166-1 alpha-2 country, or `<country>-<subdivision>`):
+ *   open    → no AV law: self-attest (web opt-in) suffices.
+ *   verify  → a US state with an AV law in effect: the easy route is BLOCKED;
+ *             NSFW requires Google Wallet ZKP verification. We do NOT rely on the
+ *             1/3 content-threshold exemption — any law state requires verification.
+ *   blocked → no verification method we trust (UK OSA HEAA); NSFW fully unavailable.
  *
- * Codes are ISO 3166-1 alpha-2 country, or `<country>-<subdivision>` (ISO 3166-2).
- *
- * Verified June 2026 (26 US states have AV laws): ~23 use the 1/3 threshold and
- * EXEMPT a sub-1/3 platform (TX/LA/FL/VA/AZ + WV, effective 2026-06-12 — all 1/3 →
- * self-attest). LA's law was permanently enjoined Dec 2025. The no/low-threshold
- * outliers that apply regardless of ratio are the only blocks below.
- * ⚠️ Fast-moving — review with counsel each quarter. Reversible once we add a
- * privacy-clean verification method. Holds only while we remain under 1/3.
+ * VERIFY_REGIONS: the 26 US states with adult-content AV laws in effect (verified
+ * June 2026). Includes KS/WY/SD (no/low-threshold) — per policy they require Google
+ * Wallet like the rest, not a full block. LA's law is enjoined (Dec 2025) but kept
+ * here for conservative consistency.
+ * ⚠️ Fast-moving — review with counsel quarterly; this is config, easy to amend.
  */
-export const BLOCKED_REGIONS: readonly string[] = [
-  'US-KS', // Kansas — 25% threshold measured by page-views (+ $50k statutory private damages)
-  'US-WY', // Wyoming — no threshold ("any amount"), private right of action
-  'US-SD', // South Dakota — no threshold, criminal exposure
-  'GB',    // United Kingdom — Online Safety Act HEAA (block is Ofcom's accepted last resort)
+export const VERIFY_REGIONS: readonly string[] = [
+  'US-AL', 'US-AR', 'US-AZ', 'US-FL', 'US-GA', 'US-ID', 'US-IN', 'US-KS', 'US-KY',
+  'US-LA', 'US-MO', 'US-MS', 'US-MT', 'US-NC', 'US-ND', 'US-NE', 'US-OH', 'US-OK',
+  'US-SC', 'US-SD', 'US-TN', 'US-TX', 'US-UT', 'US-VA', 'US-WV', 'US-WY',
 ];
 
-/** True if a resolved region code (e.g. 'US-KS' or 'GB-ENG') is on the block list. */
-export function isBlockedRegion(code: string): boolean {
-  if (!code) return false;                       // unknown → not blocked (permissive default)
-  if (BLOCKED_REGIONS.includes(code)) return true;
-  const country = code.split('-')[0];            // block whole country if listed (e.g. 'GB' blocks 'GB-ENG')
-  return BLOCKED_REGIONS.includes(country);
+/** Full block — no privacy-clean verification method we trust. Also reserved for
+ *  any future government-ID-only mandate. */
+export const BLOCKED_REGIONS: readonly string[] = [
+  'GB', // United Kingdom — Online Safety Act HEAA; no confirmed Google Wallet route
+];
+
+export type RegionTier = 'open' | 'verify' | 'blocked';
+
+/** Classify a resolved region code (e.g. 'US-KS', 'GB-ENG', '') into a tier. */
+export function regionTier(code: string): RegionTier {
+  if (!code) return 'open';                          // unknown → permissive default
+  const country = code.split('-')[0];
+  if (BLOCKED_REGIONS.includes(code) || BLOCKED_REGIONS.includes(country)) return 'blocked';
+  if (VERIFY_REGIONS.includes(code)) return 'verify';
+  return 'open';
 }
 
 /**
  * Decide whether a user may access NSFW content here. Pure: caller supplies the
- * resolved region/surface/flags. Decision is the STRICTER of region + opt-in state.
+ * resolved region/surface/flags. Wallet verification satisfies every tier; the
+ * web self-attest opt-in only satisfies the `open` tier.
  */
 export function resolveNsfwAccess(input: {
   isNsfw: boolean;
   hasOptIn: boolean;     // users.showAdultContentAt set (web self-attestation)
-  hasVerified: boolean;  // users.ageVerifiedAt set (optional stronger verify)
+  hasVerified: boolean;  // users.ageVerifiedAt set (Google Wallet ZKP, etc.)
   regionCode: string;
   surface: Surface;
 }): NsfwAccess {
   if (!input.isNsfw) return { decision: 'allow', reason: 'not_nsfw' };
 
-  // Geo-block takes precedence: not available here regardless of opt-in.
-  if (isBlockedRegion(input.regionCode)) {
+  const tier = regionTier(input.regionCode);
+  if (tier === 'blocked') {
     return { decision: 'blocked', reason: 'region_law', remediation: 'unavailable_in_region' };
   }
 
+  // Wallet verification clears every (non-blocked) tier.
   if (input.hasVerified) return { decision: 'allow', reason: 'verified' };
-  if (input.hasOptIn) return { decision: 'allow', reason: 'self_attested' };
 
-  // Not opted in. The opt-in is web-only (Apple Reddit-pattern), so native apps
-  // must send the user to the web to enable it.
+  if (tier === 'verify') {
+    // Law state: self-attest is NOT enough — require Google Wallet verification.
+    return { decision: 'needs_verify', reason: 'verify_required', remediation: 'verify_with_wallet' };
+  }
+
+  // Open region: the web-set self-attest opt-in suffices.
+  if (input.hasOptIn) return { decision: 'allow', reason: 'self_attested' };
   return {
     decision: 'needs_optin',
     reason: 'opt_in_required',

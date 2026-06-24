@@ -97,6 +97,7 @@ export const createTribe = withPublicErrors(async (payload: Parameters<typeof im
     const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
     const gate = await resolveNsfwGate({ isNsfw: true, userId });
     if (gate.decision === 'blocked') throw new PublicError('NSFW_REGION_BLOCKED');
+    if (gate.decision === 'needs_verify') throw new PublicError('AGE_VERIFICATION_REQUIRED');
     if (gate.decision !== 'allow') throw new PublicError('NSFW_OPT_IN_REQUIRED');
   }
   // Subscription guard: check if user can create another tribe

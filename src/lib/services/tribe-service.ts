@@ -67,6 +67,7 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
     const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
     const gate = await resolveNsfwGate({ isNsfw: true, userId: payload.createdBy });
     if (gate.decision === 'blocked') throw new Error('NSFW_REGION_BLOCKED');
+    if (gate.decision === 'needs_verify') throw new Error('AGE_VERIFICATION_REQUIRED');
     if (gate.decision !== 'allow') throw new Error('NSFW_OPT_IN_REQUIRED');
   }
 
@@ -581,6 +582,7 @@ export async function requestToJoinTribe(userId: string, tribeId: string, aliasN
     const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
     const gate = await resolveNsfwGate({ isNsfw: true, userId });
     if (gate.decision === 'blocked') return 'region_blocked';
+    if (gate.decision === 'needs_verify') return 'age_required';
     if (gate.decision === 'needs_optin') return 'opt_in_required';
   }
 
@@ -663,6 +665,7 @@ export async function joinTribeDirectly(userId: string, tribeId: string): Promis
     const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
     const gate = await resolveNsfwGate({ isNsfw: true, userId });
     if (gate.decision === 'blocked') throw new Error('NSFW_REGION_BLOCKED');
+    if (gate.decision === 'needs_verify') throw new Error('AGE_VERIFICATION_REQUIRED');
     if (gate.decision !== 'allow') throw new Error('NSFW_OPT_IN_REQUIRED');
   }
 

@@ -1194,6 +1194,7 @@ export async function getPostsForTribe(
     const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
     const gate = await resolveNsfwGate({ isNsfw: true, userId });
     if (gate.decision === 'blocked') throw new Error('NSFW_REGION_BLOCKED');
+    if (gate.decision === 'needs_verify') throw new Error('AGE_VERIFICATION_REQUIRED');
     if (gate.decision === 'needs_optin') throw new Error('NSFW_OPT_IN_REQUIRED');
   }
 
