@@ -143,3 +143,7 @@ ws-relay/package-lock.json
 dev-mailbox.json
 public/emulator-screenshot.png
 tests/check-emulator-idb.mjs
+
+# GeoIP database (licensed, ~63MB — provisioned per-host, never committed)
+geoip/
+*.mmdb

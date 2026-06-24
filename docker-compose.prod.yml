@@ -7,6 +7,8 @@ services:
     container_name: tribes-app-blue
     restart: unless-stopped
     env_file: .env.production
+    environment:
+      GEOIP_DB_PATH: /app/geoip/GeoLite2-City.mmdb
     depends_on:
       postgres:
         condition: service_healthy
@@ -15,6 +17,7 @@ services:
     networks: [tribes]
     volumes:
       - ./keys:/app/keys:ro
+      - ./geoip:/app/geoip:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9002/api/health"]
       interval: 5s
@@ -33,6 +36,8 @@ services:
     container_name: tribes-app-green
     restart: unless-stopped
     env_file: .env.production
+    environment:
+      GEOIP_DB_PATH: /app/geoip/GeoLite2-City.mmdb
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,6 +46,7 @@ services:
     networks: [tribes]
     volumes:
       - ./keys:/app/keys:ro
+      - ./geoip:/app/geoip:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9002/api/health"]
       interval: 5s
@@ -53,6 +59,24 @@ services:
         max-size: "50m"
         max-file: "5"
     profiles: ["green"]
+
+  # ── GeoIP DB auto-refresh (opt-in: add `--profile geoip` to the deploy) ──
+  # Keeps ./geoip/GeoLite2-City.mmdb current — the GeoLite2 license REQUIRES
+  # staying up-to-date. Needs GEOIPUPDATE_ACCOUNT_ID + GEOIPUPDATE_LICENSE_KEY in
+  # .env.production. The app reads the same ./geoip dir read-only. Until this is
+  # enabled (or the file is placed manually), unknown regions default to 'open'.
+  geoipupdate:
+    image: ghcr.io/maxmind/geoipupdate
+    restart: unless-stopped
+    environment:
+      GEOIPUPDATE_ACCOUNT_ID: ${GEOIPUPDATE_ACCOUNT_ID}
+      GEOIPUPDATE_LICENSE_KEY: ${GEOIPUPDATE_LICENSE_KEY}
+      GEOIPUPDATE_EDITION_IDS: GeoLite2-City
+      GEOIPUPDATE_FREQUENCY: "168" # hours → weekly
+    volumes:
+      - ./geoip:/usr/share/GeoIP
+    networks: [tribes]
+    profiles: ["geoip"]
 
   # ── WebSocket Relay ───────────────────────────────────────────
   ws-relay:
