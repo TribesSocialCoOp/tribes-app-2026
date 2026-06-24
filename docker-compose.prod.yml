@@ -60,23 +60,10 @@ services:
         max-file: "5"
     profiles: ["green"]
 
-  # ── GeoIP DB auto-refresh (opt-in: add `--profile geoip` to the deploy) ──
-  # Keeps ./geoip/GeoLite2-City.mmdb current — the GeoLite2 license REQUIRES
-  # staying up-to-date. Needs GEOIPUPDATE_ACCOUNT_ID + GEOIPUPDATE_LICENSE_KEY in
-  # .env.production. The app reads the same ./geoip dir read-only. Until this is
-  # enabled (or the file is placed manually), unknown regions default to 'open'.
-  geoipupdate:
-    image: ghcr.io/maxmind/geoipupdate
-    restart: unless-stopped
-    environment:
-      GEOIPUPDATE_ACCOUNT_ID: ${GEOIPUPDATE_ACCOUNT_ID}
-      GEOIPUPDATE_LICENSE_KEY: ${GEOIPUPDATE_LICENSE_KEY}
-      GEOIPUPDATE_EDITION_IDS: GeoLite2-City
-      GEOIPUPDATE_FREQUENCY: "168" # hours → weekly
-    volumes:
-      - ./geoip:/usr/share/GeoIP
-    networks: [tribes]
-    profiles: ["geoip"]
+  # NOTE: GeoIP DB (./geoip/GeoLite2-City.mmdb, mounted read-only into both app
+  # slots above) is provisioned + refreshed by scripts/remote_deploy.sh — it runs
+  # geoipupdate before the app starts and installs a weekly refresh cron. No
+  # standalone service needed here. See .env.example for GEOIPUPDATE_* creds.
 
   # ── WebSocket Relay ───────────────────────────────────────────
   ws-relay:
