@@ -11,10 +11,13 @@
  * against the dev Postgres. Seeds its own NSFW tribe (dustin is a member) so the
  * gate — not membership — is what's under test.
  *
- * Uses `domcontentloaded` (not networkidle) + element waits, so it's robust whether
- * or not the websocket relay is running. First run is slow (dev first-compile).
+ * Login uses the robust prf-vault-settings-detail pattern; tribe feed pages wait for
+ * networkidle; /settings (which never idles — sessions/notifications poll) uses
+ * domcontentloaded + element waits. Run with the full dev server up (relay included).
  *
- * Run: npx playwright test tests/nsfw-age-gate.spec.ts   (dev server must be up)
+ * Run: npm run dev   (one terminal)
+ *      npx playwright test tests/nsfw-age-gate.spec.ts   (another)
+ *      npx playwright test tests/nsfw-age-gate.spec.ts -g region   (gate tiers only)
  */
 import { test, expect, type Page } from '@playwright/test';
 import { execSync } from 'child_process';
@@ -23,7 +26,8 @@ const BASE = 'http://localhost:9002';
 const USER = 'dustin';
 const USER_LABEL = 'Dustin';
 const TRIBE_ID = 'tribe-e2e-nsfw';
-const TRIBE_URL = `${BASE}/tribes/${TRIBE_ID}`;
+const TRIBE_SLUG = 'e2e-nsfw-test';
+const TRIBE_URL = `${BASE}/t/${TRIBE_SLUG}`; // canonical short route (matches multi-device-key-sync)
 const W = { timeout: 30_000 };
 
 function db(sql: string): string {
@@ -31,22 +35,23 @@ function db(sql: string): string {
   return execSync(cmd).toString().trim();
 }
 
-/** goto with retry — dev turbopack can abort a navigation mid-compile/redirect. */
+/** Navigate + wait for the network to settle (used for tribe feed pages). */
 async function gotoStable(page: Page, url: string) {
-  for (let i = 0; i < 3; i++) {
-    try { await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 }); return; }
-    catch (e) { if (i === 2) throw e; await page.waitForTimeout(1500); }
-  }
+  await page.goto(url, { waitUntil: 'networkidle' });
 }
 
+// Dev quick-login — polls until we've actually left /login (the post-login redirect is
+// a multi-step client router.push), then settles before the caller navigates onward.
+// This is the robust pattern from prf-vault-settings-detail, which reaches /settings
+// cleanly (a plain waitForURL returns mid-redirect and the next goto can detach).
 async function loginAs(page: Page, label = USER_LABEL) {
-  await gotoStable(page, `${BASE}/your-comms`);
-  if (new URL(page.url()).pathname.startsWith('/login')) {
-    await page.click(`button:has-text("${label}")`, { timeout: 30_000 });
-    await page.waitForURL('**/your-comms', { timeout: 30_000 });
-    await page.waitForLoadState('domcontentloaded');         // fully settle before next nav
-    await page.waitForTimeout(500);
-  }
+  await page.goto(`${BASE}/your-comms`, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(500);
+  if (!page.url().includes('/login')) return;
+  await page.waitForSelector(`button:has-text("${label}")`, { state: 'visible', timeout: 10_000 });
+  await page.click(`button:has-text("${label}")`);
+  await page.waitForFunction(() => !window.location.pathname.startsWith('/login'), { timeout: 30_000, polling: 500 });
+  await page.waitForTimeout(2000);
 }
 
 /** Set the dev-only region override for subsequent requests. */
@@ -81,7 +86,9 @@ test('Settings: adult-content opt-in is web-settable and round-trips to the DB',
   test.slow();
   optInOff();
   await loginAs(page);
-  await gotoStable(page, `${BASE}/settings`);
+  // /settings polls (sessions/notifications) so it never reaches 'networkidle' —
+  // use domcontentloaded + element waits. (loginAs already settles the redirect.)
+  await page.goto(`${BASE}/settings`, { waitUntil: 'domcontentloaded' });
 
   const toggle = page.locator('#adult-content-toggle');
   await expect(toggle).toBeVisible(W);
