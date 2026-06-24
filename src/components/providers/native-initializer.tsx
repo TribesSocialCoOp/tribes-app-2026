@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { isNative } from '@/lib/capacitor/platform';
 import { initDeepLinks } from '@/lib/capacitor/deep-links';
 import { syncStatusBarStyle } from '@/lib/capacitor/status-bar';
+import { installSurfaceHeader } from '@/lib/capacitor/surface-header';
 import { App } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 
@@ -107,6 +108,10 @@ export function NativeInitializer() {
     document.addEventListener('click', handleGlobalClick, true);
     return () => document.removeEventListener('click', handleGlobalClick, true);
   }, [handleGlobalClick]);
+
+  // Tag native requests with X-Tribes-Surface so the server knows app-vs-web
+  // (issue #32). No-op on web. Installed once, early, before any server action.
+  useEffect(() => { installSurfaceHeader(); }, []);
 
   // ── Native-only setup ──────────────────────────────────────────────────────
   useEffect(() => {

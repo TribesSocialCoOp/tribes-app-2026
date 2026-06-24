@@ -103,7 +103,9 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   const [lightboxIndex, setLightboxIndex] = useState(0);
   // NSFW blur (issue #32): blur adult media until tapped, unless the viewer disabled blur.
   const [revealed, setRevealed] = useState(false);
-  const shouldBlur = !!state.tribe?.isNsfw && state.blurAdultContent && !revealed;
+  // Header images reveal as a group (card-level); inline images self-manage per-image.
+  const nsfwBlurActive = !!state.tribe?.isNsfw && state.blurAdultContent;
+  const shouldBlur = nsfwBlurActive && !revealed;
 
 
   // Inline reply state
@@ -629,6 +631,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
               ring={post.ring || 'tribes'}
               tribeId={post.tribeId || tribeId}
               onImageClick={(idx) => { setLightboxIndex(idx); setLightboxOpen(true); }}
+              blurImages={nsfwBlurActive}
             />
           )}
           {/* Link preview card */}
