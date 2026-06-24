@@ -27,7 +27,7 @@ export function regionCode(r: RequestRegion): string {
 }
 
 type CityReader = { city: (ip: string) => { country?: { isoCode?: string }; subdivisions?: Array<{ isoCode?: string }> } };
-let readerPromise: Promise<CityReader | null> | null = null;
+let readerPromise: Promise<CityReader> | null = null;
 
 async function getReader(): Promise<CityReader | null> {
   const dbPath = process.env.GEOIP_DB_PATH;
@@ -36,12 +36,18 @@ async function getReader(): Promise<CityReader | null> {
     readerPromise = (async () => {
       const { Reader } = await import('@maxmind/geoip2-node');
       return (await Reader.open(dbPath)) as unknown as CityReader;
-    })().catch((e) => {
-      console.warn('[geo] MaxMind DB open failed (region → unknown):', (e as Error).message);
-      return null;
-    });
+    })();
   }
-  return readerPromise;
+  try {
+    return await readerPromise;
+  } catch (e) {
+    // Do NOT cache the failure: the DB may be provisioned moments later (e.g. by
+    // geoipupdate on first deploy). Reset so the next request retries the open
+    // instead of being stuck 'unknown' until a container restart.
+    readerPromise = null;
+    console.warn('[geo] MaxMind DB open failed (region → unknown, will retry):', (e as Error).message);
+    return null;
+  }
 }
 
 /** Resolve the caller's region from their IP (local DB; nothing stored or shared). */

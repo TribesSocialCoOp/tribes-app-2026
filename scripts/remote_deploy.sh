@@ -141,6 +141,31 @@ if [ "$MIGRATE_ONLY" = "true" ]; then
   exit 0
 fi
 
+# ── Step 5.5: GeoIP database (NSFW geo gate, issue #32) ──────
+# The app reads ./geoip/GeoLite2-City.mmdb (mounted read-only by both slots). The
+# DB is licensed + ~63MB so it is NOT in git — it's provisioned here and persists
+# across deploys in $REMOTE_DIR/geoip. Done BEFORE the new container starts so the
+# region reader opens a present DB on its first request.
+log "Provisioning GeoIP database..."
+mkdir -p "$REMOTE_DIR/geoip"
+if [ -n "${GEOIPUPDATE_ACCOUNT_ID:-}" ] && [ -n "${GEOIPUPDATE_LICENSE_KEY:-}" ]; then
+  if docker run --rm \
+    -e GEOIPUPDATE_ACCOUNT_ID="$GEOIPUPDATE_ACCOUNT_ID" \
+    -e GEOIPUPDATE_LICENSE_KEY="$GEOIPUPDATE_LICENSE_KEY" \
+    -e GEOIPUPDATE_EDITION_IDS="GeoLite2-City" \
+    -v "$REMOTE_DIR/geoip:/usr/share/GeoIP" \
+    ghcr.io/maxmind/geoipupdate 2>&1; then
+    ok "GeoIP DB fetched/refreshed via geoipupdate"
+  else
+    warn "geoipupdate failed — falling back to existing ./geoip if present"
+  fi
+elif [ -f "$REMOTE_DIR/geoip/GeoLite2-City.mmdb" ]; then
+  ok "GeoIP DB present (rsync-provisioned); no MaxMind creds → no auto-refresh"
+else
+  warn "NO GeoIP DB and no MaxMind creds — the NSFW geo gate is INERT (all regions resolve 'open')."
+  warn "Fix: add GEOIPUPDATE_ACCOUNT_ID/LICENSE_KEY to .env.production, OR rsync the .mmdb to $REMOTE_DIR/geoip/"
+fi
+
 # ── Step 6: Start the NEW container ──────────────────────────
 log "Starting app-${NEW_COLOR} container..."
 docker compose -f "$COMPOSE_FILE" --profile "$NEW_COLOR" up -d "app-$NEW_COLOR"
@@ -219,10 +244,17 @@ ok "Cleanup complete"
 CRON_SEAWEEDFS="0 3 * * * CONTAINER=\$(cat /opt/tribes/.active-color 2>/dev/null || echo blue) && cd /opt/tribes && docker compose -f docker-compose.prod.yml --profile \$CONTAINER exec -T app-\$CONTAINER npx tsx scripts/cleanup-seaweedfs.ts >> /var/log/tribes-cleanup.log 2>&1"
 # Server maintenance: Docker image pruning + disk space alerts (every 6 hours)
 CRON_MAINTENANCE="0 */6 * * * /usr/bin/bash /opt/tribes/scripts/server-maintenance.sh >> /var/log/tribes-maintenance.log 2>&1"
+# GeoIP DB refresh (weekly, Mon 04:00 UTC) — the GeoLite2 license requires staying
+# current. Only active when MaxMind creds are set; otherwise a harmless marker.
+if [ -n "${GEOIPUPDATE_ACCOUNT_ID:-}" ] && [ -n "${GEOIPUPDATE_LICENSE_KEY:-}" ]; then
+  CRON_GEOIP="0 4 * * 1 cd /opt/tribes && set -a && . ./.env.production && set +a && docker run --rm -e GEOIPUPDATE_ACCOUNT_ID -e GEOIPUPDATE_LICENSE_KEY -e GEOIPUPDATE_EDITION_IDS=GeoLite2-City -v /opt/tribes/geoip:/usr/share/GeoIP ghcr.io/maxmind/geoipupdate >> /var/log/tribes-geoip.log 2>&1"
+else
+  CRON_GEOIP="# tribes geoipupdate refresh disabled (no GEOIPUPDATE_* in .env.production)"
+fi
 
 # Rebuild crontab: remove old entries, add current ones
-(crontab -l 2>/dev/null | grep -v "cleanup-seaweedfs.ts" | grep -v "server-maintenance.sh" | grep -v "storage-cleanup" ; echo "$CRON_SEAWEEDFS" ; echo "$CRON_MAINTENANCE") | crontab -
-ok "Cron jobs updated (seaweedfs cleanup + server maintenance)"
+(crontab -l 2>/dev/null | grep -v "cleanup-seaweedfs.ts" | grep -v "server-maintenance.sh" | grep -v "storage-cleanup" | grep -v "geoipupdate" ; echo "$CRON_SEAWEEDFS" ; echo "$CRON_MAINTENANCE" ; echo "$CRON_GEOIP") | crontab -
+ok "Cron jobs updated (seaweedfs cleanup + server maintenance + geoip refresh)"
 
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}"
