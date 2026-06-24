@@ -6,6 +6,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useActionError } from '@/hooks/use-action-error';
 import { useAgeGate } from '@/components/providers/age-gate-provider';
 import { isAgeGateError, isNsfwBlockedError, isNsfwOptInError } from '@/lib/age-gate';
+import { getBlurAdultContent } from '@/lib/actions/age-actions';
 import { useUser } from '@/hooks/use-user';
 import { getTribeById, getTribeBySlug, getTribeMembers, leaveTribe, getMyTribeIds, requestToJoinTribe, checkTribeAccess, checkPendingMembership } from '@/lib/actions/tribe-actions';
 import { getEventsForTribe } from '@/lib/actions/event-actions';
@@ -49,6 +50,8 @@ interface TribeDetailState {
   reportReason: string;
   /** NSFW gate outcome from loading posts (issue #32) — drives the gate screen. */
   gateError: 'blocked' | 'verify' | 'optin' | null;
+  /** Viewer's "blur adult media" preference (issue #32) — default ON. */
+  blurAdultContent: boolean;
 
   // Pagination state for posts feed
   hasMorePosts: boolean;
@@ -76,6 +79,7 @@ type Action =
       events: Event[]; isMember: boolean; isOwnerVerified: boolean;
       hasMorePosts: boolean; postsCursor: string | null;
       gateError?: 'blocked' | 'verify' | 'optin' | null;
+      blurAdultContent?: boolean;
     }}
   | { type: 'SET_POSTS'; payload: { posts: TribePost[]; hasMorePosts: boolean; postsCursor: string | null } }
   | { type: 'APPEND_POSTS'; payload: { posts: TribePost[]; hasMorePosts: boolean; postsCursor: string | null } }
@@ -108,7 +112,7 @@ type Action =
 const initialState: TribeDetailState = {
   tribe: null, posts: [], events: [], members: [],
   reportedPostIds: new Set(), reportedPosts: [], promotedPostIds: new Set(),
-  isMember: false, isPending: false, isLoading: true, isJoining: false, isOwnerVerified: false, hasTribeKey: null, reportReason: '', gateError: null,
+  isMember: false, isPending: false, isLoading: true, isJoining: false, isOwnerVerified: false, hasTribeKey: null, reportReason: '', gateError: null, blurAdultContent: true,
   hasMorePosts: false, postsCursor: null, isLoadingMorePosts: false,
   promoteDialog: { open: false, target: null },
   reportPostDialog: { open: false, target: null },
@@ -301,7 +305,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     // NSFW gate (issue #32): capture WHY posts were withheld so the feed can render
     // the right gate screen (region-blocked / verify / opt-in) instead of "no posts".
     let gateError: 'blocked' | 'verify' | 'optin' | null = null;
-    const [membersData, postsData, reportedIds, tribeReports] = await Promise.all([
+    const [membersData, postsData, reportedIds, tribeReports, blurPref] = await Promise.all([
       getTribeMembers(effectiveTribeId),
       // Posts are access-gated server-side: guests / non-members of a private or
       // NSFW tribe get a thrown access error. That's expected — swallow it so the
@@ -318,6 +322,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       isSpeakerOrAbove
         ? getActiveReportsForTribe(effectiveTribeId)
         : Promise.resolve({ tribe: null, reports: [], posts: [] }),
+      getBlurAdultContent().catch(() => ({ enabled: true })),
     ]);
 
     if (tribeData) {
@@ -336,6 +341,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
           hasMorePosts: postsData.nextCursor !== null,
           postsCursor: postsData.nextCursor,
           gateError,
+          blurAdultContent: blurPref.enabled,
         },
       });
 

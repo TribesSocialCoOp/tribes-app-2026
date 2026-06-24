@@ -37,6 +37,9 @@ export const users = pgTable('users', {
   // Reddit-pattern: no in-app toggle). null = NSFW hidden everywhere. Holds no PII —
   // it's just the moment the user attested 18+ and chose to see adult content.
   showAdultContentAt: timestamp('show_adult_content_at', { withTimezone: true }),
+  // Blur adult media by default (issue #32, Reddit pattern): ON unless the user opts
+  // out. View preference only — no PII. true/null = blur NSFW media until revealed.
+  blurAdultContent: boolean('blur_adult_content').default(true),
   slug: text('slug').unique(),
   username: text('username').unique(),
   passwordHash: text('password_hash'),

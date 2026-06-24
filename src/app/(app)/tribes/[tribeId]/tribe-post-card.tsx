@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil, Lock, Globe, UserRoundX, Send, Loader2, Link2, ChevronDown, ChevronRight } from "lucide-react";
+import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil, Lock, Globe, UserRoundX, Send, Loader2, Link2, ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import { createComment } from '@/lib/actions/content-actions';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -101,6 +101,9 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  // NSFW blur (issue #32): blur adult media until tapped, unless the viewer disabled blur.
+  const [revealed, setRevealed] = useState(false);
+  const shouldBlur = !!state.tribe?.isNsfw && state.blurAdultContent && !revealed;
 
 
   // Inline reply state
@@ -522,9 +525,9 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
             const headerImages = allImages.filter((_, idx) => !inlineRefs.has(idx + 1));
             
             if (headerImages.length > 0) {
-              return (
+              const grid = (
                 <div className={cn(
-                  "mb-3 grid gap-2 overflow-hidden rounded-lg border bg-muted/20",
+                  "grid gap-2 overflow-hidden rounded-lg border bg-muted/20",
                   headerImages.length === 1 ? "grid-cols-1" :
                     headerImages.length === 2 ? "grid-cols-2" :
                       headerImages.length === 3 ? "grid-cols-2" :
@@ -566,6 +569,23 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                   })}
                 </div>
               );
+              if (shouldBlur) {
+                return (
+                  <div className="relative mb-3 overflow-hidden rounded-lg">
+                    <div className="blur-2xl scale-110 pointer-events-none select-none">{grid}</div>
+                    <button
+                      type="button"
+                      onClick={() => setRevealed(true)}
+                      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 bg-background/30 text-foreground"
+                      aria-label="Reveal adult content"
+                    >
+                      <EyeOff className="h-7 w-7 opacity-80" />
+                      <span className="text-sm font-medium">Adult content — tap to reveal</span>
+                    </button>
+                  </div>
+                );
+              }
+              return <div className="mb-3">{grid}</div>;
             }
             return null;
           })()}

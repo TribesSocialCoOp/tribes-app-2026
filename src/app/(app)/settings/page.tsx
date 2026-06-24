@@ -28,6 +28,7 @@ import { SessionsSection } from '@/components/settings/sessions-section';
 import { VaultBackupSection } from '@/components/settings/vault-backup-section';
 import { AppearanceSection, BillingSection, AccountActionsSection } from '@/components/settings/minor-sections';
 import { AdultContentSection } from '@/components/settings/adult-content-section';
+import { BlurContentSection } from '@/components/settings/blur-content-section';
 import { useScrollToHash } from '@/hooks/use-scroll-to-hash';
 import { AuthGuard } from '@/components/providers/auth-guard';
 
@@ -620,6 +621,9 @@ function SettingsContent() {
 
       <Separator />
       <AdultContentSection />
+
+      <Separator />
+      <BlurContentSection />
 
       <Separator />
 

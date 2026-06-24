@@ -64,6 +64,31 @@ export const setAdultContentOptIn = withPublicErrors(async (enabled: boolean): P
   return { enabled };
 });
 
+/** Current user's "blur adult media" view preference (default ON — Reddit pattern). */
+export async function getBlurAdultContent(): Promise<{ enabled: boolean }> {
+  const userId = await getCurrentUserId();
+  if (!userId) return { enabled: true };
+  const { db } = await import('@/db');
+  const { users } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [u] = await db.select({ blurAdultContent: users.blurAdultContent })
+    .from(users).where(eq(users.id, userId)).limit(1);
+  return { enabled: u?.blurAdultContent ?? true };
+}
+
+/**
+ * Set the "blur adult media" view preference. Default ON; unlike the 18+ opt-in this
+ * is a display preference (no PII, no attestation), so it may be set on any surface.
+ */
+export const setBlurAdultContent = withPublicErrors(async (enabled: boolean): Promise<{ enabled: boolean }> => {
+  const userId = await requireAuth();
+  const { db } = await import('@/db');
+  const { users } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  await db.update(users).set({ blurAdultContent: enabled }).where(eq(users.id, userId));
+  return { enabled };
+});
+
 /**
  * Build a signed OpenID4VP request for a wallet provider. The client passes the result
  * to navigator.credentials.get(); the returned verifierState is echoed back to
