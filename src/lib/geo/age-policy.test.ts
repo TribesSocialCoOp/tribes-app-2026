@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveNsfwAccess, regionTier } from './age-policy';
+import { resolveNsfwAccess, regionTier, VERIFY_REGIONS, BLOCKED_REGIONS } from './age-policy';
 
 const base = { isNsfw: true, hasOptIn: false, hasVerified: false, regionCode: '', surface: 'web' as const };
 
@@ -60,5 +60,34 @@ describe('resolveNsfwAccess', () => {
   it('allows self-attested users in open regions (incl. unknown)', () => {
     expect(resolveNsfwAccess({ ...base, hasOptIn: true, regionCode: '' }).decision).toBe('allow');
     expect(resolveNsfwAccess({ ...base, hasOptIn: true, regionCode: 'US-CA' }).reason).toBe('self_attested');
+  });
+});
+
+// Guards against the verify list silently drifting. Update EXPECTED (with a counsel
+// note in age-policy.ts) whenever a state's law takes effect / is repealed.
+describe('verify-tier completeness (US AV-law states, verified June 2026)', () => {
+  const EXPECTED = [
+    'US-AL', 'US-AR', 'US-AZ', 'US-FL', 'US-GA', 'US-IA', 'US-ID', 'US-IN', 'US-KS',
+    'US-KY', 'US-LA', 'US-MO', 'US-MS', 'US-MT', 'US-NC', 'US-ND', 'US-NE', 'US-OH',
+    'US-OK', 'US-SC', 'US-SD', 'US-TN', 'US-TX', 'US-UT', 'US-VA', 'US-WV', 'US-WY',
+  ];
+
+  it('matches the expected state set exactly (no drift)', () => {
+    expect([...VERIFY_REGIONS].sort()).toEqual([...EXPECTED].sort());
+  });
+
+  it('classifies EVERY law state as verify', () => {
+    for (const code of VERIFY_REGIONS) expect(regionTier(code)).toBe('verify');
+  });
+
+  it('does not block any verify state, and only blocks the configured set', () => {
+    for (const code of VERIFY_REGIONS) expect(regionTier(code)).not.toBe('blocked');
+    for (const code of BLOCKED_REGIONS) expect(regionTier(code)).toBe('blocked');
+  });
+
+  it('treats common no-law US states as open (not over-blocking)', () => {
+    for (const code of ['US-CA', 'US-WA', 'US-NY', 'US-CO', 'US-OR', 'US-MA']) {
+      expect(regionTier(code)).toBe('open');
+    }
   });
 });

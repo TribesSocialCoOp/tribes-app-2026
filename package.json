@@ -16,6 +16,7 @@
     "db:push": "drizzle-kit push --force",
     "db:seed": "tsx --env-file=.env.local src/db/seed.ts",
     "check:wallet": "tsx --env-file-if-exists=.env.local scripts/check-wallet-config.ts",
+    "check:geoip": "tsx --env-file-if-exists=.env.local scripts/check-geoip.ts",
     "ios:preflight": "./scripts/preflight.sh",
     "ios:sync": "npx cap sync ios",
     "ios:open": "npx cap open ios",

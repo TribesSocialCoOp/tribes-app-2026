@@ -26,16 +26,21 @@ export interface NsfwAccess {
  *             1/3 content-threshold exemption — any law state requires verification.
  *   blocked → no verification method we trust (UK OSA HEAA); NSFW fully unavailable.
  *
- * VERIFY_REGIONS: the 26 US states with adult-content AV laws in effect (verified
- * June 2026). Includes KS/WY/SD (no/low-threshold) — per policy they require Google
- * Wallet like the rest, not a full block. LA's law is enjoined (Dec 2025) but kept
- * here for conservative consistency.
+ * VERIFY_REGIONS: US states with adult-content AV laws in effect (verified June 2026).
+ * Includes KS/WY/SD (no/low-threshold) — per policy they require Google Wallet like
+ * the rest, not a full block. LA's law is enjoined (Dec 2025) but kept for caution.
+ * WV eff. 2026-06-12; IA eff. 2026-07-01.
+ *
+ * WATCH (not added — don't reach a sub-1/3 foreign small platform per research):
+ *   ND SB2380 (device/app-store signal model, not a site duty); EU DSA (small-biz
+ *   exempt); Canada S-209 (not law); Australia Phase 2 (risk-tiered); FR/DE/IT/BR
+ *   (enforce only vs dedicated porn sites — geo-block as a cheap hedge if ever desired).
  * ⚠️ Fast-moving — review with counsel quarterly; this is config, easy to amend.
  */
 export const VERIFY_REGIONS: readonly string[] = [
-  'US-AL', 'US-AR', 'US-AZ', 'US-FL', 'US-GA', 'US-ID', 'US-IN', 'US-KS', 'US-KY',
-  'US-LA', 'US-MO', 'US-MS', 'US-MT', 'US-NC', 'US-ND', 'US-NE', 'US-OH', 'US-OK',
-  'US-SC', 'US-SD', 'US-TN', 'US-TX', 'US-UT', 'US-VA', 'US-WV', 'US-WY',
+  'US-AL', 'US-AR', 'US-AZ', 'US-FL', 'US-GA', 'US-IA', 'US-ID', 'US-IN', 'US-KS',
+  'US-KY', 'US-LA', 'US-MO', 'US-MS', 'US-MT', 'US-NC', 'US-ND', 'US-NE', 'US-OH',
+  'US-OK', 'US-SC', 'US-SD', 'US-TN', 'US-TX', 'US-UT', 'US-VA', 'US-WV', 'US-WY',
 ];
 
 /** Full block — no privacy-clean verification method we trust. Also reserved for
