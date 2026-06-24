@@ -52,6 +52,18 @@ async function getReader(): Promise<CityReader | null> {
 
 /** Resolve the caller's region from their IP (local DB; nothing stored or shared). */
 export async function getRequestRegion(): Promise<RequestRegion> {
+  // Per-request override header (NON-PROD ONLY) — lets E2E/dev switch tiers without
+  // restarting the server, e.g. Playwright sets `x-tribes-geo: US-KS`. Ignored in prod.
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const code = (await headers()).get('x-tribes-geo');
+      if (code) {
+        const [country, subdivision] = code.split('-');
+        return { country: country || null, subdivision: subdivision || null };
+      }
+    } catch { /* no request context */ }
+  }
+
   const override = process.env.AGE_GEO_OVERRIDE;
   if (override) {
     const [country, subdivision] = override.split('-');
