@@ -60,12 +60,26 @@ test('v5 → v7 tribe-key upgrade preserves cached keys (no data loss, no user a
   expect(seededRawLen, 'seeded a 256-bit AES key').toBe(32);
 
   // 2. Enter the app → the real keystore code opens & upgrades the DB to v7.
-  await page.click('button:has-text("Dustin")');
-  await page.waitForURL('**/your-comms', { timeout: 30_000, waitUntil: 'commit' });
-  await page.waitForTimeout(6_000); // allow KeySyncProvider to open the keystore
+  // Robust against the dev-login cookie-commit race: the server action sets the
+  // session cookie, but the proxy may not see it on the first client nav and
+  // bounce back to /login. Retry the click+nav until we actually land
+  // authenticated in the (app) shell — only there does KeySyncProvider mount and
+  // open the keystore. (The v5 seed lives in IndexedDB, so it survives these navs.)
+  await expect(async () => {
+    if (page.url().includes('/login')) {
+      const btn = page.locator(`button:has-text("Dustin")`);
+      await btn.waitFor({ state: 'visible', timeout: 10_000 });
+      await btn.click();
+      await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 10_000 }).catch(() => {});
+    } else {
+      await page.goto(`${BASE}/your-comms`, { waitUntil: 'domcontentloaded' });
+    }
+    expect(page.url(), 'expected to be authenticated, not on /login').not.toContain('/login');
+  }).toPass({ timeout: 30_000 });
 
-  // 3. Verify the legacy key SURVIVED the upgrade.
-  const after = await page.evaluate(async () => {
+  // 3. Verify the legacy key SURVIVED the upgrade. KeySyncProvider opens the
+  //    keystore on mount and upgrades it; poll until that lands (no fixed sleep).
+  const readState = () => page.evaluate(async () => {
     return await new Promise<any>((resolve, reject) => {
       const open = indexedDB.open('tribes_keystore'); // opens at current (upgraded) version
       open.onsuccess = () => {
@@ -87,6 +101,11 @@ test('v5 → v7 tribe-key upgrade preserves cached keys (no data loss, no user a
       open.onerror = () => reject(open.error);
     });
   });
+
+  await expect.poll(async () => (await readState()).version, {
+    message: 'DB upgraded to v7 by KeySyncProvider', timeout: 30_000,
+  }).toBe(7);
+  const after = await readState();
 
   expect(after.version, 'DB upgraded to v7').toBe(7);
   expect(after.stores, 'new scoped store added').toContain('tribe_keys_v2');

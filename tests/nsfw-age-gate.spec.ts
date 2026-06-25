@@ -45,13 +45,21 @@ async function gotoStable(page: Page, url: string) {
 // This is the robust pattern from prf-vault-settings-detail, which reaches /settings
 // cleanly (a plain waitForURL returns mid-redirect and the next goto can detach).
 async function loginAs(page: Page, label = USER_LABEL) {
-  await page.goto(`${BASE}/your-comms`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(500);
-  if (!page.url().includes('/login')) return;
-  await page.waitForSelector(`button:has-text("${label}")`, { state: 'visible', timeout: 10_000 });
-  await page.click(`button:has-text("${label}")`);
-  await page.waitForFunction(() => !window.location.pathname.startsWith('/login'), { timeout: 30_000, polling: 500 });
-  await page.waitForTimeout(2000);
+  // The dev login sets the session cookie in a server action, then the client
+  // router.push()es to /your-comms. There's a brief window where the cookie isn't
+  // yet readable by the proxy, so that first nav can bounce back to /login. Wrap
+  // the whole flow in toPass: on a bounce, the next iteration re-navigates with
+  // the now-committed cookie and lands authenticated. No fixed sleep.
+  await expect(async () => {
+    await page.goto(`${BASE}/your-comms`, { waitUntil: 'domcontentloaded' });
+    // Unauthenticated requests are 307'd to /login by the proxy.
+    if (page.url().includes('/login')) {
+      await page.waitForSelector(`button:has-text("${label}")`, { state: 'visible', timeout: 10_000 });
+      await page.click(`button:has-text("${label}")`);
+      await page.waitForURL((u) => !u.pathname.startsWith('/login'), { timeout: 10_000 }).catch(() => {});
+    }
+    expect(page.url(), 'expected to be authenticated, not on /login').not.toContain('/login');
+  }).toPass({ timeout: 30_000 });
 }
 
 /** Set the dev-only region override for subsequent requests. */
@@ -83,7 +91,6 @@ test.afterAll(() => {
 });
 
 test('Settings: adult-content opt-in is web-settable and round-trips to the DB', async ({ page }) => {
-  test.slow();
   optInOff();
   await loginAs(page);
   // /settings polls (sessions/notifications) so it never reaches 'networkidle' —
