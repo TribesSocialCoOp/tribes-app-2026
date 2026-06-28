@@ -1,0 +1,199 @@
+name: deploy-reusable
+
+# Shared deploy pipeline used by both prod (deploy.yml, on main) and
+# staging (deploy-staging.yml, on the staging branch). Callers pass the
+# target host/user/key + Hetzner firewall ID as secrets, so the same
+# blue/green engine runs against either box unchanged.
+
+on:
+  workflow_call:
+    inputs:
+      environment_name:
+        description: 'Human label for logs (production | staging)'
+        type: string
+        required: true
+    secrets:
+      HCLOUD_TOKEN:
+        required: true
+      HCLOUD_FIREWALL_ID:
+        required: true
+      DEPLOY_HOST:
+        required: true
+      DEPLOY_USER:
+        required: true
+      DEPLOY_KEY:
+        required: true
+      DEPLOY_KEY_PASSPHRASE:
+        required: true
+      FCM_SERVICE_ACCOUNT_JSON:
+        required: false
+      APNS_PUSH_P12_BASE64:
+        required: false
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run Typecheck
+        run: npm run typecheck
+
+      - name: Run Unit Tests
+        run: npm run test
+
+  deploy:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Announce target
+        run: echo "Deploying to ${{ inputs.environment_name }} (${{ secrets.DEPLOY_USER }}@***)"
+
+      - name: Get Runner Public IP
+        id: runner-ip
+        run: |
+          RUNNER_IP=$(curl -s https://api.ipify.org)
+          echo "ip=${RUNNER_IP}" >> $GITHUB_OUTPUT
+          echo "Runner public IP: ${RUNNER_IP}"
+
+      - name: Open Firewall for Runner
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          HCLOUD_FIREWALL_ID: ${{ secrets.HCLOUD_FIREWALL_ID }}
+          RUNNER_IP: ${{ steps.runner-ip.outputs.ip }}
+        run: |
+          set -euo pipefail
+
+          # Fetch current firewall rules
+          CURRENT=$(curl -sf \
+            -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+            "https://api.hetzner.cloud/v1/firewalls/${HCLOUD_FIREWALL_ID}")
+
+          # Save original rules for cleanup step
+          echo "${CURRENT}" | jq '.firewall.rules' > /tmp/original-fw-rules.json
+
+          # Build new rules: inject runner IP into the SSH rule (port 22)
+          NEW_RULES=$(echo "${CURRENT}" | jq --arg ip "${RUNNER_IP}/32" '
+            .firewall.rules | map(
+              if .direction == "in" and .protocol == "tcp" and .port == "22"
+              then .source_ips += [$ip] | .source_ips |= unique
+              else .
+              end
+            )
+          ')
+
+          # Apply the updated rules
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"rules\": ${NEW_RULES}}" \
+            "https://api.hetzner.cloud/v1/firewalls/${HCLOUD_FIREWALL_ID}/actions/set_rules" \
+            | jq '.actions[0].status'
+
+          echo "✅ Runner IP ${RUNNER_IP} added to firewall SSH rule"
+
+          # Wait briefly for the firewall rule to propagate
+          sleep 5
+
+      - name: Setup SSH Agent with Passphrase
+        env:
+          SSH_PASSPHRASE: ${{ secrets.DEPLOY_KEY_PASSPHRASE }}
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          eval $(ssh-agent -s)
+          printf '%s\n' "echo \"$SSH_PASSPHRASE\"" > ~/.ssh_askpass
+          chmod +x ~/.ssh_askpass
+          printf '%s\n' "$SSH_PRIVATE_KEY" | DISPLAY=None SSH_ASKPASS=~/.ssh_askpass ssh-add -
+          echo "SSH_AUTH_SOCK=$SSH_AUTH_SOCK" >> $GITHUB_ENV
+          echo "SSH_AGENT_PID=$SSH_AGENT_PID" >> $GITHUB_ENV
+
+      - name: Configure SSH Keepalive
+        run: |
+          mkdir -p ~/.ssh
+          cat >> ~/.ssh/config <<EOF
+          Host *
+            ServerAliveInterval 30
+            ServerAliveCountMax 10
+            StrictHostKeyChecking no
+          EOF
+
+      - name: Provision Push Notification Keys
+        env:
+          FCM_SERVICE_ACCOUNT_JSON: ${{ secrets.FCM_SERVICE_ACCOUNT_JSON }}
+          APNS_PUSH_P12_BASE64: ${{ secrets.APNS_PUSH_P12_BASE64 }}
+        run: |
+          mkdir -p keys
+          if [ -n "$FCM_SERVICE_ACCOUNT_JSON" ]; then
+            echo "$FCM_SERVICE_ACCOUNT_JSON" > keys/fcm-service-account.json
+            echo "✅ FCM service account key written to keys/"
+          else
+            echo "⚠️ FCM_SERVICE_ACCOUNT_JSON secret not set — Android push will use mock mode"
+          fi
+          if [ -n "$APNS_PUSH_P12_BASE64" ]; then
+            echo "$APNS_PUSH_P12_BASE64" | base64 -d > keys/apns-push.p12
+            echo "✅ APNs .p12 certificate written to keys/"
+          else
+            echo "⚠️ APNS_PUSH_P12_BASE64 secret not set — iOS push will use mock mode"
+          fi
+
+      - name: Execute Deploy Script
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          # Overwrite deploy host parameters from GitHub secrets
+          sed -i "s/REMOTE_HOST=.*/REMOTE_HOST=\"$DEPLOY_USER@$DEPLOY_HOST\"/" ./scripts/deploy.sh
+          ./scripts/deploy.sh --skip-typecheck
+
+      - name: Close Firewall for Runner
+        if: always()
+        env:
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          HCLOUD_FIREWALL_ID: ${{ secrets.HCLOUD_FIREWALL_ID }}
+          RUNNER_IP: ${{ steps.runner-ip.outputs.ip }}
+        run: |
+          set -euo pipefail
+
+          if [ -f /tmp/original-fw-rules.json ]; then
+            # Restore the original rules exactly as they were
+            ORIGINAL_RULES=$(cat /tmp/original-fw-rules.json)
+            echo "Restoring original firewall rules (removing runner IP)..."
+          else
+            # Fallback: fetch current rules and strip the runner IP
+            echo "Original rules file not found, fetching current and stripping runner IP..."
+            CURRENT=$(curl -sf \
+              -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+              "https://api.hetzner.cloud/v1/firewalls/${HCLOUD_FIREWALL_ID}")
+
+            ORIGINAL_RULES=$(echo "${CURRENT}" | jq --arg ip "${RUNNER_IP}/32" '
+              .firewall.rules | map(
+                if .direction == "in" and .protocol == "tcp" and .port == "22"
+                then .source_ips -= [$ip]
+                else .
+                end
+              )
+            ')
+          fi
+
+          curl -sf -X POST \
+            -H "Authorization: Bearer ${HCLOUD_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"rules\": ${ORIGINAL_RULES}}" \
+            "https://api.hetzner.cloud/v1/firewalls/${HCLOUD_FIREWALL_ID}/actions/set_rules" \
+            | jq '.actions[0].status'
+
+          echo "✅ Runner IP ${RUNNER_IP} removed from firewall — SSH locked down"

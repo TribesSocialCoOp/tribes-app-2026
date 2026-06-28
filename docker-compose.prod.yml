@@ -168,7 +168,9 @@ services:
       - "443:443"
       - "443:443/udp"               # HTTP/3 (QUIC)
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Prod uses ./Caddyfile (default). Staging sets CADDYFILE_PATH=./Caddyfile.staging
+      # in its .env.production to mount the basic-auth-gated variant instead.
+      - ${CADDYFILE_PATH:-./Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy-data:/data            # TLS certs (persisted across restarts)
       - caddy-config:/config
     environment:

@@ -1,0 +1,28 @@
+name: deploy-staging
+
+# Staging deploy — runs on push to the `staging` branch and delegates to
+# the shared pipeline in deploy-reusable.yml. Promote a tested SHA to prod
+# by merging it into main.
+#
+# Required repo secrets (staging equivalents of the PROD_* set):
+#   STAGING_HOST, STAGING_USER, STAGING_KEY, STAGING_KEY_PASSPHRASE,
+#   STAGING_FIREWALL_ID   (HCLOUD_TOKEN is shared with prod)
+# FCM/APNs are intentionally omitted → push runs in mock mode on staging.
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  deploy-staging:
+    uses: ./.github/workflows/deploy-reusable.yml
+    with:
+      environment_name: staging
+    secrets:
+      HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+      HCLOUD_FIREWALL_ID: ${{ secrets.STAGING_FIREWALL_ID }}
+      DEPLOY_HOST: ${{ secrets.STAGING_HOST }}
+      DEPLOY_USER: ${{ secrets.STAGING_USER }}
+      DEPLOY_KEY: ${{ secrets.STAGING_KEY }}
+      DEPLOY_KEY_PASSPHRASE: ${{ secrets.STAGING_KEY_PASSPHRASE }}

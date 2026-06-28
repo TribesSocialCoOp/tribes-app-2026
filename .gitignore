@@ -45,6 +45,9 @@ next-env.d.ts
 .genkit/*
 .env*
 !.env.example
+# Env *templates* (no secrets) are tracked: .env.production.example,
+# .env.production.staging.example, etc.
+!.env*.example
 
 # firebase
 firebase-debug.log
