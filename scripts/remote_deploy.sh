@@ -80,6 +80,26 @@ else
   fi
 fi
 
+# ── Step 2.5: Bootstrap base services if not running (fresh box) ──
+# Only the app slots are profile-gated; postgres/pgbouncer/valkey/seaweedfs/
+# ws-relay/caddy start with a plain `up -d`. This is a NO-OP on an established
+# box (postgres already running) and self-bootstraps a fresh one (e.g. staging).
+# --env-file is required so compose can interpolate ${POSTGRES_PASSWORD} etc.
+PG_RUNNING=$(docker inspect -f '{{.State.Running}}' tribes-postgres-1 2>/dev/null || echo "false")
+if [ "$PG_RUNNING" != "true" ]; then
+  log "Base services not running — bootstrapping (fresh box)..."
+  docker compose -f "$COMPOSE_FILE" --env-file .env.production up -d
+  log "Waiting for postgres to become healthy..."
+  PG_OK=false
+  for _ in $(seq 1 30); do
+    if [ "$(docker inspect -f '{{.State.Health.Status}}' tribes-postgres-1 2>/dev/null || echo starting)" = "healthy" ]; then
+      PG_OK=true; break
+    fi
+    sleep 2
+  done
+  [ "$PG_OK" = "true" ] && ok "Base services up; postgres healthy" || fail "postgres did not become healthy after bootstrap"
+fi
+
 # ── Step 3: Run versioned schema migrations ─────────────────
 log "Applying database migrations..."
 PG_IP=$(docker inspect tribes-postgres-1 --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' 2>/dev/null || echo "")
