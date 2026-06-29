@@ -62,7 +62,10 @@ const TRIBES = [
   { id: 'stg_tribe_foodies', slug: 'foodies-united', name: 'Foodies United', desc: 'Recipes, restaurant finds, and kitchen experiments.', cover: '/seed/tribe-foodies.svg', isPublic: true, isListed: false, join: 'approval', founder: 'stg_user_hedy', moods: ['showcase', 'connect'] },
   { id: 'stg_tribe_books', slug: 'page-turners', name: 'Page Turners', desc: 'A book club for slow reads and big ideas.', cover: '/seed/tribe-books.svg', isPublic: true, isListed: false, join: 'instant', founder: 'stg_user_barbara', moods: ['learn', 'reflect'] },
   { id: 'stg_tribe_games', slug: 'game-night', name: 'Game Night', desc: 'Co-op runs, tabletop nights, and friendly trash talk.', cover: '/seed/tribe-games.svg', isPublic: true, isListed: false, join: 'instant', founder: 'stg_user_linus', moods: ['game', 'chill'] },
-  { id: 'stg_tribe_inner', slug: 'staging-inner', name: 'Staging Inner Circle', desc: 'A private tribe for testing membership + approval flows.', cover: '/seed/tribe-ai.svg', isPublic: false, isListed: true, join: 'approval', founder: 'stg_user_ada', moods: ['kin', 'focus'] },
+  // Normal private tribe: isListed=false so it is hidden from guest discovery.
+  // (isListed=true is reserved for NSFW tribes — the only case the policy lists
+  // a private tribe to guests. Setting it on a non-NSFW private tribe leaks it.)
+  { id: 'stg_tribe_inner', slug: 'staging-inner', name: 'Staging Inner Circle', desc: 'A private tribe for testing membership + approval flows.', cover: '/seed/tribe-ai.svg', isPublic: false, isListed: false, join: 'approval', founder: 'stg_user_ada', moods: ['kin', 'focus'] },
 ];
 
 // ── Memberships: [tribeId, userId, role] ──
