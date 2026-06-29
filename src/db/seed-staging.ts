@@ -11,8 +11,11 @@
  * Run seed-production.ts first for the idempotent bootstrap (plans, system bot,
  * Trials tribe); remote_deploy.sh does both on staging.
  *
- * IDEMPOTENT: visible entities (tribes/posts) upsert so re-runs refresh covers
- * and content; the rest insert-or-skip. Safe to run on every staging deploy.
+ * ADDITIVE-ONLY: every write is insert-or-skip (onConflictDoNothing) and there
+ * are NO deletes. Re-running can only add missing fixtures on a fresh box — it
+ * never modifies or removes existing rows, so anything you or testers create (or
+ * edits to the seeded fixtures themselves, e.g. founder transfers) is preserved
+ * across deploys. Safe to run on every staging deploy.
  *
  * SAFETY: refuses to run unless TRIBES_ENV=staging — can never touch prod.
  *
@@ -118,10 +121,7 @@ async function seedStaging() {
       isPublic: t.isPublic, isListed: t.isListed, joinMechanism: t.join,
       createdBy: t.founder, memberCount: memberCounts.get(t.id) ?? 1, createdAt: daysAgo(20),
     };
-    await db.insert(schema.tribes).values(row).onConflictDoUpdate({
-      target: schema.tribes.id,
-      set: { slug: row.slug, name: row.name, description: row.description, cover: row.cover, isPublic: row.isPublic, isListed: row.isListed, joinMechanism: row.joinMechanism, memberCount: row.memberCount },
-    });
+    await db.insert(schema.tribes).values(row).onConflictDoNothing({ target: schema.tribes.id });
     for (const mood of t.moods) {
       await db.insert(schema.tribeMoodTags).values({ tribeId: t.id, moodSlug: mood }).onConflictDoNothing();
     }
@@ -147,10 +147,7 @@ async function seedStaging() {
       title: p.title ?? null, content: p.content, imageUrl: p.img ?? null,
       ring: p.ring, moodTag: p.mood ?? null, isPinned: p.pinned ?? false,
       vibeCount: p._vibes, commentCount: p._comments.length, createdAt: daysAgo(p.days),
-    }).onConflictDoUpdate({
-      target: schema.posts.id,
-      set: { content: p.content, title: p.title ?? null, imageUrl: p.img ?? null, moodTag: p.mood ?? null, ring: p.ring, isPinned: p.pinned ?? false, vibeCount: p._vibes, commentCount: p._comments.length, tribeId: p.tribe },
-    });
+    }).onConflictDoNothing({ target: schema.posts.id });
 
     // Comments
     for (let ci = 0; ci < p._comments.length; ci++) {
