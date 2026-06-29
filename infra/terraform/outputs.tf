@@ -3,11 +3,6 @@ output "prod_ip" {
   value       = hcloud_server.tribes_prod.ipv4_address
 }
 
-output "backup_ip" {
-  description = "Backup server public IPv4 — used by restic SFTP target (DECOMMISSIONING: remove in STEP 2 with the tribes_backup resource)"
-  value       = hcloud_server.tribes_backup.ipv4_address
-}
-
 output "staging_ip" {
   description = "Staging server public IPv4 — point staging.tribes.app DNS records here"
   value       = hcloud_server.tribes_staging.ipv4_address

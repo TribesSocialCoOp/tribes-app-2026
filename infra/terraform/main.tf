@@ -16,6 +16,14 @@ provider "hcloud" {
 resource "hcloud_ssh_key" "tribes" {
   name       = "tribes-deploy"
   public_key = file(var.ssh_public_key_path)
+
+  # The registered key must not churn based on which operator's machine runs
+  # tofu (ssh_public_key_path resolves per-machine). Servers bake the key in at
+  # creation (ssh_keys is ignore_changes on them), so the registered key is only
+  # used for FUTURE provisioning — pin it to avoid spurious replacement.
+  lifecycle {
+    ignore_changes = [public_key]
+  }
 }
 
 # ── Firewall ─────────────────────────────────────────────────
@@ -57,27 +65,10 @@ resource "hcloud_firewall" "tribes_prod" {
   # All Docker services (sqld, valkey, seaweedfs) are on internal network only
 }
 
-# DECOMMISSIONING alongside hcloud_server.tribes_backup — see the note there.
-# Delete this block in STEP 2.
-resource "hcloud_firewall" "tribes_backup" {
-  name = "tribes-backup-fw"
-
-  # SSH from prod server only (for restic SFTP)
-  # NOTE: prod server IP is hardcoded here to avoid a circular dependency /
-  # null-value issue when the primary IP is unassigned during tofu operations.
-  rule {
-    direction  = "in"
-    protocol   = "tcp"
-    port       = "22"
-    source_ips = concat(var.admin_ips, ["5.78.189.222/32"])
-  }
-
-  rule {
-    direction  = "in"
-    protocol   = "icmp"
-    source_ips = ["0.0.0.0/0", "::/0"]
-  }
-}
+# NOTE: tribes-backup server + firewall were decommissioned on 2026-06-29.
+# Offsite backups now go to a Hetzner Storage Box (u624360.your-storagebox.de,
+# managed outside Terraform — Storage Boxes are a separate product). See
+# scripts/backup.sh + /etc/tribes/backup.env on prod.
 
 # ── Production Server ────────────────────────────────────────
 resource "hcloud_server" "tribes_prod" {
@@ -116,50 +107,6 @@ resource "hcloud_server" "tribes_prod" {
   lifecycle {
     prevent_destroy = true
     ignore_changes  = [ssh_keys, user_data, public_net]
-  }
-}
-
-# ── Backup Server (DECOMMISSIONING) ──────────────────────────
-# This dedicated-CPU box only received a nightly rsync of the encrypted
-# restic repo. Offsite backups now go to a Hetzner Storage Box (see
-# scripts/setup-offsite-backup.sh), so this server is being retired.
-#
-# DECOMMISSION PROCEDURE (two applies — do NOT skip step 1):
-#   STEP 1 (this commit): protections lifted below + prevent_destroy removed.
-#           Run `tofu apply` once to push delete_protection=false to Hetzner.
-#   STEP 2 (follow-up, AFTER Storage Box backups are verified): delete this
-#           resource block, the hcloud_firewall.tribes_backup block, the
-#           backup_ip output, and infra/terraform/cloud-init-backup.yaml; then
-#           `tofu apply` to destroy. (Removing the block before STEP 1 is
-#           applied fails safe — Hetzner refuses to delete a protected server.)
-resource "hcloud_server" "tribes_backup" {
-  name        = "tribes-backup"
-  server_type = "ccx13"              # Smallest dedicated CPU available at hil
-  location    = "hil"
-  image       = "ubuntu-24.04"
-  ssh_keys    = [hcloud_ssh_key.tribes.id]
-  firewall_ids = [hcloud_firewall.tribes_backup.id]
-
-  # Protections lifted to allow decommission (STEP 1).
-  delete_protection  = false
-  rebuild_protection = false
-
-  user_data = templatefile("${path.module}/cloud-init-backup.yaml", {
-    deploy_user = "tribes"
-  })
-
-  labels = {
-    env     = "production"
-    project = "tribes"
-    role    = "backup"
-  }
-
-  # ssh_keys and user_data are write-only at creation time — the Hetzner
-  # provider cannot read them back after import, so tofu will always see
-  # drift on these fields. Ignore them to prevent accidental server replacement.
-  # NOTE: prevent_destroy intentionally removed for decommission (see STEP 2).
-  lifecycle {
-    ignore_changes = [ssh_keys, user_data]
   }
 }
 
