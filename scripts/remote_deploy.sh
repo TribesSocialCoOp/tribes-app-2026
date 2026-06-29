@@ -166,27 +166,23 @@ if [ "$MIGRATE_ONLY" = "true" ]; then
   exit 0
 fi
 
-# ── Step 5.6: Staging seed (staging only, one-time, sentinel-gated) ──
+# ── Step 5.6: Staging seed (staging only, every deploy) ──────
 # TRIBES_ENV is sourced from .env.production above (set to "staging" only on
 # the staging box). Runs the idempotent prod bootstrap (plans, system bot,
-# Trials tribe) then layers synthetic staging content. seed-staging.ts hard
-# refuses to run unless TRIBES_ENV=staging, so this can never touch prod.
-SEED_STAGING_SENTINEL=".seed-staging-done"
+# Trials tribe) then layers synthetic staging fixtures. Both seeds are
+# idempotent (upsert), so we run every deploy to keep fixtures fresh; this is
+# how cover/content updates to seed-staging.ts reach the box. seed-staging.ts
+# hard-refuses to run unless TRIBES_ENV=staging, so this can never touch prod.
 if [ "${TRIBES_ENV:-}" = "staging" ]; then
-  if [ -f "$SEED_STAGING_SENTINEL" ]; then
-    ok "Staging seed already completed — skipping"
+  log "Seeding staging database (idempotent)..."
+  if docker run --rm \
+    --network="$PG_NETWORK" \
+    -e DATABASE_URL="postgresql://tribes:${POSTGRES_PASSWORD}@${PG_IP}:5432/tribes" \
+    -e TRIBES_ENV=staging \
+    tribes-builder sh -c "npx tsx src/db/seed-production.ts && TRIBES_ENV=staging npx tsx src/db/seed-staging.ts" 2>&1; then
+    ok "Staging seed complete"
   else
-    log "Seeding staging database..."
-    if docker run --rm \
-      --network="$PG_NETWORK" \
-      -e DATABASE_URL="postgresql://tribes:${POSTGRES_PASSWORD}@${PG_IP}:5432/tribes" \
-      -e TRIBES_ENV=staging \
-      tribes-builder sh -c "npx tsx src/db/seed-production.ts && TRIBES_ENV=staging npx tsx src/db/seed-staging.ts" 2>&1; then
-      date -u '+completed %Y-%m-%dT%H:%M:%SZ' > "$SEED_STAGING_SENTINEL"
-      ok "Staging seed complete"
-    else
-      warn "Staging seed failed — will retry next deploy"
-    fi
+    warn "Staging seed failed — will retry next deploy"
   fi
 fi
 
