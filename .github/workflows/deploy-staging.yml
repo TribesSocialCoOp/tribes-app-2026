@@ -4,9 +4,10 @@ name: deploy-staging
 # the shared pipeline in deploy-reusable.yml. Promote a tested SHA to prod
 # by merging it into main.
 #
-# Required repo secrets (staging equivalents of the PROD_* set):
-#   STAGING_HOST, STAGING_USER, STAGING_KEY, STAGING_KEY_PASSPHRASE,
-#   STAGING_FIREWALL_ID   (HCLOUD_TOKEN is shared with prod)
+# Required repo secrets:
+#   STAGING_HOST, STAGING_USER, STAGING_FIREWALL_ID
+# The SSH key + token are SHARED with prod (both boxes authorize the same
+# hcloud_ssh_key.tribes): reuses PROD_KEY / PROD_KEY_PASSPHRASE / HCLOUD_TOKEN.
 # FCM/APNs are intentionally omitted → push runs in mock mode on staging.
 
 on:
@@ -24,5 +25,5 @@ jobs:
       HCLOUD_FIREWALL_ID: ${{ secrets.STAGING_FIREWALL_ID }}
       DEPLOY_HOST: ${{ secrets.STAGING_HOST }}
       DEPLOY_USER: ${{ secrets.STAGING_USER }}
-      DEPLOY_KEY: ${{ secrets.STAGING_KEY }}
-      DEPLOY_KEY_PASSPHRASE: ${{ secrets.STAGING_KEY_PASSPHRASE }}
+      DEPLOY_KEY: ${{ secrets.PROD_KEY }}
+      DEPLOY_KEY_PASSPHRASE: ${{ secrets.PROD_KEY_PASSPHRASE }}
