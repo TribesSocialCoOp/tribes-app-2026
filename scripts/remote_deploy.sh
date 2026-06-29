@@ -28,6 +28,11 @@ else
   exit 1
 fi
 
+# docker compose reads `.env` (not `.env.production`) for ${VAR} interpolation of
+# the compose file (POSTGRES_PASSWORD, TRIBES_APP_PASSWORD, ...). Ensure the
+# symlink exists so a fresh box doesn't recreate postgres with blank passwords.
+[ -e .env ] || ln -s .env.production .env
+
 # ── Colors ─────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -296,8 +301,12 @@ else
   CRON_GEOIP="# tribes geoipupdate refresh disabled (no GEOIPUPDATE_* in .env.production)"
 fi
 
-# Rebuild crontab: remove old entries, add current ones
-(crontab -l 2>/dev/null | grep -v "cleanup-seaweedfs.ts" | grep -v "server-maintenance.sh" | grep -v "storage-cleanup" | grep -v "geoipupdate" ; echo "$CRON_SEAWEEDFS" ; echo "$CRON_MAINTENANCE" ; echo "$CRON_GEOIP") | crontab -
+# Rebuild crontab: remove old entries, add current ones.
+# Use command substitution with `|| true` so a fresh box (no crontab yet) and
+# grep returning 1 on empty input don't trip set -e / pipefail.
+EXISTING_CRON=$(crontab -l 2>/dev/null || true)
+KEPT_CRON=$(printf '%s\n' "$EXISTING_CRON" | grep -vE "cleanup-seaweedfs.ts|server-maintenance.sh|storage-cleanup|geoipupdate" || true)
+printf '%s\n%s\n%s\n%s\n' "$KEPT_CRON" "$CRON_SEAWEEDFS" "$CRON_MAINTENANCE" "$CRON_GEOIP" | grep -v '^$' | crontab -
 ok "Cron jobs updated (seaweedfs cleanup + server maintenance + geoip refresh)"
 
 echo ""
