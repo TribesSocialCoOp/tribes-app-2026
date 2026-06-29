@@ -29,8 +29,13 @@
 
 {$APP_DOMAIN:staging.tribes.app} {
     # Private staging gate — prompt for credentials before anything else.
+    # Shared tester gate (intentionally easy: tribes / tribes-staging). The
+    # bcrypt hash is inlined literally rather than via {$ENV} because a bcrypt
+    # hash contains '$', which both bash `source .env.production` (set -u) and
+    # docker-compose interpolation would mangle. To rotate: regenerate with
+    #   docker run --rm caddy:2-alpine caddy hash-password --plaintext '<pw>'
     basic_auth {
-        {$STAGING_BASIC_AUTH_USER} {$STAGING_BASIC_AUTH_HASH}
+        tribes $2a$14$wE9bc1WCWbYF.TaCCO0Q4.AXV5T9pxmL8EVOo9kxf/QB2JZwBmtEC
     }
 
     # Next.js app — blue/green load balancing
