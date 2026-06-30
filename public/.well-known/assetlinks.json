@@ -15,7 +15,7 @@
     }
   },
   {
-    "_comment": "Staging native flavor. Replace the fingerprint with the staging app's Play App Signing SHA-256 from the Play Console (App integrity → App signing) — NOT the upload keystore fingerprint, since Play re-signs internal-testing builds.",
+    "_comment": "Staging native flavor. First fingerprint = Play App Signing cert (Play internal-testing installs); second = local release keystore (sideloaded adb/release APK). Both are listed so passkeys/app-links verify whether the staging app is installed from Play or sideloaded.",
     "relation": [
       "delegate_permission/common.handle_all_urls",
       "delegate_permission/common.get_login_creds"
@@ -24,7 +24,8 @@
       "namespace": "android_app",
       "package_name": "app.tribes.android.staging",
       "sha256_cert_fingerprints": [
-        "REPLACE_WITH_STAGING_PLAY_APP_SIGNING_SHA256"
+        "A3:F6:8B:BF:4D:71:98:64:15:BD:7A:0E:BD:0F:04:E5:13:2D:39:F7:1D:0C:DE:13:48:D0:74:34:4A:18:B7:F9",
+        "C3:74:0E:64:03:60:57:DC:D5:B0:BB:3B:BF:A8:2D:81:1C:A1:68:C4:CC:C6:87:BE:8E:6E:5E:8F:2B:0A:B7:5B"
       ]
     }
   }
