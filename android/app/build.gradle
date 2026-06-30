@@ -94,3 +94,18 @@ try {
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
+
+// Push is intentionally mock on staging, and google-services.json only contains the
+// production client (app.tribes.android). Skip Google Services processing for the
+// staging flavor so the build doesn't require a staging Firebase client. Firebase
+// simply won't initialize on staging (FirebaseInitProvider logs a benign warning and
+// no-ops) — which is the intended "no push on staging" behavior. To enable push on
+// staging later, register app.tribes.android.staging in the Firebase project and drop
+// a src/staging/google-services.json, then remove this block.
+afterEvaluate {
+    tasks.configureEach { task ->
+        if (task.name.startsWith("process") && task.name.contains("Staging") && task.name.endsWith("GoogleServices")) {
+            task.enabled = false
+        }
+    }
+}
