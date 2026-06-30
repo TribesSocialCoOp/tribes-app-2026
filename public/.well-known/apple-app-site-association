@@ -14,12 +14,26 @@
           "/events/*",
           "/signup"
         ]
+      },
+      {
+        "appID": "ABXVW6PWCW.app.tribes.TribesApp.staging",
+        "paths": [
+          "/bond/tap/*",
+          "/bonds/*",
+          "/tribe/*",
+          "/post/*",
+          "/profile/*",
+          "/my-wall",
+          "/events/*",
+          "/signup"
+        ]
       }
     ]
   },
   "webcredentials": {
     "apps": [
-      "ABXVW6PWCW.app.tribes.TribesApp"
+      "ABXVW6PWCW.app.tribes.TribesApp",
+      "ABXVW6PWCW.app.tribes.TribesApp.staging"
     ]
   }
 }

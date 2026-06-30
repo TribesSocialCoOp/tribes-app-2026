@@ -16,11 +16,32 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 416
         versionName "1.0.5"
+        // Default App Link host (overridden per flavor below).
+        manifestPlaceholders = [appLinkHost: "tribes.app"]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // Build flavors: production (default identity) and staging. The staging flavor gets
+    // a distinct applicationId so it installs alongside prod, points App Links at
+    // staging.tribes.app, and bumps versionName. The WebView URL, passkey origin/domains
+    // and UA token come from capacitor.config.ts via TRIBES_ENV=staging at `cap sync`
+    // time (exported by scripts/build_android.sh --staging). The staging flavor reuses
+    // the same release keystore (upload cert), but Play re-signs internal-testing builds
+    // with a per-app key — use that Play App Signing fingerprint in assetlinks.json.
+    flavorDimensions "env"
+    productFlavors {
+        production {
+            dimension "env"
+        }
+        staging {
+            dimension "env"
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-stg"
+            manifestPlaceholders = [appLinkHost: "staging.tribes.app"]
         }
     }
     if (keystorePropertiesFile.exists()) {
