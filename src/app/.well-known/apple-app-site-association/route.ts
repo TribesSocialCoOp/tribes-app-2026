@@ -25,18 +25,18 @@ export async function GET() {
     });
   } catch {
     // Fallback: return the AASA inline if the file is missing
+    const paths = ['/bond/tap/*', '/bonds/*', '/tribe/*', '/post/*', '/profile/*', '/my-wall', '/events/*', '/signup'];
     const aasa = {
       applinks: {
         apps: [],
         details: [
-          {
-            appID: 'ABXVW6PWCW.app.tribes.TribesApp',
-            paths: ['/bond/tap/*', '/bonds/*', '/tribe/*', '/post/*', '/profile/*', '/my-wall', '/events/*', '/signup'],
-          },
+          { appID: 'ABXVW6PWCW.app.tribes.TribesApp', paths },
+          // Staging native flavor — harmless on prod (the prod app won't match it).
+          { appID: 'ABXVW6PWCW.app.tribes.TribesApp.staging', paths },
         ],
       },
       webcredentials: {
-        apps: ['ABXVW6PWCW.app.tribes.TribesApp'],
+        apps: ['ABXVW6PWCW.app.tribes.TribesApp', 'ABXVW6PWCW.app.tribes.TribesApp.staging'],
       },
     };
     return NextResponse.json(aasa, {

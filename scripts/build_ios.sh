@@ -11,6 +11,7 @@
 # Usage:
 #   ./scripts/build_ios.sh                  # Archive for App Store / TestFlight
 #   ./scripts/build_ios.sh --dev            # Build for connected device (debug)
+#   ./scripts/build_ios.sh --staging        # Archive the staging flavor (staging.tribes.app)
 #   TRIBES_TEAM_ID=XXXX ./scripts/build_ios.sh  # Override team ID
 # ==============================================================================
 set -e
@@ -26,9 +27,18 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# Parse args
+BUILD_MODE="release"
+IS_STAGING="false"
+for arg in "$@"; do
+    case "$arg" in
+        --dev)     BUILD_MODE="dev" ;;
+        --staging) IS_STAGING="true" ;;
+    esac
+done
+
 # Configuration
 APP_NAME="Tribes"
-BUNDLE_ID="app.tribes.TribesApp"
 TEAM_ID="${TRIBES_TEAM_ID:-ABXVW6PWCW}"
 SCHEME="App"
 WORKSPACE="ios/App/App.xcworkspace"
@@ -38,15 +48,28 @@ ARCHIVE_PATH="$ARCHIVE_DIR/$APP_NAME.xcarchive"
 IPA_DIR="$ARCHIVE_DIR/ipa"
 EXPORT_PLIST="scripts/ExportOptions.plist"
 
-# Parse args
-BUILD_MODE="release"
-if [ "$1" = "--dev" ]; then
-    BUILD_MODE="dev"
+# Environment-specific identity. Staging gets a distinct bundle id (so it installs
+# alongside prod), staging entitlements (associated-domains -> staging.tribes.app),
+# a "(stg)" display name, and points the WebView/error redirects at staging. The
+# TRIBES_ENV export is what makes capacitor.config.ts emit the staging server.url,
+# passkey origin/domains, and UA token during `npx cap sync` below.
+if [ "$IS_STAGING" = "true" ]; then
+    export TRIBES_ENV="staging"
+    BUNDLE_ID="app.tribes.TribesApp.staging"
+    ENTITLEMENTS="App/App.staging.entitlements"
+    DISPLAY_NAME="Tribes (stg)"
+    APP_URL="https://staging.tribes.app"
+else
+    BUNDLE_ID="app.tribes.TribesApp"
+    ENTITLEMENTS="App/App.entitlements"
+    DISPLAY_NAME="Tribes"
+    APP_URL="https://tribes.app"
 fi
 
 echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║   🏔️  Tribes iOS Build Pipeline           ║${NC}"
 echo -e "${CYAN}║   Mode: $(printf '%-32s' "$BUILD_MODE")║${NC}"
+echo -e "${CYAN}║   Env:  $(printf '%-32s' "$([ "$IS_STAGING" = "true" ] && echo "staging ($BUNDLE_ID)" || echo "production")")║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -69,7 +92,7 @@ echo "   Syncing web assets and native plugins..."
 # (Capacitor needs webDir to exist even in server-url mode)
 mkdir -p out
 if [ ! -f "out/index.html" ]; then
-    echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=https://tribes.app"></head><body>Loading Tribes...</body></html>' > out/index.html
+    echo "<!DOCTYPE html><html><head><meta http-equiv=\"refresh\" content=\"0;url=$APP_URL\"></head><body>Loading Tribes...</body></html>" > out/index.html
 fi
 
 # Generate the offline error screen
@@ -125,6 +148,12 @@ cat > out/error.html << 'EOF'
 </html>
 EOF
 
+# Point the offline screen's "Try Again" at the right environment (staging vs prod).
+# The heredoc above is single-quoted, so patch the URL afterwards.
+if [ "$APP_URL" != "https://tribes.app" ]; then
+    sed -i '' "s|https://tribes.app|$APP_URL|g" out/error.html
+fi
+
 npx cap sync ios
 echo -e "   ${GREEN}✅ Capacitor synced${NC}"
 
@@ -152,6 +181,9 @@ PLIST="ios/App/App/Info.plist"
     /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$PLIST"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$PLIST" 2>/dev/null || \
     /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" "$PLIST"
+# Display name diverges for staging so testers can tell the two apps apart on-device.
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $DISPLAY_NAME" "$PLIST" 2>/dev/null || \
+    /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string $DISPLAY_NAME" "$PLIST"
 echo -e "   ${GREEN}✅ Patched Info.plist${NC}"
 
 # ── Step 3: Build / Archive ──────────────────────────────────────────────────
@@ -176,6 +208,8 @@ if [ "$BUILD_MODE" = "dev" ]; then
         -allowProvisioningUpdates \
         DEVELOPMENT_TEAM="$TEAM_ID" \
         CODE_SIGN_STYLE=Automatic \
+        PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+        CODE_SIGN_ENTITLEMENTS="$ENTITLEMENTS" \
         build 2>&1 | tail -5
 
     echo ""
@@ -206,6 +240,8 @@ xcodebuild archive \
     -allowProvisioningUpdates \
     DEVELOPMENT_TEAM="$TEAM_ID" \
     CODE_SIGN_STYLE=Automatic \
+    PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+    CODE_SIGN_ENTITLEMENTS="$ENTITLEMENTS" \
     2>&1 | tail -5
 
 if [ ! -d "$ARCHIVE_PATH" ]; then

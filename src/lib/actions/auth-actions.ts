@@ -69,6 +69,7 @@ export async function verifyReauthChallenge(response: import('@simplewebauthn/se
 
   const { cookies } = await import('next/headers');
   const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
+  const { getExpectedOrigins } = await import('@/lib/auth/passkeys');
   const { db } = await import('@/db');
   const { credentials } = await import('@/db/schema');
   const { eq } = await import('drizzle-orm');
@@ -90,7 +91,9 @@ export async function verifyReauthChallenge(response: import('@simplewebauthn/se
     const verification = await verifyAuthenticationResponse({
       response,
       expectedChallenge: challenge,
-      expectedOrigin: process.env.WEBAUTHN_ORIGIN || 'http://localhost:9002',
+      // Use the shared origin list so native (Android apk-key-hash) reauth works,
+      // matching the login/registration path in @/lib/auth/passkeys.
+      expectedOrigin: getExpectedOrigins(),
       expectedRPID: process.env.WEBAUTHN_RP_ID || 'localhost',
       credential: {
         id: dbCredential.id,

@@ -11,89 +11,115 @@
 #   STAGING_BASIC_AUTH_USER  — the username
 #   STAGING_BASIC_AUTH_HASH  — bcrypt hash from `caddy hash-password`
 #
-# NOTE (Phase 3): native WebView apps cannot answer a 401 prompt. When the
-# staging apps land, reconcile this gate (IP allowlist, a header-bypass
-# matcher, or exempting /.well-known/* + app API paths).
+# Native staging apps (Phase 3): WebView apps cannot answer a 401 prompt, and
+# passkey/associated-domain verification must fetch /.well-known/* unauthenticated.
+# The {$APP_DOMAIN} block below therefore exempts /.well-known/* and lets the
+# native staging build through via its custom User-Agent token, while browsers
+# still hit the basic-auth prompt. See the (app_upstream) snippet + handle blocks.
 # ============================================================
 
 # Shared security headers — imported by every server block
 (security_headers) {
-    header {
-        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "DENY"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        X-Permitted-Cross-Domain-Policies "none"
-    }
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Permitted-Cross-Domain-Policies "none"
+	}
+}
+
+# Next.js app upstream — blue/green load balancing. Defined as a snippet so the
+# authenticated and bypass handle blocks below share one definition.
+(app_upstream) {
+	reverse_proxy app-blue:9002 app-green:9002 {
+		lb_policy first
+
+		# Passive health: mark upstream down after 2 failures
+		fail_duration 10s
+		max_fails 2
+
+		# Active health: probe /api/health on each upstream every 5s
+		health_uri /api/health
+		health_interval 5s
+		health_timeout 3s
+	}
 }
 
 {$APP_DOMAIN:staging.tribes.app} {
-    # Private staging gate — prompt for credentials before anything else.
-    # Shared tester gate (intentionally easy: tribes / tribes-staging). The
-    # bcrypt hash is inlined literally rather than via {$ENV} because a bcrypt
-    # hash contains '$', which both bash `source .env.production` (set -u) and
-    # docker-compose interpolation would mangle. To rotate: regenerate with
-    #   docker run --rm caddy:2-alpine caddy hash-password --plaintext '<pw>'
-    basic_auth {
-        tribes $2a$14$wE9bc1WCWbYF.TaCCO0Q4.AXV5T9pxmL8EVOo9kxf/QB2JZwBmtEC
-    }
+	# Bypass the basic-auth gate for:
+	#   - /.well-known/*  : Apple/Google fetch these UNAUTHENTICATED to verify the
+	#                       native app's associated domains (passkeys + app links).
+	#   - the native staging app : Capacitor injects a custom User-Agent token
+	#                       (appendUserAgent in capacitor.config.ts) on every WebView
+	#                       request, including the top-level document. Convenience-grade,
+	#                       not a secret — staging is noindex and holds no real data.
+	@public path /.well-known/*
+	@nativeapp header User-Agent *TribesStaging*
 
-    # Next.js app — blue/green load balancing
-    reverse_proxy app-blue:9002 app-green:9002 {
-        lb_policy first
+	handle @public {
+		import app_upstream
+	}
 
-        # Passive health: mark upstream down after 2 failures
-        fail_duration 10s
-        max_fails 2
+	handle @nativeapp {
+		import app_upstream
+	}
 
-        # Active health: probe /api/health on each upstream every 5s
-        health_uri /api/health
-        health_interval 5s
-        health_timeout 3s
-    }
+	# Everything else (browsers) stays behind the shared tester gate.
+	# Intentionally easy: tribes / tribes-staging. The bcrypt hash is inlined
+	# literally rather than via {$ENV} because a bcrypt hash contains '$', which
+	# both bash `source .env.production` (set -u) and docker-compose interpolation
+	# would mangle. To rotate: regenerate with
+	#   docker run --rm caddy:2-alpine caddy hash-password --plaintext '<pw>'
+	handle {
+		basic_auth {
+			tribes $2a$14$wE9bc1WCWbYF.TaCCO0Q4.AXV5T9pxmL8EVOo9kxf/QB2JZwBmtEC
+		}
+		import app_upstream
+	}
 
-    import security_headers
+	import security_headers
 
-    header {
-        X-Robots-Tag "noindex, nofollow"  # Staging must never be indexed
-    }
+	header {
+		X-Robots-Tag "noindex, nofollow" # Staging must never be indexed
+	}
 
-    log {
-        output file /var/log/caddy/access.log
-        format json
-    }
+	log {
+		output file /var/log/caddy/access.log
+		format json
+	}
 }
 
 {$WS_DOMAIN:ws.staging.tribes.app} {
-    # WebSocket relay — must preserve upgrade headers
-    reverse_proxy ws-relay:9003 {
-        header_up Connection "Upgrade"
-        header_up Upgrade "websocket"
-    }
+	# WebSocket relay — must preserve upgrade headers
+	reverse_proxy ws-relay:9003 {
+		header_up Connection "Upgrade"
+		header_up Upgrade "websocket"
+	}
 
-    import security_headers
+	import security_headers
 }
 
 {$MEDIA_DOMAIN:media.staging.tribes.app} {
-    # SeaweedFS Filer — public media CDN
-    rewrite * /buckets{path}
+	# SeaweedFS Filer — public media CDN
+	rewrite * /buckets{path}
 
-    reverse_proxy seaweedfs-filer:8888 {
-        header_down -Access-Control-Allow-Origin
-        header_down -Access-Control-Allow-Credentials
-        header_down -Access-Control-Allow-Methods
-        header_down -Access-Control-Allow-Headers
-        header_down -Access-Control-Expose-Headers
-    }
+	reverse_proxy seaweedfs-filer:8888 {
+		header_down -Access-Control-Allow-Origin
+		header_down -Access-Control-Allow-Credentials
+		header_down -Access-Control-Allow-Methods
+		header_down -Access-Control-Allow-Headers
+		header_down -Access-Control-Expose-Headers
+	}
 
-    import security_headers
+	import security_headers
 
-    # Allow only the staging app origin to fetch media
-    header Access-Control-Allow-Origin "https://{$APP_DOMAIN:staging.tribes.app}"
+	# Allow only the staging app origin to fetch media
+	header Access-Control-Allow-Origin "https://{$APP_DOMAIN:staging.tribes.app}"
 
-    # Block script execution in media documents
-    header Content-Security-Policy "script-src 'none'; object-src 'none'"
+	# Block script execution in media documents
+	header Content-Security-Policy "script-src 'none'; object-src 'none'"
 
-    header Cache-Control "public, max-age=31536000, immutable"
-    header Vary "Accept-Encoding"
+	header Cache-Control "public, max-age=31536000, immutable"
+	header Vary "Accept-Encoding"
 }

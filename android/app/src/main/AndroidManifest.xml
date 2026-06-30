@@ -24,12 +24,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- Android App Links — deep linking for tribes.app -->
+            <!-- Android App Links — deep linking. Host is set per build flavor
+                 (tribes.app for production, staging.tribes.app for staging). -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="https" android:host="tribes.app" />
+                <data android:scheme="https" android:host="${appLinkHost}" />
             </intent-filter>
 
             <!-- Custom URL scheme fallback -->

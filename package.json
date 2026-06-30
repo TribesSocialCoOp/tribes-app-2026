@@ -22,6 +22,7 @@
     "ios:open": "npx cap open ios",
     "ios:build": "./scripts/build_ios.sh",
     "ios:build:dev": "./scripts/build_ios.sh --dev",
+    "ios:build:staging": "./scripts/build_ios.sh --staging",
     "ios:upload": "./scripts/upload_testflight.sh",
     "ios:icons": "./scripts/generate_icons.sh",
     "android:sync": "npx cap sync android",
@@ -29,6 +30,8 @@
     "android:copy": "npx cap copy android",
     "android:build": "./scripts/build_android.sh",
     "android:build:apk": "./scripts/build_android.sh --apk",
+    "android:build:staging": "./scripts/build_android.sh --staging",
+    "android:build:staging:apk": "./scripts/build_android.sh --staging --apk",
     "cap:sync": "npx cap sync",
     "prepare": "husky"
   },

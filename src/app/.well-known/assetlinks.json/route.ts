@@ -41,6 +41,21 @@ export async function GET() {
           ],
         },
       },
+      {
+        // Staging native flavor. Replace the fingerprint with the staging app's Play App
+        // Signing SHA-256 from the Play Console — NOT the upload keystore (Play re-signs).
+        relation: [
+          'delegate_permission/common.handle_all_urls',
+          'delegate_permission/common.get_login_creds'
+        ],
+        target: {
+          namespace: 'android_app',
+          package_name: 'app.tribes.android.staging',
+          sha256_cert_fingerprints: [
+            'REPLACE_WITH_STAGING_PLAY_APP_SIGNING_SHA256'
+          ],
+        },
+      },
     ];
     return NextResponse.json(assetlinks, {
       headers: { 'Cache-Control': 'public, max-age=3600' },
