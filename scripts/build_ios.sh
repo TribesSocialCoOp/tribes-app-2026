@@ -293,13 +293,25 @@ EXPORT_EXIT=${PIPESTATUS[0]}
 IPA_FILE=$(find "$IPA_DIR" -name "*.ipa" -type f | head -1)
 if [ -n "$IPA_FILE" ]; then
     echo -e "   ${GREEN}✅ IPA exported: $IPA_FILE${NC}"
+    echo "   Upload it with: npm run ios:upload"
 elif [ $EXPORT_EXIT -eq 0 ]; then
-    # destination=upload mode: no local IPA, but upload succeeded
-    echo -e "   ${GREEN}✅ Build uploaded directly to App Store Connect${NC}"
+    # destination=upload mode: no local IPA, but upload succeeded.
+    # Staging and production use this identical path — the build uploads straight
+    # to App Store Connect for whichever bundle id was archived.
+    echo -e "   ${GREEN}✅ Build uploaded directly to App Store Connect (${BUNDLE_ID})${NC}"
     IPA_FILE="(uploaded directly)"
 else
-    echo -e "${RED}❌ IPA export failed${NC}"
+    echo -e "${RED}❌ Export/upload failed for ${BUNDLE_ID}${NC}"
     echo "   Check the archive in Xcode: open $ARCHIVE_PATH"
+    if [ "$IS_STAGING" = "true" ]; then
+        echo ""
+        echo -e "   ${YELLOW}Staging uploads use the same mechanism as production (destination=upload).${NC}"
+        echo "   A failure here usually means the staging app isn't set up yet. Confirm:"
+        echo "     • App ID '${BUNDLE_ID}' is registered in the Apple Developer Portal"
+        echo "       (with Associated Domains, Sign in with Apple, NFC Tag Reading)"
+        echo "     • An App Store Connect app record exists for '${BUNDLE_ID}'"
+        echo "   Then re-run: npm run ios:build:staging"
+    fi
     exit 1
 fi
 
