@@ -47,3 +47,18 @@ export async function canSeeNsfw(userId: string | null): Promise<boolean> {
   const gate = await resolveNsfwGate({ isNsfw: true, userId });
   return gate.decision === 'allow';
 }
+
+/**
+ * Whether listed NSFW tribes should be VISIBLE in discovery/search for this viewer.
+ *
+ * Looser than {@link canSeeNsfw}: a listed NSFW tribe exposes only metadata in
+ * discovery (name, cover, 18+ badge) — its posts are gated separately at join/view.
+ * So we show it to anyone who could still gain access, i.e. every non-'blocked'
+ * decision (needs_optin / needs_verify / allow); attempting to join then surfaces
+ * the opt-in or wallet-verify remediation. Only geo-'blocked' regions (where there's
+ * no access path at all) hide them entirely.
+ */
+export async function canDiscoverNsfw(userId: string | null): Promise<boolean> {
+  const gate = await resolveNsfwGate({ isNsfw: true, userId });
+  return gate.decision !== 'blocked';
+}

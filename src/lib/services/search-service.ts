@@ -27,11 +27,13 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
   const escaped = query.replace(/[%_\\]/g, '\\$&');
   const pattern = `%${escaped}%`;
 
-  // NSFW discovery filter (issue #32): hide NSFW tribes from search unless this
-  // request+user may see them (not geo-blocked, and opted-in/verified). Computed
+  // NSFW discovery filter (issue #32): listed NSFW tribes expose only metadata in
+  // search (posts gated at join/view), so surface them to any signed-in viewer who
+  // could still gain access (needs_optin / needs_verify / allow) — only geo-blocked
+  // regions hide them. Guests stay conservative (NSFW hidden until sign-in). Computed
   // once and applied in the WHERE clause so the limit counts visible rows.
-  const { canSeeNsfw } = await import('@/lib/age-verification/nsfw-gate');
-  const showNsfw = await canSeeNsfw(currentUserId ?? null);
+  const { canDiscoverNsfw } = await import('@/lib/age-verification/nsfw-gate');
+  const showNsfw = currentUserId ? await canDiscoverNsfw(currentUserId) : false;
 
   // Build the blocked user ID list (bidirectional)
   let blockedIdsSql: ReturnType<typeof sql> | undefined;
