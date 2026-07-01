@@ -126,7 +126,7 @@ function CreateTribeContent() {
        // Optional wallet-verify path may still surface the verify gate — launch then retry.
        if (isAgeGateError(error)) {
          setIsLoading(false);
-         openAgeGate({ onVerified: () => onSubmit(values) });
+         openAgeGate({ onResolved: () => onSubmit(values) });
          return;
        }
        console.error("Failed to create tribe:", error);

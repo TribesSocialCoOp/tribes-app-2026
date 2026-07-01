@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { getTribeByInviteToken, requestToJoinTribe } from '@/lib/actions/tribe-actions';
+import { isAgeGateStatus } from '@/lib/age-gate';
 import type { Tribe } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -67,7 +68,7 @@ export default function InvitePage() {
       } else if (result === 'pending') {
         toast({ title: 'Request Sent', description: 'Your request to join has been submitted. The tribe admins will review it.' });
         setJoining(false);
-      } else if (result === 'age_required' || result === 'opt_in_required' || result === 'region_blocked') {
+      } else if (isAgeGateStatus(result)) {
         setJoining(false);
         // Unified age-gate modal explains what's required and retries the join once satisfied.
         openAgeGate({ onResolved: () => handleConfirmJoin(selectedTribe, selectedAlias, aliasAvatar) });

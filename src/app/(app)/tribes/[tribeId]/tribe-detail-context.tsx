@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useActionError } from '@/hooks/use-action-error';
 import { useAgeGate } from '@/components/providers/age-gate-provider';
-import { isAgeGateError, isNsfwBlockedError, isNsfwOptInError } from '@/lib/age-gate';
+import { isAgeGateError, isNsfwBlockedError, isNsfwOptInError, isAgeGateStatus } from '@/lib/age-gate';
 import { getBlurAdultContent } from '@/lib/actions/age-actions';
 import { useUser } from '@/hooks/use-user';
 import { getTribeById, getTribeBySlug, getTribeMembers, leaveTribe, getMyTribeIds, requestToJoinTribe, checkTribeAccess, checkPendingMembership } from '@/lib/actions/tribe-actions';
@@ -480,7 +480,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       } else if (result === 'already_pending') {
         dispatch({ type: 'SET_PENDING', payload: true });
         toast({ title: 'Request Already Sent', description: `Your request to join ${state.tribe.name} is still pending approval.` });
-      } else if (result === 'age_required' || result === 'opt_in_required' || result === 'region_blocked') {
+      } else if (isAgeGateStatus(result)) {
         // Unified age-gate modal explains exactly what's required (verify / enable / blocked)
         // for the viewer's region+surface and retries the join once satisfied.
         openAgeGate({ onResolved: () => handleConfirmJoinTribe(tribe, selectedAlias, aliasAvatar) });

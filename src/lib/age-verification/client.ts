@@ -24,6 +24,8 @@ export function providerSupport(id: string): { enabled: boolean; hint?: string }
   if (id === 'dev') return { enabled: true };
 
   if (id === 'privately') {
+    // PARKED: the on-device provider is disabled (providers/privately.ts), so this
+    // branch is currently unreachable. Kept for the future self-hosted-model revive.
     return isOnDeviceAgeAvailable()
       ? { enabled: true }
       : { enabled: false, hint: 'On-device age check runs in the Tribes mobile app.' };
@@ -116,6 +118,9 @@ export async function runWalletVerification(provider: WalletProvider): Promise<{
  * Run on-device (Privately) age verification — the universal path that also works
  * on iOS (no wallet / DC-API). The device produces a signed credential; the server
  * validates it. Resolves to the verified method on success; throws otherwise.
+ *
+ * ⚠️ PARKED (2026-07): unreachable while the on-device provider is disabled
+ * (providers/privately.ts). Kept for the future self-hosted-model revive.
  */
 export async function runOnDeviceVerification(userId: string): Promise<{ verified: boolean; method: string }> {
   const { runOnDeviceAgeCheck } = await import('./on-device-age');

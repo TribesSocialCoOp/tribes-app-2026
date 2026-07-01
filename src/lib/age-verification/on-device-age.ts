@@ -1,6 +1,12 @@
 /**
  * Client-side bridge for on-device age estimation (issue #32) — Privately.
  *
+ * ⚠️ PARKED (2026-07): this whole module is currently UNREACHABLE — the on-device
+ * provider is disabled (`providers/privately.ts` `isAvailable()` returns false), so
+ * `availableAgeProviders()` never emits 'privately' and nothing calls in here. Kept as a
+ * stub for a future self-hosted open-source age model (see memory: ondevice-age-model-pivot).
+ * Revive by un-parking `providers/privately.ts`.
+ *
  * The check runs ON THE DEVICE and returns a SIGNED credential the server
  * validates (see services/age-verification/providers/privately.ts). No image
  * leaves the device.
