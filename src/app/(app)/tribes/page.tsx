@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from '@/lib/utils';
 import type { Tribe, UserProfile } from '@/lib/types';
 import { getTribes, getMyTribeIds, requestToJoinTribe, checkPendingMembership } from '@/lib/actions/tribe-actions';
+import { isAgeGateStatus } from '@/lib/age-gate';
 import { useUser } from '@/hooks/use-user';
 import { useAgeGate } from '@/components/providers/age-gate-provider';
 import { useToast } from '@/hooks/use-toast';
@@ -246,7 +247,7 @@ export default function TribesPage() {
       } else if (result === 'already_pending') {
         setPendingTribeIds(prev => new Set(prev).add(tribeToJoin.id));
         toast({ title: "Request Already Sent", description: `Your request to join ${tribeToJoin.name} is still pending approval.` });
-      } else if (result === 'age_required' || result === 'opt_in_required' || result === 'region_blocked') {
+      } else if (isAgeGateStatus(result)) {
         // Unified age-gate modal explains what's required and retries the join once satisfied.
         openAgeGate({ onResolved: () => handleConfirmJoin(tribeToJoin, selectedAlias, aliasAvatar) });
       } else {

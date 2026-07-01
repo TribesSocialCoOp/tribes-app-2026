@@ -27,3 +27,12 @@ export function errorCarries(error: unknown, sentinel: string): boolean {
 export const isAgeGateError = (error: unknown) => errorCarries(error, AGE_GATE_SENTINEL);
 export const isNsfwOptInError = (error: unknown) => errorCarries(error, NSFW_OPT_IN_SENTINEL);
 export const isNsfwBlockedError = (error: unknown) => errorCarries(error, NSFW_BLOCKED_SENTINEL);
+
+/**
+ * Join-flow statuses (returned by requestToJoinTribe) that require the age-gate modal
+ * — verification, opt-in, or region-blocked. The unified modal figures out which to show.
+ */
+export type AgeGateJoinStatus = 'age_required' | 'opt_in_required' | 'region_blocked';
+export function isAgeGateStatus(status: unknown): status is AgeGateJoinStatus {
+  return status === 'age_required' || status === 'opt_in_required' || status === 'region_blocked';
+}

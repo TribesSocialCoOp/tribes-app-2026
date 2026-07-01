@@ -653,13 +653,18 @@ export async function getTribeKey(userId: string, tribeId: string): Promise<Stor
 }
 
 /**
- * Retrieves all tribe keys for a user (scoped store + legacy fallback, attributed
- * to this user). Used for vault backup.
+ * Retrieves all of a user's tribe keys from the USER-SCOPED store. Used for vault backup.
+ *
+ * SECURITY: deliberately does NOT sweep the legacy (unscoped, pre-user-scoping)
+ * `tribe_keys` store. Those entries carry no userId, so merging them here would — on a
+ * shared browser — fold ANOTHER account's pre-migration keys into this user's vault
+ * backup (defeating user-scoping). Legacy keys are still adopted per-tribe by the guarded
+ * `getTribeKey()` path when the user actually opens the tribe, so nothing is permanently
+ * lost — it just isn't back-filled from an ambient store we can't attribute.
  */
 export async function getAllTribeKeys(userId: string): Promise<StoredTribeKey[]> {
   if (!userId) return []; // user-scoped: nothing to return without a user
   const db = await openDatabase();
-  const hasLegacy = db.objectStoreNames.contains(LEGACY_TRIBE_KEYS_STORE);
 
   const scoped = await new Promise<StoredTribeKey[]>((resolve, reject) => {
     const tx = db.transaction(TRIBE_KEYS_STORE, 'readonly');
@@ -668,34 +673,8 @@ export async function getAllTribeKeys(userId: string): Promise<StoredTribeKey[]>
     request.onerror = () => reject(new Error('Failed to list tribe keys'));
   });
 
-  let legacyAll: StoredTribeKey[] = [];
-  if (hasLegacy) {
-    legacyAll = await new Promise<StoredTribeKey[]>((resolve) => {
-      try {
-        const tx = db.transaction(LEGACY_TRIBE_KEYS_STORE, 'readonly');
-        const request = tx.objectStore(LEGACY_TRIBE_KEYS_STORE).getAll();
-        request.onsuccess = () => resolve(request.result ?? []);
-        request.onerror = () => resolve([]);
-      } catch { resolve([]); }
-    });
-  }
   db.close();
-
-  const haveTribeIds = new Set(scoped.map(s => s.tribeId));
-  const merged = [...scoped];
-  for (const l of legacyAll) {
-    if (l && l.tribeId && l.key && !haveTribeIds.has(l.tribeId)) {
-      merged.push({
-        scope: tribeKeyScope(userId, l.tribeId),
-        userId,
-        tribeId: l.tribeId,
-        key: l.key,
-        version: l.version ?? 1,
-        receivedAt: l.receivedAt ?? Date.now(),
-      });
-    }
-  }
-  return merged;
+  return scoped;
 }
 
 /**

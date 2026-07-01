@@ -67,6 +67,8 @@ export function AgeVerificationDialog({ open, onOpenChange, onResolved }: AgeGat
         }
       } else if (providerId === 'privately') {
         // On-device (Privately) age estimation — runs on the device, not via a wallet.
+        // PARKED: unreachable while the on-device provider is disabled (providers/privately.ts);
+        // the dialog only renders providers from availableAgeProviders(), which omits 'privately'.
         if (!user?.id) throw new Error('Please sign in again and retry.');
         await runOnDeviceVerification(user.id);
       } else {
