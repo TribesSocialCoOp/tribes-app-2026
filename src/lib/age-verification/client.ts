@@ -42,6 +42,9 @@ export function providerSupport(id: string): { enabled: boolean; hint?: string }
   }
 
   if (id === 'apple_wallet') {
+    // DISABLED: Apple prohibits Apple Wallet / its Digital ID for adult-content age
+    // gating, so the apple_wallet provider is off (providers/apple-wallet.ts) and never
+    // reaches this branch. Kept for shape only.
     const ios = (isNative && isIos) || /iPhone|iPad|iPod/i.test(ua);
     return dc && ios
       ? { enabled: true }
