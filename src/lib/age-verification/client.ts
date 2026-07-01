@@ -10,8 +10,44 @@
  */
 import { createAgeVerificationRequest, submitAgeVerification } from '@/lib/actions/age-actions';
 import { isNative, isIos, isAndroid } from '@/lib/capacitor/platform';
+import { isOnDeviceAgeAvailable } from './on-device-age';
 
 export type WalletProvider = 'google_wallet' | 'apple_wallet';
+
+/**
+ * Whether a verification provider can actually run on THIS device, with a hint that
+ * points the user to where it works when it can't. Used to grey out (rather than fail)
+ * methods that aren't usable on the current surface — e.g. Google Wallet needs the
+ * Digital Credentials API, which realistically means an Android device.
+ */
+export function providerSupport(id: string): { enabled: boolean; hint?: string } {
+  if (id === 'dev') return { enabled: true };
+
+  if (id === 'privately') {
+    return isOnDeviceAgeAvailable()
+      ? { enabled: true }
+      : { enabled: false, hint: 'On-device age check runs in the Tribes mobile app.' };
+  }
+
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const dc = isDigitalCredentialsSupported();
+
+  if (id === 'google_wallet') {
+    const android = (isNative && isAndroid) || /Android/i.test(ua);
+    return dc && android
+      ? { enabled: true }
+      : { enabled: false, hint: 'Verify with Google Wallet on an Android device — open tribes.app in Chrome on Android, or use the Tribes Android app.' };
+  }
+
+  if (id === 'apple_wallet') {
+    const ios = (isNative && isIos) || /iPhone|iPad|iPod/i.test(ua);
+    return dc && ios
+      ? { enabled: true }
+      : { enabled: false, hint: 'Verify with Apple Wallet on an iPhone (iOS 26+) with a digital ID.' };
+  }
+
+  return { enabled: true };
+}
 
 /**
  * True if the current runtime exposes the W3C Digital Credentials API.

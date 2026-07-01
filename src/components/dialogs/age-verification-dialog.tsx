@@ -5,7 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { ShieldCheck, ShieldAlert, Loader2, Globe2, Check, ExternalLink } from 'lucide-react';
 import { getNsfwGateStatus, setAdultContentOptIn, submitAgeVerification, type NsfwGateStatus } from '@/lib/actions/age-actions';
-import { runWalletVerification, type WalletProvider } from '@/lib/age-verification/client';
+import { runWalletVerification, runOnDeviceVerification, providerSupport, type WalletProvider } from '@/lib/age-verification/client';
+import { useUser } from '@/components/providers/user-provider';
 
 interface AgeGateDialogProps {
   open: boolean;
@@ -24,6 +25,7 @@ interface AgeGateDialogProps {
  * only the pass/fail outcome. Replaces the old vanishing remediation toasts.
  */
 export function AgeVerificationDialog({ open, onOpenChange, onResolved }: AgeGateDialogProps) {
+  const { user } = useUser();
   const [status, setStatus] = React.useState<NsfwGateStatus | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -63,6 +65,10 @@ export function AgeVerificationDialog({ open, onOpenChange, onResolved }: AgeGat
         if (result && 'serverError' in (result as object)) {
           throw new Error((result as { serverError: string }).serverError);
         }
+      } else if (providerId === 'privately') {
+        // On-device (Privately) age estimation — runs on the device, not via a wallet.
+        if (!user?.id) throw new Error('Please sign in again and retry.');
+        await runOnDeviceVerification(user.id);
       } else {
         await runWalletVerification(providerId as WalletProvider);
       }
@@ -164,17 +170,24 @@ export function AgeVerificationDialog({ open, onOpenChange, onResolved }: AgeGat
                       Wallet — we only ever learn that you’re over 18, never your ID or birthdate.
                     </p>
                     <div className="space-y-2 pt-1">
-                      {wallets.map((p) => (
-                        <Button
-                          key={p.id}
-                          className="w-full justify-start"
-                          disabled={busy !== null}
-                          onClick={() => runVerify(p.id)}
-                        >
-                          {busy === p.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
-                          {p.label}
-                        </Button>
-                      ))}
+                      {wallets.map((p) => {
+                        const sup = providerSupport(p.id);
+                        return (
+                          <div key={p.id} className="space-y-1">
+                            <Button
+                              className="w-full justify-start"
+                              disabled={busy !== null || !sup.enabled}
+                              onClick={() => runVerify(p.id)}
+                            >
+                              {busy === p.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}
+                              {p.label}
+                            </Button>
+                            {!sup.enabled && sup.hint && (
+                              <p className="text-xs text-muted-foreground pl-1">{sup.hint}</p>
+                            )}
+                          </div>
+                        );
+                      })}
                       {dev && (
                         <Button
                           variant="outline"
