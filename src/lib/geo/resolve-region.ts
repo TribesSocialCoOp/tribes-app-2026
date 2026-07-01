@@ -52,9 +52,16 @@ async function getReader(): Promise<CityReader | null> {
 
 /** Resolve the caller's region from their IP (local DB; nothing stored or shared). */
 export async function getRequestRegion(): Promise<RequestRegion> {
-  // Per-request override header (NON-PROD ONLY) — lets E2E/dev switch tiers without
-  // restarting the server, e.g. Playwright sets `x-tribes-geo: US-KS`. Ignored in prod.
-  if (process.env.NODE_ENV !== 'production') {
+  // Geo overrides (DEV/E2E/STAGING ONLY) — the sanctioned way to fake a region tier
+  // for testing (never IP spoofing; forged IP headers are not trusted):
+  //   - `x-tribes-geo` request header: per-request, no restart (Playwright sets US-KS).
+  //   - AGE_GEO_OVERRIDE env: process-wide, requires a restart to change.
+  // Staging runs a production build (NODE_ENV=production), so it's marked with
+  // TRIBES_ENV=staging (see src/db/seed-staging.ts). Real prod sets neither → both
+  // overrides are ignored there.
+  const overridesAllowed =
+    process.env.NODE_ENV !== 'production' || process.env.TRIBES_ENV === 'staging';
+  if (overridesAllowed) {
     try {
       const code = (await headers()).get('x-tribes-geo');
       if (code) {
@@ -62,12 +69,12 @@ export async function getRequestRegion(): Promise<RequestRegion> {
         return { country: country || null, subdivision: subdivision || null };
       }
     } catch { /* no request context */ }
-  }
 
-  const override = process.env.AGE_GEO_OVERRIDE;
-  if (override) {
-    const [country, subdivision] = override.split('-');
-    return { country: country || null, subdivision: subdivision || null };
+    const override = process.env.AGE_GEO_OVERRIDE;
+    if (override) {
+      const [country, subdivision] = override.split('-');
+      return { country: country || null, subdivision: subdivision || null };
+    }
   }
   try {
     const reader = await getReader();

@@ -1,6 +1,28 @@
 import 'server-only';
 import { resolveNsfwAccess, type NsfwAccess } from '@/lib/geo/age-policy';
 import { getRequestRegion, regionCode, getSurface } from '@/lib/geo/resolve-region';
+import { PublicError } from '@/lib/actions/error-utils';
+
+/**
+ * The user's two account-level gate inputs, as booleans:
+ *   hasOptIn    → users.showAdultContentAt (web-set 18+ self-attest content toggle)
+ *   hasVerified → users.ageVerifiedAt (high-assurance wallet verification)
+ * Guests (no userId) get both false.
+ */
+export async function getUserNsfwFlags(
+  userId: string | null,
+): Promise<{ hasOptIn: boolean; hasVerified: boolean }> {
+  if (!userId) return { hasOptIn: false, hasVerified: false };
+  const { db } = await import('@/db');
+  const { users } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [u] = await db
+    .select({ showAdultContentAt: users.showAdultContentAt, ageVerifiedAt: users.ageVerifiedAt })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return { hasOptIn: !!u?.showAdultContentAt, hasVerified: !!u?.ageVerifiedAt };
+}
 
 /**
  * Server-side NSFW gate (issue #32): gathers the request region + surface + the
@@ -13,22 +35,11 @@ export async function resolveNsfwGate(opts: {
 }): Promise<NsfwAccess> {
   if (!opts.isNsfw) return { decision: 'allow', reason: 'not_nsfw' };
 
-  const [region, surface] = await Promise.all([getRequestRegion(), getSurface()]);
-
-  let hasOptIn = false;
-  let hasVerified = false;
-  if (opts.userId) {
-    const { db } = await import('@/db');
-    const { users } = await import('@/db/schema');
-    const { eq } = await import('drizzle-orm');
-    const [u] = await db
-      .select({ showAdultContentAt: users.showAdultContentAt, ageVerifiedAt: users.ageVerifiedAt })
-      .from(users)
-      .where(eq(users.id, opts.userId))
-      .limit(1);
-    hasOptIn = !!u?.showAdultContentAt;
-    hasVerified = !!u?.ageVerifiedAt;
-  }
+  const [region, surface, { hasOptIn, hasVerified }] = await Promise.all([
+    getRequestRegion(),
+    getSurface(),
+    getUserNsfwFlags(opts.userId),
+  ]);
 
   return resolveNsfwAccess({
     isNsfw: true,
@@ -40,23 +51,28 @@ export async function resolveNsfwGate(opts: {
 }
 
 /**
- * Resolve once whether the current request + user may see NSFW content — for
- * filtering NSFW tribes out of discovery/search when blocked or not opted in.
+ * Run the NSFW gate for this request + user and throw the matching sentinel unless
+ * the decision is 'allow'. The single enforcement helper for every throw-style gate
+ * (view / join / create / settings). Sentinels are recognized client-side via
+ * @/lib/age-gate; PublicError lets withPublicErrors-wrapped actions surface them
+ * in production (Next.js strips plain server-action error messages).
  */
-export async function canSeeNsfw(userId: string | null): Promise<boolean> {
+export async function assertNsfwAccess(userId: string | null): Promise<void> {
   const gate = await resolveNsfwGate({ isNsfw: true, userId });
-  return gate.decision === 'allow';
+  if (gate.decision === 'blocked') throw new PublicError('NSFW_REGION_BLOCKED');
+  if (gate.decision === 'needs_verify') throw new PublicError('AGE_VERIFICATION_REQUIRED');
+  if (gate.decision !== 'allow') throw new PublicError('NSFW_OPT_IN_REQUIRED');
 }
 
 /**
  * Whether listed NSFW tribes should be VISIBLE in discovery/search for this viewer.
  *
- * Looser than {@link canSeeNsfw}: a listed NSFW tribe exposes only metadata in
- * discovery (name, cover, 18+ badge) — its posts are gated separately at join/view.
- * So we show it to anyone who could still gain access, i.e. every non-'blocked'
- * decision (needs_optin / needs_verify / allow); attempting to join then surfaces
- * the opt-in or wallet-verify remediation. Only geo-'blocked' regions (where there's
- * no access path at all) hide them entirely.
+ * Looser than the view gate (`resolveNsfwGate(...).decision === 'allow'`): a listed
+ * NSFW tribe exposes only metadata in discovery (name, cover, 18+ badge) — its posts
+ * are gated separately at join/view. So we show it to anyone who could still gain
+ * access, i.e. every non-'blocked' decision (needs_optin / needs_verify / allow);
+ * attempting to join then surfaces the opt-in or wallet-verify remediation. Only
+ * geo-'blocked' regions (where there's no access path at all) hide them entirely.
  */
 export async function canDiscoverNsfw(userId: string | null): Promise<boolean> {
   const gate = await resolveNsfwGate({ isNsfw: true, userId });

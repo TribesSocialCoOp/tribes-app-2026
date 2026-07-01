@@ -10,6 +10,10 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// age-actions now reaches nsfw-gate.ts (getUserNsfwFlags), which is `import 'server-only'`
+// — no-op it in the test runtime.
+vi.mock('server-only', () => ({}));
+
 // ── Configurable mock state ────────────────────────────────────────
 let mockSurface: 'web' | 'ios' | 'android' = 'web';
 let mockRegion: { country: string | null; subdivision: string | null } = { country: 'US', subdivision: 'CA' };

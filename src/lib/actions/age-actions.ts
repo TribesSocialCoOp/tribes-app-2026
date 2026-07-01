@@ -12,39 +12,12 @@ import { withPublicErrors } from './error-utils';
 import type { AgeVerificationRequest } from '@/lib/services/age-verification/types';
 import type { RegionTier, Surface } from '@/lib/geo/age-policy';
 
-export interface AgeVerificationStatus {
-  verified: boolean;
-  /** Providers offered to this client (e.g. wallet providers + dev in non-prod). */
-  providers: { id: string; label: string }[];
-}
-
-/** Current user's verification state + which providers are available to attempt. */
-export async function getAgeVerificationStatus(): Promise<AgeVerificationStatus> {
-  const { availableAgeProviders } = await import('@/lib/services/age-verification');
-  const providers = availableAgeProviders();
-
-  const userId = await getCurrentUserId();
-  if (!userId) return { verified: false, providers };
-
-  const { db } = await import('@/db');
-  const { users } = await import('@/db/schema');
-  const { eq } = await import('drizzle-orm');
-  const [u] = await db.select({ ageVerifiedAt: users.ageVerifiedAt })
-    .from(users).where(eq(users.id, userId)).limit(1);
-
-  return { verified: Boolean(u?.ageVerifiedAt), providers };
-}
-
 /** Current user's web-set "show adult content" 18+ self-attest opt-in state. */
 export async function getAdultContentOptIn(): Promise<{ enabled: boolean }> {
   const userId = await getCurrentUserId();
-  if (!userId) return { enabled: false };
-  const { db } = await import('@/db');
-  const { users } = await import('@/db/schema');
-  const { eq } = await import('drizzle-orm');
-  const [u] = await db.select({ showAdultContentAt: users.showAdultContentAt })
-    .from(users).where(eq(users.id, userId)).limit(1);
-  return { enabled: !!u?.showAdultContentAt };
+  const { getUserNsfwFlags } = await import('@/lib/age-verification/nsfw-gate');
+  const { hasOptIn } = await getUserNsfwFlags(userId);
+  return { enabled: hasOptIn };
 }
 
 export interface NsfwGateStatus {
@@ -70,28 +43,20 @@ export async function getNsfwGateStatus(): Promise<NsfwGateStatus> {
   const { regionTier } = await import('@/lib/geo/age-policy');
   const { availableAgeProviders } = await import('@/lib/services/age-verification');
 
-  const [surface, region] = await Promise.all([getSurface(), getRequestRegion()]);
-  const tier = regionTier(regionCode(region));
-  const providers = availableAgeProviders();
-
+  const { getUserNsfwFlags } = await import('@/lib/age-verification/nsfw-gate');
   const userId = await getCurrentUserId();
-  if (!userId) {
-    return { regionTier: tier, surface, hasOptIn: false, hasVerified: false, providers };
-  }
-
-  const { db } = await import('@/db');
-  const { users } = await import('@/db/schema');
-  const { eq } = await import('drizzle-orm');
-  const [u] = await db
-    .select({ showAdultContentAt: users.showAdultContentAt, ageVerifiedAt: users.ageVerifiedAt })
-    .from(users).where(eq(users.id, userId)).limit(1);
+  const [surface, region, { hasOptIn, hasVerified }] = await Promise.all([
+    getSurface(),
+    getRequestRegion(),
+    getUserNsfwFlags(userId),
+  ]);
 
   return {
-    regionTier: tier,
+    regionTier: regionTier(regionCode(region)),
     surface,
-    hasOptIn: !!u?.showAdultContentAt,
-    hasVerified: !!u?.ageVerifiedAt,
-    providers,
+    hasOptIn,
+    hasVerified,
+    providers: availableAgeProviders(),
   };
 }
 
@@ -119,9 +84,9 @@ export const setAdultContentOptIn = withPublicErrors(async (enabled: boolean): P
     const { regionTier } = await import('@/lib/geo/age-policy');
     const tier = regionTier(regionCode(await getRequestRegion()));
     if (tier === 'verify') {
-      const [u] = await db.select({ ageVerifiedAt: users.ageVerifiedAt })
-        .from(users).where(eq(users.id, userId)).limit(1);
-      if (!u?.ageVerifiedAt) {
+      const { getUserNsfwFlags } = await import('@/lib/age-verification/nsfw-gate');
+      const { hasVerified } = await getUserNsfwFlags(userId);
+      if (!hasVerified) {
         throw new PublicError('Verify your age with Google Wallet before enabling adult content.');
       }
     }

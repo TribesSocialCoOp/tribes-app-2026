@@ -92,14 +92,7 @@ export async function checkTribeAccess(tribeId: string): Promise<TribeAccessLeve
 
 export const createTribe = withPublicErrors(async (payload: Parameters<typeof import('@/lib/services/tribe-service').createTribe>[0]): Promise<Tribe> => {
   const userId = await requireVerifiedEmail();
-  // NSFW gate (issue #32): geo-block region, else require the web-set 18+ opt-in.
-  if (payload?.isNsfw) {
-    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
-    const gate = await resolveNsfwGate({ isNsfw: true, userId });
-    if (gate.decision === 'blocked') throw new PublicError('NSFW_REGION_BLOCKED');
-    if (gate.decision === 'needs_verify') throw new PublicError('AGE_VERIFICATION_REQUIRED');
-    if (gate.decision !== 'allow') throw new PublicError('NSFW_OPT_IN_REQUIRED');
-  }
+  // NSFW gate (issue #32) is enforced in the service layer (tribe-service.createTribe).
   // Subscription guard: check if user can create another tribe
   const { canCreateTribe } = await import('@/lib/services/subscription-guard');
   const check = await canCreateTribe(userId);
@@ -117,7 +110,7 @@ export async function updateTribeSettings(tribeId: string, payload: Parameters<t
   const { requireTribeFounder } = await import('@/lib/services/tribe-auth');
   await requireTribeFounder(userId, tribeId);
   const { updateTribeSettings: fn } = await import('@/lib/services/tribe-service');
-  return fn(tribeId, payload);
+  return fn(tribeId, payload, userId);
 }
 
 export async function getTribeMembers(

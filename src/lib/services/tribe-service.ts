@@ -64,11 +64,8 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
 
   // NSFW gate (issue #32): geo-block region, else require the web-set 18+ opt-in.
   if (isNsfw && payload.createdBy) {
-    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
-    const gate = await resolveNsfwGate({ isNsfw: true, userId: payload.createdBy });
-    if (gate.decision === 'blocked') throw new Error('NSFW_REGION_BLOCKED');
-    if (gate.decision === 'needs_verify') throw new Error('AGE_VERIFICATION_REQUIRED');
-    if (gate.decision !== 'allow') throw new Error('NSFW_OPT_IN_REQUIRED');
+    const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
+    await assertNsfwAccess(payload.createdBy);
   }
 
   await db.insert(tribes).values({
@@ -149,7 +146,7 @@ const tribeSettingsFormSchema = z.object({
 });
 type UpdateTribeSettingsPayload = z.infer<typeof tribeSettingsFormSchema>;
 
-export async function updateTribeSettings(tribeId: string, payload: UpdateTribeSettingsPayload): Promise<Tribe | null> {
+export async function updateTribeSettings(tribeId: string, payload: UpdateTribeSettingsPayload, actingUserId: string): Promise<Tribe | null> {
   const existingRows = await db.select().from(tribes).where(eq(tribes.id, tribeId)).limit(1);
   const existing = existingRows[0];
   if (!existing) return null;
@@ -179,6 +176,17 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
     throw new Error('An NSFW tribe cannot be un-flagged. This setting is permanent.');
   }
   const isNsfw = existing.isNsfw || (payload.isNsfw ?? false);
+
+  // Flipping a tribe TO NSFW is itself a gated action (same gate as createTribe): the
+  // acting founder must clear the geo/opt-in/verify gate first. A public→NSFW flip is
+  // still allowed — reads are gated per-request — but note that plaintext post/comment
+  // history from the tribe's public era stays unencrypted in the DB; only content
+  // created after the flip (once the tribe is Private/E2EE) is encrypted.
+  if (isNsfw && !existing.isNsfw) {
+    const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
+    await assertNsfwAccess(actingUserId);
+  }
+
   const isPublic = isNsfw ? false : payload.isPublic;
   // NSFW tribes are listable (founder option, default listed); non-NSFW derive
   // discoverability from isPublic, so isListed is forced false for them.
@@ -662,11 +670,8 @@ export async function joinTribeDirectly(userId: string, tribeId: string): Promis
   const [tribeRow] = await db.select({ isNsfw: tribes.isNsfw }).from(tribes)
     .where(eq(tribes.id, tribeId)).limit(1);
   if (tribeRow?.isNsfw) {
-    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
-    const gate = await resolveNsfwGate({ isNsfw: true, userId });
-    if (gate.decision === 'blocked') throw new Error('NSFW_REGION_BLOCKED');
-    if (gate.decision === 'needs_verify') throw new Error('AGE_VERIFICATION_REQUIRED');
-    if (gate.decision !== 'allow') throw new Error('NSFW_OPT_IN_REQUIRED');
+    const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
+    await assertNsfwAccess(userId);
   }
 
   await db.insert(tribeMembers).values({

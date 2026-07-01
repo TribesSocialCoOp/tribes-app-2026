@@ -282,11 +282,13 @@ export const uploadLimiter = new RateLimiter({
 
 /**
  * Get client IP from headers. Works with proxied requests.
- * When behind Cloudflare, CF-Connecting-IP is the most reliable header.
+ * Trust ONLY the headers our own Caddy reverse proxy sets (x-forwarded-for /
+ * x-real-ip). We deliberately do NOT honor CDN headers like cf-connecting-ip —
+ * we never sit behind Cloudflare, so trusting one would let any client forge
+ * its IP (and defeat the geo age-gate) with a single header.
  */
 export function getClientIp(headersList: Headers): string {
   return (
-    headersList.get('cf-connecting-ip') ??          // Cloudflare (most accurate)
     headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     headersList.get('x-real-ip') ??
     '127.0.0.1'

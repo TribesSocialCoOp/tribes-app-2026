@@ -199,12 +199,20 @@ export async function getPostById(postId: string): Promise<{
   let viewerRole: 'founder' | 'speaker' | 'member' | null = null;
 
   if (row.tribeId) {
-    const [tribe] = await db.select({ name: tribes.name, slug: tribes.slug, isPublic: tribes.isPublic })
+    const [tribe] = await db.select({ name: tribes.name, slug: tribes.slug, isPublic: tribes.isPublic, isNsfw: tribes.isNsfw })
       .from(tribes).where(eq(tribes.id, row.tribeId)).limit(1);
     if (tribe) {
       tribeName = tribe.name;
       tribeSlug = tribe.slug;
       isPublic = tribe.isPublic ?? true;
+    }
+
+    // SECURITY: NSFW gate at the content boundary (issue #32) — same sentinel behavior
+    // as getPostsForTribe, independent of membership: a member who hasn't cleared the
+    // opt-in/verification gate can't fetch NSFW posts by ID either.
+    if (tribe?.isNsfw) {
+      const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
+      await assertNsfwAccess(userId);
     }
 
     // Check viewer membership
@@ -1191,11 +1199,8 @@ export async function getPostsForTribe(
   // user needs the web-set 18+ self-attest opt-in (or an optional wallet verify).
   // Sentinels let the client show the right thing (blocked screen vs opt-in prompt).
   if (tribe.isNsfw) {
-    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
-    const gate = await resolveNsfwGate({ isNsfw: true, userId });
-    if (gate.decision === 'blocked') throw new Error('NSFW_REGION_BLOCKED');
-    if (gate.decision === 'needs_verify') throw new Error('AGE_VERIFICATION_REQUIRED');
-    if (gate.decision === 'needs_optin') throw new Error('NSFW_OPT_IN_REQUIRED');
+    const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
+    await assertNsfwAccess(userId);
   }
 
   // SECURITY: A private tribe may now be publicly LISTED (e.g. NSFW tribes opt in to
@@ -1378,6 +1383,25 @@ export async function getCommentsForPost(postId: string) {
       const { getTribeById: fetchTribe } = await import('@/lib/data-access/tribes');
       const tribe = await fetchTribe(post.tribeId, userId);
       if (!tribe) throw new Error('Tribe not found or access denied.');
+
+      // SECURITY: NSFW gate at the content boundary (issue #32) — same as
+      // getPostsForTribe, independent of membership.
+      if (tribe.isNsfw) {
+        const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
+        await assertNsfwAccess(userId);
+      }
+
+      // SECURITY: A private tribe may be publicly LISTED (e.g. NSFW), so getTribeById
+      // returns its metadata to non-members. Comments must still be members-only —
+      // enforce membership independently here (policy §2: zero content leaks).
+      if (!tribe.isPublic) {
+        if (!userId) throw new Error('Tribe not found or access denied.');
+        const { getTribeAccessLevel } = await import('@/lib/services/tribe-auth');
+        const level = await getTribeAccessLevel(userId, post.tribeId);
+        if (level === 'guest') {
+          throw new Error('Tribe not found or access denied.');
+        }
+      }
     }
   }
 
