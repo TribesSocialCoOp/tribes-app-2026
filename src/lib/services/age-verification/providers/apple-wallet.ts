@@ -14,7 +14,11 @@ export const appleWalletProvider: AgeVerificationProvider = {
   id: 'apple_wallet',
   label: 'Verify with Apple Wallet',
   isAvailable() {
-    return loadWalletConfig('APPLE_WALLET') !== null;
+    // DISABLED (2026-07): Apple prohibits using Apple Wallet / its Digital ID for adult
+    // (18+) content age-gating, so we must never offer it as an age-verification method
+    // for NSFW access — regardless of whether APPLE_WALLET_* creds are configured. The
+    // verify() path is kept for the OID4VP/mdoc shape but is unreachable while disabled.
+    return false;
   },
   async verify(req: AgeVerificationRequest, ctx: AgeVerificationContext): Promise<AgeVerificationResult> {
     const cfg = loadWalletConfig('APPLE_WALLET');
