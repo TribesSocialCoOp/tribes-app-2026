@@ -29,9 +29,12 @@ export const privatelyProvider: AgeVerificationProvider = {
   id: 'privately',
   label: 'Verify with on-device age check',
   isAvailable() {
-    // Real on-device verification when configured; otherwise available only in
-    // non-production so we can build/test the flow with the stub.
-    return privatelyConfigured() || !isProd();
+    // PARKED (2026-07): the on-device age-estimation path is pulled for now. The
+    // open-source model choice + weights licensing + hardware-attestation trust model
+    // aren't settled yet (see memory: ondevice-age-model-pivot). Returning false hides
+    // the "on-device age check" button everywhere (dev + prod), leaving wallet + dev.
+    // To revive: restore `return privatelyConfigured() || !isProd();`.
+    return false;
   },
   async verify(req: AgeVerificationRequest, ctx: AgeVerificationContext): Promise<AgeVerificationResult> {
     const att = req.attestation as { kind?: string; ageOver18?: boolean; userId?: string } | undefined;
