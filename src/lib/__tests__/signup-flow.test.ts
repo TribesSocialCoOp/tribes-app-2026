@@ -209,6 +209,31 @@ describe('Signup Flow — Invite Redemption & Welcome Tribe Join', () => {
     });
   });
 
+  describe('Open registration (NEXT_PUBLIC_INVITE_ONLY toggle)', () => {
+    it('allows passkey registration with NO invite code when open', async () => {
+      process.env.NEXT_PUBLIC_INVITE_ONLY = 'false';
+      vi.doMock('@/lib/auth/passkeys', () => ({
+        startRegistration: vi.fn(async () => ({ challenge: 'test-challenge' } as any)),
+        finishRegistration: vi.fn(),
+      }));
+      const { registerUserAction } = await import('@/lib/auth-actions');
+      const result = await registerUserAction('Open User', 'open@example.com', undefined, 'turnstile-token');
+      expect(result).toHaveProperty('options');
+      expect(result).not.toHaveProperty('error');
+    });
+
+    it('still REQUIRES an invite code when invite-only', async () => {
+      process.env.NEXT_PUBLIC_INVITE_ONLY = 'true';
+      vi.doMock('@/lib/auth/passkeys', () => ({
+        startRegistration: vi.fn(async () => ({ challenge: 'test-challenge' } as any)),
+        finishRegistration: vi.fn(),
+      }));
+      const { registerUserAction } = await import('@/lib/auth-actions');
+      const result = await registerUserAction('Gated User', 'gated@example.com', undefined, 'turnstile-token');
+      expect(result).toMatchObject({ error: expect.stringMatching(/invite code is required/i) });
+    });
+  });
+
   describe('Passkey — finishRegistrationAction', () => {
     // Helper: seed the cookie store with a server-signed registration context
     function seedRegContextCookie(userId: string, name: string, email: string, inviteCode?: string) {
