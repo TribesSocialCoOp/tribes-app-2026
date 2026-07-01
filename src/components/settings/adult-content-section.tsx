@@ -13,10 +13,12 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { isNative } from '@/lib/capacitor/platform';
 import { getAdultContentOptIn, setAdultContentOptIn } from '@/lib/actions/age-actions';
+import { useAgeGate } from '@/components/providers/age-gate-provider';
 import { ShieldAlert, Loader2 } from 'lucide-react';
 
 export function AdultContentSection() {
   const { toast } = useToast();
+  const { openAgeGate } = useAgeGate();
   const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -34,6 +36,12 @@ export function AdultContentSection() {
       // withPublicErrors RETURNS { serverError } (it does not throw) on a handled error.
       const res = await setAdultContentOptIn(next);
       if (res && 'serverError' in res) {
+        // Law states require Google Wallet verification before the toggle can be enabled —
+        // open the age-gate modal to verify, then retry the toggle automatically.
+        if (next && /verify your age/i.test(res.serverError)) {
+          openAgeGate({ onResolved: () => onToggle(true) });
+          return;
+        }
         toast({ title: 'Couldn’t update', description: res.serverError, variant: 'destructive' });
         return;
       }

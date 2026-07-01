@@ -10,6 +10,7 @@ import { requireAuth, getCurrentUserId } from './shared';
 import { PublicError } from './error-utils';
 import { withPublicErrors } from './error-utils';
 import type { AgeVerificationRequest } from '@/lib/services/age-verification/types';
+import type { RegionTier, Surface } from '@/lib/geo/age-policy';
 
 export interface AgeVerificationStatus {
   verified: boolean;
@@ -46,20 +47,86 @@ export async function getAdultContentOptIn(): Promise<{ enabled: boolean }> {
   return { enabled: !!u?.showAdultContentAt };
 }
 
+export interface NsfwGateStatus {
+  /** Region policy tier for this request (coarse geo, not sensitive). */
+  regionTier: RegionTier;
+  /** web / ios / android — drives inline-toggle vs "enable on web" guidance. */
+  surface: Surface;
+  /** users.showAdultContentAt — the web-set content toggle. */
+  hasOptIn: boolean;
+  /** users.ageVerifiedAt — high-assurance (Google Wallet) age verification. */
+  hasVerified: boolean;
+  /** Available verification providers (wallets + dev in non-prod). */
+  providers: { id: string; label: string }[];
+}
+
+/**
+ * Everything the age-gate modal needs to show the user exactly what's required for
+ * their region × surface, up front — rather than discovering each requirement by
+ * trial-and-error. Order of steps: open → [toggle]; law state → [verify, toggle].
+ */
+export async function getNsfwGateStatus(): Promise<NsfwGateStatus> {
+  const { getSurface, getRequestRegion, regionCode } = await import('@/lib/geo/resolve-region');
+  const { regionTier } = await import('@/lib/geo/age-policy');
+  const { availableAgeProviders } = await import('@/lib/services/age-verification');
+
+  const [surface, region] = await Promise.all([getSurface(), getRequestRegion()]);
+  const tier = regionTier(regionCode(region));
+  const providers = availableAgeProviders();
+
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return { regionTier: tier, surface, hasOptIn: false, hasVerified: false, providers };
+  }
+
+  const { db } = await import('@/db');
+  const { users } = await import('@/db/schema');
+  const { eq } = await import('drizzle-orm');
+  const [u] = await db
+    .select({ showAdultContentAt: users.showAdultContentAt, ageVerifiedAt: users.ageVerifiedAt })
+    .from(users).where(eq(users.id, userId)).limit(1);
+
+  return {
+    regionTier: tier,
+    surface,
+    hasOptIn: !!u?.showAdultContentAt,
+    hasVerified: !!u?.ageVerifiedAt,
+    providers,
+  };
+}
+
 /**
  * Set/clear the 18+ "show adult content" self-attestation opt-in. WEB-ONLY by
  * design (Apple Reddit-pattern: the enable switch must live on the website, never
  * an in-app toggle). Holds no PII — just the opt-in timestamp.
+ *
+ * In law-state ("verify") regions, high-assurance age verification (Google Wallet)
+ * is a prerequisite: you must verify before you can enable the content toggle.
  */
 export const setAdultContentOptIn = withPublicErrors(async (enabled: boolean): Promise<{ enabled: boolean }> => {
   const userId = await requireAuth();
-  const { getSurface } = await import('@/lib/geo/resolve-region');
+  const { getSurface, getRequestRegion, regionCode } = await import('@/lib/geo/resolve-region');
   if ((await getSurface()) !== 'web') {
     throw new PublicError('Please enable adult content from the website (tribes.app), not the app.');
   }
+
   const { db } = await import('@/db');
   const { users } = await import('@/db/schema');
   const { eq } = await import('drizzle-orm');
+
+  if (enabled) {
+    // Law states require Google Wallet verification BEFORE the toggle can be enabled.
+    const { regionTier } = await import('@/lib/geo/age-policy');
+    const tier = regionTier(regionCode(await getRequestRegion()));
+    if (tier === 'verify') {
+      const [u] = await db.select({ ageVerifiedAt: users.ageVerifiedAt })
+        .from(users).where(eq(users.id, userId)).limit(1);
+      if (!u?.ageVerifiedAt) {
+        throw new PublicError('Verify your age with Google Wallet before enabling adult content.');
+      }
+    }
+  }
+
   await db.update(users).set({ showAdultContentAt: enabled ? new Date() : null }).where(eq(users.id, userId));
   return { enabled };
 });

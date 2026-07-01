@@ -7,12 +7,10 @@
  *   verify  → law region: verify privately with Google Wallet (reuses the age gate)
  *   optin   → no-law region: enable the web-set self-attest opt-in
  */
-import Link from 'next/link';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ShieldAlert, BadgeCheck, Globe2 } from 'lucide-react';
 import { useAgeGate } from '@/components/providers/age-gate-provider';
-import { isNative } from '@/lib/capacitor/platform';
 
 export function NsfwGateCard({
   gate,
@@ -49,7 +47,7 @@ export function NsfwGateCard({
             Your region requires age verification for adult content. You can verify privately
             with Google Wallet — we only learn that you’re over 18, never your ID or birthdate.
           </p>
-          <Button className="mt-2" onClick={() => openAgeGate({ onVerified: onResolved })}>
+          <Button className="mt-2" onClick={() => openAgeGate({ onResolved })}>
             Verify with Google Wallet
           </Button>
           <p className="text-xs text-muted-foreground max-w-sm">
@@ -60,27 +58,19 @@ export function NsfwGateCard({
     );
   }
 
-  // optin
+  // optin — open the unified age-gate modal, which self-attests inline on web and
+  // shows clear "enable on the web" guidance on native (no Settings detour).
   return (
     <Card className="text-center py-12 shadow-md">
       <CardContent className="flex flex-col items-center justify-center gap-3">
         <ShieldAlert className="h-14 w-14 text-muted-foreground opacity-70" />
         <h3 className="text-xl font-semibold text-foreground">Enable adult content to view</h3>
         <p className="text-muted-foreground max-w-sm">
-          Adult content is hidden by default. Turn on “Show adult content” (confirming you’re
-          18 or older) to see this Tribe.
+          Adult content is hidden by default. Confirm you’re 18 or older to see this Tribe.
         </p>
-        {isNative ? (
-          <p className="text-sm text-muted-foreground max-w-sm mt-1">
-            For App Store rules, enable it on the website at{' '}
-            <span className="font-medium">tribes.app</span> → Settings → Adult Content. It’ll
-            then appear here.
-          </p>
-        ) : (
-          <Link href="/settings" className="mt-2">
-            <Button>Go to Settings</Button>
-          </Link>
-        )}
+        <Button className="mt-2" onClick={() => openAgeGate({ onResolved })}>
+          Enable adult content
+        </Button>
       </CardContent>
     </Card>
   );

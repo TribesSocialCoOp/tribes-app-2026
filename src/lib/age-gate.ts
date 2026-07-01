@@ -7,7 +7,8 @@
 export const AGE_GATE_SENTINEL = 'AGE_VERIFICATION_REQUIRED';
 /** NSFW needs the web-set self-attest opt-in (the user hasn't enabled adult content). */
 export const NSFW_OPT_IN_SENTINEL = 'NSFW_OPT_IN_REQUIRED';
-/** NSFW is geo-blocked in the caller's region (KS/WY/SD/UK). */
+/** NSFW is geo-blocked in the caller's region — no trusted verification method (e.g. UK).
+ *  (Law states like KS/WY/SD are 'verify' via Google Wallet, not blocked.) */
 export const NSFW_BLOCKED_SENTINEL = 'NSFW_REGION_BLOCKED';
 
 /** True if `error` (Error | {serverError|message|error} | string) carries `sentinel`. */
