@@ -62,12 +62,19 @@ export function regionTier(code: string): RegionTier {
 
 /**
  * Decide whether a user may access NSFW content here. Pure: caller supplies the
- * resolved region/surface/flags. Wallet verification satisfies every tier; the
- * web self-attest opt-in only satisfies the `open` tier.
+ * resolved region/surface/flags.
+ *
+ * Two requirements, in order:
+ *   - `open` region: just the content toggle (`hasOptIn`, users.showAdultContentAt) —
+ *     set on the WEB only, off by default. This IS the 18+ self-attestation.
+ *   - `verify` (law-state) region: high-assurance Google Wallet verification
+ *     (`hasVerified`) comes FIRST — you must verify before the content toggle can be
+ *     enabled — and the web content toggle is still required afterward.
+ * Wallet verification proves age but does NOT substitute for the content toggle.
  */
 export function resolveNsfwAccess(input: {
   isNsfw: boolean;
-  hasOptIn: boolean;     // users.showAdultContentAt set (web self-attestation)
+  hasOptIn: boolean;     // users.showAdultContentAt set (web self-attestation / content toggle)
   hasVerified: boolean;  // users.ageVerifiedAt set (Google Wallet ZKP, etc.)
   regionCode: string;
   surface: Surface;
@@ -79,19 +86,23 @@ export function resolveNsfwAccess(input: {
     return { decision: 'blocked', reason: 'region_law', remediation: 'unavailable_in_region' };
   }
 
-  // Wallet verification clears every (non-blocked) tier.
-  if (input.hasVerified) return { decision: 'allow', reason: 'verified' };
-
-  if (tier === 'verify') {
-    // Law state: self-attest is NOT enough — require Google Wallet verification.
+  // (1) Law-state regions require high-assurance age verification FIRST — you must
+  // verify (Google Wallet) before the content toggle can be enabled.
+  if (tier === 'verify' && !input.hasVerified) {
     return { decision: 'needs_verify', reason: 'verify_required', remediation: 'verify_with_wallet' };
   }
 
-  // Open region: the web-set self-attest opt-in suffices.
-  if (input.hasOptIn) return { decision: 'allow', reason: 'self_attested' };
-  return {
-    decision: 'needs_optin',
-    reason: 'opt_in_required',
-    remediation: input.surface === 'web' ? 'enable_on_web_here' : 'enable_on_web_elsewhere',
-  };
+  // (2) The web-set content toggle is then required in every non-blocked region. In open
+  // regions this IS the 18+ self-attestation; in law regions it's the second step, after
+  // verification. It can only be set on the web.
+  if (!input.hasOptIn) {
+    return {
+      decision: 'needs_optin',
+      reason: 'opt_in_required',
+      remediation: input.surface === 'web' ? 'enable_on_web_here' : 'enable_on_web_elsewhere',
+    };
+  }
+
+  // Open region (toggle = self-attest) or verify region cleared by wallet → allowed.
+  return { decision: 'allow', reason: input.hasVerified ? 'verified' : 'self_attested' };
 }

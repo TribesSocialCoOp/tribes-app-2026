@@ -4,12 +4,14 @@ import React from 'react';
 import { AgeVerificationDialog } from '@/components/dialogs/age-verification-dialog';
 
 interface OpenOptions {
-  /** Run after the user successfully verifies (e.g. retry the gated action). */
+  /** Run once every requirement is satisfied — e.g. retry the gated action. */
+  onResolved?: () => void;
+  /** @deprecated alias for {@link OpenOptions.onResolved}. */
   onVerified?: () => void;
 }
 
 interface AgeGateContextValue {
-  /** Open the 18+ verification dialog. */
+  /** Open the 18+ age-gate dialog (opt-in and/or verification). */
   openAgeGate: (opts?: OpenOptions) => void;
 }
 
@@ -21,10 +23,10 @@ const AgeGateContext = React.createContext<AgeGateContextValue | null>(null);
  */
 export function AgeGateProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false);
-  const onVerifiedRef = React.useRef<(() => void) | undefined>(undefined);
+  const onResolvedRef = React.useRef<(() => void) | undefined>(undefined);
 
   const openAgeGate = React.useCallback((opts?: OpenOptions) => {
-    onVerifiedRef.current = opts?.onVerified;
+    onResolvedRef.current = opts?.onResolved ?? opts?.onVerified;
     setOpen(true);
   }, []);
 
@@ -36,7 +38,7 @@ export function AgeGateProvider({ children }: { children: React.ReactNode }) {
       <AgeVerificationDialog
         open={open}
         onOpenChange={setOpen}
-        onVerified={() => onVerifiedRef.current?.()}
+        onResolved={() => onResolvedRef.current?.()}
       />
     </AgeGateContext.Provider>
   );

@@ -33,16 +33,24 @@ describe('resolveNsfwAccess', () => {
     expect(resolveNsfwAccess({ ...base, regionCode: 'GB', hasVerified: true }).decision).toBe('blocked');
   });
 
-  it('requires WALLET verify (not self-attest) in a law state', () => {
+  it('requires WALLET verify FIRST in a law state (before the content toggle)', () => {
+    // Nothing set → verification is the first requirement in a law state.
+    const fresh = resolveNsfwAccess({ ...base, regionCode: 'US-KS' });
+    expect(fresh.decision).toBe('needs_verify');
+    expect(fresh.remediation).toBe('verify_with_wallet');
+    // Even if the toggle were somehow on, an unverified law-state user still needs verify.
     const optedIn = resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasOptIn: true });
-    expect(optedIn.decision).toBe('needs_verify');          // opt-in is NOT enough here
-    expect(optedIn.remediation).toBe('verify_with_wallet');
-    expect(resolveNsfwAccess({ ...base, regionCode: 'US-KS' }).decision).toBe('needs_verify');
+    expect(optedIn.decision).toBe('needs_verify');
   });
 
-  it('allows a wallet-verified user in any law state', () => {
-    expect(resolveNsfwAccess({ ...base, regionCode: 'US-WY', hasVerified: true }).reason).toBe('verified');
-    expect(resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasVerified: true }).decision).toBe('allow');
+  it('after wallet verify, a law state still requires the content toggle', () => {
+    // Verified but toggle off → now the web content toggle is the remaining step.
+    const verifiedNoToggle = resolveNsfwAccess({ ...base, regionCode: 'US-WY', hasVerified: true });
+    expect(verifiedNoToggle.decision).toBe('needs_optin');
+    // Both verify + toggle → allowed.
+    const both = resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasOptIn: true, hasVerified: true });
+    expect(both.decision).toBe('allow');
+    expect(both.reason).toBe('verified');
   });
 
   it('requires opt-in (self-attest) in an open region when not attested', () => {
@@ -60,6 +68,12 @@ describe('resolveNsfwAccess', () => {
   it('allows self-attested users in open regions (incl. unknown)', () => {
     expect(resolveNsfwAccess({ ...base, hasOptIn: true, regionCode: '' }).decision).toBe('allow');
     expect(resolveNsfwAccess({ ...base, hasOptIn: true, regionCode: 'US-CA' }).reason).toBe('self_attested');
+  });
+
+  it('still requires the content toggle for a wallet-verified user in an open region', () => {
+    // Verified but toggle off → the content toggle is still required (not bypassed).
+    const r = resolveNsfwAccess({ ...base, regionCode: 'US-CA', hasVerified: true });
+    expect(r.decision).toBe('needs_optin');
   });
 });
 
