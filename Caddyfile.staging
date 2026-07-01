@@ -50,11 +50,17 @@
 	# Bypass the basic-auth gate for:
 	#   - /.well-known/*  : Apple/Google fetch these UNAUTHENTICATED to verify the
 	#                       native app's associated domains (passkeys + app links).
+	#   - /api/internal/* : server-side self-fetches from the app (e.g. proxy.ts's
+	#                       session-check) loop back through Caddy via the public host.
+	#                       These are secret-gated (Bearer INTERNAL_API_SECRET, fail
+	#                       closed) — the same exposure as prod, which has no gate.
+	#                       Without this, the gate 401s the session check and every
+	#                       logged-in request bounces to /login.
 	#   - the native staging app : Capacitor injects a custom User-Agent token
 	#                       (appendUserAgent in capacitor.config.ts) on every WebView
 	#                       request, including the top-level document. Convenience-grade,
 	#                       not a secret — staging is noindex and holds no real data.
-	@public path /.well-known/*
+	@public path /.well-known/* /api/internal/*
 	@nativeapp header User-Agent *TribesStaging*
 
 	handle @public {
