@@ -54,8 +54,13 @@ async function getViewerTribeIds(viewerUserId?: string | null): Promise<'all' | 
   // NSFW (issue #32): hidden from discovery unless this request+viewer may see it
   // (not geo-blocked, opted-in/verified). Members still reach their own NSFW tribes
   // via membership below; the content gate protects the actual posts regardless.
-  const { canSeeNsfw } = await import('@/lib/age-verification/nsfw-gate');
-  const showNsfw = await canSeeNsfw(viewerUserId ?? null);
+  const { canDiscoverNsfw } = await import('@/lib/age-verification/nsfw-gate');
+  // Listed NSFW tribes expose only metadata in discovery (posts gated at join/view),
+  // so show them to any signed-in viewer who could still gain access (needs_optin /
+  // needs_verify / allow) — joining then triggers the opt-in/verify remediation. Only
+  // geo-blocked regions hide them. Guests (no userId) stay conservative: NSFW hidden
+  // until they sign in and can be led through opt-in/verification.
+  const showNsfw = viewerUserId ? await canDiscoverNsfw(viewerUserId) : false;
   const discoverable = and(
     or(eq(tribes.isPublic, true), eq(tribes.isListed, true)),
     showNsfw ? undefined : eq(tribes.isNsfw, false),
