@@ -25,8 +25,6 @@ export interface AgeVerificationRequest {
   /** Provider-specific attestation payload (e.g. an OpenID4VP vp_token, or the
    *  Privately on-device signed credential). Absent for dev. */
   attestation?: unknown;
-  /** Server-issued one-time nonce that scoped the attestation request (replay protection). */
-  nonce?: string;
 }
 
 export interface AgeVerificationResult {

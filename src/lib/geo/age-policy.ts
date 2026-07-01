@@ -79,9 +79,24 @@ export function resolveNsfwAccess(input: {
   regionCode: string;
   surface: Surface;
 }): NsfwAccess {
+  const { regionCode, ...rest } = input;
+  return resolveNsfwAccessForTier({ ...rest, tier: regionTier(regionCode) });
+}
+
+/**
+ * Same decision as {@link resolveNsfwAccess}, but from an already-classified region
+ * tier — for callers (e.g. the age-gate dialog) that only hold the tier, not the code.
+ */
+export function resolveNsfwAccessForTier(input: {
+  isNsfw: boolean;
+  hasOptIn: boolean;
+  hasVerified: boolean;
+  tier: RegionTier;
+  surface: Surface;
+}): NsfwAccess {
   if (!input.isNsfw) return { decision: 'allow', reason: 'not_nsfw' };
 
-  const tier = regionTier(input.regionCode);
+  const tier = input.tier;
   if (tier === 'blocked') {
     return { decision: 'blocked', reason: 'region_law', remediation: 'unavailable_in_region' };
   }

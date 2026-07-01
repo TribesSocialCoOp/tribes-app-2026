@@ -9,6 +9,7 @@ import { profilePath, eventPath } from '@/lib/utils/paths';
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { NsfwBadge } from "@/components/ui/nsfw-badge";
 import { Button } from "@/components/ui/button";
 import {
   Search as SearchIcon,
@@ -152,7 +153,7 @@ export default function SearchPage() {
                               {tribe.isPublic ? <><Globe className="h-3 w-3 mr-1" />Public</> : <><Lock className="h-3 w-3 mr-1" />Private</>}
                             </Badge>
                             {tribe.isNsfw && (
-                              <Badge variant="destructive" className="text-xs shrink-0">18+</Badge>
+                              <NsfwBadge className="text-xs shrink-0" />
                             )}
                           </div>
                           <p className="text-sm text-muted-foreground truncate">{tribe.description}</p>

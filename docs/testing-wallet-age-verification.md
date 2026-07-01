@@ -116,10 +116,10 @@ only the attestation is simulated.
 6. Confirm in the DB: `select email, age_verified_at, age_verification_method from users
    where age_verified_at is not null;` → method = `dev`.
 
-> **Dev provider is HARD-DISABLED in production (L2).** It now returns unavailable whenever
-> `NODE_ENV === 'production'`, **regardless of any flag** — the old
-> `AGE_VERIFICATION_ALLOW_DEV` escape hatch can no longer rubber-stamp the gate in prod. If
-> you need the dev provider on a staging box, run that box with `NODE_ENV !== 'production'`.
+> **Dev provider is HARD-DISABLED in production (L2).** It is enabled purely by
+> `NODE_ENV !== 'production'` and returns unavailable in production regardless of any env
+> flag (the old `AGE_VERIFICATION_ALLOW_DEV` variable is not read anywhere). If you need
+> the dev provider on a staging box, run that box with `NODE_ENV !== 'production'`.
 
 ---
 
@@ -259,8 +259,8 @@ dialog shows a **"Verify with Google Wallet"** button.
 `APP_ORIGIN?`; `SESSION_SECRET` (required — seals/​domain-separates the verifier state);
 `INTERNAL_API_SECRET` (required in prod — app↔relay; fails closed if unset);
 `VALKEY_URL` (single-use nonce across instances; in-memory fallback in dev).
-`AGE_VERIFICATION_ALLOW_DEV` is **no longer honored in production** — the dev provider is
-hard-off whenever `NODE_ENV=production`.
+`AGE_VERIFICATION_ALLOW_DEV` is **not read anywhere** — the dev provider is enabled purely
+by `NODE_ENV !== 'production'` and hard-off whenever `NODE_ENV=production`.
 
 **Reset a user to re-test the gate:** `update users set age_verified_at = null,
 age_verification_method = null where email = '...';`

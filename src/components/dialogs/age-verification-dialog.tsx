@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { ShieldCheck, ShieldAlert, Loader2, Globe2, Check, ExternalLink } from 'lucide-react';
 import { getNsfwGateStatus, setAdultContentOptIn, submitAgeVerification, type NsfwGateStatus } from '@/lib/actions/age-actions';
 import { runWalletVerification, runOnDeviceVerification, providerSupport, type WalletProvider } from '@/lib/age-verification/client';
+import { resolveNsfwAccessForTier } from '@/lib/geo/age-policy';
 import { useUser } from '@/components/providers/user-provider';
 
 interface AgeGateDialogProps {
@@ -45,15 +46,18 @@ export function AgeVerificationDialog({ open, onOpenChange, onResolved }: AgeGat
   }, [open]);
 
   const resolveIfDone = React.useCallback((s: NsfwGateStatus): boolean => {
-    if (s.regionTier === 'blocked') return false;
-    const needVerify = s.regionTier === 'verify' && !s.hasVerified;
-    const needOptIn = !s.hasOptIn;
-    if (!needVerify && !needOptIn) {
-      onResolved?.();
-      onOpenChange(false);
-      return true;
-    }
-    return false;
+    // One source of truth for the requirement ordering: the shared policy resolver.
+    const access = resolveNsfwAccessForTier({
+      isNsfw: true,
+      hasOptIn: s.hasOptIn,
+      hasVerified: s.hasVerified,
+      tier: s.regionTier,
+      surface: s.surface,
+    });
+    if (access.decision !== 'allow') return false;
+    onResolved?.();
+    onOpenChange(false);
+    return true;
   }, [onResolved, onOpenChange]);
 
   const runVerify = async (providerId: string) => {

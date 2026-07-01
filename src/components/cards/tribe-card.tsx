@@ -5,7 +5,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tent, Users, ArrowRight, Globe, Lock, ShieldAlert } from 'lucide-react';
+import { NsfwBadge } from '@/components/ui/nsfw-badge';
+import { Tent, Users, ArrowRight, Globe, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface TribeCardData {
@@ -57,7 +58,7 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
                 <p className="font-medium text-sm truncate">{tribe.name}</p>
                 <div className="flex items-center gap-2 mt-0.5">
                   {tribe.isNsfw && (
-                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">18+</Badge>
+                    <NsfwBadge className="text-[10px] px-1.5 py-0" />
                   )}
                   {tribe.isPublic !== undefined && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
@@ -101,7 +102,7 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
             )}
             {tribe.isNsfw && (
               <div className="absolute top-2 right-3">
-                <Badge variant="destructive" className="text-[10px]"><ShieldAlert className="h-3 w-3 mr-1" /> 18+</Badge>
+                <NsfwBadge icon className="text-[10px]" />
               </div>
             )}
           </div>
@@ -124,7 +125,7 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
             )}
             {tribe.isNsfw && (
               <div className="absolute top-2 right-3">
-                <Badge variant="destructive" className="text-[10px]"><ShieldAlert className="h-3 w-3 mr-1" /> 18+</Badge>
+                <NsfwBadge icon className="text-[10px]" />
               </div>
             )}
           </div>

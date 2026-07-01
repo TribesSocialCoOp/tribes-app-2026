@@ -5,8 +5,8 @@
  * locally without a wallet credential or manual DB edits. It performs no real
  * attestation, so it is HARD-DISABLED in production.
  *
- * Enabled when NODE_ENV !== 'production', or explicitly via AGE_VERIFICATION_ALLOW_DEV=true
- * (e.g. to test on a staging deployment). Never set that flag in production.
+ * Enabled purely by NODE_ENV !== 'production' — no env flag. A staging deployment that
+ * needs it must simply not run with NODE_ENV=production.
  */
 import type { AgeVerificationProvider, AgeVerificationResult } from '../types';
 

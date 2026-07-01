@@ -14,7 +14,7 @@ blur-by-default on adult media. All of it is driven by `resolveNsfwAccess`.
 |---|---|---|
 | Policy logic (tiers/decisions) | ✅ fully | `npm test` (unit matrix) |
 | Geo IP→region resolution | ✅ | `npm run check:geoip` |
-| Tier switching without real geo | ✅ | `x-tribes-geo` header (no restart) or `AGE_GEO_OVERRIDE` env |
+| Tier switching without real geo | ✅ | `x-tribes-geo` header (no restart) or `AGE_GEO_OVERRIDE` env (dev + staging; ignored in prod) |
 | Full web flow (opt-in, gate screens, blur, discovery) | ✅ | `npm run dev` |
 | **Automated browser E2E** (opt-in DB round-trip, all 3 tiers, keystore migration, key-sync) | ✅ | `npx playwright test` (see §4) |
 | Verify (Google Wallet) pass/fail | ⚠️ partial | dev provider stub (real wallet needs a device + credential) |
@@ -28,10 +28,8 @@ Already set this session: `GEOIP_DB_PATH=…/geoip/GeoLite2-City.mmdb`. Also ens
 - `SESSION_SECRET` is set (seals verification state).
 - `DEV_BYPASS_SECRET=local-dev-only` — enables the dev quick-login buttons (the
   Playwright E2E + emulator flows log in via the **Dustin** button, not passwords).
-- To exercise the **verify** tier without a real wallet, enable the dev provider:
-  ```
-  AGE_VERIFICATION_ALLOW_DEV=true   # non-prod only; never in production
-  ```
+- To exercise the **verify** tier without a real wallet, use the dev provider — it is
+  auto-enabled whenever `NODE_ENV !== 'production'` (no env flag; hard-off in prod).
 
 The dev Postgres runs in Docker as `tribes-app-2026-postgres-dev-1` (the E2E DB
 helper `psql`s into it directly).
@@ -54,10 +52,15 @@ Expect e.g. `129.7.0.1 → US-TX [verify]`, `212.58.224.0 → GB [blocked]`,
 ## 3. Web flow (`npm run dev` → http://localhost:9002)
 > Localhost requests resolve to a private IP → **unknown → open**. Two ways to
 > simulate a tier:
-> - **`x-tribes-geo` request header** (non-prod only) — per-request, **no restart**.
+> - **`x-tribes-geo` request header** — per-request, **no restart**.
 >   Easiest for ad-hoc checks (e.g. a browser header-override extension) and what the
 >   E2E tests use (`x-tribes-geo: US-KS`).
 > - **`AGE_GEO_OVERRIDE` env** — process-wide; **requires a dev restart** to change.
+>
+> Both overrides work when `NODE_ENV !== 'production'` **or** `TRIBES_ENV=staging`
+> (staging runs a production build), and are ignored in real prod. Forged IP headers
+> (e.g. `cf-connecting-ip`) are no longer honored anywhere — the override is the only
+> way to fake geo.
 
 1. **Log in** with the dev **Dustin** quick-login button (passkeys are origin-bound to
    tribes.app, so they don't work locally — see Native caveat). Email+password also works.
@@ -67,8 +70,8 @@ Expect e.g. `129.7.0.1 → US-TX [verify]`, `212.58.224.0 → GB [blocked]`,
    - unset / `US-CA` → **open**: opted-in user sees NSFW; not opted-in sees the
      "enable adult content" gate.
    - `US-KS` (or `US-TX`) → **verify**: gate shows "Verify your age to continue"
-     (Google Wallet). With `AGE_VERIFICATION_ALLOW_DEV=true`, complete the dev
-     provider to unlock.
+     (Google Wallet). Complete the dev provider (auto-enabled outside production)
+     to unlock.
    - `GB` → **blocked**: gate shows "Not available in your region".
 4. **Create / join** an NSFW tribe in each tier — confirm create + join are gated the
    same way (region_blocked / verify / opt-in messages).
@@ -161,5 +164,5 @@ hot and `ws-relay/server` is ~0%, it's the build cache, not the relay.
 - [ ] Web: opt-in, all three tiers (via `x-tribes-geo`), blur on/off, discovery hide
 - [ ] Android emulator: in-app opt-in rejected (web-only), native render + blur
 - [ ] iOS simulator: verify-tier shows the web-verify note, native render + blur
-- [ ] Remove `AGE_GEO_OVERRIDE` / `AGE_VERIFICATION_ALLOW_DEV` before shipping
+- [ ] Remove `AGE_GEO_OVERRIDE` before shipping
 - [ ] Prod has `GEOIPUPDATE_*` creds (or rsync'd `.mmdb`) so the gate isn't inert

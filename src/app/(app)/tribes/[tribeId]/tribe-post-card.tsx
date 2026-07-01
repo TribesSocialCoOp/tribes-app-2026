@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { UserAvatar } from "@/components/ui/user-avatar";
-import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil, Lock, Globe, UserRoundX, Send, Loader2, Link2, ChevronDown, ChevronRight, EyeOff } from "lucide-react";
+import { Smile, SquareArrowUp, MessageSquareText, MoreVertical, Flag, Rss, RefreshCcw, Pin, Trash2, ShieldAlert, Pencil, Lock, Globe, UserRoundX, Send, Loader2, Link2, ChevronDown, ChevronRight } from "lucide-react";
 import { createComment } from '@/lib/actions/content-actions';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -34,6 +34,7 @@ import { useTribeDetail } from './tribe-detail-context';
 import { MarkdownContent, getReferencedImageIndices } from '@/components/ui/markdown-content';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
 import { EncryptedImage } from '@/components/ui/encrypted-image';
+import { BlurReveal } from '@/components/ui/blur-reveal';
 import { LinkPreviewCard } from '@/components/ui/link-preview-card';
 import { InlineReplyBox } from '@/components/content/inline-reply-box';
 import { ThreadCollapseHeader } from '@/components/content/thread-collapse-header';
@@ -573,18 +574,9 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
               );
               if (shouldBlur) {
                 return (
-                  <div className="relative mb-3 overflow-hidden rounded-lg">
-                    <div className="blur-2xl scale-110 pointer-events-none select-none">{grid}</div>
-                    <button
-                      type="button"
-                      onClick={() => setRevealed(true)}
-                      className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 bg-background/30 text-foreground"
-                      aria-label="Reveal adult content"
-                    >
-                      <EyeOff className="h-7 w-7 opacity-80" />
-                      <span className="text-sm font-medium">Adult content — tap to reveal</span>
-                    </button>
-                  </div>
+                  <BlurReveal className="mb-3 rounded-lg" onReveal={() => setRevealed(true)}>
+                    {grid}
+                  </BlurReveal>
                 );
               }
               return <div className="mb-3">{grid}</div>;

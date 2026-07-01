@@ -7,7 +7,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import { cn } from '@/lib/utils';
 import type { Ring } from '@/lib/types';
 import Link from 'next/link';
-import { EyeOff } from 'lucide-react';
+import { BlurReveal } from '@/components/ui/blur-reveal';
 import { resolveEmojiShortcode } from '@/lib/emoji-data';
 
 const MAX_CHART_LENGTH = 10_000; // ~10 KB — generous for any reasonable diagram
@@ -320,18 +320,17 @@ function InlineImage({
 
   if (blur && !revealed) {
     return (
-      <span className="relative block my-3 overflow-hidden rounded-md">
-        <span className="block blur-2xl scale-105 pointer-events-none select-none">{children}</span>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); setRevealed(true); }}
-          className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1 bg-background/30 text-foreground"
-          aria-label="Reveal adult image"
-        >
-          <EyeOff className="h-6 w-6 opacity-80" />
-          <span className="text-xs font-medium">Tap to reveal</span>
-        </button>
-      </span>
+      <BlurReveal
+        as="span"
+        size="sm"
+        className="my-3 rounded-md"
+        blurClassName="blur-2xl scale-105"
+        label="Tap to reveal"
+        ariaLabel="Reveal adult image"
+        onReveal={() => setRevealed(true)}
+      >
+        {children}
+      </BlurReveal>
     );
   }
 

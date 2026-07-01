@@ -23,7 +23,7 @@ import {
 } from 'jose';
 import { createHash, X509Certificate } from 'node:crypto';
 import { DeviceResponse, SessionTranscript } from '@owf/mdoc';
-import { nodeMdocContext } from './mdoc-context';
+import { nodeMdocContext, pemCertsToDer } from './mdoc-context';
 import type { WalletProviderConfig } from './config';
 
 const STATE_TTL = '10m';
@@ -160,7 +160,7 @@ export async function verifyAgeResponse(cfg: WalletProviderConfig, input: AgeRes
   );
 
   // 4. Verify the mdoc against the IACA trust anchors (throws on any failure).
-  const trustedCertificates = cfg.iacaPems.map((pem) => new Uint8Array(new X509Certificate(pem).raw));
+  const trustedCertificates = pemCertsToDer(cfg.iacaPems);
   await Verifier_verify(deviceResponseBytes, sessionTranscript, trustedCertificates);
 
   // 5. Read the verified age_over_18 claim.
