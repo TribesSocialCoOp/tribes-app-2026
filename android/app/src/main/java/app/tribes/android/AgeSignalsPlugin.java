@@ -17,8 +17,9 @@ package app.tribes.android;
 // in production, attach a Play Integrity token over the server `nonce` and verify it
 // server-side (providers/play-age-signals.ts). Until then the server prod-rejects it.
 //
-// NOTE: written against Google's published API; verify the exact method/constant names
-// against the SDK on first build (the SDK couldn't be compiled here).
+// Symbols verified against age-signals:0.0.3: AgeSignalsVerificationStatus is an @IntDef
+// in the `.model` subpackage (VERIFIED=0, SUPERVISED=1..DENIED=3, UNKNOWN=4, DECLARED=5);
+// userStatus()/ageLower()/ageUpper() all return nullable Integer.
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -29,7 +30,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.google.android.play.agesignals.AgeSignalsManager;
 import com.google.android.play.agesignals.AgeSignalsManagerFactory;
 import com.google.android.play.agesignals.AgeSignalsRequest;
-import com.google.android.play.agesignals.AgeSignalsVerificationStatus;
+import com.google.android.play.agesignals.model.AgeSignalsVerificationStatus;
 
 @CapacitorPlugin(name = "AgeSignals")
 public class AgeSignalsPlugin extends Plugin {
