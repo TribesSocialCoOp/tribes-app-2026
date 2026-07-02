@@ -6,6 +6,15 @@ import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
     @Override
+    public void onCreate(Bundle savedInstanceState) {
+        // Register app-local Capacitor plugins BEFORE super.onCreate(). Capacitor
+        // auto-discovers only npm-package plugins, so our in-app AgeSignals plugin
+        // (Play Age Signals, issue #32) must be registered by hand here.
+        registerPlugin(AgeSignalsPlugin.class);
+        super.onCreate(savedInstanceState);
+    }
+
+    @Override
     public void onStart() {
         super.onStart();
 

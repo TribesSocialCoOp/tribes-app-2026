@@ -8,7 +8,7 @@
  * On native (Capacitor) the same shape will be produced by a native plugin instead of
  * navigator.credentials; the server verification path is identical.
  */
-import { createAgeVerificationRequest, createIosAgeChallenge, submitAgeVerification } from '@/lib/actions/age-actions';
+import { createAgeVerificationRequest, createIosAgeChallenge, createPlayAgeChallenge, submitAgeVerification } from '@/lib/actions/age-actions';
 import { isNative, isIos, isAndroid } from '@/lib/capacitor/platform';
 import { isOnDeviceAgeAvailable } from './on-device-age';
 
@@ -57,6 +57,14 @@ export function providerSupport(id: string): { enabled: boolean; hint?: string }
     return isNative && isIos
       ? { enabled: true }
       : { enabled: false, hint: 'Confirm your age in the Tribes iPhone app (iOS 26.2 or later).' };
+  }
+
+  if (id === 'play_age_signals') {
+    // Android-native only (Google Play Age Signals). The plugin reports availability at
+    // runtime; here we gate to the Android app.
+    return isNative && isAndroid
+      ? { enabled: true }
+      : { enabled: false, hint: 'Confirm your age in the Tribes Android app.' };
   }
 
   return { enabled: true };
@@ -160,6 +168,29 @@ export async function runDeclaredAgeVerification(userId: string): Promise<{ veri
       declaration: result.declaration,
       parentalControlsActive: result.parentalControlsActive,
       appAttest: result.appAttest,
+    },
+  }));
+}
+
+/**
+ * Run Google's Play Age Signals check (Android native) and submit it. Android analog of
+ * runDeclaredAgeVerification — gets a single-use server nonce, runs the native plugin,
+ * then submits the band + status + supervised signal. The server owns the policy and
+ * returns a user-safe reason on rejection.
+ */
+export async function runPlayAgeVerification(): Promise<{ verified: boolean; method: string }> {
+  const { nonce } = unwrap(await createPlayAgeChallenge());
+  const { runPlayAgeCheck } = await import('./play-age-signals');
+  const result = await runPlayAgeCheck(nonce);
+
+  return unwrap(await submitAgeVerification({
+    provider: 'play_age_signals',
+    attestation: {
+      nonce,
+      over18: result.over18,
+      userStatus: result.userStatus,
+      parentalControlsActive: result.parentalControlsActive,
+      integrityToken: result.integrityToken,
     },
   }));
 }

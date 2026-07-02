@@ -13,10 +13,11 @@
  * (per-env) to re-open the `verify` tier once Wallet is tested. The VERIFY_REGIONS
  * list is preserved throughout, so re-enabling is just the env flag.
  *
- * A SECOND, INDEPENDENT method re-opens the verify tier for iOS-native users only:
- * Apple's Declared Age Range OS signal, behind `NEXT_PUBLIC_IOS_AGE_VERIFY_ENABLED`
- * (see regionTier + providers/apple-declared-age.ts) — it can unblock iPhone users in
- * law states without Google Wallet.
+ * Two more INDEPENDENT methods re-open the verify tier per native surface, each behind
+ * its own flag, without Google Wallet: Apple's Declared Age Range for iOS
+ * (`NEXT_PUBLIC_IOS_AGE_VERIFY_ENABLED`, providers/apple-declared-age.ts) and Google's
+ * Play Age Signals for Android (`NEXT_PUBLIC_PLAY_AGE_VERIFY_ENABLED`,
+ * providers/play-age-signals.ts). They share one decision core (os-age-policy.ts).
  */
 
 export type Surface = 'web' | 'ios' | 'android';
@@ -86,6 +87,16 @@ export function iosDeclaredAgeEnabled(): boolean {
 }
 
 /**
+ * Feature flag for the Android Play Age Signals provider (Google's on-device age signal,
+ * the analog of Apple's Declared Age Range). OFF by default. INDEPENDENT of Google Wallet:
+ * when on, Android-native users in a law state can satisfy the verify tier via the OS
+ * signal even while Wallet stays parked. Read at call time.
+ */
+export function playAgeSignalsEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_PLAY_AGE_VERIFY_ENABLED === 'true';
+}
+
+/**
  * PURE geographic/legal classification, independent of rollout state. `verify` here
  * means "this jurisdiction has an AV law", NOT that verification is currently offered.
  * Use this to reason about the law itself (e.g. list-integrity tests); use
@@ -126,6 +137,7 @@ export function regionTier(code: string, surface?: Surface, hasVerified?: boolea
   if (hasVerified) return 'verify';
   if (walletVerifyEnabled()) return 'verify';
   if (surface === 'ios' && iosDeclaredAgeEnabled()) return 'verify';
+  if (surface === 'android' && playAgeSignalsEnabled()) return 'verify';
   return 'blocked';
 }
 

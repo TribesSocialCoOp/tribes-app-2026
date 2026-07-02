@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { ShieldCheck, ShieldAlert, Loader2, Globe2, Check, ExternalLink } from 'lucide-react';
 import { getNsfwGateStatus, setAdultContentOptIn, submitAgeVerification, type NsfwGateStatus } from '@/lib/actions/age-actions';
-import { runWalletVerification, runOnDeviceVerification, runDeclaredAgeVerification, providerSupport, type WalletProvider } from '@/lib/age-verification/client';
+import { runWalletVerification, runOnDeviceVerification, runDeclaredAgeVerification, runPlayAgeVerification, providerSupport, type WalletProvider } from '@/lib/age-verification/client';
 import { resolveNsfwAccessForTier } from '@/lib/geo/age-policy';
 import { useUser } from '@/components/providers/user-provider';
 
@@ -79,6 +79,9 @@ export function AgeVerificationDialog({ open, onOpenChange, onResolved }: AgeGat
         // iOS Declared Age Range OS signal — runs via our native plugin, not a wallet.
         if (!user?.id) throw new Error('Please sign in again and retry.');
         await runDeclaredAgeVerification(user.id);
+      } else if (providerId === 'play_age_signals') {
+        // Android Play Age Signals OS signal — runs via our native plugin, not a wallet.
+        await runPlayAgeVerification();
       } else {
         await runWalletVerification(providerId as WalletProvider);
       }

@@ -167,9 +167,24 @@ export const createAgeVerificationRequest = withPublicErrors(async (
  * which consumes it single-use. Mirrors the wallet nonce, minus the OID4VP request.
  */
 export const createIosAgeChallenge = withPublicErrors(async (): Promise<{ nonce: string }> => {
-  const userId = await requireAuth();
   const { iosDeclaredAgeEnabled } = await import('@/lib/geo/age-policy');
-  if (!iosDeclaredAgeEnabled()) {
+  return mintOsAgeChallenge(iosDeclaredAgeEnabled());
+});
+
+/**
+ * Android sibling of createIosAgeChallenge for the Play Age Signals flow. The native
+ * plugin runs the Play check anchored to this nonce (and, in Phase 2, binds it into a
+ * Play Integrity token); submitAgeVerification consumes it single-use.
+ */
+export const createPlayAgeChallenge = withPublicErrors(async (): Promise<{ nonce: string }> => {
+  const { playAgeSignalsEnabled } = await import('@/lib/geo/age-policy');
+  return mintOsAgeChallenge(playAgeSignalsEnabled());
+});
+
+/** Shared: auth + feature-gate + rate-limit, then issue a single-use user-bound nonce. */
+async function mintOsAgeChallenge(featureEnabled: boolean): Promise<{ nonce: string }> {
+  const userId = await requireAuth();
+  if (!featureEnabled) {
     throw new PublicError('That verification method is not available right now.');
   }
   const { ageChallengeLimiter } = await import('@/lib/auth/rate-limit');
@@ -178,7 +193,7 @@ export const createIosAgeChallenge = withPublicErrors(async (): Promise<{ nonce:
   const { issueNonce } = await import('@/lib/services/age-verification/nonce-store');
   await issueNonce(nonce, userId, 10 * 60);
   return { nonce };
-});
+}
 
 /**
  * Submit a wallet attestation for verification. On success, permanently marks the

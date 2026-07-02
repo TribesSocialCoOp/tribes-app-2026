@@ -22,6 +22,12 @@ function withIosAgeEnabled(fn: () => void) {
   try { fn(); } finally { vi.unstubAllEnvs(); }
 }
 
+/** Run a block with the Android Play Age Signals method turned ON (Wallet stays parked). */
+function withPlayAgeEnabled(fn: () => void) {
+  vi.stubEnv('NEXT_PUBLIC_PLAY_AGE_VERIFY_ENABLED', 'true');
+  try { fn(); } finally { vi.unstubAllEnvs(); }
+}
+
 afterEach(() => vi.unstubAllEnvs());
 
 // ── Pure legal classification (flag-independent) ─────────────────────────────
@@ -99,6 +105,29 @@ describe('regionTier (iOS Declared Age Range — surface-aware)', () => {
     withWalletEnabled(() => {
       expect(regionTier('US-TX', 'web')).toBe('verify');
       expect(regionTier('US-TX', 'ios')).toBe('verify');
+    });
+  });
+});
+
+describe('regionTier (Android Play Age Signals — surface-aware)', () => {
+  it('re-opens a law state to verify on ANDROID when the Play method is ON', () => {
+    withPlayAgeEnabled(() => {
+      expect(regionTier('US-TX', 'android')).toBe('verify');
+      expect(regionTier('US-KS', 'android')).toBe('verify');
+    });
+  });
+  it('does NOT re-open on ios/web with only the Android method ON', () => {
+    withPlayAgeEnabled(() => {
+      expect(regionTier('US-TX', 'ios')).toBe('blocked');
+      expect(regionTier('US-TX', 'web')).toBe('blocked');
+    });
+  });
+  it('is independent of the iOS flag (each surface has its own method)', () => {
+    withIosAgeEnabled(() => {
+      expect(regionTier('US-TX', 'android')).toBe('blocked'); // iOS flag doesn't open Android
+    });
+    withPlayAgeEnabled(() => {
+      expect(regionTier('US-TX', 'ios')).toBe('blocked');     // Android flag doesn't open iOS
     });
   });
 });

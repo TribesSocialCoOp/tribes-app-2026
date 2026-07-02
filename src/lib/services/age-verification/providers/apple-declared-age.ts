@@ -25,28 +25,30 @@ import type {
   AgeVerificationContext,
 } from '../types';
 import { iosDeclaredAgeEnabled } from '@/lib/geo/age-policy';
-import { CONFIRMED_AGE_DECLARATIONS, UNCONFIRMED_AGE_GUIDANCE } from '@/lib/age-verification/declared-age-policy';
+import { CONFIRMED_AGE_DECLARATIONS } from '@/lib/age-verification/declared-age-policy';
+import { evaluateOsAgeSignal, isRealProd, type OsAgeReasonCode } from '@/lib/age-verification/os-age-policy';
 
 // ── Child-safety policy flags (server-side env, runtime-tunable — no rebuild) ────────
-/** Block when the device reports ANY active parental control (managed / child account).
- *  Default ON — a strong minor signal even if the age band claims 18+. */
-const blockOnParentalControls = () => process.env.IOS_AGE_BLOCK_ON_PARENTAL_CONTROLS !== 'false';
-/** Require a definitive age band from Apple; a missing/unreadable signal is blocked
- *  (fail closed for child safety). Default ON. */
-const requireDefinitiveSignal = () => process.env.IOS_AGE_REQUIRE_DEFINITIVE_SIGNAL !== 'false';
-/** Require an Apple-CONFIRMED declaration (gov-ID / payment / other), rejecting bare
- *  self_declared. Default OFF — Apple returns self_declared for most adults, so this
- *  rejects them; turn on only where counsel demands higher assurance. */
-const requireConfirmedDeclaration = () => process.env.IOS_AGE_REQUIRE_CONFIRMED === 'true';
+// The shared decision lives in os-age-policy.ts (also used by Android Play Age Signals);
+// here we just read the iOS-specific env and map reason codes to iOS copy.
+const iosFlags = () => ({
+  /** Block managed/child devices even if the band claims 18+. Default ON. */
+  blockOnParentalControls: process.env.IOS_AGE_BLOCK_ON_PARENTAL_CONTROLS !== 'false',
+  /** Fail closed on a missing/unreadable age band. Default ON. */
+  requireDefinitiveSignal: process.env.IOS_AGE_REQUIRE_DEFINITIVE_SIGNAL !== 'false',
+  /** Require an Apple-CONFIRMED declaration (rejects bare self_declared). Default OFF —
+   *  Apple returns self_declared for most adults, so ON rejects them; enable only where
+   *  counsel demands higher assurance. */
+  requireConfirmed: process.env.IOS_AGE_REQUIRE_CONFIRMED === 'true',
+});
 
-/**
- * "Real" production = a production build that is NOT the staging box. Staging runs
- * NODE_ENV=production builds but sets TRIBES_ENV=staging (same precedent as the geo
- * override in resolve-region.ts), and must be able to device-test this flow before
- * App Attest lands.
- */
-const isRealProd = () =>
-  process.env.NODE_ENV === 'production' && process.env.TRIBES_ENV !== 'staging';
+/** iOS-flavored copy for each shared reason code. */
+const IOS_REASONS: Record<OsAgeReasonCode, string> = {
+  no_signal: 'We couldn’t read a clear age signal from your iPhone. Please try again.',
+  under_18: 'Your Apple Account shows you’re under 18, so this adult content isn’t available.',
+  supervised: 'This device has parental controls (a managed or child account), so adult content can’t be enabled here.',
+  unconfirmed: 'Your Apple Account isn’t independently age-confirmed. Add a card to your Apple Account or complete an ID check, then try again.',
+};
 
 /**
  * Phase-2 App Attest verification. In REAL production the client boolean is worthless
@@ -113,31 +115,18 @@ export const appleDeclaredAgeProvider: AgeVerificationProvider = {
     const soft = (verified: boolean, reason?: string): AgeVerificationResult =>
       ({ verified, method: 'apple_declared_age_range', nonce: att.nonce, nonceFailClosed: true, reason });
 
-    // (1) Definitive signal required (fail closed for child safety): Apple must have
-    //     returned a real 18+/under-18 answer, not a missing/unreadable one.
-    if (requireDefinitiveSignal() && typeof att.over18 !== 'boolean') {
-      return soft(false, 'We couldn’t read a clear age signal from your iPhone. Please try again.');
-    }
-
-    // (2) The KID GATE: an under-18 age band is blocked. This is the primary child gate.
-    if (att.over18 !== true) {
-      return soft(false, 'Your Apple Account shows you’re under 18, so this adult content isn’t available.');
-    }
-
-    // (3) Managed / child device: block on any active parental control (default on).
-    if (blockOnParentalControls() && att.parentalControlsActive === true) {
-      return soft(false, 'This device has parental controls (a managed or child account), so adult content can’t be enabled here.');
-    }
-
-    // (4) Optional higher-assurance gate: require an Apple-CONFIRMED declaration. OFF by
-    //     default (Apple reports self_declared for most adults); on only where counsel
-    //     requires it. The age band already keeps minors out regardless.
-    if (requireConfirmedDeclaration()) {
-      const declaration = typeof att.declaration === 'string' ? att.declaration : 'unknown';
-      if (!CONFIRMED_AGE_DECLARATIONS.has(declaration)) {
-        return soft(false, UNCONFIRMED_AGE_GUIDANCE);
-      }
-    }
+    // Normalize Apple's signal into the shared model, then run the shared decision so iOS
+    // and Android stay identical. `confirmed` = an Apple-verified declaration level.
+    const declaration = typeof att.declaration === 'string' ? att.declaration : 'unknown';
+    const decision = evaluateOsAgeSignal(
+      {
+        over18: att.over18,
+        parentalControlsActive: att.parentalControlsActive === true,
+        confirmed: CONFIRMED_AGE_DECLARATIONS.has(declaration),
+      },
+      iosFlags(),
+    );
+    if (!decision.verified) return soft(false, IOS_REASONS[decision.reasonCode!]);
 
     // ── App Attest boundary ──────────────────────────────────────────────────────
     // In real production, the unsigned client result is only trusted once an App Attest

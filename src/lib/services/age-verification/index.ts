@@ -14,12 +14,14 @@ import { devProvider } from './providers/dev';
 import { googleWalletProvider } from './providers/google-wallet';
 import { appleWalletProvider } from './providers/apple-wallet';
 import { appleDeclaredAgeProvider } from './providers/apple-declared-age';
+import { playAgeSignalsProvider } from './providers/play-age-signals';
 import { privatelyProvider } from './providers/privately';
 
 const REGISTRY: Record<string, AgeVerificationProvider> = {
   google_wallet: googleWalletProvider,
   apple_wallet: appleWalletProvider,
   apple_declared_age_range: appleDeclaredAgeProvider,
+  play_age_signals: playAgeSignalsProvider,
   privately: privatelyProvider,
   dev: devProvider,
 };

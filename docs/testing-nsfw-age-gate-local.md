@@ -190,6 +190,30 @@ Attest (Phase 2) is implemented — even with the flag on. `IOS_AGE_APP_ATTEST_E
 stays false; do not set it in prod until the DCAppAttest assertion is verified server-side
 (`providers/apple-declared-age.ts`). Dev/staging testing works without it.
 
+## 6b. Android Play Age Signals (OS age signal) — unblocks Android law states
+
+The Android analog of §6a — Google Play Age Signals. Off by default; independent of Google
+Wallet. Shares the same decision core + child-safety flags as iOS.
+
+**One-time setup:** add `android/.../AgeSignalsPlugin.java` — already registered in
+`MainActivity.onCreate` via `registerPlugin(AgeSignalsPlugin.class)`, gradle dep
+`com.google.android.play:age-signals:0.0.3` is in `android/app/build.gradle`. Enable with
+`NEXT_PUBLIC_PLAY_AGE_VERIFY_ENABLED=true` (rebuild — build-time flag).
+
+**Testing — NO two phones needed** (unlike Wallet):
+- Logic/integration: Google ships `FakeAgeSignalsManager` to simulate any status (verified
+  adult, SUPERVISED child, under-18, UNKNOWN) on one device / in unit tests.
+- Real on-device signals: install via a **Play internal-testing track** in a covered
+  region (Texas/Brazil live; more states rolling out). A sideloaded build returns
+  `APP_NOT_OWNED`.
+- Off-device wiring: `NEXT_PUBLIC_ANDROID_AGE_STUB=true` (non-prod) fakes a DECLARED adult
+  and logs loudly.
+
+Mapping: `SUPERVISED*` (Family Link) → blocked like iOS parental controls; under-18 band →
+blocked; `VERIFIED` → confirmed; `DECLARED` → self-declared adult (accepted, band-gated).
+**Prod safety:** not signed → prod-rejected until **Play Integrity** (Phase 2) is coded
+(`providers/play-age-signals.ts`), mirroring iOS App Attest.
+
 ## ⚠️ Native login caveat
 Passkey / E2E login is origin-bound to `tribes.app`, so a **local** native build can't
 complete passkey login. Options: (a) use the **Dustin dev login button** in the native
