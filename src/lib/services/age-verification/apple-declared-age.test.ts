@@ -40,14 +40,22 @@ describe('appleDeclaredAgeProvider.verify (non-production)', () => {
     expect(r.verified).toBe(true);
   });
 
-  it('does NOT verify a self-declared age (unconfirmed for a law state)', async () => {
+  it('accepts "other" (checkedByOtherMethod — account-history / card-on-file confirmation)', async () => {
+    // Apple confirms adulthood from account longevity or a card on file and returns
+    // checkedByOtherMethod → normalized 'other'. This is independent confirmation, not
+    // self-attestation, so it must pass (the original bug rejected it).
+    const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'other' }), ctx);
+    expect(r.verified).toBe(true);
+  });
+
+  it('does NOT verify a self-declared age (bare self-attestation, unconfirmed)', async () => {
     const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'self_declared' }), ctx);
     expect(r.verified).toBe(false);
     expect(r.nonce).toBe('n1');
   });
 
-  it('does NOT verify guardian-declared or "other" levels', async () => {
-    for (const declaration of ['guardian_declared', 'other', 'unknown']) {
+  it('does NOT verify guardian-declared or unknown levels', async () => {
+    for (const declaration of ['guardian_declared', 'unknown']) {
       const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration }), ctx);
       expect(r.verified).toBe(false);
     }

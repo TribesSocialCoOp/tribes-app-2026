@@ -159,7 +159,9 @@ export async function runDeclaredAgeVerification(userId: string): Promise<{ veri
     throw new Error('Your Apple Account doesn’t show you as 18 or older, so adult content can’t be enabled here.');
   }
   if (!CONFIRMED_AGE_DECLARATIONS.has(result.declaration ?? 'unknown')) {
-    throw new Error(UNCONFIRMED_AGE_GUIDANCE);
+    // Append the raw declaration level Apple returned — diagnostic while we validate
+    // real-account behavior on staging (tells us self_declared vs an unexpected level).
+    throw new Error(`${UNCONFIRMED_AGE_GUIDANCE} (Apple reported: ${result.declaration ?? 'none'})`);
   }
 
   return unwrap(await submitAgeVerification({
