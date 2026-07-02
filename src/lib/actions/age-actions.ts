@@ -52,9 +52,10 @@ export async function getNsfwGateStatus(): Promise<NsfwGateStatus> {
   ]);
 
   return {
-    // Surface-aware: an iOS law state stays 'verify' (not 'blocked') when the iOS
-    // Declared Age Range method is enabled, so the dialog offers it.
-    regionTier: regionTier(regionCode(region), surface),
+    // Surface- and verified-aware: an iOS law state stays 'verify' (not 'blocked') when
+    // the iOS Declared Age Range method is enabled, and an already-verified user is
+    // never re-collapsed to 'blocked' on another surface.
+    regionTier: regionTier(regionCode(region), surface, hasVerified),
     surface,
     hasOptIn,
     hasVerified,
@@ -82,16 +83,18 @@ export const setAdultContentOptIn = withPublicErrors(async (enabled: boolean): P
   const { eq } = await import('drizzle-orm');
 
   if (enabled) {
-    // Law states require age verification BEFORE the toggle can be enabled. The toggle is
-    // web-only (enforced above), so surface is 'web' here — the iOS Declared Age Range
-    // method never keeps a law state open on this path; only Google Wallet does.
-    const { regionTier } = await import('@/lib/geo/age-policy');
-    const tier = regionTier(regionCode(await getRequestRegion()), 'web');
-    if (tier === 'verify') {
+    // Any non-open jurisdiction (a law state OR a fully blocked region like the UK)
+    // requires high-assurance verification BEFORE the self-attest toggle can be enabled —
+    // regardless of whether a verification method is currently live for the surface.
+    // Guarding on the PURE lawRegionTier (not the collapsed regionTier) keeps this
+    // enforced during Stage 1, when law states collapse to 'blocked'; otherwise the
+    // guard would silently no-op and a law-state user could self-attest unverified.
+    const { lawRegionTier } = await import('@/lib/geo/age-policy');
+    if (lawRegionTier(regionCode(await getRequestRegion())) !== 'open') {
       const { getUserNsfwFlags } = await import('@/lib/age-verification/nsfw-gate');
       const { hasVerified } = await getUserNsfwFlags(userId);
       if (!hasVerified) {
-        throw new PublicError('Verify your age with Google Wallet before enabling adult content.');
+        throw new PublicError('Verify your age before enabling adult content.');
       }
     }
   }
@@ -165,6 +168,12 @@ export const createAgeVerificationRequest = withPublicErrors(async (
  */
 export const createIosAgeChallenge = withPublicErrors(async (): Promise<{ nonce: string }> => {
   const userId = await requireAuth();
+  const { iosDeclaredAgeEnabled } = await import('@/lib/geo/age-policy');
+  if (!iosDeclaredAgeEnabled()) {
+    throw new PublicError('That verification method is not available right now.');
+  }
+  const { ageChallengeLimiter } = await import('@/lib/auth/rate-limit');
+  await ageChallengeLimiter.check(userId); // per-user cap on nonce minting
   const nonce = crypto.randomUUID();
   const { issueNonce } = await import('@/lib/services/age-verification/nonce-store');
   await issueNonce(nonce, userId, 10 * 60);
@@ -199,7 +208,8 @@ export const submitAgeVerification = withPublicErrors(async (
   // the dev provider has none.
   if (result.nonce) {
     const { consumeNonce } = await import('@/lib/services/age-verification/nonce-store');
-    const ok = await consumeNonce(result.nonce, userId);
+    // Providers whose nonce is the only binding (no crypto seal) fail CLOSED on infra error.
+    const ok = await consumeNonce(result.nonce, userId, { failClosed: result.nonceFailClosed });
     if (!ok) {
       throw new PublicError('This verification request has expired or already been used. Please start again.');
     }

@@ -30,9 +30,9 @@ describe('appleDeclaredAgeProvider.verify (non-production)', () => {
     ).rejects.toThrow(/nonce/i);
   });
 
-  it('verifies an over-18 government-ID-confirmed result (returns the nonce for single-use)', async () => {
+  it('verifies an over-18 government-ID-confirmed result (nonce returned, marked fail-closed)', async () => {
     const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'government_id' }), ctx);
-    expect(r).toEqual({ verified: true, method: 'apple_declared_age_range', nonce: 'n1' });
+    expect(r).toEqual({ verified: true, method: 'apple_declared_age_range', nonce: 'n1', nonceFailClosed: true });
   });
 
   it('accepts payment-confirmed as a confirmed level', async () => {
@@ -59,17 +59,25 @@ describe('appleDeclaredAgeProvider.verify (non-production)', () => {
   });
 });
 
-describe('appleDeclaredAgeProvider.verify (production — App Attest gate)', () => {
-  it('rejects an unattested result in production (Phase 1)', async () => {
+describe('appleDeclaredAgeProvider.verify (real production — App Attest gate)', () => {
+  it('rejects an unattested result in real production (Phase 1)', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     await expect(
       appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'government_id' }), ctx),
     ).rejects.toThrow(/not enabled in production/i);
   });
 
-  it('allows in production once App Attest is enabled (Phase 2 flag)', async () => {
+  it('an env flag alone CANNOT open prod — App Attest verification must exist (no bypass)', async () => {
     vi.stubEnv('NODE_ENV', 'production');
-    vi.stubEnv('IOS_AGE_APP_ATTEST_ENABLED', 'true');
+    vi.stubEnv('IOS_AGE_APP_ATTEST_ENABLED', 'true'); // ops mistake / premature flip
+    await expect(
+      appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'government_id', appAttest: { foo: 1 } }), ctx),
+    ).rejects.toThrow(/App Attest pending/i);
+  });
+
+  it('staging (prod build + TRIBES_ENV=staging) accepts for device testing', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('TRIBES_ENV', 'staging');
     const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'government_id' }), ctx);
     expect(r.verified).toBe(true);
   });

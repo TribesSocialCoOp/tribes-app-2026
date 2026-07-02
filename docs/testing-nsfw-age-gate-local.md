@@ -156,15 +156,24 @@ state confirm 18+ via the OS instead of Google Wallet. Off by default; independe
 `NEXT_PUBLIC_WALLET_VERIFY_ENABLED`.
 
 **One-time Xcode setup** (not done by `cap sync`):
-1. In Xcode, add `ios/App/App/AgeRangePlugin.swift` to the **App** target (drag into the
-   App group, check "App" under Target Membership). Capacitor auto-registers the
-   `CAPBridgedPlugin` at runtime — no `registerPlugin` needed.
-2. Enable the **Declared Age Range** capability on the App ID (and staging App ID) in the
+1. In Xcode, add both `ios/App/App/AgeRangePlugin.swift` **and** `MainViewController.swift`
+   to the **App** target (drag into the App group, check "App" under Target Membership).
+2. ⚠️ Capacitor 8 does **not** auto-discover app-local plugins. `MainViewController`
+   (already set as the storyboard's root VC, module "App") registers it via
+   `bridge?.registerPluginInstance(AgeRangePlugin())`. If `window.Capacitor.Plugins.AgeRange`
+   is `undefined` at runtime, the target membership or the storyboard `customClass` is
+   the culprit — not the JS.
+3. Enable the **Declared Age Range** capability on the App ID (and staging App ID) in the
    Developer portal. The `com.apple.developer.declared-age-range` entitlement is already
    in `App.entitlements` / `App.staging.entitlements`.
-3. Build with the **iOS 26.2 SDK (Xcode 26.2+)**. Older devices return `available:false`
+4. Build with the **iOS 26.2 SDK (Xcode 26.2+)**. Older devices return `available:false`
    and stay blocked. Deployment floor is unchanged (15.0); the plugin runtime-gates on
    `#available(iOS 26.2, *)`.
+
+> **No silent stub on-device.** If the native plugin isn't wired, the flow does **not**
+> fake-pass — it errors. To exercise the wiring WITHOUT the native plugin (web/simulator),
+> opt into the dev stub with `NEXT_PUBLIC_IOS_AGE_STUB=true` (non-production only); it logs
+> a loud console warning so a stubbed run is never mistaken for the real OS check.
 
 **Enable + sandbox-test (real device, iOS 26.2+):**
 1. Set `NEXT_PUBLIC_IOS_AGE_VERIFY_ENABLED=true` in `.env.local` (rebuild — it's baked in).

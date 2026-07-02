@@ -148,8 +148,20 @@ export async function runOnDeviceVerification(userId: string): Promise<{ verifie
  */
 export async function runDeclaredAgeVerification(userId: string): Promise<{ verified: boolean; method: string }> {
   const { nonce } = unwrap(await createIosAgeChallenge());
-  const { runIosDeclaredAgeCheck } = await import('./ios-declared-age');
+  const { runIosDeclaredAgeCheck, CONFIRMED_AGE_DECLARATIONS, UNCONFIRMED_AGE_GUIDANCE } =
+    await import('./ios-declared-age');
   const result = await runIosDeclaredAgeCheck(userId, nonce);
+
+  // Pre-check the declaration level BEFORE submitting so the common self-declared case
+  // gets actionable guidance (confirm your age with Apple) instead of a generic
+  // "verification did not succeed". The server enforces the same policy regardless.
+  if (result.over18 !== true) {
+    throw new Error('Your Apple Account doesn’t show you as 18 or older, so adult content can’t be enabled here.');
+  }
+  if (!CONFIRMED_AGE_DECLARATIONS.has(result.declaration ?? 'unknown')) {
+    throw new Error(UNCONFIRMED_AGE_GUIDANCE);
+  }
+
   return unwrap(await submitAgeVerification({
     provider: 'apple_declared_age_range',
     attestation: { nonce, over18: result.over18, declaration: result.declaration, appAttest: result.appAttest },

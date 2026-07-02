@@ -229,6 +229,14 @@ export const signupLimiter = new RateLimiter({
   maxRequests: 5,
 });
 
+// Age-verification challenge minting — keyed by userId. Bounds how many single-use
+// nonces one account can write into the shared nonce store (each has a 10-min TTL).
+export const ageChallengeLimiter = new RateLimiter({
+  prefix: 'age-challenge',
+  windowMs: 10 * 60 * 1000,  // 10 minutes
+  maxRequests: 12,
+});
+
 // Content surfaces — keyed by userId
 export const postLimiter = new RateLimiter({
   prefix: 'post',

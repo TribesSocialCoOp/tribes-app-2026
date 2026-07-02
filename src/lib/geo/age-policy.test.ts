@@ -116,9 +116,33 @@ describe('resolveNsfwAccess — iOS law state via Declared Age Range', () => {
       expect(r.decision).toBe('allow');
     });
   });
-  it('same user on web (no iOS method) → blocked', () => {
+  it('an iOS-verified user is NOT re-blocked on web (needs the web-only opt-in toggle)', () => {
     withIosAgeEnabled(() => {
-      const r = resolveNsfwAccess({ ...base, regionCode: 'US-KS', surface: 'web', hasVerified: true, hasOptIn: true });
+      // Verified, not yet opted in, on web → the remaining step is the toggle.
+      const needsToggle = resolveNsfwAccess({ ...base, regionCode: 'US-KS', surface: 'web', hasVerified: true });
+      expect(needsToggle.decision).toBe('needs_optin');
+      // Verified + opted in, on web → allowed. Verification is account-level.
+      const done = resolveNsfwAccess({ ...base, regionCode: 'US-KS', surface: 'web', hasVerified: true, hasOptIn: true });
+      expect(done.decision).toBe('allow');
+    });
+  });
+
+  it('a verified user stays verify-tier even with ALL method flags off (account-level, one-and-done)', () => {
+    expect(regionTier('US-TX', 'web', true)).toBe('verify');
+    expect(regionTier('US-TX', undefined, true)).toBe('verify');
+  });
+
+  it('an UNVERIFIED user on web (no iOS method) stays blocked', () => {
+    withIosAgeEnabled(() => {
+      const r = resolveNsfwAccess({ ...base, regionCode: 'US-KS', surface: 'web', hasOptIn: true });
+      expect(r.decision).toBe('blocked');
+    });
+  });
+
+  it('hasVerified never opens a truly blocked region (UK)', () => {
+    expect(regionTier('GB', 'ios', true)).toBe('blocked');
+    withIosAgeEnabled(() => {
+      const r = resolveNsfwAccess({ ...base, regionCode: 'GB', surface: 'ios', hasVerified: true, hasOptIn: true });
       expect(r.decision).toBe('blocked');
     });
   });
@@ -157,13 +181,16 @@ describe('resolveNsfwAccess (flag-independent cases)', () => {
   });
 });
 
-// While Wallet is parked, law states behave exactly like the UK — no access path.
+// While Wallet is parked, law states behave like the UK for UNVERIFIED users — no
+// access path. A user who already holds account-level verification is the exception:
+// they've cleared the law's requirement, so parking the method doesn't re-block them.
 describe('resolveNsfwAccess — law states while Wallet PARKED', () => {
-  it('blocks law-state users regardless of opt-in/verify', () => {
+  it('blocks unverified law-state users regardless of opt-in', () => {
     expect(resolveNsfwAccess({ ...base, regionCode: 'US-KS' }).decision).toBe('blocked');
     expect(resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasOptIn: true }).decision).toBe('blocked');
-    // Even a previously-verified user is blocked while the tier is parked.
-    expect(resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasVerified: true, hasOptIn: true }).decision).toBe('blocked');
+  });
+  it('a previously-verified user keeps access even while the method is parked', () => {
+    expect(resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasVerified: true, hasOptIn: true }).decision).toBe('allow');
   });
 });
 

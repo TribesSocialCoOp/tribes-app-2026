@@ -4,7 +4,8 @@
  * NSFW gate screens (issue #32) shown in the tribe feed when the content boundary
  * withholds posts. Three variants map to the policy decisions:
  *   blocked → region where we have no trusted method (cite local policy NEUTRALLY)
- *   verify  → law region: verify privately with Google Wallet (reuses the age gate)
+ *   verify  → law region: verify privately (the age-gate modal shows the actual
+ *             method available for this surface — Google Wallet or the iPhone OS check)
  *   optin   → no-law region: enable the web-set self-attest opt-in
  */
 import { Card, CardContent } from '@/components/ui/card';
@@ -45,14 +46,11 @@ export function NsfwGateCard({
           <h3 className="text-xl font-semibold text-foreground">Verify your age to continue</h3>
           <p className="text-muted-foreground max-w-sm">
             Your region requires age verification for adult content. You can verify privately
-            with Google Wallet — we only learn that you’re over 18, never your ID or birthdate.
+            — we only learn that you’re over 18, never your ID or birthdate.
           </p>
           <Button className="mt-2" onClick={() => openAgeGate({ onResolved })}>
-            Verify with Google Wallet
+            Verify my age
           </Button>
-          <p className="text-xs text-muted-foreground max-w-sm">
-            On iPhone, verify in a browser at tribes.app — it unlocks the app automatically.
-          </p>
         </CardContent>
       </Card>
     );

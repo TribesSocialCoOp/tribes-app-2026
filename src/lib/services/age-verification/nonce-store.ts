@@ -52,10 +52,19 @@ export async function issueNonce(nonce: string, userId: string, ttlSeconds: numb
 
 /**
  * Atomically consume a nonce. Returns true only if it existed, was unused, not
- * expired, and bound to `userId`. A replay returns false. On a Valkey infra error
- * it fails OPEN (returns true) — the sealed userId binding remains the real guard.
+ * expired, and bound to `userId`. A replay returns false.
+ *
+ * On a Valkey infra error the default is fail OPEN — for the wallet providers the nonce
+ * is a SECONDARY guard on top of the cryptographic userId binding sealed in the verifier
+ * state, so availability wins. Providers whose nonce is the PRIMARY (only) binding —
+ * e.g. the Apple Declared Age Range provider, which carries no signature — must pass
+ * `{ failClosed: true }` so an infra outage can't wave through an unbound/replayed nonce.
  */
-export async function consumeNonce(nonce: string, userId: string): Promise<boolean> {
+export async function consumeNonce(
+  nonce: string,
+  userId: string,
+  opts?: { failClosed?: boolean },
+): Promise<boolean> {
   const client = getRedis();
   if (client) {
     try {
@@ -63,7 +72,8 @@ export async function consumeNonce(nonce: string, userId: string): Promise<boole
       const stored = await client.getdel(KEY_PREFIX + nonce);
       return stored !== null && stored === userId;
     } catch {
-      return true; // fail open on infra error (defense-in-depth control)
+      // Fail open (secondary guard) unless the caller says this nonce is the only guard.
+      return !opts?.failClosed;
     }
   }
   const entry = mem.get(nonce);

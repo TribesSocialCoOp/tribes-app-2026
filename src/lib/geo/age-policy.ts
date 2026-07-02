@@ -100,20 +100,30 @@ export function lawRegionTier(code: string): RegionTier {
 }
 
 /**
- * EFFECTIVE tier the app enforces for this request, given the caller's `surface`. A law
- * state's `verify` tier is only "live" if some verification method can actually run:
- *   - Google Wallet (`walletVerifyEnabled()`) — any surface; OR
- *   - Apple Declared Age Range (`iosDeclaredAgeEnabled()`) — iOS-native only.
- * If none is available for this surface, the law state collapses to `blocked` (same UX
- * as the UK) — this is the Stage-1 default for web/Android while Wallet is parked. Every
- * downstream consumer (server gate, discovery filter, age-gate dialog) keys off this one
- * function, so the decision stays consistent across the flow. `surface` is optional;
- * omitting it (or passing a non-iOS surface) means only the Wallet path can keep a law
- * state open.
+ * EFFECTIVE tier the app enforces for this request, given the caller's `surface` and
+ * whether the user has ALREADY passed high-assurance verification. A law state's
+ * `verify` tier is only "live" if the user can actually clear it:
+ *   - they are already verified (`hasVerified`) — verification is account-level and
+ *     one-and-done, so a user who verified on iPhone must not be re-blocked on web
+ *     (they NEED the web surface for the web-only opt-in toggle); OR
+ *   - Google Wallet is live (`walletVerifyEnabled()`) — any surface; OR
+ *   - Apple Declared Age Range is live (`iosDeclaredAgeEnabled()`) — iOS-native only.
+ * Otherwise the law state collapses to `blocked` (same UX as the UK) — the Stage-1
+ * default for web/Android while Wallet is parked. Every downstream consumer (server
+ * gate, discovery filter, age-gate dialog) keys off this one function, so the decision
+ * stays consistent across the flow.
+ *
+ * ⚠️ `surface` comes from the client-controlled X-Tribes-Surface header, so a web user
+ * CAN spoof 'ios' to see the verify OFFER (and NSFW discovery metadata) in a law state.
+ * That is accepted: actually PASSING verification still requires the genuine iOS plugin
+ * (and App Attest in prod) or a wallet — the verification itself is the boundary, the
+ * tier is just routing. Truly blocked regions (BLOCKED_REGIONS) never open, verified
+ * or not.
  */
-export function regionTier(code: string, surface?: Surface): RegionTier {
+export function regionTier(code: string, surface?: Surface, hasVerified?: boolean): RegionTier {
   const tier = lawRegionTier(code);
   if (tier !== 'verify') return tier;
+  if (hasVerified) return 'verify';
   if (walletVerifyEnabled()) return 'verify';
   if (surface === 'ios' && iosDeclaredAgeEnabled()) return 'verify';
   return 'blocked';
@@ -139,7 +149,10 @@ export function resolveNsfwAccess(input: {
   surface: Surface;
 }): NsfwAccess {
   const { regionCode, ...rest } = input;
-  return resolveNsfwAccessForTier({ ...rest, tier: regionTier(regionCode, input.surface) });
+  return resolveNsfwAccessForTier({
+    ...rest,
+    tier: regionTier(regionCode, input.surface, input.hasVerified),
+  });
 }
 
 /**

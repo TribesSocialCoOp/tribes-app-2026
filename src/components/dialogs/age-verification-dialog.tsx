@@ -211,15 +211,10 @@ export function AgeVerificationDialog({ open, onOpenChange, onResolved }: AgeGat
                       )}
                       {wallets.length === 0 && !dev && (
                         <p className="text-sm text-muted-foreground">
-                          No verification method is available yet. Wallet verification is being set up.
+                          No verification method is available here yet.
                         </p>
                       )}
                     </div>
-                    {!isWeb && (
-                      <p className="text-xs text-muted-foreground pt-1">
-                        On iPhone you can also verify in a browser at tribes.app — it unlocks the app automatically.
-                      </p>
-                    )}
                   </>
                 )}
               </StepBlock>

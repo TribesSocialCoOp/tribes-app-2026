@@ -8,11 +8,16 @@
 //  src/lib/services/age-verification/providers/apple-declared-age.ts (server trust).
 //
 //  ⚠️ XCODE SETUP (one-time, not done by `cap sync`):
-//    1. In Xcode, add this file to the **App** target (it lives in ios/App/App/;
-//       drag it into the App group and check "App" under Target Membership).
-//    2. Enable the "Declared Age Range" capability on the App ID in the Developer
+//    1. In Xcode, add this file AND MainViewController.swift to the **App** target
+//       (they live in ios/App/App/; drag into the App group, check "App" under Target
+//       Membership).
+//    2. Registration is manual: MainViewController (set as the storyboard's root VC)
+//       calls `bridge?.registerPluginInstance(AgeRangePlugin())`. Capacitor 8 does NOT
+//       auto-discover app-local plugins — without MainViewController this plugin never
+//       loads and `window.Capacitor.Plugins.AgeRange` is undefined.
+//    3. Enable the "Declared Age Range" capability on the App ID in the Developer
 //       portal; the entitlement is already in App.entitlements / App.staging.entitlements.
-//    3. Requires the iOS 26.2 SDK (Xcode 26.2+). The runtime is gated to iOS 26.2, so
+//    4. Requires the iOS 26.2 SDK (Xcode 26.2+). The runtime is gated to iOS 26.2, so
 //       older devices resolve { available: false } and the gate stays blocked for them.
 //
 //  Phase 2 (App Attest): the result here is not cryptographically signed. Before this

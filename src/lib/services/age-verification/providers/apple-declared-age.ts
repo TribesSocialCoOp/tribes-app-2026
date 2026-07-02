@@ -25,25 +25,38 @@ import type {
   AgeVerificationContext,
 } from '../types';
 import { iosDeclaredAgeEnabled } from '@/lib/geo/age-policy';
-
-const isProd = () => process.env.NODE_ENV === 'production';
+import { CONFIRMED_AGE_DECLARATIONS } from '@/lib/age-verification/ios-declared-age';
 
 /**
- * Phase-2 gate: has the App Attest anti-forgery verification been implemented + enabled?
- * While false, an unattested boolean is never trusted in production. Flip to true only
- * once the App Attest assertion is verified below (and set the backing env in prod).
+ * "Real" production = a production build that is NOT the staging box. Staging runs
+ * NODE_ENV=production builds but sets TRIBES_ENV=staging (same precedent as the geo
+ * override in resolve-region.ts), and must be able to device-test this flow before
+ * App Attest lands.
  */
-function appAttestProdTrusted(): boolean {
-  return process.env.IOS_AGE_APP_ATTEST_ENABLED === 'true';
+const isRealProd = () =>
+  process.env.NODE_ENV === 'production' && process.env.TRIBES_ENV !== 'staging';
+
+/**
+ * Phase-2 App Attest verification. In REAL production the client boolean is worthless
+ * without proof it came from a genuine, unmodified instance of THIS app — so this must
+ * verify a DCAppAttest assertion binding `appAttest` to `nonce`. It is NOT implemented
+ * yet, so it throws unconditionally: this is deliberate, and it means NO env var or flag
+ * can open the prod path until the code below actually exists. (A single env-var "trust"
+ * switch with no verification behind it would be a full client-forgery bypass.)
+ */
+async function verifyAppAttestOrThrow(_appAttest: unknown, _nonce: string, _userId: string): Promise<void> {
+  // TODO(app-attest, Phase 2): validate the DCAppAttest assertion:
+  //   - assertion signs the server `nonce` (freshness/replay),
+  //   - the attested key belongs to a genuine instance of our App ID,
+  //   - bind to `_userId`. Reject on any failure. Only then remove this throw.
+  throw new Error('iOS age verification is not enabled in production yet (App Attest pending).');
 }
 
-/**
- * Declaration levels (normalized by the native plugin) that count as high-assurance
- * for a US law state. Bare self-declaration is the SAME assurance as the web opt-in we
- * geo-block those states to avoid, so it is NOT accepted here. `other` is excluded
- * conservatively. ⚠️ Confirm this set with counsel before prod (Decision 2).
- */
-const CONFIRMED_DECLARATIONS = new Set(['government_id', 'payment']);
+// Declaration levels that count as high-assurance for a US law state live in
+// @/lib/age-verification/ios-declared-age.ts (CONFIRMED_AGE_DECLARATIONS — shared with
+// the client pre-check). Bare self-declaration is the SAME assurance as the web opt-in
+// we geo-block those states to avoid, so it is NOT accepted; `other` is excluded
+// conservatively. ⚠️ Confirm the set with counsel before prod (Decision 2).
 
 interface DeclaredAgeAttestation {
   nonce?: string;
@@ -72,29 +85,31 @@ export const appleDeclaredAgeProvider: AgeVerificationProvider = {
     if (!att.nonce || typeof att.nonce !== 'string') {
       throw new Error('Declared Age Range attestation missing its server nonce.');
     }
-    if (att.over18 !== true) {
-      return { verified: false, method: 'apple_declared_age_range', nonce: att.nonce };
-    }
+    // This nonce is the ONLY server-side binding (the signal isn't signed), so its
+    // consumption must fail CLOSED — an outage must not wave through an unbound nonce.
+    const soft = (verified: boolean): AgeVerificationResult =>
+      ({ verified, method: 'apple_declared_age_range', nonce: att.nonce, nonceFailClosed: true });
+
+    if (att.over18 !== true) return soft(false);
 
     const declaration = typeof att.declaration === 'string' ? att.declaration : 'unknown';
-    if (!CONFIRMED_DECLARATIONS.has(declaration)) {
+    if (!CONFIRMED_AGE_DECLARATIONS.has(declaration)) {
       // Self-declared / guardian / other → not high-assurance enough for a law state.
       // Return not-verified (a soft "didn't succeed") rather than throw (which the action
       // maps to "method unavailable" — misleading; the method ran, the age just isn't
       // confirmed). The client explains that iOS must have a confirmed age.
-      return { verified: false, method: 'apple_declared_age_range', nonce: att.nonce };
+      return soft(false);
     }
 
     // ── App Attest boundary ──────────────────────────────────────────────────────
-    // Phase 2: verify att.appAttest is a valid DCAppAttest assertion from a genuine
-    // instance of this app over `att.nonce`, then trust. Until implemented, an
-    // unattested boolean is accepted ONLY outside production (dev/staging testing).
-    if (isProd() && !appAttestProdTrusted()) {
-      throw new Error('iOS age verification is not enabled in production yet (App Attest pending).');
+    // In real production, the unsigned client result is only trusted once an App Attest
+    // assertion proves it came from a genuine app instance (throws until implemented, so
+    // no env flag can open this path). Dev + staging (TRIBES_ENV=staging) skip it for
+    // device testing; the feature is still config-gated and prod-safe.
+    if (isRealProd()) {
+      await verifyAppAttestOrThrow(att.appAttest, att.nonce, ctx.expectedUserId);
     }
-    // TODO(app-attest): verify DCAppAttest assertion `att.appAttest` binds a genuine app
-    // instance to `att.nonce`; reject on failure. Then appAttestProdTrusted() can be true.
 
-    return { verified: true, method: 'apple_declared_age_range', nonce: att.nonce };
+    return soft(true);
   },
 };

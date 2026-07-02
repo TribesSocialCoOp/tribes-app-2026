@@ -35,6 +35,10 @@ export interface AgeVerificationResult {
   /** Server-issued nonce that scoped this attestation. The action consumes it
    *  (single-use) before stamping the account. Absent for the dev provider. */
   nonce?: string;
+  /** When true, the nonce is this provider's PRIMARY binding (no cryptographic userId
+   *  seal), so its consumption must fail CLOSED on a nonce-store infra error. Set by
+   *  providers like Apple Declared Age Range whose result isn't signed. */
+  nonceFailClosed?: boolean;
 }
 
 export interface AgeVerificationProvider {
