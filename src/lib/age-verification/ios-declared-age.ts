@@ -11,26 +11,6 @@
  * Until App Attest lands, the result is prod-rejected server-side.
  */
 
-/**
- * Declaration levels that count as CONFIRMED for a law state (see Decision 2 in
- * providers/apple-declared-age.ts — bare self-declaration is rejected there). Single
- * source of truth, shared by the server policy check and the client pre-check so the
- * two can't drift.
- */
-export const CONFIRMED_AGE_DECLARATIONS: ReadonlySet<string> = new Set(['government_id', 'payment']);
-
-/**
- * User-facing guidance for the self-declared case: the account says 18+, but Apple
- * hasn't confirmed it. Steps per Apple Support (support.apple.com/125662): iOS can
- * confirm adulthood from account history, a credit card, or a government ID / passport
- * (region-dependent) — Apple shares only the RESULT with us, never the document.
- */
-export const UNCONFIRMED_AGE_GUIDANCE =
-  'Your Apple Account lists you as 18+, but Apple hasn’t confirmed it yet. ' +
-  'On your iPhone, open Settings → your name → Personal Information and confirm your age — ' +
-  'Apple can confirm it from your account history, a credit card, or an ID, and only ever ' +
-  'shares the result with us (never your documents or birthdate). Then try again here.';
-
 /** Result the native plugin returns for a Declared Age Range request. */
 export interface DeclaredAgeResult {
   /** False when the OS API is unavailable (iOS < 26.2) or the person declined sharing. */
@@ -80,6 +60,13 @@ export async function runIosDeclaredAgeCheck(userId: string, nonce: string): Pro
     }
     return result;
   }
+  // Dev-only by design — NOT extended to staging (unlike the server's isRealProd() App
+  // Attest exemption). Staging is a publicly reachable environment with no real user
+  // data protecting it; a trivially-triggerable "pretend I'm 18+" client stub has no
+  // place there. Staging device-testing must exercise the REAL native plugin (which
+  // works there — the server accepts unattested results when TRIBES_ENV=staging).
+  // TRIBES_ENV itself is also unavailable here regardless (not a NEXT_PUBLIC_* var, so
+  // Next.js never inlines it into the client bundle — see next.config's `env` block).
   const stubEnabled = process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_IOS_AGE_STUB === 'true';
   if (stubEnabled) {
     // DEV STUB (opt-in, non-prod) — no native plugin. Server rejects it in real prod.

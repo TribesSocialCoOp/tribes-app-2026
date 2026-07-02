@@ -25,7 +25,7 @@ import type {
   AgeVerificationContext,
 } from '../types';
 import { iosDeclaredAgeEnabled } from '@/lib/geo/age-policy';
-import { CONFIRMED_AGE_DECLARATIONS } from '@/lib/age-verification/ios-declared-age';
+import { CONFIRMED_AGE_DECLARATIONS } from '@/lib/age-verification/declared-age-policy';
 
 /**
  * "Real" production = a production build that is NOT the staging box. Staging runs

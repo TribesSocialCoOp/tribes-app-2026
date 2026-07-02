@@ -148,8 +148,8 @@ export async function runOnDeviceVerification(userId: string): Promise<{ verifie
  */
 export async function runDeclaredAgeVerification(userId: string): Promise<{ verified: boolean; method: string }> {
   const { nonce } = unwrap(await createIosAgeChallenge());
-  const { runIosDeclaredAgeCheck, CONFIRMED_AGE_DECLARATIONS, UNCONFIRMED_AGE_GUIDANCE } =
-    await import('./ios-declared-age');
+  const { runIosDeclaredAgeCheck } = await import('./ios-declared-age');
+  const { CONFIRMED_AGE_DECLARATIONS, UNCONFIRMED_AGE_GUIDANCE } = await import('./declared-age-policy');
   const result = await runIosDeclaredAgeCheck(userId, nonce);
 
   // Pre-check the declaration level BEFORE submitting so the common self-declared case
