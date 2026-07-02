@@ -63,12 +63,21 @@ public class AgeRangePlugin: CAPPlugin, CAPBridgedPlugin {
                     call.resolve(["available": false, "declined": true])
                 case .sharing(let range):
                     let over18 = (range.lowerBound ?? 0) >= 18
-                    call.resolve([
+                    // `activeParentalControls` is an OptionSet — non-empty means the
+                    // device is a managed / child account (a strong minor signal the
+                    // server can block on). `.description` is a human-readable list for
+                    // diagnostics. We also surface the raw band for logging.
+                    var payload: [String: Any] = [
                         "available": true,
                         "over18": over18,
-                        "declaration": Self.normalize(range.ageRangeDeclaration)
+                        "declaration": Self.normalize(range.ageRangeDeclaration),
+                        "parentalControlsActive": !range.activeParentalControls.isEmpty,
+                        "parentalControls": range.activeParentalControls.description
                         // Phase 2: add "appAttest": <assertion over call's nonce>.
-                    ])
+                    ]
+                    if let lb = range.lowerBound { payload["lowerBound"] = lb }
+                    if let ub = range.upperBound { payload["upperBound"] = ub }
+                    call.resolve(payload)
                 @unknown default:
                     // A future OS adds a case we don't understand yet — fail safe to
                     // "unavailable" rather than guess at its meaning (never over-grant).

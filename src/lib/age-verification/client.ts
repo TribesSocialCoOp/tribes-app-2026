@@ -141,31 +141,25 @@ export async function runOnDeviceVerification(userId: string): Promise<{ verifie
 
 /**
  * Run Apple's Declared Age Range OS check (iOS 26.2+ native) and submit it. Gets a
- * single-use server nonce, runs the native plugin anchored to it, then submits the
- * band + declaration level. Resolves to the verified method on success; throws with a
- * user-safe message otherwise (declined, too-old iOS, or an unconfirmed declaration
- * that doesn't clear a law state — surfaced as a failed attempt).
+ * single-use server nonce, runs the native plugin anchored to it, then submits the age
+ * band + declaration + parental-controls signal. The SERVER is the single source of
+ * truth for the policy (under-18, managed-device, and confirmation flags) and returns a
+ * user-safe reason on rejection, which this surfaces. `runIosDeclaredAgeCheck` throws
+ * earlier for a declined / too-old-iOS device.
  */
 export async function runDeclaredAgeVerification(userId: string): Promise<{ verified: boolean; method: string }> {
   const { nonce } = unwrap(await createIosAgeChallenge());
   const { runIosDeclaredAgeCheck } = await import('./ios-declared-age');
-  const { CONFIRMED_AGE_DECLARATIONS, UNCONFIRMED_AGE_GUIDANCE } = await import('./declared-age-policy');
   const result = await runIosDeclaredAgeCheck(userId, nonce);
-
-  // Pre-check the declaration level BEFORE submitting so the common self-declared case
-  // gets actionable guidance (confirm your age with Apple) instead of a generic
-  // "verification did not succeed". The server enforces the same policy regardless.
-  if (result.over18 !== true) {
-    throw new Error('Your Apple Account doesn’t show you as 18 or older, so adult content can’t be enabled here.');
-  }
-  if (!CONFIRMED_AGE_DECLARATIONS.has(result.declaration ?? 'unknown')) {
-    // Append the raw declaration level Apple returned — diagnostic while we validate
-    // real-account behavior on staging (tells us self_declared vs an unexpected level).
-    throw new Error(`${UNCONFIRMED_AGE_GUIDANCE} (Apple reported: ${result.declaration ?? 'none'})`);
-  }
 
   return unwrap(await submitAgeVerification({
     provider: 'apple_declared_age_range',
-    attestation: { nonce, over18: result.over18, declaration: result.declaration, appAttest: result.appAttest },
+    attestation: {
+      nonce,
+      over18: result.over18,
+      declaration: result.declaration,
+      parentalControlsActive: result.parentalControlsActive,
+      appAttest: result.appAttest,
+    },
   }));
 }

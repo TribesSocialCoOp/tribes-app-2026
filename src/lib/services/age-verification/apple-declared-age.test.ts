@@ -30,40 +30,62 @@ describe('appleDeclaredAgeProvider.verify (non-production)', () => {
     ).rejects.toThrow(/nonce/i);
   });
 
-  it('verifies an over-18 government-ID-confirmed result (nonce returned, marked fail-closed)', async () => {
+  it('verifies an over-18 result (nonce returned, marked fail-closed)', async () => {
     const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'government_id' }), ctx);
     expect(r).toEqual({ verified: true, method: 'apple_declared_age_range', nonce: 'n1', nonceFailClosed: true });
   });
 
-  it('accepts payment-confirmed as a confirmed level', async () => {
-    const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'payment' }), ctx);
-    expect(r.verified).toBe(true);
-  });
-
-  it('accepts "other" (checkedByOtherMethod — account-history / card-on-file confirmation)', async () => {
-    // Apple confirms adulthood from account longevity or a card on file and returns
-    // checkedByOtherMethod → normalized 'other'. This is independent confirmation, not
-    // self-attestation, so it must pass (the original bug rejected it).
-    const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'other' }), ctx);
-    expect(r.verified).toBe(true);
-  });
-
-  it('does NOT verify a self-declared age (bare self-attestation, unconfirmed)', async () => {
-    const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'self_declared' }), ctx);
-    expect(r.verified).toBe(false);
-    expect(r.nonce).toBe('n1');
-  });
-
-  it('does NOT verify guardian-declared or unknown levels', async () => {
-    for (const declaration of ['guardian_declared', 'unknown']) {
+  it('accepts a 18+ result regardless of declaration METHOD (the age band is the kid gate)', async () => {
+    // Apple returns self_declared for essentially all adult accounts; the confirmed
+    // levels are for minors in Family Sharing or new accounts in enforcing law-states.
+    // The declaration method does not change whether the person is a minor — the age
+    // band does — so we accept any Apple 18+ signal here (recorded for audit).
+    for (const declaration of ['self_declared', 'other', 'government_id', 'payment', 'unknown']) {
       const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration }), ctx);
-      expect(r.verified).toBe(false);
+      expect(r.verified).toBe(true);
     }
   });
 
-  it('does NOT verify when over18 is false', async () => {
-    const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: false, declaration: 'government_id' }), ctx);
+  it('does NOT verify when the age band is under 18 (the kid gate), with a reason', async () => {
+    const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: false, declaration: 'guardian_declared' }), ctx);
     expect(r.verified).toBe(false);
+    expect(r.reason).toMatch(/under 18/i);
+  });
+
+  it('blocks a managed / child device (active parental controls) even if the band says 18+', async () => {
+    const r = await appleDeclaredAgeProvider.verify(
+      req({ nonce: 'n1', over18: true, declaration: 'self_declared', parentalControlsActive: true }), ctx);
+    expect(r.verified).toBe(false);
+    expect(r.reason).toMatch(/parental controls|managed|child/i);
+  });
+
+  it('allows an 18+ device with parental controls when the block flag is OFF', async () => {
+    vi.stubEnv('IOS_AGE_BLOCK_ON_PARENTAL_CONTROLS', 'false');
+    const r = await appleDeclaredAgeProvider.verify(
+      req({ nonce: 'n1', over18: true, declaration: 'self_declared', parentalControlsActive: true }), ctx);
+    expect(r.verified).toBe(true);
+  });
+
+  it('blocks a missing age signal when definitive signal is required (default)', async () => {
+    const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', declaration: 'self_declared' }), ctx);
+    expect(r.verified).toBe(false);
+    expect(r.reason).toMatch(/age signal/i);
+  });
+});
+
+describe('appleDeclaredAgeProvider.verify — IOS_AGE_REQUIRE_CONFIRMED (opt-in)', () => {
+  it('rejects self_declared when confirmed is required', async () => {
+    vi.stubEnv('IOS_AGE_REQUIRE_CONFIRMED', 'true');
+    const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'self_declared' }), ctx);
+    expect(r.verified).toBe(false);
+  });
+
+  it('accepts a confirmed level (government_id / payment / other) when required', async () => {
+    vi.stubEnv('IOS_AGE_REQUIRE_CONFIRMED', 'true');
+    for (const declaration of ['government_id', 'payment', 'other']) {
+      const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration }), ctx);
+      expect(r.verified).toBe(true);
+    }
   });
 });
 

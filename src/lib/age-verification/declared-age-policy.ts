@@ -1,15 +1,16 @@
 /**
- * Shared policy constants for Apple's Declared Age Range (issue #32) — imported by BOTH
- * the server provider (providers/apple-declared-age.ts) and the client pre-check
- * (client.ts), so the two can't drift. Deliberately NOT in ios-declared-age.ts (that
- * file is documented as a client-only bridge — window/Capacitor access — and must never
- * become a server-code dependency).
+ * Policy constants for Apple's Declared Age Range (issue #32). These back the OPTIONAL
+ * IOS_AGE_REQUIRE_CONFIRMED flag in providers/apple-declared-age.ts — the DEFAULT policy
+ * keeps minors out via the age band and does not gate on the declaration method (Apple
+ * returns self_declared for most adults). Only consulted when that flag is turned on.
+ * Kept in a neutral module (not the client-only ios-declared-age.ts bridge) so server
+ * code can import it without pulling in window/Capacitor access.
  */
 
 /**
- * Declaration levels that count as high-assurance ("Apple-confirmed") for a US law
- * state. The line we draw is: did Apple INDEPENDENTLY verify the age, or did the user
- * just self-report it?
+ * Declaration levels that count as high-assurance ("Apple-confirmed"), used only when
+ * IOS_AGE_REQUIRE_CONFIRMED is on. The line: did Apple INDEPENDENTLY verify the age, or
+ * did the user just self-report it?
  *   - `self_declared`  → REJECTED. Just a typed birthday; same assurance as the web
  *                        opt-in we geo-block those states to avoid.
  *   - `guardian_declared` → REJECTED. A guardian declaring a range, no check (and

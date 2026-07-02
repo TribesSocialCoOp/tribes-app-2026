@@ -39,6 +39,9 @@ export interface AgeVerificationResult {
    *  seal), so its consumption must fail CLOSED on a nonce-store infra error. Set by
    *  providers like Apple Declared Age Range whose result isn't signed. */
   nonceFailClosed?: boolean;
+  /** User-safe explanation when `verified` is false (e.g. under-18, managed device,
+   *  unconfirmed). The submit action surfaces it instead of a generic failure. */
+  reason?: string;
 }
 
 export interface AgeVerificationProvider {

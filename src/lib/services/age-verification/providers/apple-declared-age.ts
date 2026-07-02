@@ -25,7 +25,19 @@ import type {
   AgeVerificationContext,
 } from '../types';
 import { iosDeclaredAgeEnabled } from '@/lib/geo/age-policy';
-import { CONFIRMED_AGE_DECLARATIONS } from '@/lib/age-verification/declared-age-policy';
+import { CONFIRMED_AGE_DECLARATIONS, UNCONFIRMED_AGE_GUIDANCE } from '@/lib/age-verification/declared-age-policy';
+
+// ── Child-safety policy flags (server-side env, runtime-tunable — no rebuild) ────────
+/** Block when the device reports ANY active parental control (managed / child account).
+ *  Default ON — a strong minor signal even if the age band claims 18+. */
+const blockOnParentalControls = () => process.env.IOS_AGE_BLOCK_ON_PARENTAL_CONTROLS !== 'false';
+/** Require a definitive age band from Apple; a missing/unreadable signal is blocked
+ *  (fail closed for child safety). Default ON. */
+const requireDefinitiveSignal = () => process.env.IOS_AGE_REQUIRE_DEFINITIVE_SIGNAL !== 'false';
+/** Require an Apple-CONFIRMED declaration (gov-ID / payment / other), rejecting bare
+ *  self_declared. Default OFF — Apple returns self_declared for most adults, so this
+ *  rejects them; turn on only where counsel demands higher assurance. */
+const requireConfirmedDeclaration = () => process.env.IOS_AGE_REQUIRE_CONFIRMED === 'true';
 
 /**
  * "Real" production = a production build that is NOT the staging box. Staging runs
@@ -52,11 +64,20 @@ async function verifyAppAttestOrThrow(_appAttest: unknown, _nonce: string, _user
   throw new Error('iOS age verification is not enabled in production yet (App Attest pending).');
 }
 
-// Declaration levels that count as high-assurance for a US law state live in
-// @/lib/age-verification/ios-declared-age.ts (CONFIRMED_AGE_DECLARATIONS — shared with
-// the client pre-check). Bare self-declaration is the SAME assurance as the web opt-in
-// we geo-block those states to avoid, so it is NOT accepted; `other` is excluded
-// conservatively. ⚠️ Confirm the set with counsel before prod (Decision 2).
+// POLICY — the goal is KEEPING MINORS OUT, so the age BAND is the gate, not the
+// declaration method (2026-07-02):
+//   • Under-18 age band → BLOCK. This is the real child gate; a minor's account (esp. in
+//     Family Sharing, where a parent set the real birthday) reports an under-18 band.
+//   • Active parental controls → BLOCK by default (managed/child device), even if the
+//     band claims 18+ (flag IOS_AGE_BLOCK_ON_PARENTAL_CONTROLS).
+//   • 18+ band → ALLOW regardless of declaration METHOD. Apple returns `selfDeclared` for
+//     essentially all adult accounts (confirmed/checked levels are for minors in Family
+//     Sharing or new accounts in enforcing law-states). The method doesn't change whether
+//     someone is a minor, so requiring "confirmed" rejects real adults without catching a
+//     single extra kid. `declaration` is recorded for audit; require it only via the
+//     opt-in IOS_AGE_REQUIRE_CONFIRMED flag where counsel demands higher assurance.
+// ⚠️ Compliance-posture call; revisit with counsel. Anti-forgery is unchanged: the App
+// Attest boundary still gates real production.
 
 interface DeclaredAgeAttestation {
   nonce?: string;
@@ -64,6 +85,8 @@ interface DeclaredAgeAttestation {
   /** Normalized declaration level from the plugin: self_declared | guardian_declared |
    *  government_id | payment | other | unknown. */
   declaration?: string;
+  /** True if the device has any active parental control (managed / child account). */
+  parentalControlsActive?: boolean;
   /** App Attest assertion envelope (Phase 2). */
   appAttest?: unknown;
 }
@@ -87,18 +110,33 @@ export const appleDeclaredAgeProvider: AgeVerificationProvider = {
     }
     // This nonce is the ONLY server-side binding (the signal isn't signed), so its
     // consumption must fail CLOSED — an outage must not wave through an unbound nonce.
-    const soft = (verified: boolean): AgeVerificationResult =>
-      ({ verified, method: 'apple_declared_age_range', nonce: att.nonce, nonceFailClosed: true });
+    const soft = (verified: boolean, reason?: string): AgeVerificationResult =>
+      ({ verified, method: 'apple_declared_age_range', nonce: att.nonce, nonceFailClosed: true, reason });
 
-    if (att.over18 !== true) return soft(false);
+    // (1) Definitive signal required (fail closed for child safety): Apple must have
+    //     returned a real 18+/under-18 answer, not a missing/unreadable one.
+    if (requireDefinitiveSignal() && typeof att.over18 !== 'boolean') {
+      return soft(false, 'We couldn’t read a clear age signal from your iPhone. Please try again.');
+    }
 
-    const declaration = typeof att.declaration === 'string' ? att.declaration : 'unknown';
-    if (!CONFIRMED_AGE_DECLARATIONS.has(declaration)) {
-      // Self-declared / guardian / other → not high-assurance enough for a law state.
-      // Return not-verified (a soft "didn't succeed") rather than throw (which the action
-      // maps to "method unavailable" — misleading; the method ran, the age just isn't
-      // confirmed). The client explains that iOS must have a confirmed age.
-      return soft(false);
+    // (2) The KID GATE: an under-18 age band is blocked. This is the primary child gate.
+    if (att.over18 !== true) {
+      return soft(false, 'Your Apple Account shows you’re under 18, so this adult content isn’t available.');
+    }
+
+    // (3) Managed / child device: block on any active parental control (default on).
+    if (blockOnParentalControls() && att.parentalControlsActive === true) {
+      return soft(false, 'This device has parental controls (a managed or child account), so adult content can’t be enabled here.');
+    }
+
+    // (4) Optional higher-assurance gate: require an Apple-CONFIRMED declaration. OFF by
+    //     default (Apple reports self_declared for most adults); on only where counsel
+    //     requires it. The age band already keeps minors out regardless.
+    if (requireConfirmedDeclaration()) {
+      const declaration = typeof att.declaration === 'string' ? att.declaration : 'unknown';
+      if (!CONFIRMED_AGE_DECLARATIONS.has(declaration)) {
+        return soft(false, UNCONFIRMED_AGE_GUIDANCE);
+      }
     }
 
     // ── App Attest boundary ──────────────────────────────────────────────────────

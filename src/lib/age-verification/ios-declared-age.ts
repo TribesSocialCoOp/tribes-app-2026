@@ -21,6 +21,14 @@ export interface DeclaredAgeResult {
   over18?: boolean;
   /** Normalized level: self_declared | guardian_declared | government_id | payment | other | unknown. */
   declaration?: string;
+  /** True if the device has ANY active parental control (managed / child account) — a
+   *  strong minor signal the server can block on. */
+  parentalControlsActive?: boolean;
+  /** Human-readable list of active parental controls (diagnostics only). */
+  parentalControls?: string;
+  /** Raw age band Apple returned (diagnostics / logging). */
+  lowerBound?: number;
+  upperBound?: number;
   /** App Attest assertion envelope (Phase 2); absent until implemented natively. */
   appAttest?: unknown;
 }

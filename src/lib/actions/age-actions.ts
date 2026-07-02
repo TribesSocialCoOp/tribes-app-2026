@@ -199,7 +199,9 @@ export const submitAgeVerification = withPublicErrors(async (
     throw new PublicError('That verification method is not available right now.');
   }
   if (!result.verified) {
-    throw new PublicError('Age verification did not succeed. Please try again.');
+    // Providers may attach a user-safe reason (under-18, managed device, unconfirmed);
+    // surface it so the client shows why, not a generic failure.
+    throw new PublicError(result.reason ?? 'Age verification did not succeed. Please try again.');
   }
 
   // SINGLE-USE: atomically consume the server-issued nonce BEFORE stamping the
