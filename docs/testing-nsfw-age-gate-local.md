@@ -30,6 +30,12 @@ Already set this session: `GEOIP_DB_PATH=…/geoip/GeoLite2-City.mmdb`. Also ens
   Playwright E2E + emulator flows log in via the **Dustin** button, not passwords).
 - To exercise the **verify** tier without a real wallet, use the dev provider — it is
   auto-enabled whenever `NODE_ENV !== 'production'` (no env flag; hard-off in prod).
+- ⚠️ **STAGE GATE:** Google Wallet verification is parked by default (Stage 1). While
+  parked, the law states resolve to **blocked**, so the verify flow is unreachable and
+  the dev provider button never appears. To test the verify tier at all, set
+  `NEXT_PUBLIC_WALLET_VERIFY_ENABLED=true` in `.env.local` (rebuild — it's a
+  `NEXT_PUBLIC_*` flag). Leave it unset to test the actual Stage-1 launch behavior
+  (law states blocked, self-attest everywhere else).
 
 The dev Postgres runs in Docker as `tribes-app-2026-postgres-dev-1` (the E2E DB
 helper `psql`s into it directly).
@@ -38,16 +44,18 @@ helper `psql`s into it directly).
 ```
 npm test -- src/lib/geo/age-policy.test.ts
 ```
-Confirms every law state → `verify`, UK → `blocked`, no-law/unknown → `open`, and the
-27-state list hasn't drifted. Run the full `npm test` (111 unit tests) before any deploy.
+Confirms every law state → `verify` **by law** (`lawRegionTier`), that while Wallet is
+parked the effective tier geo-blocks those states, UK → `blocked`, no-law/unknown →
+`open`, and the 27-state list hasn't drifted. Run the full `npm test` before any deploy.
 
 ## 2. Geo resolution (IP → region → tier)
 ```
 npm run check:geoip                      # built-in sample across tiers
 npm run check:geoip -- 129.7.0.1 1.2.3.4 # specific IPs
 ```
-Expect e.g. `129.7.0.1 → US-TX [verify]`, `212.58.224.0 → GB [blocked]`,
-`128.101.101.101 → US-MN [open]`.
+Expect (Stage 1, Wallet parked) e.g. `129.7.0.1 → US-TX [blocked] (law state,
+parked→blocked)`, `212.58.224.0 → GB [blocked]`, `128.101.101.101 → US-MN [open]`. With
+`NEXT_PUBLIC_WALLET_VERIFY_ENABLED=true`, US-TX resolves `[verify]`.
 
 ## 3. Web flow (`npm run dev` → http://localhost:9002)
 > Localhost requests resolve to a private IP → **unknown → open**. Two ways to
@@ -69,9 +77,11 @@ Expect e.g. `129.7.0.1 → US-TX [verify]`, `212.58.224.0 → GB [blocked]`,
 3. **Tier walk-through** — set the header/env, retry an NSFW tribe:
    - unset / `US-CA` → **open**: opted-in user sees NSFW; not opted-in sees the
      "enable adult content" gate.
-   - `US-KS` (or `US-TX`) → **verify**: gate shows "Verify your age to continue"
-     (Google Wallet). Complete the dev provider (auto-enabled outside production)
-     to unlock.
+   - `US-KS` (or `US-TX`) → **law state**:
+     - Stage 1 (default, `NEXT_PUBLIC_WALLET_VERIFY_ENABLED` unset): gate shows "Not
+       available in your region" — law states are geo-blocked, same as the UK.
+     - Stage 2 (`NEXT_PUBLIC_WALLET_VERIFY_ENABLED=true`): gate shows "Verify your age
+       to continue" (Google Wallet). Complete the dev provider to unlock.
    - `GB` → **blocked**: gate shows "Not available in your region".
 4. **Create / join** an NSFW tribe in each tier — confirm create + join are gated the
    same way (region_blocked / verify / opt-in messages).

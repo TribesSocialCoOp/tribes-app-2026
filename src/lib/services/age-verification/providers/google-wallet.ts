@@ -12,12 +12,17 @@
 import type { AgeVerificationProvider, AgeVerificationRequest, AgeVerificationResult, AgeVerificationContext } from '../types';
 import { ProviderUnavailableError } from '../types';
 import { loadWalletConfig } from '../config';
+import { walletVerifyEnabled } from '@/lib/geo/age-policy';
 
 export const googleWalletProvider: AgeVerificationProvider = {
   id: 'google_wallet',
   label: 'Verify with Google Wallet',
   isAvailable() {
-    return loadWalletConfig('GOOGLE_WALLET') !== null;
+    // PARKED (2026-07): Google Wallet verification isn't launched — no production RP
+    // creds until we can device-test it. Gated behind the same NEXT_PUBLIC_WALLET_VERIFY_ENABLED
+    // flag that re-opens the law-state `verify` tier, so provider + tier ungate together.
+    // Still also requires the GOOGLE_WALLET_* config to be present.
+    return walletVerifyEnabled() && loadWalletConfig('GOOGLE_WALLET') !== null;
   },
   async verify(req: AgeVerificationRequest, ctx: AgeVerificationContext): Promise<AgeVerificationResult> {
     const cfg = loadWalletConfig('GOOGLE_WALLET');

@@ -5,6 +5,13 @@
  * jurisdictions whose age laws catch us regardless of content ratio — those are
  * geo-blocked. Optional Google Wallet ZKP can also satisfy the gate. We never
  * collect government ID. See docs/plan-age-geo-policy.md.
+ *
+ * STAGED ROLLOUT (2026-07): Google Wallet verification is NOT live yet — we can't get
+ * production RP credentials until we can device-test it. Stage 1 launches with
+ * self-attestation in open regions and GEO-BLOCKS the law states (no trusted
+ * verification method to offer them). Stage 2 flips `NEXT_PUBLIC_WALLET_VERIFY_ENABLED`
+ * (per-env) to re-open the `verify` tier once Wallet is tested. The VERIFY_REGIONS
+ * list is preserved throughout, so re-enabling is just the env flag.
  */
 
 export type Surface = 'web' | 'ios' | 'android';
@@ -51,13 +58,42 @@ export const BLOCKED_REGIONS: readonly string[] = [
 
 export type RegionTier = 'open' | 'verify' | 'blocked';
 
-/** Classify a resolved region code (e.g. 'US-KS', 'GB-ENG', '') into a tier. */
-export function regionTier(code: string): RegionTier {
+/**
+ * Stage-2 feature flag: is Google Wallet age-verification live? OFF by default (no prod
+ * RP creds until device testing). While off, law-state regions geo-block instead of
+ * offering a dead "verify" step. Enable per-env (dev/staging, later prod) to re-open the
+ * verify tier and the Google Wallet provider — the two ungate together. Read at call
+ * time so tests (and env changes) take effect without a rebuild in Node.
+ */
+export function walletVerifyEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_WALLET_VERIFY_ENABLED === 'true';
+}
+
+/**
+ * PURE geographic/legal classification, independent of rollout state. `verify` here
+ * means "this jurisdiction has an AV law", NOT that verification is currently offered.
+ * Use this to reason about the law itself (e.g. list-integrity tests); use
+ * {@link regionTier} for what the app actually enforces right now.
+ */
+export function lawRegionTier(code: string): RegionTier {
   if (!code) return 'open';                          // unknown → permissive default
   const country = code.split('-')[0];
   if (BLOCKED_REGIONS.includes(code) || BLOCKED_REGIONS.includes(country)) return 'blocked';
   if (VERIFY_REGIONS.includes(code)) return 'verify';
   return 'open';
+}
+
+/**
+ * EFFECTIVE tier the app enforces for this request. While Google Wallet verification is
+ * parked (`walletVerifyEnabled() === false`), law-state regions collapse to `blocked` —
+ * same UX as the UK — because we have no verification method to offer there yet. Every
+ * downstream consumer (server gate, discovery filter, age-gate dialog) keys off this one
+ * function, so the block stays consistent across the whole flow.
+ */
+export function regionTier(code: string): RegionTier {
+  const tier = lawRegionTier(code);
+  if (tier === 'verify' && !walletVerifyEnabled()) return 'blocked';
+  return tier;
 }
 
 /**
@@ -102,7 +138,9 @@ export function resolveNsfwAccessForTier(input: {
   }
 
   // (1) Law-state regions require high-assurance age verification FIRST — you must
-  // verify (Google Wallet) before the content toggle can be enabled.
+  // verify (Google Wallet) before the content toggle can be enabled. NOTE: while Wallet
+  // is parked, `regionTier` never yields 'verify' (law states collapse to 'blocked'), so
+  // this branch is dormant until NEXT_PUBLIC_WALLET_VERIFY_ENABLED is set.
   if (tier === 'verify' && !input.hasVerified) {
     return { decision: 'needs_verify', reason: 'verify_required', remediation: 'verify_with_wallet' };
   }

@@ -3,9 +3,11 @@
  *
  * Exercises the whole browser-side flow without restarting the dev server:
  *   • Settings: the WEB-ONLY adult-content opt-in + blur toggles (DB round-trip).
- *   • The 3 region tiers via the non-prod `x-tribes-geo` request header:
- *       open (no law) → opt-in suffices · verify (law state) → Google Wallet ·
- *       blocked (UK) → unavailable.
+ *   • The region tiers via the non-prod `x-tribes-geo` request header:
+ *       open (no law) → opt-in suffices · law state → geo-blocked while Google Wallet
+ *       is parked (Stage 1), or Google Wallet verify once enabled (Stage 2) ·
+ *       blocked (UK) → unavailable. Stage is chosen by NEXT_PUBLIC_WALLET_VERIFY_ENABLED
+ *       (the verify-flow tests skip in the stage they don't apply to).
  *
  * Setup matches the repo convention: local dev login button + the db() SQL helper
  * against the dev Postgres. Seeds its own NSFW tribe (dustin is a member) so the
@@ -128,8 +130,25 @@ test('open region + opted in → content allowed (no gate)', async ({ page }) =>
   await expect(page.getByText('Enable adult content to view')).toHaveCount(0);
 });
 
-test('law state (US-KS) + opted in but unverified → Google Wallet verify gate', async ({ page }) => {
+// Staged rollout: Google Wallet verification is parked by default (Stage 1), so law
+// states are geo-blocked like the UK. The verify-flow tests below only apply once
+// NEXT_PUBLIC_WALLET_VERIFY_ENABLED=true (Stage 2). We branch on the same env the
+// server reads so the spec matches whichever stage the dev server is running.
+const WALLET_ENABLED = process.env.NEXT_PUBLIC_WALLET_VERIFY_ENABLED === 'true';
+
+test('law state (US-KS) while Wallet PARKED → fully unavailable (Stage 1)', async ({ page }) => {
   test.slow();
+  test.skip(WALLET_ENABLED, 'Stage 1 only — law states are blocked while Wallet is parked');
+  optInOn(); setVerified(false);
+  await loginAs(page);
+  await setRegion(page, 'US-KS'); // parked → blocked, same as UK
+  await gotoStable(page, TRIBE_URL);
+  await expect(page.getByText('Not available in your region')).toBeVisible(W);
+});
+
+test('law state (US-KS) + opted in but unverified → Google Wallet verify gate (Stage 2)', async ({ page }) => {
+  test.slow();
+  test.skip(!WALLET_ENABLED, 'Stage 2 only — set NEXT_PUBLIC_WALLET_VERIFY_ENABLED=true');
   optInOn(); setVerified(false);
   await loginAs(page);
   await setRegion(page, 'US-KS'); // verify tier — opt-in is NOT enough
@@ -137,8 +156,9 @@ test('law state (US-KS) + opted in but unverified → Google Wallet verify gate'
   await expect(page.getByText('Verify your age to continue')).toBeVisible(W);
 });
 
-test('law state (US-KS) + verified → content allowed', async ({ page }) => {
+test('law state (US-KS) + verified → content allowed (Stage 2)', async ({ page }) => {
   test.slow();
+  test.skip(!WALLET_ENABLED, 'Stage 2 only — set NEXT_PUBLIC_WALLET_VERIFY_ENABLED=true');
   optInOn(); setVerified(true);
   await loginAs(page);
   await setRegion(page, 'US-KS');

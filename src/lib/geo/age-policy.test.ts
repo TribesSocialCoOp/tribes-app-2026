@@ -1,29 +1,70 @@
-import { describe, it, expect } from 'vitest';
-import { resolveNsfwAccess, regionTier, VERIFY_REGIONS, BLOCKED_REGIONS } from './age-policy';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import {
+  resolveNsfwAccess,
+  regionTier,
+  lawRegionTier,
+  walletVerifyEnabled,
+  VERIFY_REGIONS,
+  BLOCKED_REGIONS,
+} from './age-policy';
 
 const base = { isNsfw: true, hasOptIn: false, hasVerified: false, regionCode: '', surface: 'web' as const };
 
-describe('regionTier', () => {
+/** Run a block with Google Wallet verification turned ON (Stage 2 re-enabled). */
+function withWalletEnabled(fn: () => void) {
+  vi.stubEnv('NEXT_PUBLIC_WALLET_VERIFY_ENABLED', 'true');
+  try { fn(); } finally { vi.unstubAllEnvs(); }
+}
+
+afterEach(() => vi.unstubAllEnvs());
+
+// ── Pure legal classification (flag-independent) ─────────────────────────────
+describe('lawRegionTier (geographic/legal classification)', () => {
   it('classifies law states as verify (incl. KS/WY/SD)', () => {
-    expect(regionTier('US-TX')).toBe('verify');
-    expect(regionTier('US-KS')).toBe('verify');
-    expect(regionTier('US-WY')).toBe('verify');
-    expect(regionTier('US-SD')).toBe('verify');
-    expect(regionTier('US-FL')).toBe('verify');
+    expect(lawRegionTier('US-TX')).toBe('verify');
+    expect(lawRegionTier('US-KS')).toBe('verify');
+    expect(lawRegionTier('US-WY')).toBe('verify');
+    expect(lawRegionTier('US-SD')).toBe('verify');
+    expect(lawRegionTier('US-FL')).toBe('verify');
   });
   it('classifies the UK as blocked (country match)', () => {
-    expect(regionTier('GB')).toBe('blocked');
-    expect(regionTier('GB-ENG')).toBe('blocked');
+    expect(lawRegionTier('GB')).toBe('blocked');
+    expect(lawRegionTier('GB-ENG')).toBe('blocked');
   });
   it('classifies no-law regions + unknown as open', () => {
-    expect(regionTier('US-CA')).toBe('open');   // no AV law
-    expect(regionTier('US-WA')).toBe('open');
-    expect(regionTier('DE')).toBe('open');
-    expect(regionTier('')).toBe('open');         // unknown → permissive
+    expect(lawRegionTier('US-CA')).toBe('open');   // no AV law
+    expect(lawRegionTier('US-WA')).toBe('open');
+    expect(lawRegionTier('DE')).toBe('open');
+    expect(lawRegionTier('')).toBe('open');         // unknown → permissive
   });
 });
 
-describe('resolveNsfwAccess', () => {
+// ── Effective tier (staged rollout: Wallet parked by default) ────────────────
+describe('regionTier (effective — Google Wallet PARKED by default)', () => {
+  it('defaults to parked (walletVerifyEnabled === false)', () => {
+    expect(walletVerifyEnabled()).toBe(false);
+  });
+  it('geo-blocks law states while Wallet is parked (no verify method to offer)', () => {
+    expect(regionTier('US-TX')).toBe('blocked');
+    expect(regionTier('US-KS')).toBe('blocked');
+    expect(regionTier('US-FL')).toBe('blocked');
+  });
+  it('leaves the UK blocked and no-law regions open regardless of the flag', () => {
+    expect(regionTier('GB')).toBe('blocked');
+    expect(regionTier('US-CA')).toBe('open');
+    expect(regionTier('')).toBe('open');
+  });
+  it('re-opens the verify tier when NEXT_PUBLIC_WALLET_VERIFY_ENABLED=true (Stage 2)', () => {
+    withWalletEnabled(() => {
+      expect(regionTier('US-TX')).toBe('verify');
+      expect(regionTier('US-KS')).toBe('verify');
+      expect(regionTier('GB')).toBe('blocked');   // UK stays blocked
+      expect(regionTier('US-CA')).toBe('open');
+    });
+  });
+});
+
+describe('resolveNsfwAccess (flag-independent cases)', () => {
   it('allows non-NSFW unconditionally', () => {
     expect(resolveNsfwAccess({ ...base, isNsfw: false }).decision).toBe('allow');
   });
@@ -31,26 +72,6 @@ describe('resolveNsfwAccess', () => {
   it('fully blocks NSFW in a blocked region regardless of opt-in/verify', () => {
     expect(resolveNsfwAccess({ ...base, regionCode: 'GB', hasOptIn: true }).decision).toBe('blocked');
     expect(resolveNsfwAccess({ ...base, regionCode: 'GB', hasVerified: true }).decision).toBe('blocked');
-  });
-
-  it('requires WALLET verify FIRST in a law state (before the content toggle)', () => {
-    // Nothing set → verification is the first requirement in a law state.
-    const fresh = resolveNsfwAccess({ ...base, regionCode: 'US-KS' });
-    expect(fresh.decision).toBe('needs_verify');
-    expect(fresh.remediation).toBe('verify_with_wallet');
-    // Even if the toggle were somehow on, an unverified law-state user still needs verify.
-    const optedIn = resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasOptIn: true });
-    expect(optedIn.decision).toBe('needs_verify');
-  });
-
-  it('after wallet verify, a law state still requires the content toggle', () => {
-    // Verified but toggle off → now the web content toggle is the remaining step.
-    const verifiedNoToggle = resolveNsfwAccess({ ...base, regionCode: 'US-WY', hasVerified: true });
-    expect(verifiedNoToggle.decision).toBe('needs_optin');
-    // Both verify + toggle → allowed.
-    const both = resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasOptIn: true, hasVerified: true });
-    expect(both.decision).toBe('allow');
-    expect(both.reason).toBe('verified');
   });
 
   it('requires opt-in (self-attest) in an open region when not attested', () => {
@@ -71,9 +92,41 @@ describe('resolveNsfwAccess', () => {
   });
 
   it('still requires the content toggle for a wallet-verified user in an open region', () => {
-    // Verified but toggle off → the content toggle is still required (not bypassed).
     const r = resolveNsfwAccess({ ...base, regionCode: 'US-CA', hasVerified: true });
     expect(r.decision).toBe('needs_optin');
+  });
+});
+
+// While Wallet is parked, law states behave exactly like the UK — no access path.
+describe('resolveNsfwAccess — law states while Wallet PARKED', () => {
+  it('blocks law-state users regardless of opt-in/verify', () => {
+    expect(resolveNsfwAccess({ ...base, regionCode: 'US-KS' }).decision).toBe('blocked');
+    expect(resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasOptIn: true }).decision).toBe('blocked');
+    // Even a previously-verified user is blocked while the tier is parked.
+    expect(resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasVerified: true, hasOptIn: true }).decision).toBe('blocked');
+  });
+});
+
+// Stage-2 behavior: kept green so re-enabling Wallet doesn't regress the verify flow.
+describe('resolveNsfwAccess — law states with Wallet ENABLED (Stage 2)', () => {
+  it('requires WALLET verify FIRST in a law state (before the content toggle)', () => {
+    withWalletEnabled(() => {
+      const fresh = resolveNsfwAccess({ ...base, regionCode: 'US-KS' });
+      expect(fresh.decision).toBe('needs_verify');
+      expect(fresh.remediation).toBe('verify_with_wallet');
+      const optedIn = resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasOptIn: true });
+      expect(optedIn.decision).toBe('needs_verify');
+    });
+  });
+
+  it('after wallet verify, a law state still requires the content toggle', () => {
+    withWalletEnabled(() => {
+      const verifiedNoToggle = resolveNsfwAccess({ ...base, regionCode: 'US-WY', hasVerified: true });
+      expect(verifiedNoToggle.decision).toBe('needs_optin');
+      const both = resolveNsfwAccess({ ...base, regionCode: 'US-TX', hasOptIn: true, hasVerified: true });
+      expect(both.decision).toBe('allow');
+      expect(both.reason).toBe('verified');
+    });
   });
 });
 
@@ -90,13 +143,20 @@ describe('verify-tier completeness (US AV-law states, verified June 2026)', () =
     expect([...VERIFY_REGIONS].sort()).toEqual([...EXPECTED].sort());
   });
 
-  it('classifies EVERY law state as verify', () => {
-    for (const code of VERIFY_REGIONS) expect(regionTier(code)).toBe('verify');
+  it('classifies EVERY law state as verify by law (list preserved for Stage 2)', () => {
+    for (const code of VERIFY_REGIONS) expect(lawRegionTier(code)).toBe('verify');
   });
 
-  it('does not block any verify state, and only blocks the configured set', () => {
-    for (const code of VERIFY_REGIONS) expect(regionTier(code)).not.toBe('blocked');
+  it('while parked, geo-blocks every law state and the configured block set', () => {
+    for (const code of VERIFY_REGIONS) expect(regionTier(code)).toBe('blocked');
     for (const code of BLOCKED_REGIONS) expect(regionTier(code)).toBe('blocked');
+  });
+
+  it('with Wallet enabled, blocks only the configured set, not the verify states', () => {
+    withWalletEnabled(() => {
+      for (const code of VERIFY_REGIONS) expect(regionTier(code)).not.toBe('blocked');
+      for (const code of BLOCKED_REGIONS) expect(regionTier(code)).toBe('blocked');
+    });
   });
 
   it('treats common no-law US states as open (not over-blocking)', () => {

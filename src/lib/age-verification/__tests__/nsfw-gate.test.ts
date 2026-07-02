@@ -76,11 +76,23 @@ describe('resolveNsfwGate (view) vs canDiscoverNsfw (discovery)', () => {
     expect(await canDiscoverNsfw('u1')).toBe(true);
   });
 
-  it('law-state region, not verified (needs_verify): cannot view, but discoverable', async () => {
+  it('law-state region while Wallet PARKED: blocked like the UK — hidden from view AND discovery', async () => {
     mockRegion = { country: 'US', subdivision: 'TX' };
-    expect((await resolveNsfwGate({ isNsfw: true, userId: 'u1' })).decision).toBe('needs_verify');
+    expect((await resolveNsfwGate({ isNsfw: true, userId: 'u1' })).decision).toBe('blocked');
     expect(await canView('u1')).toBe(false);
-    expect(await canDiscoverNsfw('u1')).toBe(true);
+    expect(await canDiscoverNsfw('u1')).toBe(false);
+  });
+
+  it('law-state region with Wallet ENABLED (Stage 2): needs_verify — cannot view, but discoverable', async () => {
+    vi.stubEnv('NEXT_PUBLIC_WALLET_VERIFY_ENABLED', 'true');
+    try {
+      mockRegion = { country: 'US', subdivision: 'TX' };
+      expect((await resolveNsfwGate({ isNsfw: true, userId: 'u1' })).decision).toBe('needs_verify');
+      expect(await canView('u1')).toBe(false);
+      expect(await canDiscoverNsfw('u1')).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('guest in a non-blocked region: canDiscoverNsfw is true at this layer (guest-hiding lives in data-access)', async () => {

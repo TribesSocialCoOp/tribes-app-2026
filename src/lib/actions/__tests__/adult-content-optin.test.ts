@@ -8,7 +8,7 @@
  * law-state user, opt in — so they're worth locking down. withPublicErrors returns
  * { serverError } (it does not throw) on a handled PublicError.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // age-actions now reaches nsfw-gate.ts (getUserNsfwFlags), which is `import 'server-only'`
 // — no-op it in the test runtime.
@@ -83,24 +83,42 @@ describe('setAdultContentOptIn', () => {
     expect(mockUpdateCalls[0].showAdultContentAt).toBeInstanceOf(Date);
   });
 
-  it('blocks enabling in a law-state region when NOT age-verified', async () => {
-    mockRegion = { country: 'US', subdivision: 'TX' }; // verify tier
-    mockAgeVerifiedAt = null;
-    const res = await setAdultContentOptIn(true);
-    expect(res).toMatchObject({ serverError: expect.stringMatching(/verify your age/i) });
-    expect(mockUpdateCalls).toHaveLength(0);
+  // VERIFY-FIRST guard is a Stage-2 (Wallet enabled) behavior: while Wallet is parked,
+  // law states resolve to the `blocked` tier, not `verify`, so this branch is dormant.
+  describe('with Google Wallet ENABLED (Stage 2)', () => {
+    beforeEach(() => vi.stubEnv('NEXT_PUBLIC_WALLET_VERIFY_ENABLED', 'true'));
+    afterEach(() => vi.unstubAllEnvs());
+
+    it('blocks enabling in a law-state region when NOT age-verified', async () => {
+      mockRegion = { country: 'US', subdivision: 'TX' }; // verify tier
+      mockAgeVerifiedAt = null;
+      const res = await setAdultContentOptIn(true);
+      expect(res).toMatchObject({ serverError: expect.stringMatching(/verify your age/i) });
+      expect(mockUpdateCalls).toHaveLength(0);
+    });
+
+    it('allows enabling in a law-state region once age-verified', async () => {
+      mockRegion = { country: 'US', subdivision: 'TX' }; // verify tier
+      mockAgeVerifiedAt = new Date();
+      const res = await setAdultContentOptIn(true);
+      expect(res).toEqual({ enabled: true });
+      expect(mockUpdateCalls).toHaveLength(1);
+    });
   });
 
-  it('allows enabling in a law-state region once age-verified', async () => {
-    mockRegion = { country: 'US', subdivision: 'TX' }; // verify tier
-    mockAgeVerifiedAt = new Date();
+  // While Wallet is PARKED a law-state region is `blocked`, so the verify-first guard
+  // doesn't fire — the toggle is settable but inert (the NSFW gate blocks content
+  // regardless), matching how the UK behaves today.
+  it('while Wallet parked, enabling in a law-state region succeeds but is gate-inert', async () => {
+    mockRegion = { country: 'US', subdivision: 'TX' };
+    mockAgeVerifiedAt = null;
     const res = await setAdultContentOptIn(true);
     expect(res).toEqual({ enabled: true });
     expect(mockUpdateCalls).toHaveLength(1);
   });
 
-  it('allows DISABLING in a law-state region without verification (guard is enable-only)', async () => {
-    mockRegion = { country: 'US', subdivision: 'TX' }; // verify tier
+  it('allows DISABLING in any region without verification (guard is enable-only)', async () => {
+    mockRegion = { country: 'US', subdivision: 'TX' };
     mockAgeVerifiedAt = null;
     const res = await setAdultContentOptIn(false);
     expect(res).toEqual({ enabled: false });
