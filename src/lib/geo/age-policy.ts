@@ -12,6 +12,11 @@
  * verification method to offer them). Stage 2 flips `NEXT_PUBLIC_WALLET_VERIFY_ENABLED`
  * (per-env) to re-open the `verify` tier once Wallet is tested. The VERIFY_REGIONS
  * list is preserved throughout, so re-enabling is just the env flag.
+ *
+ * A SECOND, INDEPENDENT method re-opens the verify tier for iOS-native users only:
+ * Apple's Declared Age Range OS signal, behind `NEXT_PUBLIC_IOS_AGE_VERIFY_ENABLED`
+ * (see regionTier + providers/apple-declared-age.ts) — it can unblock iPhone users in
+ * law states without Google Wallet.
  */
 
 export type Surface = 'web' | 'ios' | 'android';
@@ -70,6 +75,17 @@ export function walletVerifyEnabled(): boolean {
 }
 
 /**
+ * Feature flag for the iOS Apple Declared Age Range provider (an on-device OS age
+ * signal, iOS 26.2+ native only). OFF by default. INDEPENDENT of Google Wallet: when
+ * on, iOS-native users in a law state can satisfy the verify tier via the OS signal
+ * even while Wallet stays parked. See providers/apple-declared-age.ts for the trust
+ * model (App Attest gates prod). Read at call time.
+ */
+export function iosDeclaredAgeEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_IOS_AGE_VERIFY_ENABLED === 'true';
+}
+
+/**
  * PURE geographic/legal classification, independent of rollout state. `verify` here
  * means "this jurisdiction has an AV law", NOT that verification is currently offered.
  * Use this to reason about the law itself (e.g. list-integrity tests); use
@@ -84,16 +100,23 @@ export function lawRegionTier(code: string): RegionTier {
 }
 
 /**
- * EFFECTIVE tier the app enforces for this request. While Google Wallet verification is
- * parked (`walletVerifyEnabled() === false`), law-state regions collapse to `blocked` —
- * same UX as the UK — because we have no verification method to offer there yet. Every
+ * EFFECTIVE tier the app enforces for this request, given the caller's `surface`. A law
+ * state's `verify` tier is only "live" if some verification method can actually run:
+ *   - Google Wallet (`walletVerifyEnabled()`) — any surface; OR
+ *   - Apple Declared Age Range (`iosDeclaredAgeEnabled()`) — iOS-native only.
+ * If none is available for this surface, the law state collapses to `blocked` (same UX
+ * as the UK) — this is the Stage-1 default for web/Android while Wallet is parked. Every
  * downstream consumer (server gate, discovery filter, age-gate dialog) keys off this one
- * function, so the block stays consistent across the whole flow.
+ * function, so the decision stays consistent across the flow. `surface` is optional;
+ * omitting it (or passing a non-iOS surface) means only the Wallet path can keep a law
+ * state open.
  */
-export function regionTier(code: string): RegionTier {
+export function regionTier(code: string, surface?: Surface): RegionTier {
   const tier = lawRegionTier(code);
-  if (tier === 'verify' && !walletVerifyEnabled()) return 'blocked';
-  return tier;
+  if (tier !== 'verify') return tier;
+  if (walletVerifyEnabled()) return 'verify';
+  if (surface === 'ios' && iosDeclaredAgeEnabled()) return 'verify';
+  return 'blocked';
 }
 
 /**
@@ -116,7 +139,7 @@ export function resolveNsfwAccess(input: {
   surface: Surface;
 }): NsfwAccess {
   const { regionCode, ...rest } = input;
-  return resolveNsfwAccessForTier({ ...rest, tier: regionTier(regionCode) });
+  return resolveNsfwAccessForTier({ ...rest, tier: regionTier(regionCode, input.surface) });
 }
 
 /**

@@ -8,7 +8,7 @@
  * On native (Capacitor) the same shape will be produced by a native plugin instead of
  * navigator.credentials; the server verification path is identical.
  */
-import { createAgeVerificationRequest, submitAgeVerification } from '@/lib/actions/age-actions';
+import { createAgeVerificationRequest, createIosAgeChallenge, submitAgeVerification } from '@/lib/actions/age-actions';
 import { isNative, isIos, isAndroid } from '@/lib/capacitor/platform';
 import { isOnDeviceAgeAvailable } from './on-device-age';
 
@@ -49,6 +49,14 @@ export function providerSupport(id: string): { enabled: boolean; hint?: string }
     return dc && ios
       ? { enabled: true }
       : { enabled: false, hint: 'Verify with Apple Wallet on an iPhone (iOS 26+) with a digital ID.' };
+  }
+
+  if (id === 'apple_declared_age_range') {
+    // iOS-native only (Apple Declared Age Range OS signal, iOS 26.2+). The plugin
+    // reports availability at runtime; here we just gate to the iOS app.
+    return isNative && isIos
+      ? { enabled: true }
+      : { enabled: false, hint: 'Confirm your age in the Tribes iPhone app (iOS 26.2 or later).' };
   }
 
   return { enabled: true };
@@ -129,4 +137,21 @@ export async function runOnDeviceVerification(userId: string): Promise<{ verifie
   const { runOnDeviceAgeCheck } = await import('./on-device-age');
   const attestation = await runOnDeviceAgeCheck(userId);
   return unwrap(await submitAgeVerification({ provider: 'privately', attestation }));
+}
+
+/**
+ * Run Apple's Declared Age Range OS check (iOS 26.2+ native) and submit it. Gets a
+ * single-use server nonce, runs the native plugin anchored to it, then submits the
+ * band + declaration level. Resolves to the verified method on success; throws with a
+ * user-safe message otherwise (declined, too-old iOS, or an unconfirmed declaration
+ * that doesn't clear a law state — surfaced as a failed attempt).
+ */
+export async function runDeclaredAgeVerification(userId: string): Promise<{ verified: boolean; method: string }> {
+  const { nonce } = unwrap(await createIosAgeChallenge());
+  const { runIosDeclaredAgeCheck } = await import('./ios-declared-age');
+  const result = await runIosDeclaredAgeCheck(userId, nonce);
+  return unwrap(await submitAgeVerification({
+    provider: 'apple_declared_age_range',
+    attestation: { nonce, over18: result.over18, declaration: result.declaration, appAttest: result.appAttest },
+  }));
 }

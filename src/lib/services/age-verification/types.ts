@@ -16,14 +16,16 @@ export type AgeVerificationMethod =
   | 'google_zkp'
   | 'apple_wallet_mdl'
   | 'apple_wallet_passport'
+  | 'apple_declared_age_range'  // iOS Declared Age Range OS signal (confirmed level) — iOS 26.2+ native
   | 'privately'      // on-device facial age estimation (Privately SDK) — universal incl. iOS
   | 'dev';
 
 export interface AgeVerificationRequest {
   /** Which provider produced the attestation. */
-  provider: 'google_wallet' | 'apple_wallet' | 'privately' | 'dev';
-  /** Provider-specific attestation payload (e.g. an OpenID4VP vp_token, or the
-   *  Privately on-device signed credential). Absent for dev. */
+  provider: 'google_wallet' | 'apple_wallet' | 'apple_declared_age_range' | 'privately' | 'dev';
+  /** Provider-specific attestation payload (e.g. an OpenID4VP vp_token, the iOS
+   *  Declared Age Range envelope, or the Privately on-device signed credential).
+   *  Absent for dev. */
   attestation?: unknown;
 }
 
@@ -37,7 +39,7 @@ export interface AgeVerificationResult {
 
 export interface AgeVerificationProvider {
   /** Stable provider id used by the client and registry. */
-  id: 'google_wallet' | 'apple_wallet' | 'privately' | 'dev';
+  id: 'google_wallet' | 'apple_wallet' | 'apple_declared_age_range' | 'privately' | 'dev';
   /** Human label for the client UI. */
   label: string;
   /** Whether this provider is usable in the current environment/config. */

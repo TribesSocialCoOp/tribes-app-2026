@@ -52,7 +52,9 @@ export async function getNsfwGateStatus(): Promise<NsfwGateStatus> {
   ]);
 
   return {
-    regionTier: regionTier(regionCode(region)),
+    // Surface-aware: an iOS law state stays 'verify' (not 'blocked') when the iOS
+    // Declared Age Range method is enabled, so the dialog offers it.
+    regionTier: regionTier(regionCode(region), surface),
     surface,
     hasOptIn,
     hasVerified,
@@ -80,9 +82,11 @@ export const setAdultContentOptIn = withPublicErrors(async (enabled: boolean): P
   const { eq } = await import('drizzle-orm');
 
   if (enabled) {
-    // Law states require Google Wallet verification BEFORE the toggle can be enabled.
+    // Law states require age verification BEFORE the toggle can be enabled. The toggle is
+    // web-only (enforced above), so surface is 'web' here — the iOS Declared Age Range
+    // method never keeps a law state open on this path; only Google Wallet does.
     const { regionTier } = await import('@/lib/geo/age-policy');
-    const tier = regionTier(regionCode(await getRequestRegion()));
+    const tier = regionTier(regionCode(await getRequestRegion()), 'web');
     if (tier === 'verify') {
       const { getUserNsfwFlags } = await import('@/lib/age-verification/nsfw-gate');
       const { hasVerified } = await getUserNsfwFlags(userId);
@@ -151,6 +155,20 @@ export const createAgeVerificationRequest = withPublicErrors(async (
 
   // Never return the bare nonce to the client — it stays sealed inside verifierState.
   return { request: built.request, verifierState: built.verifierState };
+});
+
+/**
+ * Issue a single-use, user-bound challenge for the iOS Apple Declared Age Range flow.
+ * The native plugin runs the OS age check anchored to this nonce (and, in Phase 2, binds
+ * it into an App Attest assertion); the client echoes it back in submitAgeVerification,
+ * which consumes it single-use. Mirrors the wallet nonce, minus the OID4VP request.
+ */
+export const createIosAgeChallenge = withPublicErrors(async (): Promise<{ nonce: string }> => {
+  const userId = await requireAuth();
+  const nonce = crypto.randomUUID();
+  const { issueNonce } = await import('@/lib/services/age-verification/nonce-store');
+  await issueNonce(nonce, userId, 10 * 60);
+  return { nonce };
 });
 
 /**

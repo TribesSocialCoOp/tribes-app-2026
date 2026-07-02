@@ -16,6 +16,12 @@ function withWalletEnabled(fn: () => void) {
   try { fn(); } finally { vi.unstubAllEnvs(); }
 }
 
+/** Run a block with the iOS Declared Age Range method turned ON (Wallet stays parked). */
+function withIosAgeEnabled(fn: () => void) {
+  vi.stubEnv('NEXT_PUBLIC_IOS_AGE_VERIFY_ENABLED', 'true');
+  try { fn(); } finally { vi.unstubAllEnvs(); }
+}
+
 afterEach(() => vi.unstubAllEnvs());
 
 // ── Pure legal classification (flag-independent) ─────────────────────────────
@@ -60,6 +66,60 @@ describe('regionTier (effective — Google Wallet PARKED by default)', () => {
       expect(regionTier('US-KS')).toBe('verify');
       expect(regionTier('GB')).toBe('blocked');   // UK stays blocked
       expect(regionTier('US-CA')).toBe('open');
+    });
+  });
+});
+
+// The iOS Declared Age Range method re-opens the verify tier for iOS-native users only,
+// independent of the Google Wallet flag.
+describe('regionTier (iOS Declared Age Range — surface-aware)', () => {
+  it('keeps a law state blocked on iOS when the iOS method is OFF (default)', () => {
+    expect(regionTier('US-TX', 'ios')).toBe('blocked');
+  });
+  it('re-opens a law state to verify on iOS when the iOS method is ON', () => {
+    withIosAgeEnabled(() => {
+      expect(regionTier('US-TX', 'ios')).toBe('verify');
+      expect(regionTier('US-KS', 'ios')).toBe('verify');
+    });
+  });
+  it('does NOT re-open a law state on web/android with only the iOS method ON', () => {
+    withIosAgeEnabled(() => {
+      expect(regionTier('US-TX', 'web')).toBe('blocked');
+      expect(regionTier('US-TX', 'android')).toBe('blocked');
+      expect(regionTier('US-TX')).toBe('blocked');   // no surface → wallet-only
+    });
+  });
+  it('leaves the UK blocked and open regions open regardless of surface/flag', () => {
+    withIosAgeEnabled(() => {
+      expect(regionTier('GB', 'ios')).toBe('blocked');
+      expect(regionTier('US-CA', 'ios')).toBe('open');
+    });
+  });
+  it('Wallet ON keeps law states verify on every surface (wallet is surface-agnostic)', () => {
+    withWalletEnabled(() => {
+      expect(regionTier('US-TX', 'web')).toBe('verify');
+      expect(regionTier('US-TX', 'ios')).toBe('verify');
+    });
+  });
+});
+
+describe('resolveNsfwAccess — iOS law state via Declared Age Range', () => {
+  it('unverified iOS law-state user → needs_verify (offered the OS check)', () => {
+    withIosAgeEnabled(() => {
+      const r = resolveNsfwAccess({ ...base, regionCode: 'US-KS', surface: 'ios' });
+      expect(r.decision).toBe('needs_verify');
+    });
+  });
+  it('verified + opted-in iOS law-state user → allow', () => {
+    withIosAgeEnabled(() => {
+      const r = resolveNsfwAccess({ ...base, regionCode: 'US-KS', surface: 'ios', hasVerified: true, hasOptIn: true });
+      expect(r.decision).toBe('allow');
+    });
+  });
+  it('same user on web (no iOS method) → blocked', () => {
+    withIosAgeEnabled(() => {
+      const r = resolveNsfwAccess({ ...base, regionCode: 'US-KS', surface: 'web', hasVerified: true, hasOptIn: true });
+      expect(r.decision).toBe('blocked');
     });
   });
 });

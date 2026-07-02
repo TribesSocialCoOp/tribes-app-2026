@@ -26,6 +26,10 @@
 	<array>
 		<string>Default</string>
 	</array>
+	<!-- Declared Age Range API (iOS 26.2+) — NSFW 18+ gate. Requires the capability
+	     enabled on the staging App ID in the Developer portal. -->
+	<key>com.apple.developer.declared-age-range</key>
+	<true/>
 	<key>aps-environment</key>
 	<string>development</string>
 </dict>

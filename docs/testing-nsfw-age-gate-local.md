@@ -149,6 +149,38 @@ npm run dev                       # in one terminal
   the "verify in a browser at tribes.app — it unlocks the app" note. Confirm that copy
   appears (don't expect in-app wallet verification).
 
+## 6a. iOS Declared Age Range (OS age signal) — unblocks iOS law states
+
+Apple's Declared Age Range API (iOS 26.2+, native only) lets an iPhone user in a law
+state confirm 18+ via the OS instead of Google Wallet. Off by default; independent of
+`NEXT_PUBLIC_WALLET_VERIFY_ENABLED`.
+
+**One-time Xcode setup** (not done by `cap sync`):
+1. In Xcode, add `ios/App/App/AgeRangePlugin.swift` to the **App** target (drag into the
+   App group, check "App" under Target Membership). Capacitor auto-registers the
+   `CAPBridgedPlugin` at runtime — no `registerPlugin` needed.
+2. Enable the **Declared Age Range** capability on the App ID (and staging App ID) in the
+   Developer portal. The `com.apple.developer.declared-age-range` entitlement is already
+   in `App.entitlements` / `App.staging.entitlements`.
+3. Build with the **iOS 26.2 SDK (Xcode 26.2+)**. Older devices return `available:false`
+   and stay blocked. Deployment floor is unchanged (15.0); the plugin runtime-gates on
+   `#available(iOS 26.2, *)`.
+
+**Enable + sandbox-test (real device, iOS 26.2+):**
+1. Set `NEXT_PUBLIC_IOS_AGE_VERIFY_ENABLED=true` in `.env.local` (rebuild — it's baked in).
+2. On the device: Developer Mode on → **Settings → Developer → Sandbox Apple Account →
+   Manage → Age Assurance** → pick a scenario. Use **"18+, age confirmed"** to get a
+   `government_id`/`payment`-level declaration (the only levels a law state accepts —
+   `self_declared` is intentionally rejected).
+3. In a law state (`x-tribes-geo: US-KS`), open an NSFW tribe → the gate now shows the
+   **"Confirm your age with iPhone"** step instead of the blocked screen. Complete it →
+   then the web opt-in step (still web-only, per Apple's Reddit-pattern rule).
+
+**Prod safety:** Apple's result isn't signed, so the server **prod-rejects** it until App
+Attest (Phase 2) is implemented — even with the flag on. `IOS_AGE_APP_ATTEST_ENABLED`
+stays false; do not set it in prod until the DCAppAttest assertion is verified server-side
+(`providers/apple-declared-age.ts`). Dev/staging testing works without it.
+
 ## ⚠️ Native login caveat
 Passkey / E2E login is origin-bound to `tribes.app`, so a **local** native build can't
 complete passkey login. Options: (a) use the **Dustin dev login button** in the native
@@ -168,7 +200,7 @@ Quick triage: `pgrep -f next-server` then `ps -p <pid> -o %cpu,rss`. If next-ser
 hot and `ws-relay/server` is ~0%, it's the build cache, not the relay.
 
 ## 8. Pre-deploy checklist
-- [ ] `npm test` green (111 unit tests) · `npx tsc --noEmit` clean
+- [ ] `npm test` green · `npx tsc --noEmit` clean
 - [ ] `npm run check:geoip` resolves sample IPs to the right tiers
 - [ ] E2E green: `npx playwright test tests/nsfw-age-gate.spec.ts` (+ the 3 key-sync specs)
 - [ ] Web: opt-in, all three tiers (via `x-tribes-geo`), blur on/off, discovery hide
