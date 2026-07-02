@@ -69,6 +69,10 @@ public class AgeRangePlugin: CAPPlugin, CAPBridgedPlugin {
                         "declaration": Self.normalize(range.ageRangeDeclaration)
                         // Phase 2: add "appAttest": <assertion over call's nonce>.
                     ])
+                @unknown default:
+                    // A future OS adds a case we don't understand yet — fail safe to
+                    // "unavailable" rather than guess at its meaning (never over-grant).
+                    call.resolve(["available": false])
                 }
             } catch {
                 call.reject("Age range request failed.", nil, error)
