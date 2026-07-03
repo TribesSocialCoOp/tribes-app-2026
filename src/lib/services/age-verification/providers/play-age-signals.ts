@@ -83,6 +83,10 @@ export const playAgeSignalsProvider: AgeVerificationProvider = {
   id: 'play_age_signals',
   label: 'Confirm your age with Google',
   isAvailable() {
+    // PARKED (2026-07): Play Age Signals v0.0.3 only answers for VERIFIED accounts in
+    // Texas/Brazil (no self-declared path in the US, unlike Apple), so coverage is too
+    // thin to launch on. Gated behind NEXT_PUBLIC_PLAY_AGE_VERIFY_ENABLED (default off) —
+    // the code + native plugin are kept, ready to un-park as Google's rollout broadens.
     return playAgeSignalsEnabled();
   },
   async verify(req: AgeVerificationRequest, ctx: AgeVerificationContext): Promise<AgeVerificationResult> {
