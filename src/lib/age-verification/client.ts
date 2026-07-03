@@ -8,7 +8,7 @@
  * On native (Capacitor) the same shape will be produced by a native plugin instead of
  * navigator.credentials; the server verification path is identical.
  */
-import { createAgeVerificationRequest, createIosAgeChallenge, createPlayAgeChallenge, submitAgeVerification } from '@/lib/actions/age-actions';
+import { createAgeVerificationRequest, createIosAgeChallenge, createPlayAgeChallenge, createAppAttestChallenge, registerAppAttestKey, submitAgeVerification } from '@/lib/actions/age-actions';
 import { isNative, isIos, isAndroid } from '@/lib/capacitor/platform';
 import { isOnDeviceAgeAvailable } from './on-device-age';
 
@@ -156,9 +156,16 @@ export async function runOnDeviceVerification(userId: string): Promise<{ verifie
  * earlier for a declined / too-old-iOS device.
  */
 export async function runDeclaredAgeVerification(userId: string): Promise<{ verified: boolean; method: string }> {
+  // App Attest (anti-forgery): make sure this device has a registered attested key, then
+  // sign the age submission with it. Best-effort — if the device can't attest (simulator/
+  // old build) we submit without, and the server rejects when attestation is required.
+  const keyId = await ensureAppAttestKey().catch(() => null);
+
   const { nonce } = unwrap(await createIosAgeChallenge());
-  const { runIosDeclaredAgeCheck } = await import('./ios-declared-age');
+  const { runIosDeclaredAgeCheck, assertAppAttest } = await import('./ios-declared-age');
   const result = await runIosDeclaredAgeCheck(userId, nonce);
+
+  const assertion = keyId ? await assertAppAttest(keyId, nonce).catch(() => null) : null;
 
   return unwrap(await submitAgeVerification({
     provider: 'apple_declared_age_range',
@@ -167,9 +174,33 @@ export async function runDeclaredAgeVerification(userId: string): Promise<{ veri
       over18: result.over18,
       declaration: result.declaration,
       parentalControlsActive: result.parentalControlsActive,
-      appAttest: result.appAttest,
+      keyId: keyId ?? undefined,
+      assertion: assertion ?? undefined,
     },
   }));
+}
+
+const ATTEST_KEY_STORAGE = 'tribes.ios.appAttestKeyId';
+
+/**
+ * Ensure this device has a registered App Attest key, returning its keyId. Generates +
+ * attests + registers once, then caches the keyId locally for reuse. Returns null if the
+ * device doesn't support App Attest.
+ */
+async function ensureAppAttestKey(): Promise<string | null> {
+  const { isAppAttestSupported, attestAppAttestKey } = await import('./ios-declared-age');
+  if (!isAppAttestSupported()) return null;
+
+  const cached = typeof localStorage !== 'undefined' ? localStorage.getItem(ATTEST_KEY_STORAGE) : null;
+  if (cached) return cached;
+
+  const { nonce: challenge } = unwrap(await createAppAttestChallenge());
+  const attested = await attestAppAttestKey(challenge);
+  if (!attested) return null;
+
+  unwrap(await registerAppAttestKey({ keyId: attested.keyId, challenge, attestation: attested.attestation }));
+  if (typeof localStorage !== 'undefined') localStorage.setItem(ATTEST_KEY_STORAGE, attested.keyId);
+  return attested.keyId;
 }
 
 /**

@@ -33,13 +33,39 @@ export interface DeclaredAgeResult {
   appAttest?: unknown;
 }
 
-type AgeRangePlugin = { getDeclaredAgeRange: (o: unknown) => Promise<DeclaredAgeResult> };
+type AgeRangePlugin = {
+  getDeclaredAgeRange: (o: unknown) => Promise<DeclaredAgeResult>;
+  // App Attest (anti-forgery). Present on iOS builds with the DeviceCheck plugin methods.
+  attestKey?: (o: { challenge: string }) => Promise<{ keyId?: string; attestation?: string; supported?: boolean }>;
+  assertNonce?: (o: { keyId: string; nonce: string }) => Promise<{ assertion?: string }>;
+};
 
 function nativePlugin(): AgeRangePlugin | null {
   if (typeof window === 'undefined') return null;
   const plugins = (window as unknown as { Capacitor?: { Plugins?: Record<string, unknown> } }).Capacitor?.Plugins;
   const p = plugins?.AgeRange as AgeRangePlugin | undefined;
   return typeof p?.getDeclaredAgeRange === 'function' ? p : null;
+}
+
+/** Whether this build/device can produce App Attest assertions (real device, not sim). */
+export function isAppAttestSupported(): boolean {
+  return typeof nativePlugin()?.attestKey === 'function';
+}
+
+/** Generate + attest a Secure-Enclave key over `challenge`. Returns null if unsupported. */
+export async function attestAppAttestKey(challenge: string): Promise<{ keyId: string; attestation: string } | null> {
+  const p = nativePlugin();
+  if (typeof p?.attestKey !== 'function') return null;
+  const r = await p.attestKey({ challenge });
+  return r?.keyId && r?.attestation ? { keyId: r.keyId, attestation: r.attestation } : null;
+}
+
+/** Sign SHA256(nonce) with the attested key. Returns the base64 assertion, or null. */
+export async function assertAppAttest(keyId: string, nonce: string): Promise<string | null> {
+  const p = nativePlugin();
+  if (typeof p?.assertNonce !== 'function') return null;
+  const r = await p.assertNonce({ keyId, nonce });
+  return r?.assertion ?? null;
 }
 
 /** Whether the iOS Declared Age Range plugin is present in this runtime. */

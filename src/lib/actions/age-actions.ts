@@ -181,6 +181,45 @@ export const createPlayAgeChallenge = withPublicErrors(async (): Promise<{ nonce
   return mintOsAgeChallenge(playAgeSignalsEnabled());
 });
 
+/**
+ * Issue a single-use challenge for App Attest KEY REGISTRATION (attestation). The device
+ * attests its Secure-Enclave key over this challenge; registerAppAttestKey verifies it.
+ */
+export const createAppAttestChallenge = withPublicErrors(async (): Promise<{ nonce: string }> => {
+  const { iosDeclaredAgeEnabled } = await import('@/lib/geo/age-policy');
+  return mintOsAgeChallenge(iosDeclaredAgeEnabled());
+});
+
+/**
+ * Register a device's attested App Attest key (one-time per device). Verifies the
+ * attestation object against `challenge` and stores the public key for this user. The
+ * challenge nonce is consumed single-use. Throws (surfaced) on verification failure.
+ */
+export const registerAppAttestKey = withPublicErrors(async (input: {
+  keyId: string;
+  challenge: string;
+  attestation: string;
+}): Promise<{ ok: true }> => {
+  const userId = await requireAuth();
+  const { consumeNonce } = await import('@/lib/services/age-verification/nonce-store');
+  // Consume the challenge single-use + user-bound BEFORE the (expensive) crypto verify.
+  const ok = await consumeNonce(input.challenge, userId, { failClosed: true });
+  if (!ok) throw new PublicError('This request has expired or already been used. Please try again.');
+
+  const { registerAttestedKey } = await import('@/lib/services/age-verification/app-attest');
+  try {
+    await registerAttestedKey({
+      keyId: input.keyId,
+      userId,
+      challenge: input.challenge,
+      attestationBase64: input.attestation,
+    });
+  } catch {
+    throw new PublicError('We couldn’t verify your device. Please update the app and try again.');
+  }
+  return { ok: true };
+});
+
 /** Shared: auth + feature-gate + rate-limit, then issue a single-use user-bound nonce. */
 async function mintOsAgeChallenge(featureEnabled: boolean): Promise<{ nonce: string }> {
   const userId = await requireAuth();

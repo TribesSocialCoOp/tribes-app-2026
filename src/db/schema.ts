@@ -840,6 +840,24 @@ export const userDeviceKeys = pgTable('user_device_keys', {
 ]);
 
 // ============================================================
+// APP ATTEST KEYS (iOS age-gate anti-forgery, issue #32)
+// ============================================================
+// One row per attested DCAppAttest key. The public key + monotonic sign counter let the
+// server verify that an age-verification submission came from a genuine, unmodified
+// instance of our app on real Apple hardware (see providers/apple-declared-age.ts).
+export const appAttestKeys = pgTable('app_attest_keys', {
+  keyId: text('key_id').primaryKey(),                 // base64 DCAppAttest key id
+  userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  publicKeyPem: text('public_key_pem').notNull(),
+  signCount: integer('sign_count').notNull().default(0), // anti-replay counter
+  receipt: text('receipt'),                            // base64 Apple receipt (fraud metric)
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+  lastUsedAt: timestamp('last_used_at', { withTimezone: true }).default(sql`NOW()`),
+}, (table) => [
+  index('idx_aak_user').on(table.userId),
+]);
+
+// ============================================================
 // EMAIL VERIFICATION TOKENS
 // ============================================================
 

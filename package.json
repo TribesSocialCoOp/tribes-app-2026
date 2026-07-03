@@ -90,6 +90,7 @@
     "altcha": "^3.0.9",
     "altcha-lib": "^2.0.3",
     "apns2": "^12.2.0",
+    "appattest-checker-node": "^1.0.3",
     "axios": "^1.7.2",
     "bcryptjs": "^3.0.3",
     "browser-image-compression": "^2.0.2",

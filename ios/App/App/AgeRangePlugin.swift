@@ -28,6 +28,8 @@
 
 import Foundation
 import Capacitor
+import DeviceCheck
+import CryptoKit
 #if canImport(DeclaredAgeRange)
 import DeclaredAgeRange
 #endif
@@ -37,8 +39,50 @@ public class AgeRangePlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "AgeRangePlugin"
     public let jsName = "AgeRange"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "getDeclaredAgeRange", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "getDeclaredAgeRange", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "attestKey", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "assertNonce", returnType: CAPPluginReturnPromise)
     ]
+
+    // ── App Attest (anti-forgery) ────────────────────────────────────────────────
+    // Proves an age submission came from a genuine, unmodified instance of this app on
+    // real Apple hardware. Server verifies via appattest-checker-node (app-attest.ts).
+    // Not available on the Simulator (DCAppAttestService.isSupported == false).
+
+    /// Generate a Secure-Enclave key and attest it over `challenge` (one-time per device).
+    @objc func attestKey(_ call: CAPPluginCall) {
+        guard let challenge = call.getString("challenge") else { call.reject("Missing challenge."); return }
+        let service = DCAppAttestService.shared
+        guard service.isSupported else { call.resolve(["supported": false]); return }
+        service.generateKey { keyId, genErr in
+            if let genErr = genErr { call.reject("generateKey failed.", nil, genErr); return }
+            guard let keyId = keyId else { call.reject("generateKey returned no key."); return }
+            // clientDataHash for attestation = SHA256(challenge) — the server passes the
+            // raw challenge to verifyAttestation, which recomputes this internally.
+            let clientDataHash = Data(SHA256.hash(data: Data(challenge.utf8)))
+            service.attestKey(keyId, clientDataHash: clientDataHash) { attestation, attErr in
+                if let attErr = attErr { call.reject("attestKey failed.", nil, attErr); return }
+                guard let attestation = attestation else { call.reject("attestKey returned nothing."); return }
+                call.resolve(["keyId": keyId, "attestation": attestation.base64EncodedString(), "supported": true])
+            }
+        }
+    }
+
+    /// Sign SHA256(nonce) with the attested key `keyId` for one age submission.
+    @objc func assertNonce(_ call: CAPPluginCall) {
+        guard let keyId = call.getString("keyId"), let nonce = call.getString("nonce") else {
+            call.reject("Missing keyId/nonce."); return
+        }
+        let service = DCAppAttestService.shared
+        guard service.isSupported else { call.reject("App Attest not supported on this device."); return }
+        // clientDataHash for assertion = SHA256(nonce) — must match the server's hash.
+        let clientDataHash = Data(SHA256.hash(data: Data(nonce.utf8)))
+        service.generateAssertion(keyId, clientDataHash: clientDataHash) { assertion, err in
+            if let err = err { call.reject("generateAssertion failed.", nil, err); return }
+            guard let assertion = assertion else { call.reject("generateAssertion returned nothing."); return }
+            call.resolve(["assertion": assertion.base64EncodedString()])
+        }
+    }
 
     /// Request the account's declared age band for an 18+ gate. Resolves with
     /// `{ available, over18?, declaration? }`. `available: false` means the OS API is

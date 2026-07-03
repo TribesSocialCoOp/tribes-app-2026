@@ -1,14 +1,27 @@
 /**
  * Unit tests for the Apple Declared Age Range provider (providers/apple-declared-age.ts):
- * the server-side trust logic — nonce required, confirmed-declaration policy, over-18
- * gate, and the App Attest prod-rejection (Phase 1 is dev/staging-only).
+ * the server-side trust logic — nonce required, over-18 kid gate, parental-controls block,
+ * and the App Attest anti-forgery boundary. NOTE: App Attest is ANTI-FORGERY (proves a
+ * genuine app produced the submission); it is ORTHOGONAL to age assurance — we still
+ * accept Apple's self-declared 18+ (IOS_AGE_REQUIRE_CONFIRMED is off by default).
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+
+// App Attest is a server-only module (db + crypto lib); mock it so these stay pure unit
+// tests. iosAppAttestEnabled + assertAttestation are controlled per-test.
+let attestEnabled = false;
+const assertAttestationMock = vi.fn(async (_arg?: unknown) => {});
+vi.mock('@/lib/services/age-verification/app-attest', () => ({
+  iosAppAttestEnabled: () => attestEnabled,
+  assertAttestation: (arg: unknown) => assertAttestationMock(arg),
+}));
+
 import { appleDeclaredAgeProvider } from './providers/apple-declared-age';
 
 const ctx = { expectedUserId: 'u1' };
 const req = (attestation: unknown) => ({ provider: 'apple_declared_age_range' as const, attestation });
 
+beforeEach(() => { attestEnabled = false; assertAttestationMock.mockReset(); assertAttestationMock.mockResolvedValue(undefined); });
 afterEach(() => vi.unstubAllEnvs());
 
 describe('appleDeclaredAgeProvider.isAvailable', () => {
@@ -89,20 +102,12 @@ describe('appleDeclaredAgeProvider.verify — IOS_AGE_REQUIRE_CONFIRMED (opt-in)
   });
 });
 
-describe('appleDeclaredAgeProvider.verify (real production — App Attest gate)', () => {
-  it('rejects an unattested result in real production (Phase 1)', async () => {
+describe('appleDeclaredAgeProvider.verify — App Attest OFF (pre-enable)', () => {
+  it('rejects an unattested result in real production', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     await expect(
       appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'government_id' }), ctx),
     ).rejects.toThrow(/not enabled in production/i);
-  });
-
-  it('an env flag alone CANNOT open prod — App Attest verification must exist (no bypass)', async () => {
-    vi.stubEnv('NODE_ENV', 'production');
-    vi.stubEnv('IOS_AGE_APP_ATTEST_ENABLED', 'true'); // ops mistake / premature flip
-    await expect(
-      appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'government_id', appAttest: { foo: 1 } }), ctx),
-    ).rejects.toThrow(/App Attest pending/i);
   });
 
   it('staging (prod build + TRIBES_ENV=staging) accepts for device testing', async () => {
@@ -110,5 +115,36 @@ describe('appleDeclaredAgeProvider.verify (real production — App Attest gate)'
     vi.stubEnv('TRIBES_ENV', 'staging');
     const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'government_id' }), ctx);
     expect(r.verified).toBe(true);
+  });
+});
+
+describe('appleDeclaredAgeProvider.verify — App Attest ON (enforced everywhere)', () => {
+  beforeEach(() => { attestEnabled = true; });
+
+  it('verifies the assertion (keyId/nonce/user) and passes on success — even in real prod', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const r = await appleDeclaredAgeProvider.verify(
+      req({ nonce: 'n1', over18: true, declaration: 'self_declared', keyId: 'k1', assertion: 'a1' }), ctx);
+    expect(r.verified).toBe(true);
+    expect(assertAttestationMock).toHaveBeenCalledWith({ keyId: 'k1', assertionBase64: 'a1', nonce: 'n1', userId: 'u1' });
+  });
+
+  it('ACCEPTS self-declared 18+ with a valid assertion — App Attest is anti-forgery, not age-assurance', async () => {
+    const r = await appleDeclaredAgeProvider.verify(
+      req({ nonce: 'n1', over18: true, declaration: 'self_declared', keyId: 'k1', assertion: 'a1' }), ctx);
+    expect(r.verified).toBe(true);
+  });
+
+  it('rejects when the assertion fails (missing key / bad signature / replay)', async () => {
+    assertAttestationMock.mockRejectedValue(new Error('App Attest key is not registered for this account.'));
+    await expect(
+      appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: true, declaration: 'self_declared', keyId: 'k1', assertion: 'bad' }), ctx),
+    ).rejects.toThrow(/not registered/i);
+  });
+
+  it('still blocks a minor BEFORE the attestation check (kid gate first)', async () => {
+    const r = await appleDeclaredAgeProvider.verify(req({ nonce: 'n1', over18: false, keyId: 'k1', assertion: 'a1' }), ctx);
+    expect(r.verified).toBe(false);
+    expect(assertAttestationMock).not.toHaveBeenCalled();
   });
 });

@@ -27,6 +27,7 @@ import type {
 import { iosDeclaredAgeEnabled } from '@/lib/geo/age-policy';
 import { CONFIRMED_AGE_DECLARATIONS } from '@/lib/age-verification/declared-age-policy';
 import { evaluateOsAgeSignal, isRealProd, type OsAgeReasonCode } from '@/lib/age-verification/os-age-policy';
+import { iosAppAttestEnabled, assertAttestation } from '@/lib/services/age-verification/app-attest';
 
 // ── Child-safety policy flags (server-side env, runtime-tunable — no rebuild) ────────
 // The shared decision lives in os-age-policy.ts (also used by Android Play Age Signals);
@@ -49,22 +50,6 @@ const IOS_REASONS: Record<OsAgeReasonCode, string> = {
   supervised: 'This device has parental controls (a managed or child account), so adult content can’t be enabled here.',
   unconfirmed: 'Your Apple Account isn’t independently age-confirmed. Add a card to your Apple Account or complete an ID check, then try again.',
 };
-
-/**
- * Phase-2 App Attest verification. In REAL production the client boolean is worthless
- * without proof it came from a genuine, unmodified instance of THIS app — so this must
- * verify a DCAppAttest assertion binding `appAttest` to `nonce`. It is NOT implemented
- * yet, so it throws unconditionally: this is deliberate, and it means NO env var or flag
- * can open the prod path until the code below actually exists. (A single env-var "trust"
- * switch with no verification behind it would be a full client-forgery bypass.)
- */
-async function verifyAppAttestOrThrow(_appAttest: unknown, _nonce: string, _userId: string): Promise<void> {
-  // TODO(app-attest, Phase 2): validate the DCAppAttest assertion:
-  //   - assertion signs the server `nonce` (freshness/replay),
-  //   - the attested key belongs to a genuine instance of our App ID,
-  //   - bind to `_userId`. Reject on any failure. Only then remove this throw.
-  throw new Error('iOS age verification is not enabled in production yet (App Attest pending).');
-}
 
 // POLICY — the goal is KEEPING MINORS OUT, so the age BAND is the gate, not the
 // declaration method (2026-07-02):
@@ -89,8 +74,9 @@ interface DeclaredAgeAttestation {
   declaration?: string;
   /** True if the device has any active parental control (managed / child account). */
   parentalControlsActive?: boolean;
-  /** App Attest assertion envelope (Phase 2). */
-  appAttest?: unknown;
+  /** App Attest: the device's attested key id + assertion (base64) over SHA256(nonce). */
+  keyId?: string;
+  assertion?: string;
 }
 
 export const appleDeclaredAgeProvider: AgeVerificationProvider = {
@@ -129,12 +115,22 @@ export const appleDeclaredAgeProvider: AgeVerificationProvider = {
     if (!decision.verified) return soft(false, IOS_REASONS[decision.reasonCode!]);
 
     // ── App Attest boundary ──────────────────────────────────────────────────────
-    // In real production, the unsigned client result is only trusted once an App Attest
-    // assertion proves it came from a genuine app instance (throws until implemented, so
-    // no env flag can open this path). Dev + staging (TRIBES_ENV=staging) skip it for
-    // device testing; the feature is still config-gated and prod-safe.
-    if (isRealProd()) {
-      await verifyAppAttestOrThrow(att.appAttest, att.nonce, ctx.expectedUserId);
+    // When enabled, REQUIRE a valid App Attest assertion — a real cryptographic proof
+    // that a genuine, unmodified instance of our app produced this submission over the
+    // server nonce. Enforced on staging AND prod (TestFlight attests in the production
+    // environment), so the API can't be forged anywhere it's on. `assertAttestation`
+    // throws on any failure (missing/unregistered key, bad signature, replayed counter).
+    if (iosAppAttestEnabled()) {
+      await assertAttestation({
+        keyId: att.keyId,
+        assertionBase64: att.assertion,
+        nonce: att.nonce,
+        userId: ctx.expectedUserId,
+      });
+    } else if (isRealProd()) {
+      // Attest not enabled yet — never trust an unsigned result in real production.
+      // Dev + staging (TRIBES_ENV=staging) still trust it here for pre-attest testing.
+      throw new Error('iOS age verification is not enabled in production yet (App Attest pending).');
     }
 
     return soft(true);
