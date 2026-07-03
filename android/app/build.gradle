@@ -14,7 +14,7 @@ android {
         applicationId "app.tribes.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 416
+        versionCode 417
         versionName "1.0.5"
         // Default App Link host (overridden per flavor below).
         manifestPlaceholders = [appLinkHost: "tribes.app"]
