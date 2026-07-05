@@ -157,6 +157,25 @@ fi
 npx cap sync ios
 echo -e "   ${GREEN}✅ Capacitor synced${NC}"
 
+# Guard: the entitlements file selected above must bind passkeys (webcredentials)
+# to the environment being built. A staging domain committed into App.entitlements
+# would break ALL production passkey auth — fail the build rather than ship it.
+EXPECTED_DOMAIN="tribes.app"
+[ "$IS_STAGING" = "true" ] && EXPECTED_DOMAIN="staging.tribes.app"
+if ! grep -q "webcredentials:${EXPECTED_DOMAIN}<" "ios/App/$ENTITLEMENTS"; then
+    echo -e "${RED}❌ ios/App/$ENTITLEMENTS does not contain webcredentials:${EXPECTED_DOMAIN}${NC}"
+    echo "   The entitlements file doesn't match the build environment."
+    exit 1
+fi
+# And the synced Capacitor config must point the WebView at the same environment.
+CAP_CONFIG="ios/App/App/capacitor.config.json"
+if [ -f "$CAP_CONFIG" ] && ! grep -q "https://${EXPECTED_DOMAIN}" "$CAP_CONFIG"; then
+    echo -e "${RED}❌ $CAP_CONFIG does not reference https://${EXPECTED_DOMAIN}${NC}"
+    echo "   cap sync ran with the wrong TRIBES_ENV for this build."
+    exit 1
+fi
+echo -e "   ${GREEN}✅ Env guard: webcredentials + server URL → ${EXPECTED_DOMAIN}${NC}"
+
 # ── Step 2: Patch version from package.json ───────────────────────────────────
 echo ""
 echo "=== Step 2: Version Patch ==="

@@ -91,6 +91,20 @@ cd "$PROJECT_DIR"
 npx cap sync android
 echo -e "${GREEN}✓${NC} Capacitor synced"
 
+# Guard: cap sync regenerates the passkey asset-statements resource from
+# capacitor.config.ts (keyed off TRIBES_ENV). If the generated host doesn't match
+# the flavor being built, passkeys would be bound to the wrong origin — fail now.
+EXPECTED_HOST="tribes.app"
+[ "$FLAVOR" = "staging" ] && EXPECTED_HOST="staging.tribes.app"
+PASSKEY_XML="$ANDROID_DIR/app/src/main/res/values/capacitor-passkey.xml"
+if ! grep -q "https://${EXPECTED_HOST}/.well-known/assetlinks.json" "$PASSKEY_XML"; then
+    echo -e "${RED}✗ ${PASSKEY_XML} does not reference ${EXPECTED_HOST}${NC}"
+    echo "  cap sync produced the wrong passkey origin for flavor '${FLAVOR}'."
+    echo "  Check TRIBES_ENV plumbing in capacitor.config.ts / this script."
+    exit 1
+fi
+echo -e "${GREEN}✓${NC} Passkey asset-statements point at ${EXPECTED_HOST}"
+
 # ── Build ────────────────────────────────────────────────────
 
 echo ""
