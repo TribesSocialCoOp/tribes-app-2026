@@ -37,8 +37,6 @@ import { evaluateOsAgeSignal, isRealProd, type OsAgeReasonCode } from '@/lib/age
 const androidFlags = () => ({
   /** Block supervised (Family Link) child accounts even if the band claims 18+. Default ON. */
   blockOnParentalControls: process.env.ANDROID_AGE_BLOCK_ON_SUPERVISED !== 'false',
-  /** Fail closed on a missing/unknown age signal. Default ON. */
-  requireDefinitiveSignal: process.env.ANDROID_AGE_REQUIRE_DEFINITIVE_SIGNAL !== 'false',
   /** Require a Play-VERIFIED status (rejects a bare DECLARED age). Default OFF — most
    *  adults are not VERIFIED; enable only where counsel demands higher assurance. */
   requireConfirmed: process.env.ANDROID_AGE_REQUIRE_CONFIRMED === 'true',

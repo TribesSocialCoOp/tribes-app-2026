@@ -12,6 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ShieldAlert, BadgeCheck, Globe2 } from 'lucide-react';
 import { useAgeGate } from '@/components/providers/age-gate-provider';
+import { NSFW_BLOCKED_REGION_TITLE, NSFW_BLOCKED_REGION_COPY } from '@/lib/age-gate';
 
 export function NsfwGateCard({
   gate,
@@ -27,12 +28,8 @@ export function NsfwGateCard({
       <Card className="text-center py-12 shadow-md">
         <CardContent className="flex flex-col items-center justify-center gap-3">
           <Globe2 className="h-14 w-14 text-muted-foreground opacity-70" />
-          <h3 className="text-xl font-semibold text-foreground">Not available in your region</h3>
-          <p className="text-muted-foreground max-w-sm">
-            Adult content isn’t available where you are right now. Some regions require
-            age-verification methods we don’t currently support. This reflects local law,
-            not a judgment — and it may change as those options improve.
-          </p>
+          <h3 className="text-xl font-semibold text-foreground">{NSFW_BLOCKED_REGION_TITLE}</h3>
+          <p className="text-muted-foreground max-w-sm">{NSFW_BLOCKED_REGION_COPY}</p>
         </CardContent>
       </Card>
     );

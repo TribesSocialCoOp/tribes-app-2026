@@ -376,12 +376,14 @@ export async function notifyTribeJoinRequest(
     const { getPreferences } = await import('./notification-service');
     const { sendPushToMultiple } = await import('./push-service');
 
-    // Get admins and founders
+    // Founders + speakers can approve joins, so both get notified. 'admin' is a
+    // legacy tribe-member role value kept defensively for old rows (no current code
+    // writes it; unrelated to users.role === 'Admin' platform admins).
     const adminMembers = await db.select({ userId: tribeMembers.userId })
       .from(tribeMembers)
       .where(and(
         eq(tribeMembers.tribeId, tribeId),
-        inArray(tribeMembers.role, ['admin', 'founder']),
+        inArray(tribeMembers.role, ['founder', 'admin', 'speaker']),
       ));
 
     const pushEligible: string[] = [];
@@ -618,7 +620,7 @@ export async function pushToUserSocket(
 }
 
 /**
- * WS-2: Nudge a tribe's key-holders (founder / admin / speaker) to run an
+ * WS-2: Nudge a tribe's key-holders (founder / speaker) to run an
  * immediate key-sync cycle so a newly-joined member is granted the tribe key
  * without waiting for the granter's 15–60s polling interval. Fire-and-forget.
  */
@@ -638,6 +640,7 @@ export async function notifyTribeKeyGranters(tribeId: string): Promise<void> {
       .from(tribeMembers)
       .where(and(
         eq(tribeMembers.tribeId, tribeId),
+        // 'admin' kept defensively for legacy rows — see notifyTribeJoinRequest.
         inArray(tribeMembers.role, ['founder', 'admin', 'speaker']),
       ));
     if (granters.length === 0) return;

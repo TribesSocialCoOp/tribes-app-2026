@@ -1,6 +1,7 @@
 import 'server-only';
 import { headers } from 'next/headers';
 import { getClientIp } from '@/lib/auth/rate-limit';
+import { isRealProd } from '@/lib/age-verification/os-age-policy';
 
 /**
  * Privacy-respecting region resolution for the NSFW age gate (issue #32).
@@ -58,9 +59,8 @@ export async function getRequestRegion(): Promise<RequestRegion> {
   //   - AGE_GEO_OVERRIDE env: process-wide, requires a restart to change.
   // Staging runs a production build (NODE_ENV=production), so it's marked with
   // TRIBES_ENV=staging (see src/db/seed-staging.ts). Real prod sets neither → both
-  // overrides are ignored there.
-  const overridesAllowed =
-    process.env.NODE_ENV !== 'production' || process.env.TRIBES_ENV === 'staging';
+  // overrides are ignored there. isRealProd() is the single shared predicate.
+  const overridesAllowed = !isRealProd();
   if (overridesAllowed) {
     try {
       const code = (await headers()).get('x-tribes-geo');

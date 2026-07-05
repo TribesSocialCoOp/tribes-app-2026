@@ -8,7 +8,6 @@ import { evaluateOsAgeSignal, type OsAgePolicyFlags } from './os-age-policy';
 
 const defaults: OsAgePolicyFlags = {
   blockOnParentalControls: true,
-  requireDefinitiveSignal: true,
   requireConfirmed: false,
 };
 
@@ -34,7 +33,7 @@ describe('evaluateOsAgeSignal', () => {
       .toEqual({ verified: true });
   });
 
-  it('blocks a missing signal when definitive is required (default, fail closed)', () => {
+  it('blocks a missing signal — always fails closed, not configurable', () => {
     expect(evaluateOsAgeSignal({ over18: undefined, parentalControlsActive: false, confirmed: false }, defaults))
       .toEqual({ verified: false, reasonCode: 'no_signal' });
   });

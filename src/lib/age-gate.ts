@@ -28,6 +28,13 @@ export const isAgeGateError = (error: unknown) => errorCarries(error, AGE_GATE_S
 export const isNsfwOptInError = (error: unknown) => errorCarries(error, NSFW_OPT_IN_SENTINEL);
 export const isNsfwBlockedError = (error: unknown) => errorCarries(error, NSFW_BLOCKED_SENTINEL);
 
+/** Shared user copy for a geo-blocked region (age-verification dialog + tribe gate card). */
+export const NSFW_BLOCKED_REGION_TITLE = 'Not available in your region';
+export const NSFW_BLOCKED_REGION_COPY =
+  'Adult content isn’t available where you are right now. Some regions require ' +
+  'age-verification methods we don’t currently support. This reflects local law, ' +
+  'not a judgment — and it may change as those options improve.';
+
 /**
  * Join-flow statuses (returned by requestToJoinTribe) that require the age-gate modal
  * — verification, opt-in, or region-blocked. The unified modal figures out which to show.

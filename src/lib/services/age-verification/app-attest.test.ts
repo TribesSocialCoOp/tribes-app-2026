@@ -9,7 +9,7 @@ import { createHash } from 'crypto';
 vi.mock('server-only', () => ({}));
 
 let verifyAssertionResult: unknown = { signCount: 5 };
-const verifyAssertionMock = vi.fn(async () => verifyAssertionResult);
+const verifyAssertionMock = vi.fn(async (..._args: unknown[]) => verifyAssertionResult);
 vi.mock('appattest-checker-node', () => ({
   verifyAssertion: (...args: unknown[]) => verifyAssertionMock(...args),
   verifyAttestation: vi.fn(async () => ({ publicKeyPem: 'PEM', receipt: Buffer.from('r') })),

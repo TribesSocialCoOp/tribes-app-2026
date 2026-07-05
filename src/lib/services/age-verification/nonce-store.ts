@@ -34,7 +34,18 @@ function getRedis(): import('ioredis').Redis | null {
 }
 
 // ── In-memory fallback (local dev / tests) ────────────────────
+// In production this fallback silently weakens the single-use guarantee to
+// per-process (and breaks it across instances), so shout once if it's ever hit there.
 const mem = new Map<string, { userId: string; expiresAt: number }>();
+let warnedMemFallback = false;
+function warnIfProdMemFallback(): void {
+  if (warnedMemFallback || process.env.NODE_ENV !== 'production') return;
+  warnedMemFallback = true;
+  console.error(
+    '[age-nonce] VALKEY_URL is not set in production — age-verification nonces are '
+    + 'stored in-memory (per-process, not shared across instances). Set VALKEY_URL.',
+  );
+}
 
 /** Record an issued nonce, bound to a user, valid for `ttlSeconds`. Best-effort. */
 export async function issueNonce(nonce: string, userId: string, ttlSeconds: number): Promise<void> {
@@ -47,6 +58,7 @@ export async function issueNonce(nonce: string, userId: string, ttlSeconds: numb
     }
     return;
   }
+  warnIfProdMemFallback();
   mem.set(nonce, { userId, expiresAt: Date.now() + ttlSeconds * 1000 });
 }
 

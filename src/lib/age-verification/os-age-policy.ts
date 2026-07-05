@@ -21,12 +21,13 @@ export interface OsAgeSignal {
   confirmed: boolean;
 }
 
-/** Policy toggles (each provider reads its own platform env and passes them in). */
+/** Policy toggles (each provider reads its own platform env and passes them in).
+ *  Note: a missing/unknown age band ALWAYS fails closed ('no_signal') — that is not
+ *  configurable. (A former requireDefinitiveSignal flag was inert: with it off, a
+ *  missing band still failed the `over18 !== true` gate, just with the wrong reason.) */
 export interface OsAgePolicyFlags {
   /** Block supervised/managed child accounts even if the band claims 18+. */
   blockOnParentalControls: boolean;
-  /** Require a definitive age band; a missing/unknown signal is blocked (fail closed). */
-  requireDefinitiveSignal: boolean;
   /** Require platform-confirmed assurance, rejecting bare self-declared. */
   requireConfirmed: boolean;
 }
@@ -47,7 +48,7 @@ export interface OsAgeDecision {
  *   5. otherwise → allow
  */
 export function evaluateOsAgeSignal(sig: OsAgeSignal, flags: OsAgePolicyFlags): OsAgeDecision {
-  if (flags.requireDefinitiveSignal && typeof sig.over18 !== 'boolean') {
+  if (typeof sig.over18 !== 'boolean') {
     return { verified: false, reasonCode: 'no_signal' };
   }
   if (sig.over18 !== true) {

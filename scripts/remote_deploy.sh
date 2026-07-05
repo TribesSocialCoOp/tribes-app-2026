@@ -166,26 +166,6 @@ if [ "$MIGRATE_ONLY" = "true" ]; then
   exit 0
 fi
 
-# ── Step 5.6: Staging seed (staging only, every deploy) ──────
-# TRIBES_ENV is sourced from .env.production above (set to "staging" only on
-# the staging box). Runs the idempotent prod bootstrap (plans, system bot,
-# Trials tribe) then layers synthetic staging fixtures. Both seeds are
-# idempotent (upsert), so we run every deploy to keep fixtures fresh; this is
-# how cover/content updates to seed-staging.ts reach the box. seed-staging.ts
-# hard-refuses to run unless TRIBES_ENV=staging, so this can never touch prod.
-if [ "${TRIBES_ENV:-}" = "staging" ]; then
-  log "Seeding staging database (idempotent)..."
-  if docker run --rm \
-    --network="$PG_NETWORK" \
-    -e DATABASE_URL="postgresql://tribes:${POSTGRES_PASSWORD}@${PG_IP}:5432/tribes" \
-    -e TRIBES_ENV=staging \
-    tribes-builder sh -c "npx tsx src/db/seed-production.ts && TRIBES_ENV=staging npx tsx src/db/seed-staging.ts" 2>&1; then
-    ok "Staging seed complete"
-  else
-    warn "Staging seed failed — will retry next deploy"
-  fi
-fi
-
 # ── Step 5.5: GeoIP database (NSFW geo gate, issue #32) ──────
 # The app reads ./geoip/GeoLite2-City.mmdb (mounted read-only by both slots). The
 # DB is licensed + ~63MB so it is NOT in git — it's provisioned here and persists
@@ -206,9 +186,40 @@ if [ -n "${GEOIPUPDATE_ACCOUNT_ID:-}" ] && [ -n "${GEOIPUPDATE_LICENSE_KEY:-}" ]
   fi
 elif [ -f "$REMOTE_DIR/geoip/GeoLite2-City.mmdb" ]; then
   ok "GeoIP DB present (rsync-provisioned); no MaxMind creds → no auto-refresh"
-else
-  warn "NO GeoIP DB and no MaxMind creds — the NSFW geo gate is INERT (all regions resolve 'open')."
+fi
+
+# With no DB at all, the geo gate is INERT — every region (including law states)
+# resolves 'open'. That must never happen silently on production: fail the deploy
+# so the box can't go green while the gate this release exists for is a no-op.
+# Staging warns only; GEOIP_OPTIONAL=true is the explicit break-glass override.
+if [ ! -f "$REMOTE_DIR/geoip/GeoLite2-City.mmdb" ]; then
+  if [ "${TRIBES_ENV:-}" != "staging" ] && [ "${GEOIP_OPTIONAL:-}" != "true" ]; then
+    warn "Fix: add GEOIPUPDATE_ACCOUNT_ID/LICENSE_KEY to .env.production, OR rsync the"
+    warn ".mmdb to $REMOTE_DIR/geoip/, OR set GEOIP_OPTIONAL=true to deploy anyway."
+    fail "NO GeoIP DB — the NSFW geo gate would be INERT on PRODUCTION. Aborting deploy."
+  fi
+  warn "NO GeoIP DB — the NSFW geo gate is INERT (all regions resolve 'open')."
   warn "Fix: add GEOIPUPDATE_ACCOUNT_ID/LICENSE_KEY to .env.production, OR rsync the .mmdb to $REMOTE_DIR/geoip/"
+fi
+
+# ── Step 5.6: Staging seed (staging only, every deploy) ──────
+# TRIBES_ENV is sourced from .env.production above (set to "staging" only on
+# the staging box). Runs the idempotent prod bootstrap (plans, system bot,
+# Trials tribe) then layers synthetic staging fixtures. Both seeds are
+# idempotent (upsert), so we run every deploy to keep fixtures fresh; this is
+# how cover/content updates to seed-staging.ts reach the box. seed-staging.ts
+# hard-refuses to run unless TRIBES_ENV=staging, so this can never touch prod.
+if [ "${TRIBES_ENV:-}" = "staging" ]; then
+  log "Seeding staging database (idempotent)..."
+  if docker run --rm \
+    --network="$PG_NETWORK" \
+    -e DATABASE_URL="postgresql://tribes:${POSTGRES_PASSWORD}@${PG_IP}:5432/tribes" \
+    -e TRIBES_ENV=staging \
+    tribes-builder sh -c "npx tsx src/db/seed-production.ts && TRIBES_ENV=staging npx tsx src/db/seed-staging.ts" 2>&1; then
+    ok "Staging seed complete"
+  else
+    warn "Staging seed failed — will retry next deploy"
+  fi
 fi
 
 # ── Step 6: Start the NEW container ──────────────────────────

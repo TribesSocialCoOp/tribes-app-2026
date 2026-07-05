@@ -36,8 +36,6 @@ import { buildAppAttestPayload } from '@/lib/age-verification/app-attest-payload
 const iosFlags = () => ({
   /** Block managed/child devices even if the band claims 18+. Default ON. */
   blockOnParentalControls: process.env.IOS_AGE_BLOCK_ON_PARENTAL_CONTROLS !== 'false',
-  /** Fail closed on a missing/unreadable age band. Default ON. */
-  requireDefinitiveSignal: process.env.IOS_AGE_REQUIRE_DEFINITIVE_SIGNAL !== 'false',
   /** Require an Apple-CONFIRMED declaration (rejects bare self_declared). Default OFF —
    *  Apple returns self_declared for most adults, so ON rejects them; enable only where
    *  counsel demands higher assurance. */

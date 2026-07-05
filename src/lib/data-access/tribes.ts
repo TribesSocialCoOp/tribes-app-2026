@@ -50,12 +50,15 @@ async function getMoodsForTribe(tribeId: string): Promise<string[]> {
 }
 
 /**
- * Resolves the set of tribe IDs a viewer has access to.
- * - Platform admins see everything.
+ * Resolves the set of tribe IDs a viewer has access to, plus the viewer's own
+ * membership set (so callers don't re-query tribeMembers for capability checks).
+ * - Platform admins see everything ('all').
  * - All other users see public tribes + their own private memberships.
  * - Guests (no userId) see public tribes only.
  */
-async function getViewerTribeIds(viewerUserId?: string | null): Promise<'all' | Set<string>> {
+async function getViewerTribeIds(
+  viewerUserId?: string | null,
+): Promise<{ visible: 'all' | Set<string>; memberTribeIds: Set<string> }> {
   // Discoverable = public OR explicitly listed (e.g. NSFW tribes that opt to be listed).
   // Listed private tribes expose only metadata here; their post content stays members-only.
   // NSFW (issue #32): hidden from discovery unless this request+viewer may see it
@@ -76,23 +79,23 @@ async function getViewerTribeIds(viewerUserId?: string | null): Promise<'all' | 
   if (!viewerUserId) {
     // Guest — public + listed tribes (metadata only)
     const publicRows = await db.select({ id: tribes.id }).from(tribes).where(discoverable);
-    return new Set(publicRows.map(r => r.id));
+    return { visible: new Set(publicRows.map(r => r.id)), memberTribeIds: new Set() };
   }
 
-  // Check platform admin status
-  const [userRow] = await db.select({ role: users.role }).from(users).where(eq(users.id, viewerUserId)).limit(1);
-  if (userRow?.role === 'Admin') return 'all'; // Admins see everything
-
-  // Collect discoverable tribe IDs + private tribes the viewer is a member of
-  const [publicRows, memberRows] = await Promise.all([
-    db.select({ id: tribes.id }).from(tribes).where(discoverable),
+  // Check platform admin status; still collect the admin's own memberships for
+  // capability checks (inviteToken) below.
+  const [[userRow], memberRows] = await Promise.all([
+    db.select({ role: users.role }).from(users).where(eq(users.id, viewerUserId)).limit(1),
     db.select({ tribeId: tribeMembers.tribeId }).from(tribeMembers).where(eq(tribeMembers.userId, viewerUserId)),
   ]);
+  const memberTribeIds = new Set(memberRows.map(r => r.tribeId));
+  if (userRow?.role === 'Admin') return { visible: 'all', memberTribeIds }; // Admins see everything
 
-  const visible = new Set<string>();
+  // Discoverable tribe IDs + private tribes the viewer is a member of
+  const publicRows = await db.select({ id: tribes.id }).from(tribes).where(discoverable);
+  const visible = new Set<string>(memberTribeIds);
   for (const r of publicRows) visible.add(r.id);
-  for (const r of memberRows) visible.add(r.tribeId);
-  return visible;
+  return { visible, memberTribeIds };
 }
 
 /**
@@ -119,7 +122,7 @@ async function viewerHasMemberAccess(
  * Private tribes are omitted unless the viewer is a member or platform admin.
  */
 export async function getTribes(viewerUserId?: string | null): Promise<Tribe[]> {
-  const visibleIds = await getViewerTribeIds(viewerUserId);
+  const { visible: visibleIds, memberTribeIds } = await getViewerTribeIds(viewerUserId);
 
   const rows = visibleIds === 'all'
     ? await db.select().from(tribes)
@@ -139,18 +142,12 @@ export async function getTribes(viewerUserId?: string | null): Promise<Tribe[]> 
     moodMap.set(m.tribeId, arr);
   }
 
-  // inviteToken is a member capability — resolve the viewer's memberships once
-  // ('all' from getViewerTribeIds means platform admin).
+  // inviteToken is a member capability — memberships were already resolved by
+  // getViewerTribeIds ('all' means platform admin).
   const isAdmin = visibleIds === 'all';
-  const memberIds = viewerUserId
-    ? new Set(
-        (await db.select({ tribeId: tribeMembers.tribeId }).from(tribeMembers)
-          .where(eq(tribeMembers.userId, viewerUserId))).map(r => r.tribeId),
-      )
-    : new Set<string>();
 
   return rows.map(row => rowToTribe(row, moodMap.get(row.id) ?? [], {
-    includeInviteToken: isAdmin || memberIds.has(row.id) || (!!viewerUserId && row.createdBy === viewerUserId),
+    includeInviteToken: isAdmin || memberTribeIds.has(row.id) || (!!viewerUserId && row.createdBy === viewerUserId),
   }));
 }
 

@@ -60,7 +60,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Announce target
-        run: echo "Deploying to ${{ inputs.environment_name }} (${{ secrets.DEPLOY_USER }}@***)"
+        run: echo "Deploying to ${{ inputs.environment_name }}"
 
       - name: Get Runner Public IP
         id: runner-ip

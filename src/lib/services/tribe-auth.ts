@@ -37,6 +37,9 @@ export async function getTribeAccessLevel(userId: string, tribeId: string): Prom
     .limit(1);
 
   if (!membership) return 'guest';
+  // 'admin' is not written by any current code path (roles are founder|speaker|member)
+  // but is kept as a defensive read-mapping in case legacy rows carry it. Distinct from
+  // users.role === 'Admin' (platform admin), which is handled above.
   if (membership.role === 'founder' || membership.role === 'admin') return 'founder';
   if (membership.role === 'speaker') return 'speaker';
   return 'member';
@@ -105,7 +108,7 @@ export async function requireTribeFounder(userId: string, tribeId: string): Prom
 export async function assertTribeContentAccess(
   userId: string | null,
   tribeId: string,
-  tribe: { isNsfw: boolean; isPublic: boolean },
+  tribe: { isNsfw?: boolean; isPublic?: boolean },
 ): Promise<void> {
   if (tribe.isNsfw) {
     const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');

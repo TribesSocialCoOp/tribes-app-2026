@@ -7,6 +7,7 @@ import { ShieldCheck, ShieldAlert, Loader2, Globe2, Check, ExternalLink } from '
 import { getNsfwGateStatus, setAdultContentOptIn, submitAgeVerification, type NsfwGateStatus } from '@/lib/actions/age-actions';
 import { runWalletVerification, runOnDeviceVerification, runDeclaredAgeVerification, runPlayAgeVerification, providerSupport, type WalletProvider } from '@/lib/age-verification/client';
 import { resolveNsfwAccessForTier } from '@/lib/geo/age-policy';
+import { NSFW_BLOCKED_REGION_TITLE, NSFW_BLOCKED_REGION_COPY } from '@/lib/age-gate';
 import { useUser } from '@/components/providers/user-provider';
 
 interface AgeGateDialogProps {
@@ -121,13 +122,9 @@ export function AgeVerificationDialog({ open, onOpenChange, onResolved }: AgeGat
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Globe2 className="h-5 w-5 text-muted-foreground" />
-              Not available in your region
+              {NSFW_BLOCKED_REGION_TITLE}
             </DialogTitle>
-            <DialogDescription>
-              Adult content isn’t available where you are right now. Some regions require
-              age-verification methods we don’t currently support. This reflects local law,
-              not a judgment — and it may change as those options improve.
-            </DialogDescription>
+            <DialogDescription>{NSFW_BLOCKED_REGION_COPY}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="ghost" onClick={() => onOpenChange(false)}>Close</Button>
