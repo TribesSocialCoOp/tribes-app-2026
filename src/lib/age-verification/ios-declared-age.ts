@@ -37,7 +37,10 @@ type AgeRangePlugin = {
   getDeclaredAgeRange: (o: unknown) => Promise<DeclaredAgeResult>;
   // App Attest (anti-forgery). Present on iOS builds with the DeviceCheck plugin methods.
   attestKey?: (o: { challenge: string }) => Promise<{ keyId?: string; attestation?: string; supported?: boolean }>;
-  assertNonce?: (o: { keyId: string; nonce: string }) => Promise<{ assertion?: string }>;
+  // The plugin signs SHA256 of the string it receives. `payload` is the canonical claim
+  // string (app-attest-payload.ts); `nonce` is the same value under the legacy key so
+  // plugin builds that predate the rename still work.
+  assertNonce?: (o: { keyId: string; payload: string; nonce: string }) => Promise<{ assertion?: string }>;
 };
 
 function nativePlugin(): AgeRangePlugin | null {
@@ -60,11 +63,13 @@ export async function attestAppAttestKey(challenge: string): Promise<{ keyId: st
   return r?.keyId && r?.attestation ? { keyId: r.keyId, attestation: r.attestation } : null;
 }
 
-/** Sign SHA256(nonce) with the attested key. Returns the base64 assertion, or null. */
-export async function assertAppAttest(keyId: string, nonce: string): Promise<string | null> {
+/** Sign SHA256(payload) with the attested key — payload is the canonical claim string
+ *  (buildAppAttestPayload), so the assertion covers the age result, not just the nonce.
+ *  Returns the base64 assertion, or null. */
+export async function assertAppAttest(keyId: string, payload: string): Promise<string | null> {
   const p = nativePlugin();
   if (typeof p?.assertNonce !== 'function') return null;
-  const r = await p.assertNonce({ keyId, nonce });
+  const r = await p.assertNonce({ keyId, payload, nonce: payload });
   return r?.assertion ?? null;
 }
 

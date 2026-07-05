@@ -28,6 +28,7 @@ import { iosDeclaredAgeEnabled } from '@/lib/geo/age-policy';
 import { CONFIRMED_AGE_DECLARATIONS } from '@/lib/age-verification/declared-age-policy';
 import { evaluateOsAgeSignal, isRealProd, type OsAgeReasonCode } from '@/lib/age-verification/os-age-policy';
 import { iosAppAttestEnabled, assertAttestation } from '@/lib/services/age-verification/app-attest';
+import { buildAppAttestPayload } from '@/lib/age-verification/app-attest-payload';
 
 // ── Child-safety policy flags (server-side env, runtime-tunable — no rebuild) ────────
 // The shared decision lives in os-age-policy.ts (also used by Android Play Age Signals);
@@ -74,7 +75,8 @@ interface DeclaredAgeAttestation {
   declaration?: string;
   /** True if the device has any active parental control (managed / child account). */
   parentalControlsActive?: boolean;
-  /** App Attest: the device's attested key id + assertion (base64) over SHA256(nonce). */
+  /** App Attest: the device's attested key id + assertion (base64) over SHA256 of the
+   *  canonical payload (nonce + claims — see app-attest-payload.ts). */
   keyId?: string;
   assertion?: string;
 }
@@ -116,15 +118,22 @@ export const appleDeclaredAgeProvider: AgeVerificationProvider = {
 
     // ── App Attest boundary ──────────────────────────────────────────────────────
     // When enabled, REQUIRE a valid App Attest assertion — a real cryptographic proof
-    // that a genuine, unmodified instance of our app produced this submission over the
-    // server nonce. Enforced on staging AND prod (TestFlight attests in the production
-    // environment), so the API can't be forged anywhere it's on. `assertAttestation`
-    // throws on any failure (missing/unregistered key, bad signature, replayed counter).
+    // that a genuine, unmodified instance of our app produced THIS EXACT submission:
+    // the signature covers the canonical payload (nonce + over18 + declaration +
+    // parental-controls), rebuilt here from the submitted fields, so swapping any
+    // claim after signing invalidates it. Enforced on staging AND prod (TestFlight
+    // attests in the production environment). `assertAttestation` throws on any
+    // failure (missing/unregistered key, bad signature, replayed counter).
     if (iosAppAttestEnabled()) {
       await assertAttestation({
         keyId: att.keyId,
         assertionBase64: att.assertion,
-        nonce: att.nonce,
+        payload: buildAppAttestPayload({
+          nonce: att.nonce,
+          over18: att.over18,
+          declaration: att.declaration,
+          parentalControlsActive: att.parentalControlsActive,
+        }),
         userId: ctx.expectedUserId,
       });
     } else if (isRealProd()) {

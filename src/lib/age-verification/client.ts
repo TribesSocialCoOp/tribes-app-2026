@@ -159,13 +159,31 @@ export async function runDeclaredAgeVerification(userId: string): Promise<{ veri
   // App Attest (anti-forgery): make sure this device has a registered attested key, then
   // sign the age submission with it. Best-effort — if the device can't attest (simulator/
   // old build) we submit without, and the server rejects when attestation is required.
-  const keyId = await ensureAppAttestKey().catch(() => null);
+  let keyId = await ensureAppAttestKey().catch(() => null);
 
   const { nonce } = unwrap(await createIosAgeChallenge());
   const { runIosDeclaredAgeCheck, assertAppAttest } = await import('./ios-declared-age');
   const result = await runIosDeclaredAgeCheck(userId, nonce);
 
-  const assertion = keyId ? await assertAppAttest(keyId, nonce).catch(() => null) : null;
+  // The assertion signs the canonical claim payload — not just the nonce — so the
+  // server can verify a genuine app produced exactly this age result.
+  const { buildAppAttestPayload } = await import('./app-attest-payload');
+  const payload = buildAppAttestPayload({
+    nonce,
+    over18: result.over18,
+    declaration: result.declaration,
+    parentalControlsActive: result.parentalControlsActive,
+  });
+
+  let assertion = keyId ? await assertAppAttest(keyId, payload).catch(() => null) : null;
+  if (keyId && !assertion) {
+    // The cached keyId can go stale (OS reinstall, Secure-Enclave key eviction) and
+    // generateAssertion then fails forever. Drop the cache, re-attest a fresh key
+    // once, and retry — otherwise the user is permanently stuck submitting unattested.
+    clearAppAttestKeyCache();
+    keyId = await ensureAppAttestKey().catch(() => null);
+    assertion = keyId ? await assertAppAttest(keyId, payload).catch(() => null) : null;
+  }
 
   return unwrap(await submitAgeVerification({
     provider: 'apple_declared_age_range',
@@ -181,6 +199,11 @@ export async function runDeclaredAgeVerification(userId: string): Promise<{ veri
 }
 
 const ATTEST_KEY_STORAGE = 'tribes.ios.appAttestKeyId';
+
+/** Forget the cached App Attest keyId (e.g. after the Secure Enclave rejects it). */
+function clearAppAttestKeyCache(): void {
+  if (typeof localStorage !== 'undefined') localStorage.removeItem(ATTEST_KEY_STORAGE);
+}
 
 /**
  * Ensure this device has a registered App Attest key, returning its keyId. Generates +

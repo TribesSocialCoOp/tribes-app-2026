@@ -121,12 +121,19 @@ describe('appleDeclaredAgeProvider.verify — App Attest OFF (pre-enable)', () =
 describe('appleDeclaredAgeProvider.verify — App Attest ON (enforced everywhere)', () => {
   beforeEach(() => { attestEnabled = true; });
 
-  it('verifies the assertion (keyId/nonce/user) and passes on success — even in real prod', async () => {
+  it('verifies the assertion over the canonical claim payload and passes on success — even in real prod', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     const r = await appleDeclaredAgeProvider.verify(
       req({ nonce: 'n1', over18: true, declaration: 'self_declared', keyId: 'k1', assertion: 'a1' }), ctx);
     expect(r.verified).toBe(true);
-    expect(assertAttestationMock).toHaveBeenCalledWith({ keyId: 'k1', assertionBase64: 'a1', nonce: 'n1', userId: 'u1' });
+    // The payload binds the SUBMITTED claims (nonce + over18 + declaration + parental
+    // controls) into the signature — not just the nonce.
+    expect(assertAttestationMock).toHaveBeenCalledWith({
+      keyId: 'k1',
+      assertionBase64: 'a1',
+      payload: 'tribes-age-v2|n1|1|self_declared|0',
+      userId: 'u1',
+    });
   });
 
   it('ACCEPTS self-declared 18+ with a valid assertion — App Attest is anti-forgery, not age-assurance', async () => {

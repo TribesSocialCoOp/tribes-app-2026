@@ -68,15 +68,19 @@ public class AgeRangePlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// Sign SHA256(nonce) with the attested key `keyId` for one age submission.
+    /// Sign SHA256(payload) with the attested key `keyId` for one age submission.
+    /// `payload` is the canonical claim string (nonce + age claims — built in
+    /// app-attest-payload.ts) so the assertion attests the age result itself, not just
+    /// nonce possession. `nonce` is accepted as a legacy alias for the same value.
     @objc func assertNonce(_ call: CAPPluginCall) {
-        guard let keyId = call.getString("keyId"), let nonce = call.getString("nonce") else {
-            call.reject("Missing keyId/nonce."); return
+        guard let keyId = call.getString("keyId"),
+              let payload = call.getString("payload") ?? call.getString("nonce") else {
+            call.reject("Missing keyId/payload."); return
         }
         let service = DCAppAttestService.shared
         guard service.isSupported else { call.reject("App Attest not supported on this device."); return }
-        // clientDataHash for assertion = SHA256(nonce) — must match the server's hash.
-        let clientDataHash = Data(SHA256.hash(data: Data(nonce.utf8)))
+        // clientDataHash for assertion = SHA256(payload) — must match the server's hash.
+        let clientDataHash = Data(SHA256.hash(data: Data(payload.utf8)))
         service.generateAssertion(keyId, clientDataHash: clientDataHash) { assertion, err in
             if let err = err { call.reject("generateAssertion failed.", nil, err); return }
             guard let assertion = assertion else { call.reject("generateAssertion returned nothing."); return }

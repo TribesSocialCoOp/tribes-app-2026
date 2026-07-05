@@ -5,12 +5,16 @@ import 'server-only';
  * The Declared Age Range result is an unsigned OS value — a script could POST
  * `over18: true` to the submit action. App Attest closes that: the app holds a
  * Secure-Enclave key that Apple attests belongs to a genuine, unmodified instance of
- * THIS app, and it signs each age submission (over the server nonce) with that key.
+ * THIS app, and it signs each age submission with that key. The signed bytes are
+ * SHA256 of the CANONICAL PAYLOAD (nonce + over18 + declaration + parental-controls —
+ * see @/lib/age-verification/app-attest-payload), so the assertion covers the claim
+ * set itself: tampering with any submitted field invalidates the signature, not just
+ * reuse of the nonce.
  *
  * Two phases, both server-verified here (crypto via `appattest-checker-node`):
  *   1. REGISTER (once/device): verify the attestation object, store the public key.
- *   2. ASSERT (per submission): verify the assertion signature over SHA256(nonce) with
- *      the stored key, and enforce the monotonic sign counter (anti-replay).
+ *   2. ASSERT (per submission): verify the assertion signature over SHA256(payload)
+ *      with the stored key, and enforce the monotonic sign counter (anti-replay).
  *
  * When enabled (IOS_AGE_APP_ATTEST_ENABLED), this is enforced on staging AND prod —
  * TestFlight builds use the production attestation environment, so staging is protected
@@ -87,13 +91,16 @@ export async function registerAttestedKey(input: {
 
 /**
  * Verify an age submission's App Attest assertion. Throws unless the assertion is a
- * valid signature over SHA256(nonce) by a key REGISTERED TO THIS USER, with a strictly
- * increasing sign counter. On success, persists the new counter.
+ * valid signature over SHA256(payload) by a key REGISTERED TO THIS USER, with a
+ * strictly increasing sign counter. `payload` is the canonical claim string
+ * (buildAppAttestPayload) rebuilt server-side from the SUBMITTED fields — so a valid
+ * signature proves a genuine app instance produced exactly these claims.
+ * On success, persists the new counter.
  */
 export async function assertAttestation(input: {
   keyId?: string;
   assertionBase64?: string;
-  nonce: string;
+  payload: string;
   userId: string;
 }): Promise<void> {
   if (!input.keyId || !input.assertionBase64) {
@@ -111,7 +118,7 @@ export async function assertAttestation(input: {
   }
 
   const result = await verifyAssertion(
-    sha256(input.nonce),           // clientDataHash — MUST match what the device signed
+    sha256(input.payload),         // clientDataHash — MUST match what the device signed
     row.publicKeyPem,
     appId(),
     Buffer.from(input.assertionBase64, 'base64'),
@@ -119,12 +126,19 @@ export async function assertAttestation(input: {
   if ('verifyError' in result) {
     throw new Error(`App Attest assertion failed: ${result.verifyError}`);
   }
-  // Anti-replay: the counter must strictly increase.
+  // Anti-replay: the counter must strictly increase. The guard is enforced in the
+  // UPDATE's WHERE clause (compare-and-set), so two concurrent submissions replaying
+  // the same assertion can't both pass off a stale read — only one row-update wins.
   if (result.signCount <= row.signCount) {
     throw new Error('App Attest assertion replayed (sign counter did not advance).');
   }
-  await db
+  const { lt } = await import('drizzle-orm');
+  const updated = await db
     .update(appAttestKeys)
     .set({ signCount: result.signCount, lastUsedAt: new Date() })
-    .where(eq(appAttestKeys.keyId, input.keyId));
+    .where(and(eq(appAttestKeys.keyId, input.keyId), lt(appAttestKeys.signCount, result.signCount)))
+    .returning({ keyId: appAttestKeys.keyId });
+  if (updated.length === 0) {
+    throw new Error('App Attest assertion replayed (sign counter did not advance).');
+  }
 }
