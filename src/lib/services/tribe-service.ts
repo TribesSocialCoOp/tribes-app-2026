@@ -665,13 +665,19 @@ export async function joinTribeDirectly(userId: string, tribeId: string): Promis
   if (existing.length > 0) return;
 
   // GATE: never create an unverified member of an NSFW tribe via this un-gated path
-  // (issue #32). Even "system" auto-joins must not bypass 18+ verification. The
-  // content boundary (getPostsForTribe) also enforces this, but block at the source.
+  // (issue #32). Even "system" auto-joins must not bypass 18+ verification. All
+  // current callers are best-effort welcome-tribe auto-joins inside signup/OAuth
+  // flows that don't catch age-gate sentinels — so SKIP rather than throw, or a
+  // founder flagging the welcome tribe NSFW would break every new signup.
   const [tribeRow] = await db.select({ isNsfw: tribes.isNsfw }).from(tribes)
     .where(eq(tribes.id, tribeId)).limit(1);
   if (tribeRow?.isNsfw) {
-    const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
-    await assertNsfwAccess(userId);
+    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
+    const gate = await resolveNsfwGate({ isNsfw: true, userId });
+    if (gate.decision !== 'allow') {
+      console.warn(`[joinTribeDirectly] skipped auto-join of NSFW tribe ${tribeId} for user ${userId}: ${gate.decision}`);
+      return;
+    }
   }
 
   await db.insert(tribeMembers).values({

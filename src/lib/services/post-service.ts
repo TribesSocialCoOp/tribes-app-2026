@@ -722,6 +722,15 @@ export async function promotePostToMoods(postId: string, moodSlugs: string[], pr
     throw new Error('This post is marked "members only" and cannot be promoted to a public mood stream.');
   }
 
+  // NSFW tribes are age-gated (issue #32); their posts must never be promoted into
+  // public mood streams, where title/media/link metadata would reach ungated viewers.
+  if (post?.tribeId) {
+    const [tribe] = await db.select({ isNsfw: tribes.isNsfw }).from(tribes).where(eq(tribes.id, post.tribeId)).limit(1);
+    if (tribe?.isNsfw) {
+      throw new Error('Posts in 18+ tribes cannot be promoted to public mood streams.');
+    }
+  }
+
   // If tribe_network, upgrade visibility to public when promoted
   if (post && post.moodVisibility === 'tribe_network') {
     await db.update(posts).set({ moodVisibility: 'public' }).where(eq(posts.id, postId));

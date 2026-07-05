@@ -87,3 +87,36 @@ export async function requireTribeFounder(userId: string, tribeId: string): Prom
     throw new Error('You do not have governance permissions for this tribe.');
   }
 }
+
+/**
+ * The single content-boundary gate for tribe posts/comments (issue #32).
+ *
+ * Two independent checks, in order:
+ *   1. NSFW: geo-blocked region → blocked; otherwise the viewer needs the 18+
+ *      opt-in (or wallet verification). Throws age-gate sentinels via
+ *      assertNsfwAccess so the client can show the right remediation.
+ *   2. Membership: a private tribe may be publicly LISTED (e.g. NSFW tribes opt
+ *      in to discovery), so metadata is visible to non-members — but content must
+ *      stay members-only (policy §2: zero content leaks to non-members).
+ *
+ * Every endpoint that returns tribe post/comment content must call this; do not
+ * inline these checks (an inlined copy is how the unified feed missed the gate).
+ */
+export async function assertTribeContentAccess(
+  userId: string | null,
+  tribeId: string,
+  tribe: { isNsfw: boolean; isPublic: boolean },
+): Promise<void> {
+  if (tribe.isNsfw) {
+    const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
+    await assertNsfwAccess(userId);
+  }
+
+  if (!tribe.isPublic) {
+    if (!userId) throw new Error('Tribe not found or access denied.');
+    const level = await getTribeAccessLevel(userId, tribeId);
+    if (level === 'guest') {
+      throw new Error('Tribe not found or access denied.');
+    }
+  }
+}

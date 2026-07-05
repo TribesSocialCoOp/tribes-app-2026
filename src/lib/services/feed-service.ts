@@ -10,6 +10,7 @@ import { getBlockedAuthorIds, getUserTribeIds, getUserTribeRoles } from './query
 import type { CommunicationItem, Ring } from '@/lib/types';
 import { rowToTribePost } from '@/lib/mappers/post-mapper';
 import { moodsData } from '@/lib/moods-data';
+import { resolveNsfwGate } from '@/lib/age-verification/nsfw-gate';
 import { computePasskeyStatus } from '@/lib/crypto/passkey-lifecycle';
 
 /**
@@ -153,11 +154,21 @@ export async function getUnifiedFeed(params: UnifiedFeedParams): Promise<Communi
     getUserTribeRoles(userId),
   ]);
 
-  const tribeRows = userTribeIds.length > 0 
-    ? await db.select({ id: tribes.id, name: tribes.name, slug: tribes.slug }).from(tribes).where(inArray(tribes.id, userTribeIds))
+  const tribeRows = userTribeIds.length > 0
+    ? await db.select({ id: tribes.id, name: tribes.name, slug: tribes.slug, isNsfw: tribes.isNsfw }).from(tribes).where(inArray(tribes.id, userTribeIds))
     : [];
   const tribeNameMap = new Map(tribeRows.map(t => [t.id, t.name]));
   const tribeSlugMap = new Map(tribeRows.map(t => [t.id, t.slug]));
+
+  // NSFW gate (issue #32): the feed must enforce the same boundary as
+  // getPostsForTribe/getPostById. Membership alone is not access — a member who is
+  // region-blocked, hasn't opted in, or lost verification must not receive NSFW
+  // tribe posts here. Resolve the viewer's gate once, only if any member tribe is NSFW.
+  const nsfwTribeIds = new Set(tribeRows.filter(t => t.isNsfw).map(t => t.id));
+  const nsfwAllowed = nsfwTribeIds.size > 0
+    ? (await resolveNsfwGate({ isNsfw: true, userId })).decision === 'allow'
+    : true;
+  const feedTribeIds = nsfwAllowed ? userTribeIds : userTribeIds.filter(id => !nsfwTribeIds.has(id));
 
   const items: CommunicationItem[] = [];
 
@@ -167,12 +178,12 @@ export async function getUnifiedFeed(params: UnifiedFeedParams): Promise<Communi
   // See notification-service.ts getActivityFeed() for the unread_message type.
 
   // ── Ring-based Posts ──────────────────────────────────────────────────────
-  const ringPosts = await fetchRingPosts(userId, ringFilter, userBonds, userTribeIds, blockedIds, moodSlugs, userTribeRoles, tribeNameMap, tribeSlugMap);
+  const ringPosts = await fetchRingPosts(userId, ringFilter, userBonds, feedTribeIds, blockedIds, moodSlugs, userTribeRoles, tribeNameMap, tribeSlugMap);
   items.push(...ringPosts);
 
   // ── Mood Stream Posts (promoted posts) ────────────────────────────────────
   if (ringFilter === 'all' || ringFilter === 'streams') {
-    const streamPosts = await fetchMoodStreamPosts(userId, blockedIds, moodSlugs, userTribeRoles);
+    const streamPosts = await fetchMoodStreamPosts(userId, blockedIds, moodSlugs, userTribeRoles, nsfwTribeIds.size > 0 ? nsfwAllowed : null);
     items.push(...streamPosts);
   }
 
@@ -462,6 +473,8 @@ async function fetchMoodStreamPosts(
   blockedIds: string[],
   moodSlugs: string[],
   userTribeRoles: Record<string, string>,
+  // Viewer's NSFW gate decision if the caller already resolved it, else null (resolve lazily).
+  precomputedNsfwAllowed: boolean | null = null,
 ): Promise<CommunicationItem[]> {
   // Push filtering to the database with a proper join (Phase 7: replaces full table scan)
   const conditions = [eq(posts.isRemoved, false)];
@@ -490,7 +503,7 @@ async function fetchMoodStreamPosts(
 
   const [allTribes, allPromoters] = await Promise.all([
     tribeIds.length > 0
-      ? db.select({ id: tribes.id, name: tribes.name, slug: tribes.slug }).from(tribes).where(inArray(tribes.id, tribeIds))
+      ? db.select({ id: tribes.id, name: tribes.name, slug: tribes.slug, isNsfw: tribes.isNsfw }).from(tribes).where(inArray(tribes.id, tribeIds))
       : [],
     promoterIds.length > 0
       ? db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, promoterIds))
@@ -500,11 +513,23 @@ async function fetchMoodStreamPosts(
   const tribeSlugMap = new Map(allTribes.map(t => [t.id, t.slug]));
   const promoterMap = new Map(allPromoters.map(u => [u.id, u.name]));
 
+  // NSFW gate (issue #32): streams span tribes the viewer isn't a member of, so
+  // posts promoted from an NSFW tribe (title/media/link metadata are plaintext)
+  // must be withheld unless the viewer's gate resolves to 'allow'. Promotion out
+  // of NSFW tribes is also blocked at the write side (promotePostToMoods); this
+  // read-side filter covers rows promoted before that guard existed.
+  const nsfwStreamTribeIds = new Set(allTribes.filter(t => t.isNsfw).map(t => t.id));
+  let nsfwAllowed = precomputedNsfwAllowed;
+  if (nsfwStreamTribeIds.size > 0 && nsfwAllowed === null) {
+    nsfwAllowed = (await resolveNsfwGate({ isNsfw: true, userId })).decision === 'allow';
+  }
+
   const items: CommunicationItem[] = [];
 
   for (const row of streamRows) {
     const postRow = row.post;
     if (blockedIds.includes(postRow.authorId)) continue;
+    if (postRow.tribeId && nsfwStreamTribeIds.has(postRow.tribeId) && !nsfwAllowed) continue;
 
     const moodSlug = row.moodSlug;
     const moodDetails = moodsData.find(m => m.slug === moodSlug);
