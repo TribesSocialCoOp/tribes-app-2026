@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useRouter } from 'next/navigation';
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
+import { NsfwBadge } from "@/components/ui/nsfw-badge";
 import { cn } from '@/lib/utils';
 import type { Tribe, UserProfile } from '@/lib/types';
 import { getTribes, getMyTribeIds, requestToJoinTribe, checkPendingMembership } from '@/lib/actions/tribe-actions';
@@ -326,6 +327,11 @@ export default function TribesPage() {
                 <Link href={`/t/${tribe.slug}`} passHref className="contents">
                     <div className="relative h-40 w-full">
                     <Image src={tribe.cover} alt={tribe.name} fill style={{ objectFit: 'cover', objectPosition: tribe.coverPosition || 'center' }} data-ai-hint={tribe.dataAiHint} />
+                    {tribe.isNsfw && (
+                      <div className="absolute top-2 left-2">
+                        <NsfwBadge icon label="NSFW" className="text-[10px]" />
+                      </div>
+                    )}
                     <TooltipProvider>
                       <Tooltip>
                         <TooltipTrigger asChild>
