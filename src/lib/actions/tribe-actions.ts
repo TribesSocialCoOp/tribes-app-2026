@@ -92,6 +92,7 @@ export async function checkTribeAccess(tribeId: string): Promise<TribeAccessLeve
 
 export const createTribe = withPublicErrors(async (payload: Parameters<typeof import('@/lib/services/tribe-service').createTribe>[0]): Promise<Tribe> => {
   const userId = await requireVerifiedEmail();
+  // NSFW gate (issue #32) is enforced in the service layer (tribe-service.createTribe).
   // Subscription guard: check if user can create another tribe
   const { canCreateTribe } = await import('@/lib/services/subscription-guard');
   const check = await canCreateTribe(userId);
@@ -109,7 +110,7 @@ export async function updateTribeSettings(tribeId: string, payload: Parameters<t
   const { requireTribeFounder } = await import('@/lib/services/tribe-auth');
   await requireTribeFounder(userId, tribeId);
   const { updateTribeSettings: fn } = await import('@/lib/services/tribe-service');
-  return fn(tribeId, payload);
+  return fn(tribeId, payload, userId);
 }
 
 export async function getTribeMembers(
@@ -212,7 +213,7 @@ export async function deleteTribe(tribeId: string): Promise<void> {
   return fn(userId, tribeId);
 }
 
-export async function requestToJoinTribe(tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending'> {
+export async function requestToJoinTribe(tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending' | 'age_required' | 'region_blocked' | 'opt_in_required'> {
   const userId = await requireAuth();
   const { requestToJoinTribe: fn } = await import('@/lib/services/tribe-service');
   return fn(userId, tribeId, aliasName, aliasAvatar);
@@ -316,7 +317,15 @@ export async function issueTribeKeyGrant(
 ): Promise<void> {
   const userId = await requireAuth();
   const { createTribeKeyGrant } = await import('@/lib/services/tribe-key-service');
-  return createTribeKeyGrant(tribeKeyId, recipientId, wrappedKey, wrapIv, userId, deviceKeyId);
+  await createTribeKeyGrant(tribeKeyId, recipientId, wrappedKey, wrapIv, userId, deviceKeyId);
+
+  // WS-2: tell the recipient their grant is ready so they pull + unwrap it
+  // immediately instead of on their next polling cycle. Skip self-grants.
+  if (recipientId !== userId) {
+    import('@/lib/services/realtime-dispatch').then(({ notifyTribeKeyAvailable }) => {
+      notifyTribeKeyAvailable(recipientId);
+    }).catch(() => {});
+  }
 }
 
 /**

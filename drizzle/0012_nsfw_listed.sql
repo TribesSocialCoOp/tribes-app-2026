@@ -1,0 +1,1 @@
+ALTER TABLE "tribes" ADD COLUMN "is_listed" boolean DEFAULT false;

@@ -10,7 +10,7 @@
 #   3. Config/env files
 #   4. Feed all into restic (AES-256 encrypted, deduplicated)
 #   5. Prune old snapshots
-#   6. Push to backup server via SFTP
+#   6. Push encrypted repo to a Hetzner Storage Box via rsync (SSH port 23)
 #
 # First-time setup:
 #   restic -r /backups/restic-repo init
@@ -32,9 +32,10 @@ if [[ -f /etc/tribes/backup.env ]]; then
   source /etc/tribes/backup.env
 fi
 
-BACKUP_HOST="${BACKUP_HOST:-}"               # Set to backup server IP
-BACKUP_USER="${BACKUP_USER:-tribes}"
-BACKUP_REMOTE_PATH="${BACKUP_REMOTE_PATH:-/backups/tribes-restic}"
+BACKUP_HOST="${BACKUP_HOST:-}"               # Storage Box host, e.g. u123456.your-storagebox.de
+BACKUP_USER="${BACKUP_USER:-}"               # Storage Box user, e.g. u123456
+BACKUP_SSH_PORT="${BACKUP_SSH_PORT:-23}"     # Hetzner Storage Box SSH/rsync port
+BACKUP_REMOTE_PATH="${BACKUP_REMOTE_PATH:-restic-repo}"  # relative to Storage Box home
 
 # ── Preflight checks ──────────────────────────────────────
 if [[ ! -f "$RESTIC_PASSWORD_FILE" ]]; then
@@ -109,11 +110,11 @@ if [[ "$(date '+%u')" == "7" ]]; then
     check
 fi
 
-# ── Step 7: Offsite push (if BACKUP_HOST is configured) ──
+# ── Step 7: Offsite push to Storage Box (if BACKUP_HOST is configured) ──
 if [[ -n "$BACKUP_HOST" ]]; then
-  echo "$LOG_PREFIX Pushing to offsite ($BACKUP_HOST)..."
+  echo "$LOG_PREFIX Pushing to offsite ($BACKUP_HOST:$BACKUP_SSH_PORT)..."
   rsync -az --delete \
-    -e "ssh -o StrictHostKeyChecking=accept-new -i /root/.ssh/backup_key" \
+    -e "ssh -p $BACKUP_SSH_PORT -o StrictHostKeyChecking=accept-new -i /root/.ssh/backup_key" \
     "$RESTIC_REPO/" \
     "$BACKUP_USER@$BACKUP_HOST:$BACKUP_REMOTE_PATH/"
   echo "$LOG_PREFIX Offsite push complete."

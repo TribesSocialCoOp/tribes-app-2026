@@ -153,7 +153,7 @@ export function PostDetailClient({
 
         if (effectiveTribeId) {
           const { getTribeKey } = await import('@/lib/crypto/key-store');
-          const cachedTribeKey = await getTribeKey(effectiveTribeId);
+          const cachedTribeKey = user?.id ? await getTribeKey(user.id, effectiveTribeId) : null;
 
           if (cachedTribeKey) {
             const { decryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
@@ -285,7 +285,7 @@ export function PostDetailClient({
     if (!effectiveTribeId) return undefined; // No tribe context
 
     const { getTribeKey } = await import('@/lib/crypto/key-store');
-    const cachedTribeKey = await getTribeKey(effectiveTribeId);
+    const cachedTribeKey = user?.id ? await getTribeKey(user.id, effectiveTribeId) : null;
     if (!cachedTribeKey) {
       throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
     }

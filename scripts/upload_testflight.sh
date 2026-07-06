@@ -49,6 +49,13 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 echo "   IPA: $IPA_FILE"
 echo "   Size: $(du -h "$IPA_FILE" | cut -f1)"
+# Surface which app this IPA targets (staging vs prod) so uploads aren't mixed up.
+# App Store Connect routes the upload by the bundle id baked into the IPA, so this
+# script is flavor-agnostic — it uploads whatever build_ios.sh / build_ios.sh
+# --staging produced.
+BUNDLE_IN_IPA=$(unzip -p "$IPA_FILE" 'Payload/*.app/Info.plist' 2>/dev/null \
+    | plutil -extract CFBundleIdentifier raw - 2>/dev/null || echo "unknown")
+echo "   Bundle ID: $BUNDLE_IN_IPA"
 echo ""
 
 # Determine upload method
@@ -94,7 +101,7 @@ else
     echo "     https://apps.apple.com/app/transporter/id1450874784"
     echo ""
     echo "   Option 3 — Open the archive in Xcode and use Organizer:"
-    echo "     open build/ios/$APP_NAME.xcarchive"
+    echo "     open build/ios/Tribes.xcarchive"
     echo ""
     echo "   Option 4 — Use xcrun altool directly:"
     echo "     xcrun altool --upload-app -f $IPA_FILE -t ios -u APPLE_ID -p APP_PASSWORD"

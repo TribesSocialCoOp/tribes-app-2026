@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Users, Image as ImageIcon, Globe, Lock, Tag, Link2 } from "lucide-react";
+import { NsfwTribeFields } from "@/components/tribes/nsfw-tribe-fields";
 import Image from "next/image";
 import React from "react";
 import { useRouter } from "next/navigation";
@@ -24,6 +25,8 @@ import { createTribe } from '@/lib/actions/tribe-actions';
 import { uploadFile } from '@/lib/upload';
 import { useActionError } from '@/hooks/use-action-error';
 import { AuthGuard } from "@/components/providers/auth-guard";
+import { useAgeGate } from "@/components/providers/age-gate-provider";
+import { isAgeGateError, isNsfwBlockedError, isNsfwOptInError } from "@/lib/age-gate";
 
 const createTribeFormSchema = z.object({
   name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
@@ -33,6 +36,8 @@ const createTribeFormSchema = z.object({
     .max(3, { message: "You can select a maximum of 3 moods." }),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
   isPublic: z.boolean().default(true),
+  isNsfw: z.boolean().default(false),
+  isListed: z.boolean().default(true),
   coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`),
 });
 
@@ -54,7 +59,8 @@ function CreateTribeContent() {
   const [coverPreview, setCoverPreview] = React.useState<string | null>(null);
   
   const { handleError } = useActionError();
-  
+  const { openAgeGate } = useAgeGate();
+
   const form = useForm<CreateTribeFormValues>({
     resolver: zodResolver(createTribeFormSchema),
     defaultValues: {
@@ -63,8 +69,17 @@ function CreateTribeContent() {
       moods: [],
       description: "",
       isPublic: true,
+      isNsfw: false,
+      isListed: true,
     },
   });
+
+  // NSFW tribes are permanently Private (policy §3). When NSFW is toggled on, force
+  // visibility to Private and lock the visibility switch.
+  const isNsfw = form.watch("isNsfw");
+  React.useEffect(() => {
+    if (isNsfw) form.setValue("isPublic", false);
+  }, [isNsfw, form]);
 
   async function onSubmit(values: CreateTribeFormValues) {
     setIsLoading(true);
@@ -98,6 +113,23 @@ function CreateTribeContent() {
 
       router.push(`/t/${newTribe.slug}`);
     } catch (error) {
+       // NSFW gate (issue #32).
+       if (isNsfwBlockedError(error)) {
+         setIsLoading(false);
+         toast({ title: "Not available in your region", description: "Adult content can't be created where you are due to local law.", variant: "destructive" });
+         return;
+       }
+       if (isNsfwOptInError(error)) {
+         setIsLoading(false);
+         toast({ title: "Enable adult content", description: 'Turn on "Show adult content" in Settings on the web before creating an adult tribe.' });
+         return;
+       }
+       // Optional wallet-verify path may still surface the verify gate — launch then retry.
+       if (isAgeGateError(error)) {
+         setIsLoading(false);
+         openAgeGate({ onResolved: () => onSubmit(values) });
+         return;
+       }
        console.error("Failed to create tribe:", error);
        handleError(error, "Creation Failed");
     } finally {
@@ -305,11 +337,14 @@ function CreateTribeContent() {
                       <Switch
                         checked={field.value}
                         onCheckedChange={field.onChange}
+                        disabled={isNsfw}
                       />
                     </FormControl>
                   </FormItem>
                 )}
               />
+
+              <NsfwTribeFields form={form} />
             </CardContent>
             <CardFooter>
               <Button type="submit" disabled={isLoading} className="w-full md:w-auto bg-primary hover:bg-primary/90 text-lg py-3 px-6">

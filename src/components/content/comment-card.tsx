@@ -118,7 +118,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
         if (!tribeId) { if (active) setDecryptionStatus('missing_key'); return; }
 
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(tribeId);
+        const cachedTribeKey = user?.id ? await getTribeKey(user.id, tribeId) : null;
         if (!cachedTribeKey) { if (active) setDecryptionStatus('missing_key'); return; }
 
         const { decryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
@@ -141,7 +141,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
 
     decryptComment();
     return () => { active = false; };
-  }, [comment.id, comment.isEncrypted, comment.ciphertextBase64, comment.encryptionIv, tribeId]);
+  }, [comment.id, comment.isEncrypted, comment.ciphertextBase64, comment.encryptionIv, tribeId, user?.id]);
 
   // ── Opportunistic backfill: encrypt legacy plaintext comments ──
   useEffect(() => {
@@ -152,7 +152,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
     async function backfill() {
       try {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(tribeId!);
+        const cachedTribeKey = user?.id ? await getTribeKey(user.id, tribeId!) : null;
         if (!cachedTribeKey) return; // No key available — can't backfill
 
         const { encryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
@@ -176,7 +176,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
 
     backfill();
     return () => { active = false; };
-  }, [comment.id, comment.isEncrypted, comment.content, isPublic, tribeId]);
+  }, [comment.id, comment.isEncrypted, comment.content, isPublic, tribeId, user?.id]);
 
   // ── Reply ──
   const [showReply, setShowReply] = useState(false);
@@ -263,7 +263,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
     let encPayload: { ciphertextBase64: string; iv: string } | undefined;
     if (!isPublic && tribeId) {
       const { getTribeKey } = await import('@/lib/crypto/key-store');
-      const cachedTribeKey = await getTribeKey(tribeId);
+      const cachedTribeKey = user?.id ? await getTribeKey(user.id, tribeId) : null;
       if (!cachedTribeKey) {
         throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
       }

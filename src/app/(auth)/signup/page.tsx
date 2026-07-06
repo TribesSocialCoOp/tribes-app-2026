@@ -97,7 +97,9 @@ function SignupForm() {
   const [autoValidateAttempted, setAutoValidateAttempted] = useState(false);
   useEffect(() => {
     const urlInvite = searchParams.get('invite');
-    if (urlInvite && INVITE_ONLY && !isInviteValidated && !autoValidateAttempted) {
+    // Auto-fill + validate from an invite link in BOTH modes: required (gates signup)
+    // and optional (unlocks the code's perks without blocking open registration).
+    if (urlInvite && !autoValidateAttempted && !invitePlanName) {
       setAutoValidateAttempted(true);
       const code = urlInvite.trim().toUpperCase();
       setInviteCode(code);
@@ -110,13 +112,13 @@ function SignupForm() {
           setInvitePlanName(result.planName);
           toast({ title: 'Invite Code Valid!', description: `This code grants access to the ${result.planName} plan.` });
         } catch {
-          // Code invalid — let user enter a different one
+          // Code invalid — let user enter a different one (or proceed, if optional)
         } finally {
           setIsValidatingCode(false);
         }
       })();
     }
-  }, [searchParams, isInviteValidated, autoValidateAttempted, toast]);
+  }, [searchParams, invitePlanName, autoValidateAttempted, toast]);
 
   const handleAltchaVerified = useCallback((payload: string) => {
     setAltchaPayload(payload);
@@ -345,46 +347,50 @@ function SignupForm() {
         </CardHeader>
         <form onSubmit={handleSignup}>
           <CardContent className="space-y-4 px-6 py-2">
-            {/* Invite-Only Gate */}
-            {INVITE_ONLY && (
-              <div className="space-y-2 p-3 bg-muted/40 border border-border rounded-xl">
-                <Label htmlFor="inviteCode" className="flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">
-                  <Ticket className="h-3.5 w-3.5 text-primary" />
-                  Invite Code {isInviteValidated && <CheckCircle2 className="h-4 w-4 text-emerald-500 inline ml-1" />}
-                </Label>
-                {!isInviteValidated ? (
-                  <div className="flex gap-2">
-                    <Input
-                      id="inviteCode"
-                      type="text"
-                      placeholder="TRIBE-XXXX-XXXX"
-                      value={inviteCode}
-                      onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                      disabled={isValidatingCode}
-                      className="font-mono h-10 bg-background border-input focus-visible:ring-primary rounded-xl"
-                    />
-                    <Button
-                      type="button"
-                      onClick={handleValidateInvite}
-                      disabled={!inviteCode.trim() || isValidatingCode}
-                      variant="secondary"
-                      className="shrink-0 h-10 px-4 bg-muted hover:bg-muted/80 text-foreground border border-border font-semibold rounded-xl"
-                    >
-                      {isValidatingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify'}
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold tracking-wide font-mono">
-                    ✓ Valid — {invitePlanName} access granted
-                  </p>
-                )}
-                {!isInviteValidated && (
-                  <p className="text-[10px] text-muted-foreground font-medium">
-                    Tribes is currently invite-only. Enter a code to proceed.
-                  </p>
-                )}
-              </div>
-            )}
+            {/* Invite code — REQUIRED in invite-only mode, OPTIONAL otherwise (still
+                redeemable for its perks). Display is driven by invitePlanName so open
+                registration shows the input rather than a pre-satisfied "valid" state. */}
+            <div className="space-y-2 p-3 bg-muted/40 border border-border rounded-xl">
+              <Label htmlFor="inviteCode" className="flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">
+                <Ticket className="h-3.5 w-3.5 text-primary" />
+                Invite Code
+                {!INVITE_ONLY && <span className="normal-case font-normal tracking-normal lowercase">&nbsp;(optional)</span>}
+                {invitePlanName && <CheckCircle2 className="h-4 w-4 text-emerald-500 inline ml-1" />}
+              </Label>
+              {!invitePlanName ? (
+                <div className="flex gap-2">
+                  <Input
+                    id="inviteCode"
+                    type="text"
+                    placeholder="TRIBE-XXXX-XXXX"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                    disabled={isValidatingCode}
+                    className="font-mono h-10 bg-background border-input focus-visible:ring-primary rounded-xl"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleValidateInvite}
+                    disabled={!inviteCode.trim() || isValidatingCode}
+                    variant="secondary"
+                    className="shrink-0 h-10 px-4 bg-muted hover:bg-muted/80 text-foreground border border-border font-semibold rounded-xl"
+                  >
+                    {isValidatingCode ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Verify'}
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold tracking-wide font-mono">
+                  ✓ Valid — {invitePlanName} access granted
+                </p>
+              )}
+              {!invitePlanName && (
+                <p className="text-[10px] text-muted-foreground font-medium">
+                  {INVITE_ONLY
+                    ? 'Tribes is currently invite-only. Enter a code to proceed.'
+                    : 'Have an invite code? Enter it to unlock its perks — otherwise just sign up.'}
+                </p>
+              )}
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="name" className="text-xs font-semibold tracking-wider uppercase font-mono text-muted-foreground">Full Name</Label>

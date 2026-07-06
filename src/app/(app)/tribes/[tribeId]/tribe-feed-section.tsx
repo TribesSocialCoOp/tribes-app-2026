@@ -9,13 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import { Edit3, MessageSquareText, CalendarDays, MapPin, LockKeyhole } from "lucide-react";
+import { Edit3, MessageSquareText, CalendarDays, MapPin, LockKeyhole, ShieldAlert } from "lucide-react";
 import { LoadMoreButton } from "@/components/ui/load-more-button";
 import type { Event, TribePost } from '@/lib/types';
 import { TribePostCard } from './tribe-post-card';
+import { NsfwGateCard } from './nsfw-gate-card';
 import { useTribeDetail } from './tribe-detail-context';
 import { ComposeBox } from '@/components/compose/compose-box';
 import { useScrollToPost } from '@/hooks/use-scroll-to-post';
+import { useKeySync } from '@/components/providers/key-sync-provider';
 
 // ─── EventHighlightCard ──────────────────────────────────────────────────────
 
@@ -58,8 +60,9 @@ type FeedItem =
 // ─── TribeFeedSection ────────────────────────────────────────────────────────
 
 export function TribeFeedSection() {
-  const { state, dispatch, isLoggedIn, currentUserId, syncAllData, hasTribeKey, isTribeAdmin, hasMorePosts, isLoadingMorePosts, loadMorePosts } = useTribeDetail();
+  const { state, dispatch, isLoggedIn, currentUserId, syncAllData, hasTribeKey, isTribeAdmin, hasMorePosts, isLoadingMorePosts, loadMorePosts, handleInitiateJoinTribe } = useTribeDetail();
   const { tribe, posts, events, isMember, promotedPostIds, reportedPostIds } = state;
+  const { tribeKeyRestoreNeeded } = useKeySync();
 
   const combinedFeedItems = useMemo(() => {
     if (!tribe) return [];
@@ -102,18 +105,36 @@ export function TribeFeedSection() {
     <section className="space-y-4">
       <div className="flex items-center justify-between px-1">
         <h2 className="text-xl font-semibold text-foreground tracking-normal">
-          {(isMember || tribe?.isPublic) ? "Feed" : "Featured Posts in Mood Streams"}
+          {(isMember || tribe?.isPublic) ? "Feed" : (tribe?.isNsfw ? "Members Only · 18+" : "Members Only")}
         </h2>
       </div>
 
       {isMember && !tribe.isPublic && hasTribeKey === false && !isTribeAdmin && (
-        <Alert variant="default" className="bg-amber-500/10 border-amber-500/50 text-amber-600 dark:text-amber-400 mb-6">
-          <LockKeyhole className="h-5 w-5 !text-amber-500" />
-          <AlertTitle className="font-semibold text-amber-700 dark:text-amber-500">Cryptographic Sync Pending</AlertTitle>
-          <AlertDescription className="text-sm mt-1 leading-relaxed">
-            You have joined this tribe, but your device is waiting to receive the encryption keys. Posts will remain locked until a tribe admin comes online to securely distribute the keys.
-          </AlertDescription>
-        </Alert>
+        tribeKeyRestoreNeeded ? (
+          // This device holds a grant it can't unwrap (no identity key here) →
+          // the only fix is a vault restore. Tell the user, don't spin forever.
+          <Alert variant="default" className="bg-amber-500/10 border-amber-500/50 text-amber-600 dark:text-amber-400 mb-6">
+            <LockKeyhole className="h-5 w-5 !text-amber-500" />
+            <AlertTitle className="font-semibold text-amber-700 dark:text-amber-500">This device can’t unlock this Tribe yet</AlertTitle>
+            <AlertDescription className="text-sm mt-1 leading-relaxed">
+              Your access is granted, but the encryption keys live on another device you’ve used.
+              Restore your secure vault on this device to unlock the content.
+              <span className="mt-2 block">
+                <Link href="/settings" className="font-semibold underline underline-offset-2">
+                  Restore from Settings →
+                </Link>
+              </span>
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Alert variant="default" className="bg-amber-500/10 border-amber-500/50 text-amber-600 dark:text-amber-400 mb-6">
+            <LockKeyhole className="h-5 w-5 !text-amber-500" />
+            <AlertTitle className="font-semibold text-amber-700 dark:text-amber-500">Cryptographic Sync Pending</AlertTitle>
+            <AlertDescription className="text-sm mt-1 leading-relaxed">
+              You have joined this tribe, but your device is waiting to receive the encryption keys. Posts will remain locked until a tribe admin comes online to securely distribute the keys.
+            </AlertDescription>
+          </Alert>
+        )
       )}
 
       {isMember && isLoggedIn && (
@@ -125,7 +146,50 @@ export function TribeFeedSection() {
           />
         </div>
       )}
-      {combinedFeedItems.length > 0 ? (
+      {state.gateError ? (
+        // NSFW gate (issue #32): posts were withheld — show why + the way forward.
+        <NsfwGateCard gate={state.gateError} onResolved={() => syncAllData(true)} />
+      ) : !isMember && !tribe.isPublic ? (
+        // Non-member viewing a private/listed tribe (e.g. an NSFW tribe found via search).
+        // The listing is visible, but content is members-only — invite them to join. For
+        // NSFW tribes, joining triggers the 18+ verification gate.
+        <Card className="text-center py-12 shadow-md">
+          <CardContent className="flex flex-col items-center justify-center gap-3">
+            {tribe.isNsfw
+              ? <ShieldAlert className="h-14 w-14 text-destructive opacity-80" />
+              : <LockKeyhole className="h-14 w-14 text-muted-foreground opacity-60" />}
+            <h3 className="text-xl font-semibold text-foreground">
+              {tribe.isNsfw ? 'This is an adult (18+) Tribe' : 'This is a private Tribe'}
+            </h3>
+            <p className="text-muted-foreground max-w-sm">
+              {tribe.isNsfw
+                ? 'Its content is end-to-end encrypted and visible to verified 18+ members only. Join to verify your age and see what’s inside.'
+                : 'Its content is visible to members only. Join to see what’s inside.'}
+            </p>
+            {isLoggedIn ? (
+              <Button onClick={handleInitiateJoinTribe} className="mt-2">
+                {tribe.isNsfw ? 'Verify age & join' : 'Join this Tribe'}
+              </Button>
+            ) : (
+              <div className="mt-2 flex flex-col items-center gap-2">
+                <p className="text-sm text-muted-foreground">
+                  {tribe.isNsfw
+                    ? 'Log in or sign up to verify your age and join.'
+                    : 'Log in or sign up to join.'}
+                </p>
+                <div className="flex gap-2">
+                  <Link href="/login" passHref>
+                    <Button variant="outline">Log in</Button>
+                  </Link>
+                  <Link href="/signup" passHref>
+                    <Button>Sign up</Button>
+                  </Link>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : combinedFeedItems.length > 0 ? (
         combinedFeedItems.map(item => {
           if (item.type === 'event') {
             return <EventHighlightCard key={item.id} event={item.data as Event} />;

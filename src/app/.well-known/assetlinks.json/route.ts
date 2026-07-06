@@ -41,6 +41,23 @@ export async function GET() {
           ],
         },
       },
+      {
+        // Staging native flavor. First = Play App Signing cert (Play internal-testing);
+        // second = local release keystore (sideloaded adb/release APK). Both listed so
+        // passkeys/app-links verify whether installed from Play or sideloaded.
+        relation: [
+          'delegate_permission/common.handle_all_urls',
+          'delegate_permission/common.get_login_creds'
+        ],
+        target: {
+          namespace: 'android_app',
+          package_name: 'app.tribes.android.staging',
+          sha256_cert_fingerprints: [
+            'A3:F6:8B:BF:4D:71:98:64:15:BD:7A:0E:BD:0F:04:E5:13:2D:39:F7:1D:0C:DE:13:48:D0:74:34:4A:18:B7:F9',
+            'C3:74:0E:64:03:60:57:DC:D5:B0:BB:3B:BF:A8:2D:81:1C:A1:68:C4:CC:C6:87:BE:8E:6E:5E:8F:2B:0A:B7:5B'
+          ],
+        },
+      },
     ];
     return NextResponse.json(assetlinks, {
       headers: { 'Cache-Control': 'public, max-age=3600' },

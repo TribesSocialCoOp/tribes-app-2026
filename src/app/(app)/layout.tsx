@@ -8,6 +8,7 @@ import { WebSocketProvider } from "@/components/providers/websocket-provider";
 import { UserProvider } from "@/components/providers/user-provider";
 import { TosAcceptanceGate } from "@/components/providers/tos-acceptance-gate";
 import { KeySyncProvider } from "@/components/providers/key-sync-provider";
+import { AgeGateProvider } from "@/components/providers/age-gate-provider";
 import { KeySyncBanner } from "@/components/providers/key-sync-banner";
 import { EmailVerificationBanner } from "@/components/providers/email-verification-banner";
 import { VersionGuard } from "@/components/providers/version-guard";
@@ -118,6 +119,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <TosAcceptanceGate>
         <KeySyncProvider>
           <WebSocketProvider>
+            <AgeGateProvider>
             <SidebarProvider>
               <AppSidebar />
               <SidebarRail />
@@ -153,6 +155,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <MobileTabBar />
               <JumpToTop />
             </SidebarProvider>
+            </AgeGateProvider>
           </WebSocketProvider>
         </KeySyncProvider>
       </TosAcceptanceGate>

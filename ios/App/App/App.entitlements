@@ -19,6 +19,10 @@
 	<array>
 		<string>merchant.app.tribes</string>
 	</array>
+	<!-- Declared Age Range API (iOS 26.2+) — lets the app request the account's age
+	     band for the NSFW 18+ gate. Requires the capability enabled on the App ID. -->
+	<key>com.apple.developer.declared-age-range</key>
+	<true/>
 	<key>aps-environment</key>
 	<string>development</string>
 </dict>

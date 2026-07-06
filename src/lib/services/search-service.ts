@@ -4,10 +4,10 @@
  */
 import { db } from '@/db';
 import { tribes, events, users, blockedUsers } from '@/db/schema';
-import { like, or, sql, and, notInArray } from 'drizzle-orm';
+import { like, or, sql, and, notInArray, eq } from 'drizzle-orm';
 
 export interface SearchResults {
-  tribes: { id: string; slug: string; name: string; description: string; memberCount: number; isPublic: boolean }[];
+  tribes: { id: string; slug: string; name: string; description: string; memberCount: number; isPublic: boolean; isNsfw: boolean }[];
   events: { id: string; name: string; description: string; eventDate: Date | null; locationName: string; coverImage?: string; slug?: string | null }[];
   users: { id: string; name: string; avatarUrl?: string; slug?: string | null }[];
 }
@@ -26,6 +26,16 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
   // can still be exploited for data enumeration.
   const escaped = query.replace(/[%_\\]/g, '\\$&');
   const pattern = `%${escaped}%`;
+
+  // NSFW discovery filter (issue #32): listed NSFW tribes expose only metadata in
+  // search (posts gated at join/view), so surface them to any signed-in viewer who
+  // could still gain access (needs_optin / needs_verify / allow) — only geo-blocked
+  // regions hide them. Guests stay conservative (NSFW hidden until sign-in). Computed
+  // once and applied in the WHERE clause so the limit counts visible rows.
+  // Shared discovery predicate (public|listed, NSFW gated) — single source of truth with
+  // data-access/tribes.ts so the two can't drift.
+  const { discoverableTribesWhere } = await import('@/lib/age-verification/nsfw-gate');
+  const discoverable = await discoverableTribesWhere(currentUserId);
 
   // Build the blocked user ID list (bidirectional)
   let blockedIdsSql: ReturnType<typeof sql> | undefined;
@@ -46,11 +56,16 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
       description: tribes.description,
       memberCount: tribes.memberCount,
       isPublic: tribes.isPublic,
+      isNsfw: tribes.isNsfw,
     })
       .from(tribes)
-      .where(or(
-        like(tribes.name, pattern),
-        like(tribes.description, pattern),
+      .where(and(
+        or(
+          like(tribes.name, pattern),
+          like(tribes.description, pattern),
+        ),
+        // Only surface discoverable tribes (public|listed, NSFW gated) — shared predicate.
+        discoverable,
       ))
       .limit(limit),
 
@@ -94,6 +109,7 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
       description: t.description ?? '',
       memberCount: t.memberCount ?? 0,
       isPublic: t.isPublic ?? true,
+      isNsfw: t.isNsfw ?? false,
     })),
     events: eventResults.map(e => ({
       id: e.id,

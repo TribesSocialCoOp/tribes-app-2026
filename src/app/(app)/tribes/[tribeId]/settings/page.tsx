@@ -20,6 +20,7 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag, Link2, ShieldAlert, Copy, Check, Info, ShieldCheck as ReputationIcon, History, Palette, Trash2, Image as ImageIcon, Move, Upload, Loader2 as Loader } from 'lucide-react';
+import { NsfwTribeFields } from '@/components/tribes/nsfw-tribe-fields';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
@@ -42,6 +43,8 @@ const tribeSettingsFormSchema = z.object({
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
   homepageUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   isPublic: z.boolean().default(true),
+  isNsfw: z.boolean().optional(),
+  isListed: z.boolean().optional(),
   moods: z.array(z.string())
     .max(3, { message: "You can select a maximum of 3 moods." })
     .optional()
@@ -129,6 +132,8 @@ function TribeSettingsContent() {
       description: "",
       homepageUrl: "",
       isPublic: true,
+      isNsfw: false,
+      isListed: true,
       moods: [],
       joinMechanism: 'instant',
       minimumReputation: "None",
@@ -137,6 +142,13 @@ function TribeSettingsContent() {
       brandLogo: "",
     },
   });
+
+  // NSFW tribes are permanently Private (policy §3). Once flagged on, force visibility
+  // to Private and lock the visibility switch.
+  const isNsfwSelected = form.watch("isNsfw");
+  useEffect(() => {
+    if (isNsfwSelected) form.setValue("isPublic", false);
+  }, [isNsfwSelected, form]);
 
   useEffect(() => {
     if (tribeId) {
@@ -152,6 +164,8 @@ function TribeSettingsContent() {
             slug: currentTribeData.slug || "",
             description: currentTribeData.description,
             isPublic: currentTribeData.isPublic,
+            isNsfw: currentTribeData.isNsfw ?? false,
+            isListed: currentTribeData.isListed ?? true,
             moods: currentTribeData.moods || [],
             homepageUrl: currentTribeData.homepageUrl || "",
             joinMechanism: currentTribeData.joinMechanism || 'instant',
@@ -632,11 +646,15 @@ function TribeSettingsContent() {
                         <Switch
                           checked={field.value}
                           onCheckedChange={field.onChange}
+                          disabled={isNsfwSelected}
                         />
                       </FormControl>
                     </FormItem>
                   )}
                 />
+
+                <NsfwTribeFields form={form} locked={tribe?.isNsfw ?? false} />
+
                 <FormField
                   control={form.control}
                   name="joinMechanism"

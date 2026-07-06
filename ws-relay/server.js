@@ -305,14 +305,21 @@ process.on('SIGTERM', () => {
 });
 
 // --- HEALTH CHECK SERVER & INTERNAL PUSH (HTTP 9004) ---
-const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || 'tribes-internal-super-secret-123';
+// In production INTERNAL_API_SECRET is REQUIRED — no known default, so /internal/push
+// fails closed if it's unset (must match the app's value). Dev uses a clearly-labeled
+// local-only value so the relay co-started by `npm run dev` works without setup.
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET
+  || (process.env.NODE_ENV !== 'production' ? 'dev-only-internal-secret' : null);
+if (!INTERNAL_API_SECRET) {
+  console.warn('[ws-relay] INTERNAL_API_SECRET not set — /internal/push will reject all requests until it is configured.');
+}
 
 const healthServer = http.createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ status: 'ok', connections: wss.clients.size }));
   } else if (req.url === '/internal/push' && req.method === 'POST') {
-    if (req.headers['x-internal-secret'] !== INTERNAL_API_SECRET) {
+    if (!INTERNAL_API_SECRET || req.headers['x-internal-secret'] !== INTERNAL_API_SECRET) {
       res.writeHead(403, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Forbidden' }));
       return;

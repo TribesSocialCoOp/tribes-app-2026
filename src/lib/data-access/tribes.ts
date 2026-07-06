@@ -8,10 +8,14 @@
 
 import { db } from '@/db';
 import { tribes, tribeMoodTags, tribeMembers, users } from '@/db/schema';
-import { eq, like, inArray } from 'drizzle-orm';
+import { eq, like, inArray, or, and } from 'drizzle-orm';
 import type { Tribe } from '@/lib/types';
 
-function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
+function rowToTribe(
+  row: typeof tribes.$inferSelect,
+  moods: string[],
+  opts?: { includeInviteToken?: boolean },
+): Tribe {
   return {
     id: row.id,
     slug: row.slug || row.id,
@@ -19,6 +23,8 @@ function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
     description: row.description,
     members: row.memberCount ?? 0,
     isPublic: row.isPublic ?? true,
+    isNsfw: row.isNsfw ?? false,
+    isListed: row.isListed ?? false,
     cover: row.cover ?? '',
     coverPosition: row.coverPosition ?? undefined,
     dataAiHint: row.dataAiHint ?? '',
@@ -30,7 +36,10 @@ function rowToTribe(row: typeof tribes.$inferSelect, moods: string[]): Tribe {
     brandColor: row.brandColor ?? undefined,
     brandLogo: row.brandLogo ?? undefined,
     createdBy: row.createdBy ?? undefined,
-    inviteToken: row.inviteToken ?? undefined,
+    // SECURITY: inviteToken is a member-held join capability, not metadata. Listed
+    // private tribes are returned to any viewer, so it's stripped unless the caller
+    // established the viewer is a member/founder (or explicitly holds the token).
+    inviteToken: opts?.includeInviteToken ? row.inviteToken ?? undefined : undefined,
     bondDurationDays: row.bondDurationDays ?? undefined,
   };
 }
@@ -41,32 +50,68 @@ async function getMoodsForTribe(tribeId: string): Promise<string[]> {
 }
 
 /**
- * Resolves the set of tribe IDs a viewer has access to.
- * - Platform admins see everything.
+ * Resolves the set of tribe IDs a viewer has access to, plus the viewer's own
+ * membership set (so callers don't re-query tribeMembers for capability checks).
+ * - Platform admins see everything ('all').
  * - All other users see public tribes + their own private memberships.
  * - Guests (no userId) see public tribes only.
  */
-async function getViewerTribeIds(viewerUserId?: string | null): Promise<'all' | Set<string>> {
+async function getViewerTribeIds(
+  viewerUserId?: string | null,
+): Promise<{ visible: 'all' | Set<string>; memberTribeIds: Set<string> }> {
+  // Discoverable = public OR explicitly listed (e.g. NSFW tribes that opt to be listed).
+  // Listed private tribes expose only metadata here; their post content stays members-only.
+  // NSFW (issue #32): hidden from discovery unless this request+viewer may see it
+  // (not geo-blocked, opted-in/verified). Members still reach their own NSFW tribes
+  // via membership below; the content gate protects the actual posts regardless.
+  // Listed NSFW tribes expose only metadata in discovery (posts gated at join/view),
+  // so show them to any signed-in viewer who could still gain access (needs_optin /
+  // needs_verify / allow) — joining then triggers the opt-in/verify remediation. Only
+  // geo-blocked regions hide them. Guests (no userId) stay conservative: NSFW hidden
+  // until they sign in and can be led through opt-in/verification. Shared predicate so
+  // this boundary can't drift from search-service.
+  const { discoverableTribesWhere } = await import('@/lib/age-verification/nsfw-gate');
+  const discoverable = await discoverableTribesWhere(viewerUserId);
+
   if (!viewerUserId) {
-    // Guest — only public tribes
-    const publicRows = await db.select({ id: tribes.id }).from(tribes).where(eq(tribes.isPublic, true));
-    return new Set(publicRows.map(r => r.id));
+    // Guest — public + listed tribes (metadata only)
+    const publicRows = await db.select({ id: tribes.id }).from(tribes).where(discoverable);
+    return { visible: new Set(publicRows.map(r => r.id)), memberTribeIds: new Set() };
   }
 
-  // Check platform admin status
-  const [userRow] = await db.select({ role: users.role }).from(users).where(eq(users.id, viewerUserId)).limit(1);
-  if (userRow?.role === 'Admin') return 'all'; // Admins see everything
-
-  // Collect public tribe IDs + private tribes the viewer is a member of
-  const [publicRows, memberRows] = await Promise.all([
-    db.select({ id: tribes.id }).from(tribes).where(eq(tribes.isPublic, true)),
+  // Check platform admin status; still collect the admin's own memberships for
+  // capability checks (inviteToken) below.
+  const [[userRow], memberRows] = await Promise.all([
+    db.select({ role: users.role }).from(users).where(eq(users.id, viewerUserId)).limit(1),
     db.select({ tribeId: tribeMembers.tribeId }).from(tribeMembers).where(eq(tribeMembers.userId, viewerUserId)),
   ]);
+  const memberTribeIds = new Set(memberRows.map(r => r.tribeId));
+  if (userRow?.role === 'Admin') return { visible: 'all', memberTribeIds }; // Admins see everything
 
-  const visible = new Set<string>();
+  // Discoverable tribe IDs + private tribes the viewer is a member of
+  const publicRows = await db.select({ id: tribes.id }).from(tribes).where(discoverable);
+  const visible = new Set<string>(memberTribeIds);
   for (const r of publicRows) visible.add(r.id);
-  for (const r of memberRows) visible.add(r.tribeId);
-  return visible;
+  return { visible, memberTribeIds };
+}
+
+/**
+ * Whether the viewer holds member-level access to this tribe (member row, founder/
+ * creator, or platform admin). Gates capability fields like inviteToken and NSFW
+ * metadata visibility on direct lookups.
+ */
+async function viewerHasMemberAccess(
+  row: { id: string; createdBy: string | null },
+  viewerUserId?: string | null,
+): Promise<boolean> {
+  if (!viewerUserId) return false;
+  if (row.createdBy === viewerUserId) return true;
+  const [m] = await db.select({ id: tribeMembers.id }).from(tribeMembers)
+    .where(and(eq(tribeMembers.tribeId, row.id), eq(tribeMembers.userId, viewerUserId)))
+    .limit(1);
+  if (m) return true;
+  const [u] = await db.select({ role: users.role }).from(users).where(eq(users.id, viewerUserId)).limit(1);
+  return u?.role === 'Admin';
 }
 
 /**
@@ -74,7 +119,7 @@ async function getViewerTribeIds(viewerUserId?: string | null): Promise<'all' | 
  * Private tribes are omitted unless the viewer is a member or platform admin.
  */
 export async function getTribes(viewerUserId?: string | null): Promise<Tribe[]> {
-  const visibleIds = await getViewerTribeIds(viewerUserId);
+  const { visible: visibleIds, memberTribeIds } = await getViewerTribeIds(viewerUserId);
 
   const rows = visibleIds === 'all'
     ? await db.select().from(tribes)
@@ -94,7 +139,42 @@ export async function getTribes(viewerUserId?: string | null): Promise<Tribe[]> 
     moodMap.set(m.tribeId, arr);
   }
 
-  return rows.map(row => rowToTribe(row, moodMap.get(row.id) ?? []));
+  // inviteToken is a member capability — memberships were already resolved by
+  // getViewerTribeIds ('all' means platform admin).
+  const isAdmin = visibleIds === 'all';
+
+  return rows.map(row => rowToTribe(row, moodMap.get(row.id) ?? [], {
+    includeInviteToken: isAdmin || memberTribeIds.has(row.id) || (!!viewerUserId && row.createdBy === viewerUserId),
+  }));
+}
+
+/**
+ * Shared access-control tail for direct single-tribe lookups (by id / name / slug):
+ * - Unlisted private tribes are invisible to non-members (member/founder/admin only).
+ * - Listed private tribes (e.g. NSFW) expose metadata for discovery; post content is
+ *   gated separately — but NSFW metadata follows the same rule as discovery/search
+ *   ({@link canDiscoverNsfw}): hidden from guests and geo-blocked viewers, so a direct
+ *   URL doesn't reveal what the discovery filter hides.
+ * - inviteToken (a member-held join capability) is only included for member-level viewers.
+ */
+async function resolveTribeLookup(
+  row: typeof tribes.$inferSelect,
+  viewerUserId?: string | null,
+): Promise<Tribe | null> {
+  const hasMemberAccess = await viewerHasMemberAccess(row, viewerUserId);
+
+  if (!hasMemberAccess) {
+    if (!row.isPublic && !row.isListed) return null;
+
+    if (row.isNsfw) {
+      const { canDiscoverNsfw } = await import('@/lib/age-verification/nsfw-gate');
+      const showNsfw = viewerUserId ? await canDiscoverNsfw(viewerUserId) : false;
+      if (!showNsfw) return null;
+    }
+  }
+
+  const moods = await getMoodsForTribe(row.id);
+  return rowToTribe(row, moods, { includeInviteToken: hasMemberAccess });
 }
 
 /**
@@ -106,15 +186,7 @@ export async function getTribeById(tribeId: string, viewerUserId?: string | null
   const row = rows[0];
   if (!row) return null;
 
-  // Access control: private tribes are invisible to non-members
-  if (!row.isPublic) {
-    const visibleIds = await getViewerTribeIds(viewerUserId);
-    const canSee = visibleIds === 'all' || visibleIds.has(tribeId);
-    if (!canSee) return null;
-  }
-
-  const moods = await getMoodsForTribe(row.id);
-  return rowToTribe(row, moods);
+  return resolveTribeLookup(row, viewerUserId);
 }
 
 /**
@@ -126,15 +198,7 @@ export async function findTribeByName(name: string, viewerUserId?: string | null
   const row = rows[0];
   if (!row) return null;
 
-  // Access control: private tribes are invisible to non-members
-  if (!row.isPublic) {
-    const visibleIds = await getViewerTribeIds(viewerUserId);
-    const canSee = visibleIds === 'all' || visibleIds.has(row.id);
-    if (!canSee) return null;
-  }
-
-  const moods = await getMoodsForTribe(row.id);
-  return rowToTribe(row, moods);
+  return resolveTribeLookup(row, viewerUserId);
 }
 
 /**
@@ -153,15 +217,7 @@ export async function getTribeBySlug(slug: string, viewerUserId?: string | null)
     return getTribeBySlug(currentSlug, viewerUserId);
   }
 
-  // Access control: private tribes are invisible to non-members
-  if (!row.isPublic) {
-    const visibleIds = await getViewerTribeIds(viewerUserId);
-    const canSee = visibleIds === 'all' || visibleIds.has(row.id);
-    if (!canSee) return null;
-  }
-
-  const moods = await getMoodsForTribe(row.id);
-  return rowToTribe(row, moods);
+  return resolveTribeLookup(row, viewerUserId);
 }
 
 /**
@@ -175,5 +231,6 @@ export async function getTribeByInviteToken(token: string): Promise<Tribe | null
   if (!row) return null;
 
   const moods = await getMoodsForTribe(row.id);
-  return rowToTribe(row, moods);
+  // The caller proved possession of the token — returning it back is not a leak.
+  return rowToTribe(row, moods, { includeInviteToken: true });
 }

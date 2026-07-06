@@ -13,7 +13,9 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from '@/lib/utils';
 import type { Tribe, UserProfile } from '@/lib/types';
 import { getTribes, getMyTribeIds, requestToJoinTribe, checkPendingMembership } from '@/lib/actions/tribe-actions';
+import { isAgeGateStatus } from '@/lib/age-gate';
 import { useUser } from '@/hooks/use-user';
+import { useAgeGate } from '@/components/providers/age-gate-provider';
 import { useToast } from '@/hooks/use-toast';
 import { JoinTribeDialog } from '@/components/dialogs/join-tribe-dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -170,6 +172,7 @@ export default function TribesPage() {
   const { user, role } = useUser();
   const router = useRouter();
   const { toast } = useToast();
+  const { openAgeGate } = useAgeGate();
   const isLoggedIn = !!role;
   const canCreate = isLoggedIn && user?.role !== 'Human_Free';
 
@@ -244,6 +247,9 @@ export default function TribesPage() {
       } else if (result === 'already_pending') {
         setPendingTribeIds(prev => new Set(prev).add(tribeToJoin.id));
         toast({ title: "Request Already Sent", description: `Your request to join ${tribeToJoin.name} is still pending approval.` });
+      } else if (isAgeGateStatus(result)) {
+        // Unified age-gate modal explains what's required and retries the join once satisfied.
+        openAgeGate({ onResolved: () => handleConfirmJoin(tribeToJoin, selectedAlias, aliasAvatar) });
       } else {
         toast({ title: "Cannot Join", description: `Your request to join ${tribeToJoin.name} was rejected.`, variant: "destructive" });
       }
@@ -273,7 +279,7 @@ export default function TribesPage() {
     const myTribesList = isLoggedIn
       ? allTribes.filter(t => myTribeIds.includes(t.id) && matchesSearch(t))
       : [];
-    const discoverTribesList = allTribes.filter(t => !myTribeIds.includes(t.id) && t.isPublic && t.id !== '0' && matchesSearch(t));
+    const discoverTribesList = allTribes.filter(t => !myTribeIds.includes(t.id) && (t.isPublic || t.isListed) && t.id !== '0' && matchesSearch(t));
     return { myTribes: myTribesList, discoverTribes: discoverTribesList };
   }, [allTribes, myTribeIds, isClient, searchTerm, isLoggedIn]);
 

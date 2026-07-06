@@ -7,6 +7,8 @@ services:
     container_name: tribes-app-blue
     restart: unless-stopped
     env_file: .env.production
+    environment:
+      GEOIP_DB_PATH: /app/geoip/GeoLite2-City.mmdb
     depends_on:
       postgres:
         condition: service_healthy
@@ -15,6 +17,7 @@ services:
     networks: [tribes]
     volumes:
       - ./keys:/app/keys:ro
+      - ./geoip:/app/geoip:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9002/api/health"]
       interval: 5s
@@ -33,6 +36,8 @@ services:
     container_name: tribes-app-green
     restart: unless-stopped
     env_file: .env.production
+    environment:
+      GEOIP_DB_PATH: /app/geoip/GeoLite2-City.mmdb
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,6 +46,7 @@ services:
     networks: [tribes]
     volumes:
       - ./keys:/app/keys:ro
+      - ./geoip:/app/geoip:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9002/api/health"]
       interval: 5s
@@ -53,6 +59,11 @@ services:
         max-size: "50m"
         max-file: "5"
     profiles: ["green"]
+
+  # NOTE: GeoIP DB (./geoip/GeoLite2-City.mmdb, mounted read-only into both app
+  # slots above) is provisioned + refreshed by scripts/remote_deploy.sh — it runs
+  # geoipupdate before the app starts and installs a weekly refresh cron. No
+  # standalone service needed here. See .env.example for GEOIPUPDATE_* creds.
 
   # ── WebSocket Relay ───────────────────────────────────────────
   ws-relay:
@@ -157,7 +168,9 @@ services:
       - "443:443"
       - "443:443/udp"               # HTTP/3 (QUIC)
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Prod uses ./Caddyfile (default). Staging sets CADDYFILE_PATH=./Caddyfile.staging
+      # in its .env.production to mount the basic-auth-gated variant instead.
+      - ${CADDYFILE_PATH:-./Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy-data:/data            # TLS certs (persisted across restarts)
       - caddy-config:/config
     environment:

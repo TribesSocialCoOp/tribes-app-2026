@@ -7,6 +7,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import { cn } from '@/lib/utils';
 import type { Ring } from '@/lib/types';
 import Link from 'next/link';
+import { BlurReveal } from '@/components/ui/blur-reveal';
 import { resolveEmojiShortcode } from '@/lib/emoji-data';
 
 const MAX_CHART_LENGTH = 10_000; // ~10 KB — generous for any reasonable diagram
@@ -149,6 +150,8 @@ interface MarkdownContentProps {
   tribeId?: string;
   /** Callback when an inline image is clicked (for lightbox) */
   onImageClick?: (imageIndex: number) => void;
+  /** Blur inline images until tapped (issue #32 — NSFW media in adult tribes). */
+  blurImages?: boolean;
 }
 
 /**
@@ -166,6 +169,7 @@ export function MarkdownContent({
   ring,
   tribeId,
   onImageClick,
+  blurImages,
 }: MarkdownContentProps) {
   // Pre-process [img:N] tokens and @mentions into markdown syntax
   const processedContent = useMemo(() => {
@@ -208,22 +212,20 @@ export function MarkdownContent({
                 tribeId={tribeId}
                 alt={alt || `Image ${index}`}
                 onClick={() => onImageClick?.(arrayIdx)}
+                blur={blurImages}
               />
             );
           }
 
           return (
-            <span
-              className="block my-3 cursor-pointer"
-              onClick={() => onImageClick?.(arrayIdx)}
-            >
+            <InlineImage blur={blurImages} onClick={() => onImageClick?.(arrayIdx)}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={urlOrId}
                 alt={alt || `Image ${index}`}
                 className="max-w-full max-h-[500px] w-auto h-auto rounded-md border bg-muted/20 object-contain"
               />
-            </span>
+            </InlineImage>
           );
         }
 
@@ -238,7 +240,7 @@ export function MarkdownContent({
         );
       },
     };
-  }, [imageUrls, isEncrypted, postId, ring, tribeId, onImageClick]);
+  }, [imageUrls, isEncrypted, postId, ring, tribeId, onImageClick, blurImages]);
 
   return (
     <div className={cn("prose prose-sm dark:prose-invert max-w-none", className)}>
@@ -261,6 +263,7 @@ function InlineEncryptedImage({
   tribeId,
   alt,
   onClick,
+  blur,
 }: {
   fileId: string;
   postId: string;
@@ -268,6 +271,7 @@ function InlineEncryptedImage({
   tribeId?: string;
   alt: string;
   onClick?: () => void;
+  blur?: boolean;
 }) {
   const [EncryptedImage, setEncryptedImage] = useState<React.ComponentType<any> | null>(null);
 
@@ -286,7 +290,7 @@ function InlineEncryptedImage({
   }
 
   return (
-    <span className="block my-3 cursor-pointer" onClick={onClick}>
+    <InlineImage blur={blur} onClick={onClick}>
       <EncryptedImage
         fileId={fileId}
         postId={postId}
@@ -295,6 +299,44 @@ function InlineEncryptedImage({
         alt={alt}
         className="max-w-full max-h-[500px] w-auto h-auto rounded-md border bg-muted/20 object-contain"
       />
+    </InlineImage>
+  );
+}
+
+// ── Inline image wrapper (issue #32) ────────────────────────────────────────────
+// Renders a block inline image. When `blur` is set, shows it blurred with a
+// tap-to-reveal overlay (per-image). Inline images are already block-level, so the
+// blur wrapper occupies the same box — it never disrupts surrounding text flow.
+function InlineImage({
+  blur,
+  onClick,
+  children,
+}: {
+  blur?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  const [revealed, setRevealed] = useState(false);
+
+  if (blur && !revealed) {
+    return (
+      <BlurReveal
+        as="span"
+        size="sm"
+        className="my-3 rounded-md"
+        blurClassName="blur-2xl scale-105"
+        label="Tap to reveal"
+        ariaLabel="Reveal adult image"
+        onReveal={() => setRevealed(true)}
+      >
+        {children}
+      </BlurReveal>
+    );
+  }
+
+  return (
+    <span className="block my-3 cursor-pointer" onClick={onClick}>
+      {children}
     </span>
   );
 }

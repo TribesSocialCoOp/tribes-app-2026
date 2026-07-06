@@ -4,6 +4,9 @@ import React, { createContext, useContext, useReducer, useCallback, useEffect, u
 import { useRouter, useParams } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { useActionError } from '@/hooks/use-action-error';
+import { useAgeGate } from '@/components/providers/age-gate-provider';
+import { isAgeGateError, isNsfwBlockedError, isNsfwOptInError, isAgeGateStatus } from '@/lib/age-gate';
+import { getBlurAdultContent } from '@/lib/actions/age-actions';
 import { useUser } from '@/hooks/use-user';
 import { getTribeById, getTribeBySlug, getTribeMembers, leaveTribe, getMyTribeIds, requestToJoinTribe, checkTribeAccess, checkPendingMembership } from '@/lib/actions/tribe-actions';
 import { getEventsForTribe } from '@/lib/actions/event-actions';
@@ -45,6 +48,10 @@ interface TribeDetailState {
   isOwnerVerified: boolean;
   hasTribeKey: boolean | null;
   reportReason: string;
+  /** NSFW gate outcome from loading posts (issue #32) — drives the gate screen. */
+  gateError: 'blocked' | 'verify' | 'optin' | null;
+  /** Viewer's "blur adult media" preference (issue #32) — default ON. */
+  blurAdultContent: boolean;
 
   // Pagination state for posts feed
   hasMorePosts: boolean;
@@ -71,6 +78,8 @@ type Action =
       reportedPostIds: Set<string>; reportedPosts: ReportedPost[];
       events: Event[]; isMember: boolean; isOwnerVerified: boolean;
       hasMorePosts: boolean; postsCursor: string | null;
+      gateError?: 'blocked' | 'verify' | 'optin' | null;
+      blurAdultContent?: boolean;
     }}
   | { type: 'SET_POSTS'; payload: { posts: TribePost[]; hasMorePosts: boolean; postsCursor: string | null } }
   | { type: 'APPEND_POSTS'; payload: { posts: TribePost[]; hasMorePosts: boolean; postsCursor: string | null } }
@@ -103,7 +112,7 @@ type Action =
 const initialState: TribeDetailState = {
   tribe: null, posts: [], events: [], members: [],
   reportedPostIds: new Set(), reportedPosts: [], promotedPostIds: new Set(),
-  isMember: false, isPending: false, isLoading: true, isJoining: false, isOwnerVerified: false, hasTribeKey: null, reportReason: '',
+  isMember: false, isPending: false, isLoading: true, isJoining: false, isOwnerVerified: false, hasTribeKey: null, reportReason: '', gateError: null, blurAdultContent: true,
   hasMorePosts: false, postsCursor: null, isLoadingMorePosts: false,
   promoteDialog: { open: false, target: null },
   reportPostDialog: { open: false, target: null },
@@ -228,6 +237,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
   const tribeId = resolvedTribeId || tribeIdParam || '';
   const { toast } = useToast();
   const { handleError } = useActionError();
+  const { openAgeGate } = useAgeGate();
   const { role, user } = useUser();
   const { triggerSync } = useKeySync();
   const isLoggedIn = !!role;
@@ -292,14 +302,27 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
 
     const isSpeakerOrAbove = accessLevel === 'platform_admin' || accessLevel === 'founder' || accessLevel === 'speaker';
 
-    const [membersData, postsData, reportedIds, tribeReports] = await Promise.all([
+    // NSFW gate (issue #32): capture WHY posts were withheld so the feed can render
+    // the right gate screen (region-blocked / verify / opt-in) instead of "no posts".
+    let gateError: 'blocked' | 'verify' | 'optin' | null = null;
+    const [membersData, postsData, reportedIds, tribeReports, blurPref] = await Promise.all([
       getTribeMembers(effectiveTribeId),
-      getPostsForTribe(effectiveTribeId),
+      // Posts are access-gated server-side: guests / non-members of a private or
+      // NSFW tribe get a thrown access error. That's expected — swallow it so the
+      // tribe shell still loads and the gate/"join to view" card can render (otherwise
+      // the whole load rejects and the page spins forever).
+      getPostsForTribe(effectiveTribeId).catch((e) => {
+        if (isNsfwBlockedError(e)) gateError = 'blocked';
+        else if (isAgeGateError(e)) gateError = 'verify';
+        else if (isNsfwOptInError(e)) gateError = 'optin';
+        return { items: [], nextCursor: null };
+      }),
       getActiveReportedPostIds(),
       // Only speakers/founders/admins can view moderation reports — skip for guests/members
       isSpeakerOrAbove
         ? getActiveReportsForTribe(effectiveTribeId)
         : Promise.resolve({ tribe: null, reports: [], posts: [] }),
+      getBlurAdultContent().catch(() => ({ enabled: true })),
     ]);
 
     if (tribeData) {
@@ -317,6 +340,8 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
           isOwnerVerified: false, // Resolved below
           hasMorePosts: postsData.nextCursor !== null,
           postsCursor: postsData.nextCursor,
+          gateError,
+          blurAdultContent: blurPref.enabled,
         },
       });
 
@@ -359,7 +384,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     const checkKey = async () => {
       try {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const key = await getTribeKey(tribeId);
+        const key = currentUserId ? await getTribeKey(currentUserId, tribeId) : null;
         if (active) {
           dispatch({ type: 'SET_HAS_TRIBE_KEY', payload: !!key });
         }
@@ -377,7 +402,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       active = false;
       clearInterval(interval);
     };
-  }, [tribeId, state.isMember, state.hasTribeKey]);
+  }, [tribeId, state.isMember, state.hasTribeKey, currentUserId]);
 
   // ── Immediate key generation for founders of private tribes ──
   // When a founder/admin enters a private tribe without a cached key,
@@ -402,7 +427,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       const recheckTimeout = setTimeout(async () => {
         try {
           const { getTribeKey } = await import('@/lib/crypto/key-store');
-          const key = await getTribeKey(tribeId);
+          const key = currentUserId ? await getTribeKey(currentUserId, tribeId) : null;
           if (key) {
             dispatch({ type: 'SET_HAS_TRIBE_KEY', payload: true });
           }
@@ -410,7 +435,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       }, 3000);
       return () => clearTimeout(recheckTimeout);
     }
-  }, [tribeId, state.isMember, state.hasTribeKey, isTribeAdmin, state.tribe, triggerSync, dispatch]);
+  }, [tribeId, state.isMember, state.hasTribeKey, isTribeAdmin, state.tribe, triggerSync, dispatch, currentUserId]);
 
   // ── Handlers ──
   const handleInitiateJoinTribe = useCallback(() => {
@@ -455,6 +480,10 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       } else if (result === 'already_pending') {
         dispatch({ type: 'SET_PENDING', payload: true });
         toast({ title: 'Request Already Sent', description: `Your request to join ${state.tribe.name} is still pending approval.` });
+      } else if (isAgeGateStatus(result)) {
+        // Unified age-gate modal explains exactly what's required (verify / enable / blocked)
+        // for the viewer's region+surface and retries the join once satisfied.
+        openAgeGate({ onResolved: () => handleConfirmJoinTribe(tribe, selectedAlias, aliasAvatar) });
       } else {
         toast({ title: 'Cannot Join', description: `Your request to join ${state.tribe.name} was rejected.`, variant: 'destructive' });
       }
@@ -466,7 +495,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     } finally {
       dispatch({ type: 'SET_JOINING', payload: false });
     }
-  }, [state.tribe, toast, syncAllData]);
+  }, [state.tribe, toast, syncAllData, handleError, openAgeGate]);
 
   const handleOpenPromoteDialog = useCallback((post: TribePost) => {
     if (state.promotedPostIds.has(post.id)) {
@@ -550,7 +579,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
       let encPayload: { ciphertextBase64: string; iv: string } | undefined;
       if (state.tribe && !state.tribe.isPublic) {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(state.tribe.id);
+        const cachedTribeKey = currentUserId ? await getTribeKey(currentUserId, state.tribe.id) : null;
         if (!cachedTribeKey) {
           throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
         }
@@ -577,7 +606,7 @@ export function TribeDetailProvider({ children }: { children: React.ReactNode })
     } catch (e: unknown) {
       handleError(e, 'Comment Failed');
     }
-  }, [state.commentDialog.target, state.tribe, toast]);
+  }, [state.commentDialog.target, state.tribe, toast, currentUserId]);
 
   const handleCreatePost = useCallback(async (values: PostFormValues) => {
     if (!state.tribe) return;

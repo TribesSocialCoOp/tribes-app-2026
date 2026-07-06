@@ -199,12 +199,20 @@ export async function getPostById(postId: string): Promise<{
   let viewerRole: 'founder' | 'speaker' | 'member' | null = null;
 
   if (row.tribeId) {
-    const [tribe] = await db.select({ name: tribes.name, slug: tribes.slug, isPublic: tribes.isPublic })
+    const [tribe] = await db.select({ name: tribes.name, slug: tribes.slug, isPublic: tribes.isPublic, isNsfw: tribes.isNsfw })
       .from(tribes).where(eq(tribes.id, row.tribeId)).limit(1);
     if (tribe) {
       tribeName = tribe.name;
       tribeSlug = tribe.slug;
       isPublic = tribe.isPublic ?? true;
+    }
+
+    // SECURITY: NSFW gate at the content boundary (issue #32) — same sentinel behavior
+    // as getPostsForTribe, independent of membership: a member who hasn't cleared the
+    // opt-in/verification gate can't fetch NSFW posts by ID either.
+    if (tribe?.isNsfw) {
+      const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
+      await assertNsfwAccess(userId);
     }
 
     // Check viewer membership
@@ -1186,6 +1194,10 @@ export async function getPostsForTribe(
     throw new Error('Tribe not found or access denied.');
   }
 
+  // SECURITY: NSFW + private-membership content boundary (issue #32) — shared gate.
+  const { assertTribeContentAccess } = await import('@/lib/services/tribe-auth');
+  await assertTribeContentAccess(userId, tribeId, tribe);
+
   const { getPostsForTribe: fn } = await import('@/lib/services/post-service');
   return fn(tribeId, userId ?? undefined, options);
 }
@@ -1353,6 +1365,10 @@ export async function getCommentsForPost(postId: string) {
       const { getTribeById: fetchTribe } = await import('@/lib/data-access/tribes');
       const tribe = await fetchTribe(post.tribeId, userId);
       if (!tribe) throw new Error('Tribe not found or access denied.');
+
+      // SECURITY: NSFW + private-membership content boundary (issue #32) — shared gate.
+      const { assertTribeContentAccess } = await import('@/lib/services/tribe-auth');
+      await assertTribeContentAccess(userId, post.tribeId, tribe);
     }
   }
 

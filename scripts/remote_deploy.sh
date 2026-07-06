@@ -28,6 +28,11 @@ else
   exit 1
 fi
 
+# docker compose reads `.env` (not `.env.production`) for ${VAR} interpolation of
+# the compose file (POSTGRES_PASSWORD, TRIBES_APP_PASSWORD, ...). Ensure the
+# symlink exists so a fresh box doesn't recreate postgres with blank passwords.
+[ -e .env ] || ln -s .env.production .env
+
 # ── Colors ─────────────────────────────────────────────────────
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -78,6 +83,26 @@ else
   else
     fail "Docker build failed — active slot is unaffected"
   fi
+fi
+
+# ── Step 2.5: Bootstrap base services if not running (fresh box) ──
+# Only the app slots are profile-gated; postgres/pgbouncer/valkey/seaweedfs/
+# ws-relay/caddy start with a plain `up -d`. This is a NO-OP on an established
+# box (postgres already running) and self-bootstraps a fresh one (e.g. staging).
+# --env-file is required so compose can interpolate ${POSTGRES_PASSWORD} etc.
+PG_RUNNING=$(docker inspect -f '{{.State.Running}}' tribes-postgres-1 2>/dev/null || echo "false")
+if [ "$PG_RUNNING" != "true" ]; then
+  log "Base services not running — bootstrapping (fresh box)..."
+  docker compose -f "$COMPOSE_FILE" --env-file .env.production up -d
+  log "Waiting for postgres to become healthy..."
+  PG_OK=false
+  for _ in $(seq 1 30); do
+    if [ "$(docker inspect -f '{{.State.Health.Status}}' tribes-postgres-1 2>/dev/null || echo starting)" = "healthy" ]; then
+      PG_OK=true; break
+    fi
+    sleep 2
+  done
+  [ "$PG_OK" = "true" ] && ok "Base services up; postgres healthy" || fail "postgres did not become healthy after bootstrap"
 fi
 
 # ── Step 3: Run versioned schema migrations ─────────────────
@@ -139,6 +164,62 @@ fi
 if [ "$MIGRATE_ONLY" = "true" ]; then
   ok "Migration-only mode. Skipping container swap."
   exit 0
+fi
+
+# ── Step 5.5: GeoIP database (NSFW geo gate, issue #32) ──────
+# The app reads ./geoip/GeoLite2-City.mmdb (mounted read-only by both slots). The
+# DB is licensed + ~63MB so it is NOT in git — it's provisioned here and persists
+# across deploys in $REMOTE_DIR/geoip. Done BEFORE the new container starts so the
+# region reader opens a present DB on its first request.
+log "Provisioning GeoIP database..."
+mkdir -p "$REMOTE_DIR/geoip"
+if [ -n "${GEOIPUPDATE_ACCOUNT_ID:-}" ] && [ -n "${GEOIPUPDATE_LICENSE_KEY:-}" ]; then
+  if docker run --rm \
+    -e GEOIPUPDATE_ACCOUNT_ID="$GEOIPUPDATE_ACCOUNT_ID" \
+    -e GEOIPUPDATE_LICENSE_KEY="$GEOIPUPDATE_LICENSE_KEY" \
+    -e GEOIPUPDATE_EDITION_IDS="GeoLite2-City" \
+    -v "$REMOTE_DIR/geoip:/usr/share/GeoIP" \
+    ghcr.io/maxmind/geoipupdate 2>&1; then
+    ok "GeoIP DB fetched/refreshed via geoipupdate"
+  else
+    warn "geoipupdate failed — falling back to existing ./geoip if present"
+  fi
+elif [ -f "$REMOTE_DIR/geoip/GeoLite2-City.mmdb" ]; then
+  ok "GeoIP DB present (rsync-provisioned); no MaxMind creds → no auto-refresh"
+fi
+
+# With no DB at all, the geo gate is INERT — every region (including law states)
+# resolves 'open'. That must never happen silently on production: fail the deploy
+# so the box can't go green while the gate this release exists for is a no-op.
+# Staging warns only; GEOIP_OPTIONAL=true is the explicit break-glass override.
+if [ ! -f "$REMOTE_DIR/geoip/GeoLite2-City.mmdb" ]; then
+  if [ "${TRIBES_ENV:-}" != "staging" ] && [ "${GEOIP_OPTIONAL:-}" != "true" ]; then
+    warn "Fix: add GEOIPUPDATE_ACCOUNT_ID/LICENSE_KEY to .env.production, OR rsync the"
+    warn ".mmdb to $REMOTE_DIR/geoip/, OR set GEOIP_OPTIONAL=true to deploy anyway."
+    fail "NO GeoIP DB — the NSFW geo gate would be INERT on PRODUCTION. Aborting deploy."
+  fi
+  warn "NO GeoIP DB — the NSFW geo gate is INERT (all regions resolve 'open')."
+  warn "Fix: add GEOIPUPDATE_ACCOUNT_ID/LICENSE_KEY to .env.production, OR rsync the .mmdb to $REMOTE_DIR/geoip/"
+fi
+
+# ── Step 5.6: Staging seed (staging only, every deploy) ──────
+# TRIBES_ENV is sourced from .env.production above (set to "staging" only on
+# the staging box). Runs the idempotent prod bootstrap (plans, system bot,
+# Trials tribe) then layers synthetic staging fixtures. Both seeds are
+# idempotent (upsert), so we run every deploy to keep fixtures fresh; this is
+# how cover/content updates to seed-staging.ts reach the box. seed-staging.ts
+# hard-refuses to run unless TRIBES_ENV=staging, so this can never touch prod.
+if [ "${TRIBES_ENV:-}" = "staging" ]; then
+  log "Seeding staging database (idempotent)..."
+  if docker run --rm \
+    --network="$PG_NETWORK" \
+    -e DATABASE_URL="postgresql://tribes:${POSTGRES_PASSWORD}@${PG_IP}:5432/tribes" \
+    -e TRIBES_ENV=staging \
+    tribes-builder sh -c "npx tsx src/db/seed-production.ts && TRIBES_ENV=staging npx tsx src/db/seed-staging.ts" 2>&1; then
+    ok "Staging seed complete"
+  else
+    warn "Staging seed failed — will retry next deploy"
+  fi
 fi
 
 # ── Step 6: Start the NEW container ──────────────────────────
@@ -219,10 +300,21 @@ ok "Cleanup complete"
 CRON_SEAWEEDFS="0 3 * * * CONTAINER=\$(cat /opt/tribes/.active-color 2>/dev/null || echo blue) && cd /opt/tribes && docker compose -f docker-compose.prod.yml --profile \$CONTAINER exec -T app-\$CONTAINER npx tsx scripts/cleanup-seaweedfs.ts >> /var/log/tribes-cleanup.log 2>&1"
 # Server maintenance: Docker image pruning + disk space alerts (every 6 hours)
 CRON_MAINTENANCE="0 */6 * * * /usr/bin/bash /opt/tribes/scripts/server-maintenance.sh >> /var/log/tribes-maintenance.log 2>&1"
+# GeoIP DB refresh (weekly, Mon 04:00 UTC) — the GeoLite2 license requires staying
+# current. Only active when MaxMind creds are set; otherwise a harmless marker.
+if [ -n "${GEOIPUPDATE_ACCOUNT_ID:-}" ] && [ -n "${GEOIPUPDATE_LICENSE_KEY:-}" ]; then
+  CRON_GEOIP="0 4 * * 1 cd /opt/tribes && set -a && . ./.env.production && set +a && docker run --rm -e GEOIPUPDATE_ACCOUNT_ID -e GEOIPUPDATE_LICENSE_KEY -e GEOIPUPDATE_EDITION_IDS=GeoLite2-City -v /opt/tribes/geoip:/usr/share/GeoIP ghcr.io/maxmind/geoipupdate >> /var/log/tribes-geoip.log 2>&1"
+else
+  CRON_GEOIP="# tribes geoipupdate refresh disabled (no GEOIPUPDATE_* in .env.production)"
+fi
 
-# Rebuild crontab: remove old entries, add current ones
-(crontab -l 2>/dev/null | grep -v "cleanup-seaweedfs.ts" | grep -v "server-maintenance.sh" | grep -v "storage-cleanup" ; echo "$CRON_SEAWEEDFS" ; echo "$CRON_MAINTENANCE") | crontab -
-ok "Cron jobs updated (seaweedfs cleanup + server maintenance)"
+# Rebuild crontab: remove old entries, add current ones.
+# Use command substitution with `|| true` so a fresh box (no crontab yet) and
+# grep returning 1 on empty input don't trip set -e / pipefail.
+EXISTING_CRON=$(crontab -l 2>/dev/null || true)
+KEPT_CRON=$(printf '%s\n' "$EXISTING_CRON" | grep -vE "cleanup-seaweedfs.ts|server-maintenance.sh|storage-cleanup|geoipupdate" || true)
+printf '%s\n%s\n%s\n%s\n' "$KEPT_CRON" "$CRON_SEAWEEDFS" "$CRON_MAINTENANCE" "$CRON_GEOIP" | grep -v '^$' | crontab -
+ok "Cron jobs updated (seaweedfs cleanup + server maintenance + geoip refresh)"
 
 echo ""
 echo -e "${GREEN}════════════════════════════════════════════════════════════════${NC}"

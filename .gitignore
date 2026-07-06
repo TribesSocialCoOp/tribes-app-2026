@@ -45,6 +45,9 @@ next-env.d.ts
 .genkit/*
 .env*
 !.env.example
+# Env *templates* (no secrets) are tracked: .env.production.example,
+# .env.production.staging.example, etc.
+!.env*.example
 
 # firebase
 firebase-debug.log
@@ -143,3 +146,7 @@ ws-relay/package-lock.json
 dev-mailbox.json
 public/emulator-screenshot.png
 tests/check-emulator-idb.mjs
+
+# GeoIP database (licensed, ~63MB — provisioned per-host, never committed)
+geoip/
+*.mmdb

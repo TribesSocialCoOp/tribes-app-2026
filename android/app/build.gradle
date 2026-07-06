@@ -14,13 +14,34 @@ android {
         applicationId "app.tribes.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 416
+        versionCode 417
         versionName "1.0.5"
+        // Default App Link host (overridden per flavor below).
+        manifestPlaceholders = [appLinkHost: "tribes.app"]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    // Build flavors: production (default identity) and staging. The staging flavor gets
+    // a distinct applicationId so it installs alongside prod, points App Links at
+    // staging.tribes.app, and bumps versionName. The WebView URL, passkey origin/domains
+    // and UA token come from capacitor.config.ts via TRIBES_ENV=staging at `cap sync`
+    // time (exported by scripts/build_android.sh --staging). The staging flavor reuses
+    // the same release keystore (upload cert), but Play re-signs internal-testing builds
+    // with a per-app key — use that Play App Signing fingerprint in assetlinks.json.
+    flavorDimensions "env"
+    productFlavors {
+        production {
+            dimension "env"
+        }
+        staging {
+            dimension "env"
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-stg"
+            manifestPlaceholders = [appLinkHost: "staging.tribes.app"]
         }
     }
     if (keystorePropertiesFile.exists()) {
@@ -56,6 +77,9 @@ dependencies {
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    // Play Age Signals API (age gate, issue #32) — the Android analog of Apple Declared
+    // Age Range. Requires the app be distributed via Google Play to return live signals.
+    implementation "com.google.android.play:age-signals:0.0.3"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
@@ -72,4 +96,19 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+// Push is intentionally mock on staging, and google-services.json only contains the
+// production client (app.tribes.android). Skip Google Services processing for the
+// staging flavor so the build doesn't require a staging Firebase client. Firebase
+// simply won't initialize on staging (FirebaseInitProvider logs a benign warning and
+// no-ops) — which is the intended "no push on staging" behavior. To enable push on
+// staging later, register app.tribes.android.staging in the Firebase project and drop
+// a src/staging/google-services.json, then remove this block.
+afterEvaluate {
+    tasks.configureEach { task ->
+        if (task.name.startsWith("process") && task.name.contains("Staging") && task.name.endsWith("GoogleServices")) {
+            task.enabled = false
+        }
+    }
 }

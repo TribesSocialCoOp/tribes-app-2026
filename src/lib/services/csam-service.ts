@@ -24,7 +24,6 @@
  */
 
 import * as fs from 'fs';
-import * as path from 'path';
 import { csamLogger } from '@/lib/logger';
 import {
   computePdqHash,
@@ -55,9 +54,14 @@ const NCMEC_ESP_ID       = process.env.NCMEC_ESP_ID;
 const NCMEC_ESP_PASSWORD = process.env.NCMEC_ESP_PASSWORD;
 const NCMEC_SKIP_REPORT  = process.env.NCMEC_SKIP_REPORT === 'true';
 
-// Path to locally cached NCMEC hash list (one PDQ hash per line, hex format)
-const HASH_LIST_PATH = process.env.PDQ_HASH_LIST_PATH
-  ?? path.join(process.cwd(), 'data', 'ncmec-hashes.bin');
+// Path to locally cached NCMEC hash list (one PDQ hash per line, hex format).
+// Resolved lazily (not at module scope) and without path.join(process.cwd(), …) so
+// Turbopack's output-file tracer doesn't classify it as "trace the whole project"
+// (which bloats the standalone Docker output and warns on every build). A relative
+// path resolves against process.cwd() at runtime — identical behavior.
+function hashListPath(): string {
+  return process.env.PDQ_HASH_LIST_PATH ?? 'data/ncmec-hashes.bin';
+}
 
 // NCMEC CyberTipline reporting endpoint (ESP API)
 const NCMEC_REPORT_URL = 'https://report.cybertip.org/ispws/outbound';
@@ -88,9 +92,10 @@ async function getHashList(): Promise<Map<string, Uint8Array>> {
   }
 
   try {
-    if (!fs.existsSync(HASH_LIST_PATH)) {
+    const hashListFile = hashListPath();
+    if (!fs.existsSync(hashListFile)) {
       csamLogger.warn(
-        { path: HASH_LIST_PATH },
+        { path: hashListFile },
         'NCMEC hash list not found — CSAM scanning disabled. ' +
         'Register with NCMEC (espteam@ncmec.org) to obtain the hash list.'
       );
@@ -99,7 +104,7 @@ async function getHashList(): Promise<Map<string, Uint8Array>> {
       return hashListCache;
     }
 
-    const raw = fs.readFileSync(HASH_LIST_PATH, 'utf-8');
+    const raw = fs.readFileSync(hashListFile, 'utf-8');
     const hexLines = raw
       .split('\n')
       .map(h => h.trim().toLowerCase())
@@ -113,7 +118,7 @@ async function getHashList(): Promise<Map<string, Uint8Array>> {
     hashListLoadedAt = now;
 
     csamLogger.info(
-      { count: hashListCache.size, path: HASH_LIST_PATH },
+      { count: hashListCache.size, path: hashListFile },
       'NCMEC hash list loaded'
     );
     return hashListCache;

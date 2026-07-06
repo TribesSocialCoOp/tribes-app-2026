@@ -229,6 +229,14 @@ export const signupLimiter = new RateLimiter({
   maxRequests: 5,
 });
 
+// Age-verification challenge minting — keyed by userId. Bounds how many single-use
+// nonces one account can write into the shared nonce store (each has a 10-min TTL).
+export const ageChallengeLimiter = new RateLimiter({
+  prefix: 'age-challenge',
+  windowMs: 10 * 60 * 1000,  // 10 minutes
+  maxRequests: 12,
+});
+
 // Content surfaces — keyed by userId
 export const postLimiter = new RateLimiter({
   prefix: 'post',
@@ -282,11 +290,13 @@ export const uploadLimiter = new RateLimiter({
 
 /**
  * Get client IP from headers. Works with proxied requests.
- * When behind Cloudflare, CF-Connecting-IP is the most reliable header.
+ * Trust ONLY the headers our own Caddy reverse proxy sets (x-forwarded-for /
+ * x-real-ip). We deliberately do NOT honor CDN headers like cf-connecting-ip —
+ * we never sit behind Cloudflare, so trusting one would let any client forge
+ * its IP (and defeat the geo age-gate) with a single header.
  */
 export function getClientIp(headersList: Headers): string {
   return (
-    headersList.get('cf-connecting-ip') ??          // Cloudflare (most accurate)
     headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     headersList.get('x-real-ip') ??
     '127.0.0.1'

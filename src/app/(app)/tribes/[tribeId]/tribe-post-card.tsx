@@ -34,6 +34,7 @@ import { useTribeDetail } from './tribe-detail-context';
 import { MarkdownContent, getReferencedImageIndices } from '@/components/ui/markdown-content';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
 import { EncryptedImage } from '@/components/ui/encrypted-image';
+import { BlurReveal } from '@/components/ui/blur-reveal';
 import { LinkPreviewCard } from '@/components/ui/link-preview-card';
 import { InlineReplyBox } from '@/components/content/inline-reply-box';
 import { ThreadCollapseHeader } from '@/components/content/thread-collapse-header';
@@ -101,6 +102,11 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  // NSFW blur (issue #32): blur adult media until tapped, unless the viewer disabled blur.
+  const [revealed, setRevealed] = useState(false);
+  // Header images reveal as a group (card-level); inline images self-manage per-image.
+  const nsfwBlurActive = !!state.tribe?.isNsfw && state.blurAdultContent;
+  const shouldBlur = nsfwBlurActive && !revealed;
 
 
   // Inline reply state
@@ -137,7 +143,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
       let encPayload: { ciphertextBase64: string; iv: string } | undefined;
       if (tribeId && state.tribe && !state.tribe.isPublic) {
         const { getTribeKey } = await import('@/lib/crypto/key-store');
-        const cachedTribeKey = await getTribeKey(tribeId);
+        const cachedTribeKey = user?.id ? await getTribeKey(user.id, tribeId) : null;
         if (!cachedTribeKey) {
           throw new Error('Encryption keys have not synced yet. Please wait a moment and try again.');
         }
@@ -184,7 +190,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
         if (effectiveTribeId) {
           // TRIBE PATH: try tribe group key first
           const { getTribeKey } = await import('@/lib/crypto/key-store');
-          const cachedTribeKey = await getTribeKey(effectiveTribeId);
+          const cachedTribeKey = user?.id ? await getTribeKey(user.id, effectiveTribeId) : null;
 
           if (cachedTribeKey) {
             const { decryptWithTribeKey } = await import('@/lib/crypto/tribe-encryption');
@@ -265,7 +271,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
     decryptText();
     return () => { active = false; };
-  }, [post.id, post.isEncrypted, post.ciphertextBase64, post.encryptionIv, post.tribeId, tribeId]);
+  }, [post.id, post.isEncrypted, post.ciphertextBase64, post.encryptionIv, post.tribeId, tribeId, user?.id]);
 
   // Display content: decrypted text for encrypted posts, raw content for public
   const displayContent = post.isEncrypted ? (decryptedContent ?? '') : post.content;
@@ -522,9 +528,9 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
             const headerImages = allImages.filter((_, idx) => !inlineRefs.has(idx + 1));
             
             if (headerImages.length > 0) {
-              return (
+              const grid = (
                 <div className={cn(
-                  "mb-3 grid gap-2 overflow-hidden rounded-lg border bg-muted/20",
+                  "grid gap-2 overflow-hidden rounded-lg border bg-muted/20",
                   headerImages.length === 1 ? "grid-cols-1" :
                     headerImages.length === 2 ? "grid-cols-2" :
                       headerImages.length === 3 ? "grid-cols-2" :
@@ -566,6 +572,14 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                   })}
                 </div>
               );
+              if (shouldBlur) {
+                return (
+                  <BlurReveal className="mb-3 rounded-lg" onReveal={() => setRevealed(true)}>
+                    {grid}
+                  </BlurReveal>
+                );
+              }
+              return <div className="mb-3">{grid}</div>;
             }
             return null;
           })()}
@@ -609,6 +623,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
               ring={post.ring || 'tribes'}
               tribeId={post.tribeId || tribeId}
               onImageClick={(idx) => { setLightboxIndex(idx); setLightboxOpen(true); }}
+              blurImages={nsfwBlurActive}
             />
           )}
           {/* Link preview card */}

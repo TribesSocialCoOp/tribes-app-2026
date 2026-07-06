@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { getTribeByInviteToken, requestToJoinTribe } from '@/lib/actions/tribe-actions';
+import { isAgeGateStatus } from '@/lib/age-gate';
 import type { Tribe } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,7 @@ import { Loader2, Users, Shield, ArrowRight, XCircle, LogIn } from 'lucide-react
 import { JoinTribeDialog } from '@/components/dialogs/join-tribe-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/components/providers/user-provider';
+import { useAgeGate } from '@/components/providers/age-gate-provider';
 import Link from 'next/link';
 
 export default function InvitePage() {
@@ -19,6 +21,7 @@ export default function InvitePage() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { user, isLoading: isUserLoading } = useUser();
+  const { openAgeGate } = useAgeGate();
   const token = params.token as string;
 
   const [tribe, setTribe] = useState<Tribe | null>(null);
@@ -65,6 +68,10 @@ export default function InvitePage() {
       } else if (result === 'pending') {
         toast({ title: 'Request Sent', description: 'Your request to join has been submitted. The tribe admins will review it.' });
         setJoining(false);
+      } else if (isAgeGateStatus(result)) {
+        setJoining(false);
+        // Unified age-gate modal explains what's required and retries the join once satisfied.
+        openAgeGate({ onResolved: () => handleConfirmJoin(selectedTribe, selectedAlias, aliasAvatar) });
       } else {
         toast({ title: 'Cannot Join', description: 'You do not meet the requirements to join this tribe.', variant: 'destructive' });
         setJoining(false);

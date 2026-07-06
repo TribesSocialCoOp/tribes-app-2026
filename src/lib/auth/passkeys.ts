@@ -16,7 +16,7 @@ const RP_NAME = process.env.WEBAUTHN_RP_NAME || 'Tribes.app';
 const ORIGIN = process.env.WEBAUTHN_ORIGIN || 'http://localhost:9002';
 const ANDROID_ORIGIN = process.env.WEBAUTHN_ANDROID_ORIGIN || '';
 
-function getExpectedOrigins(): string[] {
+export function getExpectedOrigins(): string[] {
   const origins = [ORIGIN];
   if (ANDROID_ORIGIN) {
     const androidOrigins = ANDROID_ORIGIN.split(',').map(o => o.trim()).filter(Boolean);

@@ -17,6 +17,8 @@ const createTribeFormSchema = z.object({
   moods: z.array(z.string()).min(1).max(3),
   description: z.string().min(10).max(500),
   isPublic: z.boolean(),
+  isNsfw: z.boolean().optional(),
+  isListed: z.boolean().optional(),
   coverImage: z.any().optional(),
 });
 type CreateTribePayload = z.infer<typeof createTribeFormSchema> & { 
@@ -52,13 +54,29 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
   };
   const brandColor = hslToHex(h, s, l);
 
+  // NSFW policy §3: an NSFW tribe is permanently locked to Private (E2EE). The flag
+  // forces isPublic=false regardless of what the client requested.
+  const isNsfw = payload.isNsfw ?? false;
+  const isPublic = isNsfw ? false : payload.isPublic;
+  // Discoverability: NSFW tribes are LISTED by default (founder may unlist). All other
+  // tribes derive discoverability from isPublic, so isListed stays false for them.
+  const isListed = isNsfw ? (payload.isListed ?? true) : false;
+
+  // NSFW gate (issue #32): geo-block region, else require the web-set 18+ opt-in.
+  if (isNsfw && payload.createdBy) {
+    const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
+    await assertNsfwAccess(payload.createdBy);
+  }
+
   await db.insert(tribes).values({
     id,
     slug,
     name: payload.name,
     description: payload.description,
     memberCount: 1,
-    isPublic: payload.isPublic,
+    isPublic,
+    isNsfw,
+    isListed,
     cover: payload.coverPreview || tribeCoverSvg(payload.name, brandColor),
     dataAiHint: 'community group',
     homepageUrl: payload.homepageUrl || null,
@@ -96,7 +114,9 @@ export async function createTribe(payload: CreateTribePayload): Promise<Tribe> {
     name: payload.name,
     description: payload.description,
     members: 1,
-    isPublic: payload.isPublic,
+    isPublic,
+    isNsfw,
+    isListed,
     cover: payload.coverPreview || '',
     dataAiHint: 'community group',
     moods: payload.moods,
@@ -112,6 +132,8 @@ const tribeSettingsFormSchema = z.object({
   description: z.string().min(10).max(500),
   homepageUrl: z.string().url().optional().or(z.literal('')),
   isPublic: z.boolean(),
+  isNsfw: z.boolean().optional(),
+  isListed: z.boolean().optional(),
   moods: z.array(z.string()).max(3).optional().default([]),
   joinMechanism: z.enum(['instant', 'approval']),
   minimumReputation: z.enum(['Newcomer', 'Active', 'Trusted', 'Veteran', 'Elder']).optional(),
@@ -124,7 +146,7 @@ const tribeSettingsFormSchema = z.object({
 });
 type UpdateTribeSettingsPayload = z.infer<typeof tribeSettingsFormSchema>;
 
-export async function updateTribeSettings(tribeId: string, payload: UpdateTribeSettingsPayload): Promise<Tribe | null> {
+export async function updateTribeSettings(tribeId: string, payload: UpdateTribeSettingsPayload, actingUserId: string): Promise<Tribe | null> {
   const existingRows = await db.select().from(tribes).where(eq(tribes.id, tribeId)).limit(1);
   const existing = existingRows[0];
   if (!existing) return null;
@@ -148,6 +170,28 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
     }
   }
 
+  // NSFW flag is one-way (issue #119): once a tribe is NSFW it stays NSFW (and Private).
+  // Founders may flag a tribe NSFW, but cannot un-flag it. NSFW forces isPublic=false.
+  if (existing.isNsfw && payload.isNsfw === false) {
+    throw new Error('An NSFW tribe cannot be un-flagged. This setting is permanent.');
+  }
+  const isNsfw = existing.isNsfw || (payload.isNsfw ?? false);
+
+  // Flipping a tribe TO NSFW is itself a gated action (same gate as createTribe): the
+  // acting founder must clear the geo/opt-in/verify gate first. A public→NSFW flip is
+  // still allowed — reads are gated per-request — but note that plaintext post/comment
+  // history from the tribe's public era stays unencrypted in the DB; only content
+  // created after the flip (once the tribe is Private/E2EE) is encrypted.
+  if (isNsfw && !existing.isNsfw) {
+    const { assertNsfwAccess } = await import('@/lib/age-verification/nsfw-gate');
+    await assertNsfwAccess(actingUserId);
+  }
+
+  const isPublic = isNsfw ? false : payload.isPublic;
+  // NSFW tribes are listable (founder option, default listed); non-NSFW derive
+  // discoverability from isPublic, so isListed is forced false for them.
+  const isListed = isNsfw ? (payload.isListed ?? existing.isListed ?? true) : false;
+
   const newBrandColor = payload.brandColor ?? existing.brandColor;
   let newCover = payload.cover ?? existing.cover;
   
@@ -161,7 +205,9 @@ export async function updateTribeSettings(tribeId: string, payload: UpdateTribeS
     slug: newSlug,
     description: payload.description,
     homepageUrl: payload.homepageUrl || null,
-    isPublic: payload.isPublic,
+    isPublic,
+    isNsfw,
+    isListed,
     joinMechanism: payload.joinMechanism,
     minimumReputation: payload.minimumReputation ?? null,
     minimumAccountAgeDays: payload.minimumAccountAgeDays ?? null,
@@ -493,7 +539,7 @@ export async function checkPendingMembership(userId: string, tribeId: string): P
  * 
  * Bot friction: new/bot accounts with low reputation cannot join gated tribes.
  */
-export async function requestToJoinTribe(userId: string, tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending'> {
+export async function requestToJoinTribe(userId: string, tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<'joined' | 'pending' | 'rejected' | 'already_member' | 'already_pending' | 'age_required' | 'region_blocked' | 'opt_in_required'> {
   const { users } = await import('@/db/schema');
 
   // 1. Load tribe and user
@@ -535,6 +581,17 @@ export async function requestToJoinTribe(userId: string, tribeId: string, aliasN
         throw new Error(`This tribe requires accounts to be at least ${tribe.minimumAccountAgeDays} days old. Your account is ${accountAgeDays} days old.`);
       }
     }
+  }
+
+  // 5b. GATE: NSFW (issue #32). Returned as a status (not thrown) so the client can
+  // react: geo-blocked region → 'region_blocked'; otherwise needs the web-set 18+
+  // self-attest opt-in → 'opt_in_required'. Verified/opted-in users pass through.
+  if (tribe.isNsfw) {
+    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
+    const gate = await resolveNsfwGate({ isNsfw: true, userId });
+    if (gate.decision === 'blocked') return 'region_blocked';
+    if (gate.decision === 'needs_verify') return 'age_required';
+    if (gate.decision === 'needs_optin') return 'opt_in_required';
   }
 
   // 6. GATE: Tribe member cap
@@ -584,6 +641,14 @@ export async function requestToJoinTribe(userId: string, tribeId: string, aliasN
   const { createTribeBond } = await import('@/lib/services/bond-service');
   await createTribeBond(userId, tribeId, 'tribe', tribe.name);
 
+  // WS-2: for a private tribe, nudge the key-holders to distribute the tribe key
+  // to this new member immediately (instead of waiting for their polling cycle).
+  if (!tribe.isPublic) {
+    import('@/lib/services/realtime-dispatch').then(({ notifyTribeKeyGranters }) => {
+      notifyTribeKeyGranters(tribeId);
+    }).catch(() => {});
+  }
+
   return 'joined';
 }
 
@@ -598,6 +663,22 @@ export async function joinTribeDirectly(userId: string, tribeId: string): Promis
     .where(and(eq(tribeMembers.userId, userId), eq(tribeMembers.tribeId, tribeId)))
     .limit(1);
   if (existing.length > 0) return;
+
+  // GATE: never create an unverified member of an NSFW tribe via this un-gated path
+  // (issue #32). Even "system" auto-joins must not bypass 18+ verification. All
+  // current callers are best-effort welcome-tribe auto-joins inside signup/OAuth
+  // flows that don't catch age-gate sentinels — so SKIP rather than throw, or a
+  // founder flagging the welcome tribe NSFW would break every new signup.
+  const [tribeRow] = await db.select({ isNsfw: tribes.isNsfw }).from(tribes)
+    .where(eq(tribes.id, tribeId)).limit(1);
+  if (tribeRow?.isNsfw) {
+    const { resolveNsfwGate } = await import('@/lib/age-verification/nsfw-gate');
+    const gate = await resolveNsfwGate({ isNsfw: true, userId });
+    if (gate.decision !== 'allow') {
+      console.warn(`[joinTribeDirectly] skipped auto-join of NSFW tribe ${tribeId} for user ${userId}: ${gate.decision}`);
+      return;
+    }
+  }
 
   await db.insert(tribeMembers).values({
     id: `tm-${userId}-${tribeId}`,

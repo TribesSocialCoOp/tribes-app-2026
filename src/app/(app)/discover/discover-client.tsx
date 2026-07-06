@@ -44,9 +44,10 @@ export default function DiscoverClient() {
     fetchData();
   }, []);
 
-  // Discover page only shows public tribes — private ones are accessible via My Tribes
+  // Discover shows public tribes + listed private tribes (e.g. NSFW tribes that opted in).
+  // Unlisted private tribes are accessible via My Tribes only.
   const filteredTribes = tribes.filter(t =>
-    t.isPublic !== false &&
+    (t.isPublic !== false || t.isListed) &&
     (t.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     t.description?.toLowerCase().includes(searchQuery.toLowerCase()))
   );

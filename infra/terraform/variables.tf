@@ -16,6 +16,12 @@ variable "server_type" {
   default     = "ccx13"
 }
 
+variable "staging_server_type" {
+  description = "Hetzner server type for the staging box. hil offers cpx (AMD shared) / ccx (dedicated) only. cpx31=4CPU/8GB, cpx21=3CPU/4GB."
+  type        = string
+  default     = "cpx31"
+}
+
 variable "admin_ips" {
   description = "List of CIDR blocks allowed to SSH. Your home/office IP."
   type        = list(string)
