@@ -34,7 +34,7 @@ import { useTribeDetail } from './tribe-detail-context';
 import { MarkdownContent, getReferencedImageIndices } from '@/components/ui/markdown-content';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
 import { EncryptedImage } from '@/components/ui/encrypted-image';
-import { BlurReveal } from '@/components/ui/blur-reveal';
+import { BlurReveal, useAutoReblur } from '@/components/ui/blur-reveal';
 import { LinkPreviewCard } from '@/components/ui/link-preview-card';
 import { InlineReplyBox } from '@/components/content/inline-reply-box';
 import { ThreadCollapseHeader } from '@/components/content/thread-collapse-header';
@@ -103,7 +103,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   // NSFW blur (issue #32): blur adult media until tapped, unless the viewer disabled blur.
-  const [revealed, setRevealed] = useState(false);
+  const { revealed, reveal, ref: mediaRef } = useAutoReblur<HTMLDivElement>();
   // Header images reveal as a group (card-level); inline images self-manage per-image.
   const nsfwBlurActive = !!state.tribe?.isNsfw && state.blurAdultContent;
   const shouldBlur = nsfwBlurActive && !revealed;
@@ -574,12 +574,13 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
               );
               if (shouldBlur) {
                 return (
-                  <BlurReveal className="mb-3 rounded-lg" onReveal={() => setRevealed(true)}>
+                  <BlurReveal className="mb-3 rounded-lg" onReveal={reveal}>
                     {grid}
                   </BlurReveal>
                 );
               }
-              return <div className="mb-3">{grid}</div>;
+              // Revealed: ref lets it auto-re-blur once it scrolls out of view.
+              return <div ref={nsfwBlurActive ? mediaRef : undefined} className="mb-3">{grid}</div>;
             }
             return null;
           })()}

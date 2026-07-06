@@ -278,6 +278,10 @@ export async function getUnifiedFeed(params: UnifiedFeedParams): Promise<Communi
     if (item.tribeId && item.authorId) {
       item.authorTribeRole = authorRoles.get(`${item.tribeId}:${item.authorId}`);
     }
+    // 4. NSFW flag — so any surface can blur this post's media per the user's setting.
+    if (item.tribeId && nsfwTribeIds.has(item.tribeId)) {
+      item.tribeIsNsfw = true;
+    }
   }
 
   // Sort by timestamp descending and apply pagination

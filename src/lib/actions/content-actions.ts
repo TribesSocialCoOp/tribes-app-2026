@@ -169,6 +169,7 @@ export async function getPostById(postId: string): Promise<{
   tribeSlug: string | null;
   tribeId: string | null;
   isPublic: boolean;
+  tribeIsNsfw: boolean;
   authorRole: 'founder' | 'speaker' | 'member';
   viewerRole: 'founder' | 'speaker' | 'member' | null;
   viewerIsMember: boolean;
@@ -194,6 +195,7 @@ export async function getPostById(postId: string): Promise<{
   let tribeName: string | null = null;
   let tribeSlug: string | null = null;
   let isPublic = true;
+  let tribeIsNsfw = false;
   let viewerIsMember = false;
   let authorRole: 'founder' | 'speaker' | 'member' = 'member';
   let viewerRole: 'founder' | 'speaker' | 'member' | null = null;
@@ -205,6 +207,7 @@ export async function getPostById(postId: string): Promise<{
       tribeName = tribe.name;
       tribeSlug = tribe.slug;
       isPublic = tribe.isPublic ?? true;
+      tribeIsNsfw = tribe.isNsfw ?? false;
     }
 
     // SECURITY: NSFW gate at the content boundary (issue #32) — same sentinel behavior
@@ -299,6 +302,7 @@ export async function getPostById(postId: string): Promise<{
     tribeSlug,
     tribeId: row.tribeId,
     isPublic,
+    tribeIsNsfw,
     authorRole,
     viewerRole,
     viewerIsMember,
@@ -319,6 +323,7 @@ export async function getPostBySlug(
   tribeSlug: string | null;
   tribeId: string | null;
   isPublic: boolean;
+  tribeIsNsfw: boolean;
   authorRole: 'founder' | 'speaker' | 'member';
   viewerRole: 'founder' | 'speaker' | 'member' | null;
   viewerIsMember: boolean;

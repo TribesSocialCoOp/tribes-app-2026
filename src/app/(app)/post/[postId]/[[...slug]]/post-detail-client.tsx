@@ -35,6 +35,7 @@ import { PostCommentCard } from './post-comment-card';
 import { MarkdownContent, getReferencedImageIndices } from '@/components/ui/markdown-content';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
 import { EncryptedImage } from '@/components/ui/encrypted-image';
+import { BlurReveal, useAutoReblur } from '@/components/ui/blur-reveal';
 import { LinkPreviewCard } from '@/components/ui/link-preview-card';
 import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
@@ -52,6 +53,7 @@ interface PostDetailClientProps {
   tribeSlug: string | null;
   tribeId: string | null;
   isPublic: boolean;
+  tribeIsNsfw?: boolean;
   authorRole: 'founder' | 'speaker' | 'member';
   viewerRole: 'founder' | 'speaker' | 'member' | null;
   viewerIsMember: boolean;
@@ -63,12 +65,16 @@ export function PostDetailClient({
   tribeSlug,
   tribeId,
   isPublic,
+  tribeIsNsfw,
   authorRole,
   viewerRole,
   viewerIsMember,
 }: PostDetailClientProps) {
   const { toast } = useToast();
-  const { user } = useUser();
+  const { user, blurAdultContent } = useUser();
+  // NSFW media blurs on the standalone post page too (issue #32), per the user's setting.
+  const blurActive = !!tribeIsNsfw && blurAdultContent;
+  const { revealed: headerRevealed, reveal: revealHeader, ref: headerRef } = useAutoReblur<HTMLDivElement>();
   const router = useRouter();
   const isMobile = useIsMobile();
 
@@ -510,7 +516,8 @@ export function PostDetailClient({
           {post.title && <h3 className="text-lg font-semibold mb-1.5 text-foreground tracking-tight">{post.title}</h3>}
 
           {/* Multi-image grid */}
-          {headerImages.length > 0 && (
+          {headerImages.length > 0 && (() => {
+            const grid = (
             <div className={cn(
               "mb-3 grid gap-2 overflow-hidden rounded-md border bg-muted/20",
               headerImages.length === 1 ? "grid-cols-1" :
@@ -552,7 +559,11 @@ export function PostDetailClient({
                 );
               })}
             </div>
-          )}
+            );
+            if (blurActive && !headerRevealed) return <BlurReveal onReveal={revealHeader}>{grid}</BlurReveal>;
+            // Revealed: ref auto-re-blurs the header once it scrolls out of view.
+            return <div ref={blurActive ? headerRef : undefined}>{grid}</div>;
+          })()}
 
           {/* Decryption states */}
           {post.isEncrypted && decryptionStatus === 'decrypting' && (
@@ -593,6 +604,7 @@ export function PostDetailClient({
             postId={post.id}
             ring={post.ring || 'tribes'}
             tribeId={post.tribeId || tribeId || undefined}
+            blurImages={blurActive}
             onImageClick={(idx) => { setLightboxIndex(idx); setLightboxOpen(true); }}
           />}
 

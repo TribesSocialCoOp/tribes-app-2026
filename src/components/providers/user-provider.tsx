@@ -12,11 +12,15 @@ import React, { createContext, useContext, useEffect, useState, type ReactNode }
 import type { UserProfile, UserRole } from '@/lib/types';
 import { getCurrentUserId } from '@/lib/actions/shared';
 import { getUserProfile } from '@/lib/actions/profile-actions';
+import { getBlurAdultContent } from '@/lib/actions/age-actions';
 
 interface UserContextValue {
   user: UserProfile | null;
   role: UserRole | null;
   isLoading: boolean;
+  /** Global "blur adult content" preference (users.blurAdultContent, default on).
+   *  Read app-wide so NSFW media blurs on every page, not just inside a tribe. */
+  blurAdultContent: boolean;
   /** Force a re-fetch (e.g. after profile update or role change) */
   refresh: () => void;
 }
@@ -25,11 +29,13 @@ const UserContext = createContext<UserContextValue>({
   user: null,
   role: null,
   isLoading: true,
+  blurAdultContent: true,
   refresh: () => {},
 });
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
+  const [blurAdultContent, setBlurAdultContent] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -57,11 +63,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         
         if (userId) {
-          const profile = await getUserProfile(userId);
+          const [profile, blur] = await Promise.all([
+            getUserProfile(userId),
+            getBlurAdultContent().catch(() => ({ enabled: true })),
+          ]);
           if (cancelled) return;
           setUser(profile);
+          setBlurAdultContent(blur.enabled);
         } else {
           setUser(null);
+          setBlurAdultContent(true);
         }
       } catch (error) {
         console.error("[UserProvider] Failed to fetch user:", error);
@@ -78,7 +89,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const refresh = () => setRefreshKey(k => k + 1);
 
   return (
-    <UserContext.Provider value={{ user, role: user?.role ?? null, isLoading, refresh }}>
+    <UserContext.Provider value={{ user, role: user?.role ?? null, isLoading, blurAdultContent, refresh }}>
       {children}
     </UserContext.Provider>
   );
