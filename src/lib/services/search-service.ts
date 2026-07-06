@@ -32,8 +32,10 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
   // could still gain access (needs_optin / needs_verify / allow) — only geo-blocked
   // regions hide them. Guests stay conservative (NSFW hidden until sign-in). Computed
   // once and applied in the WHERE clause so the limit counts visible rows.
-  const { canDiscoverNsfw } = await import('@/lib/age-verification/nsfw-gate');
-  const showNsfw = currentUserId ? await canDiscoverNsfw(currentUserId) : false;
+  // Shared discovery predicate (public|listed, NSFW gated) — single source of truth with
+  // data-access/tribes.ts so the two can't drift.
+  const { discoverableTribesWhere } = await import('@/lib/age-verification/nsfw-gate');
+  const discoverable = await discoverableTribesWhere(currentUserId);
 
   // Build the blocked user ID list (bidirectional)
   let blockedIdsSql: ReturnType<typeof sql> | undefined;
@@ -62,11 +64,8 @@ export async function searchAll(query: string, limit: number = 5, currentUserId?
           like(tribes.name, pattern),
           like(tribes.description, pattern),
         ),
-        // Only surface discoverable tribes: public OR explicitly listed (e.g. NSFW).
-        // Unlisted private tribes never appear in search.
-        or(eq(tribes.isPublic, true), eq(tribes.isListed, true)),
-        // Hide NSFW from users who can't view it here (and() drops undefined).
-        showNsfw ? undefined : eq(tribes.isNsfw, false),
+        // Only surface discoverable tribes (public|listed, NSFW gated) — shared predicate.
+        discoverable,
       ))
       .limit(limit),
 

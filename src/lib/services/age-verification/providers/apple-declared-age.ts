@@ -81,7 +81,7 @@ interface DeclaredAgeAttestation {
 
 export const appleDeclaredAgeProvider: AgeVerificationProvider = {
   id: 'apple_declared_age_range',
-  label: 'Confirm your age with iPhone',
+  label: 'Confirm your age with the App Store',
   isAvailable() {
     // Config-level availability; surface (iOS-only) is enforced client-side via
     // providerSupport() and server-side via the surface-aware gate. Off by default.

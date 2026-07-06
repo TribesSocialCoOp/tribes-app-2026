@@ -20,6 +20,7 @@ import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from "@/components/ui/label";
 import { ArrowLeft, Settings as SettingsIcon, Globe, Lock, Tag, Link2, ShieldAlert, Copy, Check, Info, ShieldCheck as ReputationIcon, History, Palette, Trash2, Image as ImageIcon, Move, Upload, Loader2 as Loader } from 'lucide-react';
+import { NsfwTribeFields } from '@/components/tribes/nsfw-tribe-fields';
 import { useToast } from "@/hooks/use-toast";
 import { cn } from '@/lib/utils';
 import { useUser } from '@/hooks/use-user';
@@ -652,65 +653,8 @@ function TribeSettingsContent() {
                   )}
                 />
 
-                <FormField
-                  control={form.control}
-                  name="isNsfw"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border border-destructive/40 p-4 shadow-sm">
-                      <div className="space-y-0.5 pr-4">
-                        <FormLabel className="text-base font-semibold">
-                          <ShieldAlert className="inline-block mr-1 h-4 w-4 text-destructive" />
-                          Adult (18+) Tribe
-                        </FormLabel>
-                        <FormDescription>
-                          {tribe?.isNsfw ? (
-                            <>This Tribe is flagged NSFW. It is permanently Private, end-to-end
-                            encrypted, hidden from feeds/search, and limited to age-verified (18+)
-                            members. This flag is permanent and cannot be removed.</>
-                          ) : (
-                            <>Mark this Tribe as NSFW. It will become permanently <strong>Private</strong>{" "}
-                            and end-to-end encrypted, hidden from feeds and search, and joinable only
-                            by age-verified (18+) members. <strong>This cannot be undone.</strong></>
-                          )}
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value ?? false}
-                          onCheckedChange={field.onChange}
-                          disabled={tribe?.isNsfw ?? false}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                <NsfwTribeFields form={form} locked={tribe?.isNsfw ?? false} />
 
-                {isNsfwSelected && (
-                  <FormField
-                    control={form.control}
-                    name="isListed"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4 shadow-sm">
-                        <div className="space-y-0.5 pr-4">
-                          <FormLabel className="text-base font-semibold">
-                            List in discovery
-                          </FormLabel>
-                          <FormDescription>
-                            {field.value
-                              ? "Listed: people can find this Tribe in search and Discover (name only — content stays private)."
-                              : "Unlisted: only people with a direct invite link can find this Tribe."}
-                          </FormDescription>
-                        </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value ?? true}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                )}
                 <FormField
                   control={form.control}
                   name="joinMechanism"

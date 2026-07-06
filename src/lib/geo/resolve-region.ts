@@ -1,5 +1,5 @@
 import 'server-only';
-import { headers } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { getClientIp } from '@/lib/auth/rate-limit';
 import { isRealProd } from '@/lib/age-verification/os-age-policy';
 
@@ -30,9 +30,35 @@ export function regionCode(r: RequestRegion): string {
 type CityReader = { city: (ip: string) => { country?: { isoCode?: string }; subdivisions?: Array<{ isoCode?: string }> } };
 let readerPromise: Promise<CityReader> | null = null;
 
+// Once-per-condition alert latches so a persistent misconfig screams (for monitoring)
+// without flooding the log on every request. `gateInertAlerted` is cleared the moment
+// the DB opens successfully, so a new outage re-alerts.
+let missingDbAlerted = false;
+let gateInertAlerted = false;
+
+/**
+ * The geo gate is a legal-compliance REQUIREMENT; unknown-region is fail-OPEN by design
+ * (a transient DB blip must not block legitimate open-region users — deploy-time is where
+ * we fail closed, by refusing to ship without a fresh DB). But an inert gate in real prod
+ * is a compliance incident, so make it LOUD (alertable) rather than silent.
+ */
+function alertGateInert(reason: string): void {
+  if (!isRealProd() || gateInertAlerted) return;
+  gateInertAlerted = true;
+  console.error(
+    `[geo][ALERT] NSFW age geo-gate is INERT in production (${reason}). Every request is ` +
+    'treated as an OPEN region — the UK block and all law-state verify tiers are disabled ' +
+    '(fail-open by design). Provision/repair the GeoLite2 DB immediately.',
+  );
+}
+
 async function getReader(): Promise<CityReader | null> {
   const dbPath = process.env.GEOIP_DB_PATH;
-  if (!dbPath) return null;
+  if (!dbPath) {
+    if (!missingDbAlerted) { missingDbAlerted = true; alertGateInert('GEOIP_DB_PATH is unset'); }
+    return null;
+  }
+  missingDbAlerted = false;
   if (!readerPromise) {
     readerPromise = (async () => {
       const { Reader } = await import('@maxmind/geoip2-node');
@@ -40,13 +66,16 @@ async function getReader(): Promise<CityReader | null> {
     })();
   }
   try {
-    return await readerPromise;
+    const reader = await readerPromise;
+    gateInertAlerted = false; // DB is healthy again — re-arm the alert for any future outage.
+    return reader;
   } catch (e) {
     // Do NOT cache the failure: the DB may be provisioned moments later (e.g. by
     // geoipupdate on first deploy). Reset so the next request retries the open
     // instead of being stuck 'unknown' until a container restart.
     readerPromise = null;
-    console.warn('[geo] MaxMind DB open failed (region → unknown, will retry):', (e as Error).message);
+    alertGateInert(`MaxMind DB open failed: ${(e as Error).message}`);
+    if (!isRealProd()) console.warn('[geo] MaxMind DB open failed (region → unknown, will retry):', (e as Error).message);
     return null;
   }
 }
@@ -95,11 +124,22 @@ export async function getRequestRegion(): Promise<RequestRegion> {
 import type { Surface } from '@/lib/geo/age-policy';
 export type { Surface };
 
-/** Delivery surface, from the X-Tribes-Surface header the Capacitor builds set. */
+/**
+ * Delivery surface, from the `tribes-surface` cookie the Capacitor shell sets on native
+ * (see src/lib/capacitor/surface-cookie.ts). The cookie rides every same-origin request,
+ * so navigations and server actions alike are attributed correctly.
+ */
 export async function getSurface(): Promise<Surface> {
   try {
-    const h = await headers();
-    const s = h.get('x-tribes-surface');
+    const c = (await cookies()).get('tribes-surface')?.value;
+    if (c === 'ios') return 'ios';
+    if (c === 'android') return 'android';
+  } catch { /* no request context */ }
+  // Backward-compat: native apps installed BEFORE the cookie migration still send the old
+  // X-Tribes-Surface header (fetch wrapper). Honor it so those users aren't mis-detected as
+  // 'web' — which would wrongly permit the in-app opt-in. Harmless once all installs update.
+  try {
+    const s = (await headers()).get('x-tribes-surface');
     if (s === 'ios' || s === 'ios-cap') return 'ios';
     if (s === 'android' || s === 'android-cap') return 'android';
   } catch { /* no request context */ }

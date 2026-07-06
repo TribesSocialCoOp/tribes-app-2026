@@ -124,7 +124,7 @@ export function lawRegionTier(code: string): RegionTier {
  * gate, discovery filter, age-gate dialog) keys off this one function, so the decision
  * stays consistent across the flow.
  *
- * ⚠️ `surface` comes from the client-controlled X-Tribes-Surface header, so a web user
+ * ⚠️ `surface` comes from the client-controlled `tribes-surface` cookie, so a web user
  * CAN spoof 'ios' to see the verify OFFER (and NSFW discovery metadata) in a law state.
  * That is accepted: actually PASSING verification still requires the genuine iOS plugin
  * (and App Attest in prod) or a wallet — the verification itself is the boundary, the

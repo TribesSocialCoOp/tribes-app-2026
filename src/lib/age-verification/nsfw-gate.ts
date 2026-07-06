@@ -78,3 +78,23 @@ export async function canDiscoverNsfw(userId: string | null): Promise<boolean> {
   const gate = await resolveNsfwGate({ isNsfw: true, userId });
   return gate.decision !== 'blocked';
 }
+
+/**
+ * Single source of truth for the tribe DISCOVERY predicate (issue #32) — the WHERE clause
+ * that decides which tribes a viewer may see in any discovery surface (search results,
+ * tribe lists). Extracted so search-service and data-access can't drift apart:
+ *   - discoverable = public OR explicitly listed (unlisted private tribes never surface);
+ *   - NSFW tribes hidden unless this viewer+request may discover them ({@link canDiscoverNsfw});
+ *     guests (no userId) stay conservative — NSFW hidden until they sign in.
+ * This is metadata-only visibility; the content gate still protects the actual posts, and
+ * members reach their own NSFW tribes via membership regardless of this clause.
+ */
+export async function discoverableTribesWhere(viewerUserId: string | null | undefined) {
+  const { tribes } = await import('@/db/schema');
+  const { and, or, eq } = await import('drizzle-orm');
+  const showNsfw = viewerUserId ? await canDiscoverNsfw(viewerUserId) : false;
+  return and(
+    or(eq(tribes.isPublic, true), eq(tribes.isListed, true)),
+    showNsfw ? undefined : eq(tribes.isNsfw, false),
+  );
+}

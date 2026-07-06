@@ -74,7 +74,7 @@ export function JoinTribeDialog({
     } else {
       setGateStep(null);
     }
-  }, [isOpen, tribe?.isNsfw]);
+  }, [isOpen, tribe?.id, tribe?.isNsfw]);
 
   if (!tribe) return null;
 
