@@ -49,11 +49,12 @@ export function AppearanceSection() {
 }
 
 interface BillingSectionProps {
-  roleName: string;
+  planName: string;
+  source?: string | null;
   hasActiveSubscription?: boolean;
 }
 
-export function BillingSection({ roleName, hasActiveSubscription }: BillingSectionProps) {
+export function BillingSection({ planName, source, hasActiveSubscription }: BillingSectionProps) {
   const { toast } = useToast();
   const router = useRouter();
   const [isLoadingPortal, setIsLoadingPortal] = useState(false);
@@ -90,7 +91,10 @@ export function BillingSection({ roleName, hasActiveSubscription }: BillingSecti
         <CardDescription>Manage your subscription plan and payment methods.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-muted-foreground">Current Plan: <span className="font-semibold text-foreground">{roleName.replace(/_/g, ' ')}</span></p>
+        <p className="text-muted-foreground">
+          Current Plan: <span className="font-semibold text-foreground">{planName}</span>
+          {source === 'founding' && <span className="ml-2 text-xs font-medium text-accent">Founding member</span>}
+        </p>
         <div className="flex flex-col sm:flex-row gap-2">
           <Button
             variant="default"
