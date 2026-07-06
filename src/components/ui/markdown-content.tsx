@@ -7,7 +7,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import { cn } from '@/lib/utils';
 import type { Ring } from '@/lib/types';
 import Link from 'next/link';
-import { BlurReveal } from '@/components/ui/blur-reveal';
+import { BlurReveal, useAutoReblur } from '@/components/ui/blur-reveal';
 import { resolveEmojiShortcode } from '@/lib/emoji-data';
 
 const MAX_CHART_LENGTH = 10_000; // ~10 KB — generous for any reasonable diagram
@@ -316,7 +316,7 @@ function InlineImage({
   onClick?: () => void;
   children: React.ReactNode;
 }) {
-  const [revealed, setRevealed] = useState(false);
+  const { revealed, reveal, ref } = useAutoReblur<HTMLSpanElement>();
 
   if (blur && !revealed) {
     return (
@@ -327,15 +327,17 @@ function InlineImage({
         blurClassName="blur-2xl scale-105"
         label="Tap to reveal"
         ariaLabel="Reveal adult image"
-        onReveal={() => setRevealed(true)}
+        onReveal={reveal}
       >
         {children}
       </BlurReveal>
     );
   }
 
+  // Revealed (or non-blur) image. When it was an adult reveal, the ref lets it
+  // auto-re-blur once it scrolls out of view.
   return (
-    <span className="block my-3 cursor-pointer" onClick={onClick}>
+    <span ref={ref} className="block my-3 cursor-pointer" onClick={onClick}>
       {children}
     </span>
   );
