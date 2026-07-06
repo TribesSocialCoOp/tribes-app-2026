@@ -13,7 +13,7 @@ import { UserAvatar } from "@/components/ui/user-avatar";
 import { UserCircle, Loader2, PlusCircle, AtSign, X, Star, CreditCard, Mail, AlertTriangle, CheckCircle2, ScrollText, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { UserProfile } from '@/lib/types';
-import { getUserProfile, updateUserProfile } from '@/lib/actions/profile-actions';
+import { getUserProfile, updateUserProfile, getMySubscription } from '@/lib/actions/profile-actions';
 import { getNotificationPreferences, saveNotificationPreferences } from '@/lib/actions/content-actions';
 import { resendVerificationEmail } from '@/lib/actions/auth-email-actions';
 import { getActiveSessions, revokeSession, revokeAllOtherSessions } from '@/lib/actions/auth-actions';
@@ -46,6 +46,11 @@ function SettingsContent() {
   const { toast } = useToast();
   const { role, user: sessionUser, isLoading: isUserLoading, refresh: refreshUser } = useUser();
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [billing, setBilling] = useState<{ planName: string; hasActiveSubscription: boolean; source: string | null }>({
+    planName: 'Always Free',
+    hasActiveSubscription: false,
+    source: null,
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   // Identity form state
@@ -173,6 +178,18 @@ function SettingsContent() {
         setAliases(userProfile.aliases || []);
         setReservedAliasInput(userProfile.reservedAlias || "");
         setUserTotpEnabled(userProfile.totpEnabled ?? false);
+      }
+
+      // Resolve the real plan (subscription → role-derived → free) for billing display.
+      try {
+        const { subscription, plan } = await getMySubscription();
+        setBilling({
+          planName: plan?.name ?? 'Always Free',
+          hasActiveSubscription: !!subscription && subscription.status === 'active',
+          source: subscription?.source ?? null,
+        });
+      } catch {
+        /* leave the free-plan default */
       }
 
       setIsLoading(false);
@@ -385,7 +402,7 @@ function SettingsContent() {
       )}
 
       {/* Billing & Subscription — first section for membership visibility */}
-      <BillingSection roleName={profile.role} hasActiveSubscription={profile.role !== 'Human_Free'} />
+      <BillingSection planName={billing.planName} source={billing.source} hasActiveSubscription={billing.hasActiveSubscription} />
 
       <Separator />
 

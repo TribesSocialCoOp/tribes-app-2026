@@ -11,7 +11,7 @@
  */
 
 import { db } from '@/db';
-import { inviteCodes, inviteRedemptions, subscriptions, plans, users } from '@/db/schema';
+import { inviteCodes, inviteRedemptions, subscriptions, plans } from '@/db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 
 // ============================================================
@@ -118,33 +118,20 @@ export async function redeemInviteCode(
 
   // Determine source from the code's type field
   const source = validated.type === 'founding' ? 'founding' : 'referral';
-  const subId = `sub-${userId}-${Date.now()}`;
   const redemptionId = `redemption-${userId}-${Date.now()}`;
 
   await db.transaction(async (tx) => {
-    // Only create a subscription if the plan isn't 'free'
+    // Only grant a plan if it isn't 'free', and never clobber an existing active
+    // subscription (an invite must not downgrade a paying member). grantPlanToUser is
+    // the shared helper that inserts the subscription AND sets the role together.
     if (validated.grantsPlanId !== 'free') {
-      // Check if user already has an active subscription
       const [existingSub] = await tx.select().from(subscriptions)
         .where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, 'active')))
         .limit(1);
 
       if (!existingSub) {
-        // Create subscription
-        await tx.insert(subscriptions).values({
-          id: subId,
-          userId,
-          planId: validated.grantsPlanId,
-          status: 'active',
-          source,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-
-        // Upgrade user role
-        await tx.update(users)
-          .set({ role: plan.targetRole })
-          .where(eq(users.id, userId));
+        const { grantPlanToUser } = await import('@/lib/services/payment-service');
+        await grantPlanToUser(tx, userId, validated.grantsPlanId, source);
       }
     }
 

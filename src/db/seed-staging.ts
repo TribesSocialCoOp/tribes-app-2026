@@ -112,6 +112,25 @@ async function seedStaging() {
   }
   console.log(`  ✓ ${USERS.length} users`);
 
+  // Subscriptions — non-free members need an ACTIVE subscription so plan entitlements
+  // (tribe limits, billing name) resolve correctly. Keyed by the seed role; ids are
+  // deterministic so this backfills existing role-only users on the next deploy too.
+  const ROLE_PLAN: Record<string, string> = { Human_Paid: 'individual_coop', Creator: 'creator' };
+  for (const u of USERS) {
+    const planId = ROLE_PLAN[u.role];
+    if (!planId) continue;
+    await db.insert(schema.subscriptions).values({
+      id: `stg_sub_${u.id}`,
+      userId: u.id,
+      planId,
+      status: 'active',
+      source: 'founding',
+      createdAt: daysAgo(30),
+      updatedAt: daysAgo(30),
+    }).onConflictDoNothing({ target: schema.subscriptions.id });
+  }
+  console.log('  ✓ subscriptions for paid members');
+
   // Tribes (upsert so covers/content refresh) + mood tags + founder membership counts
   const memberCounts = new Map<string, number>();
   for (const [tribeId] of MEMBERS) memberCounts.set(tribeId, (memberCounts.get(tribeId) ?? 0) + 1);
