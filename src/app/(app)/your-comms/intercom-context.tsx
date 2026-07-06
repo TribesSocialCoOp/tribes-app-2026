@@ -123,10 +123,21 @@ export function IntercomProvider({ children }: { children: React.ReactNode }) {
       dispatch({ type: 'SET_RING_FILTER', payload: storedRing });
     }
 
+    // A "New Post" click lands here as ?compose=true. The composer (ComposeBox)
+    // only mounts on the 'feed' sub-tab, so force that tab regardless of the
+    // persisted/return tab — otherwise the compose intent is silently dropped
+    // when the user last left the Feed page on the Activity tab. ComposeBox then
+    // reads the param, expands, focuses, and strips it.
+    const wantsCompose = new URLSearchParams(window.location.search).get('compose') === 'true';
+
     // sessionStorage takes priority — set by activity items before navigating away
     // so that back navigation always restores the correct tab
     const returnTab = sessionStorage.getItem(RETURN_TAB_KEY) as 'feed' | 'activity' | null;
-    if (returnTab) {
+    if (wantsCompose) {
+      dispatch({ type: 'SET_ACTIVE_TAB', payload: 'feed' });
+      // Consume any return-tab hint so it can't override the compose intent.
+      sessionStorage.removeItem(RETURN_TAB_KEY);
+    } else if (returnTab) {
       dispatch({ type: 'SET_ACTIVE_TAB', payload: returnTab });
       sessionStorage.removeItem(RETURN_TAB_KEY);
     } else {
