@@ -106,6 +106,86 @@ export async function shareImage(url: string): Promise<boolean> {
   return false;
 }
 
+/**
+ * Save an already-decrypted image Blob to the device (used for E2E-encrypted
+ * images, whose pixels live in a client-side Blob — there is no fetchable URL).
+ * iOS: writes to cache, then opens the share sheet (offers "Save Image" / "Save to Files").
+ * Android: writes to app-external storage (Files app), no sheet.
+ * Web: triggers an <a download>.
+ */
+export async function downloadImageBlob(blob: Blob, fileName: string): Promise<boolean> {
+  if (isNative) {
+    try {
+      const base64 = await blobToBase64(blob);
+      // Android saves straight to external storage; iOS routes through the share
+      // sheet (no direct Photos-write API without extra permissions/plugins).
+      const directory = isAndroid ? Directory.External : Directory.Cache;
+      const result = await Filesystem.writeFile({ path: fileName, data: base64, directory });
+      if (isAndroid) return true;
+      await Share.share({ url: result.uri });
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/cancel/i.test(msg)) return true; // user dismissed the sheet — not an error
+      console.warn('[downloadImageBlob] native save failed:', err);
+      return false;
+    }
+  }
+
+  // Web: object URL + <a download>
+  try {
+    const objectUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = objectUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(objectUrl);
+    return true;
+  } catch (err) {
+    console.warn('[downloadImageBlob] web download failed:', err);
+    return false;
+  }
+}
+
+/**
+ * Share an already-decrypted image Blob via the native OS share sheet / Web Share API.
+ * Native: writes to cache then Share.share({ files }).
+ * Web: navigator.share({ files }) when supported, else falls back to a download.
+ */
+export async function shareImageBlob(blob: Blob, fileName: string): Promise<boolean> {
+  if (isNative) {
+    try {
+      const base64 = await blobToBase64(blob);
+      const result = await Filesystem.writeFile({ path: fileName, data: base64, directory: Directory.Cache });
+      await Share.share({ files: [result.uri] });
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/cancel/i.test(msg)) return true;
+      console.warn('[shareImageBlob] native share failed:', err);
+      return false;
+    }
+  }
+
+  // Web: Web Share API with a File attachment (supported on mobile browsers / some desktop)
+  try {
+    const file = new File([blob], fileName, { type: blob.type || 'image/jpeg' });
+    if (typeof navigator !== 'undefined' && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      return true;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/abort/i.test(msg)) return true; // user cancelled
+    console.warn('[shareImageBlob] web share failed:', err);
+  }
+
+  // Desktop / unsupported: fall back to saving the image.
+  return downloadImageBlob(blob, fileName);
+}
+
 /** Convert a Blob to a base64 string (without the data URL prefix). */
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {

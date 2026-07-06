@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { decryptFileWithKey, EncryptionMeta } from '@/lib/crypto/file-encryption';
 import { getPostKeyGrants } from '@/lib/actions/content-actions';
 import { unwrapPostKey } from '@/lib/crypto/post-encryption';
@@ -15,13 +15,21 @@ interface EncryptedImageProps {
   tribeId?: string;
   alt?: string;
   className?: string;
+  /**
+   * Called with the decrypted image Blob once decryption succeeds. Lets a parent
+   * (e.g. the lightbox) lift the plaintext out for Save/Share without re-fetching
+   * or re-decrypting. Held in a ref so its identity never re-triggers decryption.
+   */
+  onBlobReady?: (blob: Blob) => void;
 }
 
-export function EncryptedImage({ fileId, postId, ring, tribeId, alt, className }: EncryptedImageProps) {
+export function EncryptedImage({ fileId, postId, ring, tribeId, alt, className, onBlobReady }: EncryptedImageProps) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { user } = useUser();
+  const onBlobReadyRef = useRef(onBlobReady);
+  onBlobReadyRef.current = onBlobReady;
 
   useEffect(() => {
     let active = true;
@@ -85,6 +93,7 @@ export function EncryptedImage({ fileId, postId, ring, tribeId, alt, className }
         urlToRevoke = url;
         if (active) {
           setObjectUrl(url);
+          onBlobReadyRef.current?.(blob);
         }
       } catch (err: any) {
         console.error('[EncryptedImage] Decryption failed:', err);
