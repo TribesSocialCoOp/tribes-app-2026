@@ -78,7 +78,18 @@ if [ "$SKIP_BUILD" = "true" ]; then
   warn "Skipping build (--skip-build)"
 else
   log "Building tribes-app:${NEW_COLOR} (active slot tribes-app:${ACTIVE_COLOR} is untouched)..."
-  if docker build --build-arg BUILD_ID="${BUILD_ID}" -t "tribes-app:${NEW_COLOR}" -f Dockerfile . 2>&1 | tail -15; then
+  # Forward the CSP/image-host build args from .env.production (sourced above) so
+  # the baked-at-build CSP + image remotePatterns match THIS environment's hosts.
+  # Without this the Dockerfile falls back to its hardcoded prod defaults, which
+  # breaks non-prod deploys (e.g. staging images blocked by a prod-host CSP).
+  # Only pass vars that are actually set — a missing one falls back to the
+  # Dockerfile ARG default rather than being overridden with an empty string.
+  BUILD_ARGS=(--build-arg "BUILD_ID=${BUILD_ID}")
+  for _bv in S3_PUBLIC_ENDPOINT S3_ENDPOINT NEXT_PUBLIC_WS_RELAY_URL NEXT_PUBLIC_APP_URL NEXT_PUBLIC_VAPID_PUBLIC_KEY; do
+    _bval="${!_bv:-}"
+    [ -n "$_bval" ] && BUILD_ARGS+=(--build-arg "${_bv}=${_bval}")
+  done
+  if docker build "${BUILD_ARGS[@]}" -t "tribes-app:${NEW_COLOR}" -f Dockerfile . 2>&1 | tail -15; then
     ok "Image built: tribes-app:${NEW_COLOR}"
   else
     fail "Docker build failed — active slot is unaffected"
