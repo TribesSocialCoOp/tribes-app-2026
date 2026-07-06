@@ -548,6 +548,8 @@ export async function editPost(postId: string, payload: string | EditPostPayload
     authorId: posts.authorId,
     isEncrypted: posts.isEncrypted,
     title: posts.title,
+    slug: posts.slug,
+    tribeId: posts.tribeId,
   }).from(posts).where(eq(posts.id, postId)).limit(1);
 
   if (!post) throw new Error('Post not found.');
@@ -568,7 +570,14 @@ export async function editPost(postId: string, payload: string | EditPostPayload
   // Regenerate slug when title or content changes
   // Use the effective title (new if provided, otherwise existing)
   const effectiveTitle = data.title !== undefined ? data.title : post.title;
-  updateSet.slug = slugify(effectiveTitle || data.content.substring(0, 60)) || null;
+  const newSlug = slugify(effectiveTitle || data.content.substring(0, 60)) || null;
+  updateSet.slug = newSlug;
+
+  // Preserve the old URL: create a redirect so the previous slug doesn't 404
+  if (post.slug && newSlug && post.slug !== newSlug) {
+    const { createPostSlugRedirect } = await import('@/lib/slugify');
+    await createPostSlugRedirect(post.slug, postId, post.tribeId);
+  }
 
   // Update image alt text based on whether images are present
   if (data.imageUrl !== undefined || data.imageUrls !== undefined) {
@@ -611,6 +620,8 @@ export async function editEncryptedPost(
   const [post] = await db.select({
     authorId: posts.authorId,
     isEncrypted: posts.isEncrypted,
+    slug: posts.slug,
+    tribeId: posts.tribeId,
   }).from(posts).where(eq(posts.id, postId)).limit(1);
 
   if (!post) throw new Error('Post not found.');
@@ -627,7 +638,14 @@ export async function editEncryptedPost(
   if (metadata) {
     if (metadata.title !== undefined) {
       updateSet.title = metadata.title;
-      updateSet.slug = slugify(metadata.title || 'Encrypted post');
+      const newSlug = slugify(metadata.title || 'Encrypted post');
+      updateSet.slug = newSlug;
+
+      // Preserve the old URL: create a redirect so the previous slug doesn't 404
+      if (post.slug && newSlug && post.slug !== newSlug) {
+        const { createPostSlugRedirect } = await import('@/lib/slugify');
+        await createPostSlugRedirect(post.slug, postId, post.tribeId);
+      }
     }
     if (metadata.imageUrl !== undefined) updateSet.imageUrl = metadata.imageUrl;
     if (metadata.imageUrls !== undefined) updateSet.imageUrls = metadata.imageUrls;
