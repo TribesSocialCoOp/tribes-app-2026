@@ -270,11 +270,69 @@ async function handlePaymentFailed(invoice: Stripe.Invoice) {
 }
 
 // ============================================================
+// MEMBERSHIP GRANTS
+// ============================================================
+
+/** A drizzle transaction, derived from db.transaction's callback param. */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+/** Either the base db or an open transaction — grants can run inline in a larger tx. */
+type Executor = typeof db | Tx;
+
+/**
+ * Grants a plan to a user — the single source of truth for "make this user a paid member".
+ * Upserts an ACTIVE subscription for `planId` and sets `users.role` to the plan's
+ * `targetRole`. Used by invite redemption, admin grants (source 'earned'), and Stripe.
+ * Pass a `tx` to run inside an existing transaction. Granting `free` only resets the role.
+ *
+ * NOTE: this is what keeps role + tribe entitlements + billing name consistent. Setting
+ * `users.role` alone (without a subscription) leaves the user on the free plan for guard
+ * purposes — that gap is exactly the bug this helper closes.
+ */
+export async function grantPlanToUser(
+  executor: Executor,
+  userId: string,
+  planId: string,
+  source: string = 'paid',
+): Promise<void> {
+  const [plan] = await executor.select().from(plans).where(eq(plans.id, planId)).limit(1);
+  if (!plan) throw new Error(`Plan not found: ${planId}`);
+
+  if (planId !== 'free') {
+    const [existing] = await executor.select().from(subscriptions)
+      .where(and(eq(subscriptions.userId, userId), eq(subscriptions.status, 'active')))
+      .limit(1);
+
+    if (existing) {
+      // Move the user's active subscription onto the granted plan.
+      await executor.update(subscriptions)
+        .set({ planId, source, updatedAt: new Date() })
+        .where(eq(subscriptions.id, existing.id));
+    } else {
+      await executor.insert(subscriptions).values({
+        id: `sub-${userId}-${Date.now()}`,
+        userId,
+        planId,
+        status: 'active',
+        source,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+  }
+
+  await executor.update(users).set({ role: plan.targetRole }).where(eq(users.id, userId));
+}
+
+// ============================================================
 // SUBSCRIPTION QUERIES
 // ============================================================
 
 /**
  * Gets the current subscription and plan for a user.
+ *
+ * Resolution order: active subscription → role-derived base plan (for users granted a
+ * paid role without a subscription) → free. This mirrors getUserPlan in subscription-guard
+ * so billing and entitlements agree.
  */
 export async function getSubscriptionForUser(userId: string): Promise<{
   subscription: typeof subscriptions.$inferSelect | null;
@@ -287,7 +345,15 @@ export async function getSubscriptionForUser(userId: string): Promise<{
 
   if (sub && sub.status === 'active') {
     const [plan] = await db.select().from(plans).where(eq(plans.id, sub.planId)).limit(1);
-    return { subscription: sub, plan: plan! };
+    if (plan) return { subscription: sub, plan };
+  }
+
+  // Fallback: a paid role set without a subscription still reflects its base plan.
+  const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+  if (user) {
+    const { resolvePlanForRole } = await import('@/lib/services/subscription-guard');
+    const rolePlan = await resolvePlanForRole(user.role);
+    if (rolePlan) return { subscription: null, plan: rolePlan };
   }
 
   // Default to free plan

@@ -3,8 +3,8 @@
 
 import { requireAdmin } from './shared';
 import { db } from '@/db';
-import { users, userBans, adminAuditLogs, sessions } from '@/db/schema';
-import { eq, and, or, ilike, sql, desc, inArray } from 'drizzle-orm';
+import { users, userBans, adminAuditLogs, sessions, plans } from '@/db/schema';
+import { eq, and, or, ilike, sql, desc, inArray, asc } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import type { UserRole } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
@@ -140,6 +140,46 @@ export async function updateGlobalUserRole(targetUserId: string, newRole: UserRo
     action: 'role_change',
     targetUserId,
     details: { oldRole: targetUser.role, newRole },
+  });
+
+  revalidatePath('/admin/users');
+}
+
+/**
+ * Lists the plans an admin can grant (excludes 'free'), lowest tier first.
+ */
+export async function getGrantablePlans() {
+  await requireAdmin();
+  return db.select({
+    id: plans.id,
+    name: plans.name,
+    targetRole: plans.targetRole,
+    maxTribesOwned: plans.maxTribesOwned,
+  }).from(plans).where(sql`${plans.id} <> 'free'`).orderBy(asc(plans.sortOrder));
+}
+
+/**
+ * Grants a membership PLAN to a user — creates/updates an active subscription AND sets the
+ * derived role, so tribe entitlements and billing stay consistent. This is the correct way
+ * to make someone a paid member (setting the role alone leaves them on the free plan for
+ * guard purposes). Use updateGlobalUserRole only for non-plan roles (Admin/Bot).
+ */
+export async function grantMembership(targetUserId: string, planId: string) {
+  const adminId = await requireAdmin();
+
+  const [plan] = await db.select().from(plans).where(eq(plans.id, planId)).limit(1);
+  if (!plan) throw new Error('Plan not found.');
+
+  const [targetUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, targetUserId)).limit(1);
+  if (!targetUser) throw new Error('User not found.');
+
+  const { grantPlanToUser } = await import('@/lib/services/payment-service');
+  await grantPlanToUser(db, targetUserId, planId, 'earned');
+
+  await logAdminAction(adminId, {
+    action: 'role_change',
+    targetUserId,
+    details: { oldRole: targetUser.role, newRole: plan.targetRole, grantedPlan: planId },
   });
 
   revalidatePath('/admin/users');

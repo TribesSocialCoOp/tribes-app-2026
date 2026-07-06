@@ -62,3 +62,30 @@ export function BlurReveal({
     </Tag>
   );
 }
+
+/**
+ * Reveal state for adult media that AUTO-RE-BLURS (issue #32):
+ *   - scrolls out of view  → IntersectionObserver flips it back to blurred
+ *   - navigates away        → the component unmounts, which resets this local state
+ * A reveal is therefore always transient; the user re-taps each time. Attach the
+ * returned `ref` to the element wrapping the revealed media.
+ */
+export function useAutoReblur<T extends HTMLElement = HTMLDivElement>() {
+  const [revealed, setRevealed] = React.useState(false);
+  const ref = React.useRef<T>(null);
+
+  React.useEffect(() => {
+    if (!revealed) return;
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (!entry.isIntersecting) setRevealed(false); },
+      { threshold: 0 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [revealed]);
+
+  const reveal = React.useCallback(() => setRevealed(true), []);
+  return { revealed, reveal, ref };
+}

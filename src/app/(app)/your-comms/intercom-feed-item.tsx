@@ -32,6 +32,7 @@ import { MarkdownContent, getReferencedImageIndices } from '@/components/ui/mark
 import { useIntercom } from './intercom-context';
 import { ImageLightbox } from '@/components/ui/image-lightbox';
 import { EncryptedImage } from '@/components/ui/encrypted-image';
+import { BlurReveal, useAutoReblur } from '@/components/ui/blur-reveal';
 import { LinkPreviewCard } from '@/components/ui/link-preview-card';
 import { ConfirmActionDialog } from '@/components/ui/confirm-action-dialog';
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
@@ -47,7 +48,10 @@ import { CardFooterButton } from '@/components/content/card-footer-button';
 
 export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }) => {
   const { toast } = useToast();
-  const { user } = useUser();
+  const { user, blurAdultContent } = useUser();
+  // NSFW media blurs on the feed too (issue #32), gated by the user's setting.
+  const blurActive = !!item.tribeIsNsfw && blurAdultContent;
+  const { revealed: headerRevealed, reveal: revealHeader, ref: headerRef } = useAutoReblur<HTMLDivElement>();
   const router = useRouter();
   const { handleOpenEditPostDialog } = useIntercom();
   const displayTime = useTimeSince(item.timestamp);
@@ -412,7 +416,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
           const headerImages = allImages.filter((_, idx) => !inlineRefs.has(idx + 1));
           
           if (headerImages.length > 0) {
-            return (
+            const grid = (
               <div className={cn(
                 "mb-3 grid gap-2 overflow-hidden rounded-md border bg-muted/20",
                 headerImages.length === 1 ? "grid-cols-1" :
@@ -457,6 +461,11 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
                 })}
               </div>
             );
+            if (blurActive && !headerRevealed) {
+              return <BlurReveal onReveal={revealHeader}>{grid}</BlurReveal>;
+            }
+            // Revealed: ref auto-re-blurs the header once it scrolls out of view.
+            return <div ref={blurActive ? headerRef : undefined}>{grid}</div>;
           }
           return null;
         })()}
@@ -467,6 +476,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
           postId={item.id}
           ring={item.ring}
           tribeId={item.tribeId}
+          blurImages={blurActive}
           onImageClick={(idx) => { setLightboxIndex(idx); setLightboxOpen(true); }}
         />}
         {/* Link preview card */}

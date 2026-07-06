@@ -62,7 +62,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { useToast } from "@/hooks/use-toast";
-import { getGlobalUsers, updateGlobalUserRole, banUserProactively, revokeGlobalBan } from '@/lib/actions/admin-actions';
+import { getGlobalUsers, updateGlobalUserRole, banUserProactively, revokeGlobalBan, grantMembership, getGrantablePlans } from '@/lib/actions/admin-actions';
 import type { UserRole } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -90,6 +90,8 @@ export default function AdminUsersPage() {
   
   // Form states
   const [newRole, setNewRole] = useState<UserRole>("Human_Free");
+  const [grantablePlans, setGrantablePlans] = useState<Array<{ id: string; name: string; targetRole: string; maxTribesOwned: number | null }>>([]);
+  const [grantPlanId, setGrantPlanId] = useState<string>("");
   const [banDuration, setBanDuration] = useState<any>("7_days");
   const [banReason, setBanReason] = useState("");
   const [forceLogout, setForceLogout] = useState(true);
@@ -141,6 +143,30 @@ export default function AdminUsersPage() {
         description: error.message,
         variant: "destructive",
       });
+    } finally {
+      setIsActionSubmitting(false);
+    }
+  };
+
+  // Load grantable plans once (for the membership-grant control).
+  useEffect(() => {
+    getGrantablePlans().then(setGrantablePlans).catch(() => setGrantablePlans([]));
+  }, []);
+
+  const handleGrantMembership = async () => {
+    if (!selectedUser || !grantPlanId) return;
+    setIsActionSubmitting(true);
+    try {
+      await grantMembership(selectedUser.id, grantPlanId);
+      const plan = grantablePlans.find(p => p.id === grantPlanId);
+      toast({
+        title: "Membership granted",
+        description: `${selectedUser.name} is now on ${plan?.name ?? grantPlanId} (creates an active subscription).`,
+      });
+      setIsRoleDialogOpen(false);
+      fetchUsers();
+    } catch (error: any) {
+      toast({ title: "Grant failed", description: error.message, variant: "destructive" });
     } finally {
       setIsActionSubmitting(false);
     }
@@ -399,8 +425,34 @@ export default function AdminUsersPage() {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="py-4">
-            <RadioGroup value={newRole} onValueChange={(v: any) => setNewRole(v)} className="grid grid-cols-2 gap-4">
+          {/* Grant a membership plan — the correct way to make someone paid. Creates an
+              active subscription AND sets the derived role, so tribe limits + billing align. */}
+          <div className="py-2 space-y-2 rounded-lg border p-3 bg-muted/30">
+            <Label className="text-sm font-semibold">Grant membership (plan)</Label>
+            <p className="text-xs text-muted-foreground">
+              Creates an active subscription and sets the matching role. Use this for paid tiers so tribe limits and billing resolve correctly.
+            </p>
+            <div className="flex gap-2">
+              <Select value={grantPlanId} onValueChange={setGrantPlanId}>
+                <SelectTrigger className="flex-1"><SelectValue placeholder="Select a plan…" /></SelectTrigger>
+                <SelectContent>
+                  {grantablePlans.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} · {p.maxTribesOwned === null ? '∞' : p.maxTribesOwned} tribes
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button onClick={handleGrantMembership} disabled={isActionSubmitting || !grantPlanId}>
+                {isActionSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Grant
+              </Button>
+            </div>
+          </div>
+
+          <div className="py-2">
+            <Label className="text-xs text-muted-foreground">Or set a raw role (for non-plan roles like Admin/Bot):</Label>
+            <RadioGroup value={newRole} onValueChange={(v: any) => setNewRole(v)} className="grid grid-cols-2 gap-4 mt-2">
               {ROLES.map((role) => (
                 <div key={role} className="flex items-center space-x-2">
                   <RadioGroupItem value={role} id={`role-${role}`} />
@@ -409,12 +461,12 @@ export default function AdminUsersPage() {
               ))}
             </RadioGroup>
           </div>
-          
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsRoleDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleUpdateRole} disabled={isActionSubmitting}>
               {isActionSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Changes
+              Save Role Only
             </Button>
           </DialogFooter>
         </DialogContent>

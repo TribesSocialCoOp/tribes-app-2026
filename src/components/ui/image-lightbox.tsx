@@ -7,7 +7,7 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { cn } from '@/lib/utils';
 import { EncryptedImage } from './encrypted-image';
 import { isSvgUrl } from '@/lib/svg-sanitizer';
-import { downloadImage, shareImage } from '@/lib/capacitor/share';
+import { downloadImage, shareImage, downloadImageBlob, shareImageBlob } from '@/lib/capacitor/share';
 import { ResponsiveMenu, ResponsiveMenuTrigger, ResponsiveMenuContent, ResponsiveMenuItem } from './responsive-menu';
 import { useToast } from '@/hooks/use-toast';
 import type { Ring } from '@/lib/types';
@@ -91,6 +91,9 @@ export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, is
   const { toast } = useToast();
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [scale, setScale] = useState(1);
+  // For encrypted images, the decrypted pixels live in a Blob (no fetchable URL),
+  // lifted up from <EncryptedImage> so Save/Share can operate on it.
+  const [currentBlob, setCurrentBlob] = useState<Blob | null>(null);
   const transformWrapperRef = useRef<React.ComponentRef<typeof TransformWrapper>>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
@@ -125,6 +128,8 @@ export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, is
   useEffect(() => {
     setScale(1);
     transformWrapperRef.current?.resetTransform();
+    // Drop the previous slide's decrypted blob; the new slide re-supplies it.
+    setCurrentBlob(null);
   }, [currentIndex]);
 
   // ── Keyboard navigation ──────────────────────────────────────
@@ -180,6 +185,41 @@ export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, is
   // any zoom), while <object> creates a browsing context that inherits color-scheme from the OS —
   // causing dark-mode SVGs with light-dark() fills to render as black boxes.
 
+  // ── Image actions (Save / Share / Copy) ─────────────────────────────
+  // Encrypted images have no fetchable URL — their pixels are in `currentBlob`
+  // (E2E means private, not un-shareable: members can save/share, screenshots exist).
+  // For encrypted images `currentUrl` is the fileId; the shareable link is the
+  // auth-gated same-origin proxy that only members can open.
+  const encryptedFileName = `${currentUrl}.jpg`;
+  const copyLinkTarget = isEncrypted
+    ? `${window.location.origin}/api/media/${currentUrl}`
+    : currentUrl;
+  const encryptedNotReady = isEncrypted && !currentBlob;
+
+  const handleSaveImage = async () => {
+    const ok = isEncrypted
+      ? await downloadImageBlob(currentBlob!, encryptedFileName)
+      : await downloadImage(currentUrl);
+    if (ok) toast({ title: 'Image saved' });
+    else toast({ title: 'Save failed', description: 'Could not save the image.', variant: 'destructive' });
+  };
+
+  const handleShareImage = async () => {
+    const ok = isEncrypted
+      ? await shareImageBlob(currentBlob!, encryptedFileName)
+      : await shareImage(currentUrl);
+    if (!ok) toast({ title: 'Share failed', description: 'Could not complete the share.', variant: 'destructive' });
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(copyLinkTarget)
+      .then(() => toast({ title: 'Link copied', description: 'Image URL copied to clipboard.' }))
+      .catch((err) => {
+        console.warn('[lightbox] Copy link failed:', err);
+        toast({ title: 'Copy failed', description: 'Could not access clipboard.', variant: 'destructive' });
+      });
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -201,50 +241,35 @@ export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, is
           <X className="h-7 w-7 sm:h-6 sm:w-6" />
         </button>
 
-        {/* Action menu — top-left, hidden for encrypted images */}
-        {!isEncrypted && (
-          <div className="absolute top-[max(1rem,env(safe-area-inset-top,16px))] left-4 sm:top-6 sm:left-6 z-50">
-            <ResponsiveMenu>
-              <ResponsiveMenuTrigger asChild>
-                <button
-                  className="p-3 bg-black/50 hover:bg-black/70 active:bg-black/80 rounded-full text-white/90 hover:text-white transition-colors"
-                  aria-label="Image actions"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <EllipsisVertical className="h-7 w-7 sm:h-6 sm:w-6" />
-                </button>
-              </ResponsiveMenuTrigger>
-              <ResponsiveMenuContent align="start">
-                <ResponsiveMenuItem onClick={async () => {
-                  const ok = await downloadImage(currentUrl);
-                  if (ok) toast({ title: 'Image saved' });
-                  else toast({ title: 'Save failed', description: 'Could not save the image.', variant: 'destructive' });
-                }}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Save Image
-                </ResponsiveMenuItem>
-                <ResponsiveMenuItem onClick={async () => {
-                  const ok = await shareImage(currentUrl);
-                  if (!ok) toast({ title: 'Share failed', description: 'Could not complete the share.', variant: 'destructive' });
-                }}>
-                  <Share2 className="h-4 w-4 mr-2" />
-                  Share
-                </ResponsiveMenuItem>
-                <ResponsiveMenuItem onClick={() => {
-                  navigator.clipboard.writeText(currentUrl)
-                    .then(() => toast({ title: 'Link copied', description: 'Image URL copied to clipboard.' }))
-                    .catch((err) => {
-                      console.warn('[lightbox] Copy link failed:', err);
-                      toast({ title: 'Copy failed', description: 'Could not access clipboard.', variant: 'destructive' });
-                    });
-                }}>
-                  <Link className="h-4 w-4 mr-2" />
-                  Copy Link
-                </ResponsiveMenuItem>
-              </ResponsiveMenuContent>
-            </ResponsiveMenu>
-          </div>
-        )}
+        {/* Action menu — top-left. Available for encrypted images too: E2E means
+            private, not un-shareable (members can save/share; screenshots exist). */}
+        <div className="absolute top-[max(1rem,env(safe-area-inset-top,16px))] left-4 sm:top-6 sm:left-6 z-50">
+          <ResponsiveMenu>
+            <ResponsiveMenuTrigger asChild>
+              <button
+                className="p-3 bg-black/50 hover:bg-black/70 active:bg-black/80 rounded-full text-white/90 hover:text-white transition-colors"
+                aria-label="Image actions"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <EllipsisVertical className="h-7 w-7 sm:h-6 sm:w-6" />
+              </button>
+            </ResponsiveMenuTrigger>
+            <ResponsiveMenuContent align="start">
+              <ResponsiveMenuItem disabled={encryptedNotReady} onClick={handleSaveImage}>
+                <Download className="h-4 w-4 mr-2" />
+                Save Image
+              </ResponsiveMenuItem>
+              <ResponsiveMenuItem disabled={encryptedNotReady} onClick={handleShareImage}>
+                <Share2 className="h-4 w-4 mr-2" />
+                Share
+              </ResponsiveMenuItem>
+              <ResponsiveMenuItem onClick={handleCopyLink}>
+                <Link className="h-4 w-4 mr-2" />
+                Copy Link
+              </ResponsiveMenuItem>
+            </ResponsiveMenuContent>
+          </ResponsiveMenu>
+        </div>
 
         {/* Navigation arrows (multi-image, hidden when zoomed) */}
         {images.length > 1 && !isZoomed && (
@@ -296,11 +321,12 @@ export function ImageLightbox({ images, initialIndex = 0, open, onOpenChange, is
               }}
             >
               {isEncrypted && postId ? (
-                <EncryptedImage 
-                  fileId={images[currentIndex]} 
+                <EncryptedImage
+                  fileId={images[currentIndex]}
                   postId={postId}
                   ring={ring}
                   tribeId={tribeId}
+                  onBlobReady={setCurrentBlob}
                   className="max-w-full max-h-[90vh] object-contain pointer-events-auto shadow-2xl"
                 />
               ) : (

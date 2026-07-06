@@ -360,6 +360,7 @@ export interface CommunicationItem {
   bondTargetId?: string;
   tribeName?: string;
   tribeId?: string;
+  tribeIsNsfw?: boolean; // post belongs to an NSFW tribe — blur media per the user's setting
   message?: string;
   content?: string;
   moodSlug?: string;

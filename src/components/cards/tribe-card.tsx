@@ -57,10 +57,11 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-sm truncate">{tribe.name}</p>
                 <div className="flex items-center gap-2 mt-0.5">
-                  {tribe.isNsfw && (
-                    <NsfwBadge className="text-[10px] px-1.5 py-0" />
-                  )}
-                  {tribe.isPublic !== undefined && (
+                  {/* NSFW tribes show an NSFW badge instead of the privacy badge
+                      (they're always private, so the lock is redundant/confusing). */}
+                  {tribe.isNsfw ? (
+                    <NsfwBadge label="NSFW" className="text-[10px] px-1.5 py-0" />
+                  ) : tribe.isPublic !== undefined && (
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                       {tribe.isPublic ? 'Public' : 'Private'}
                     </Badge>
@@ -93,7 +94,7 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
               className="object-cover group-hover:scale-105 transition-transform duration-300"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-            {tribe.isPublic !== undefined && (
+            {tribe.isPublic !== undefined && !tribe.isNsfw && (
               <div className="absolute bottom-2 left-3">
                 <Badge variant="secondary" className="text-[10px] bg-black/50 text-white border-none">
                   {tribe.isPublic ? <><Globe className="h-3 w-3 mr-1" /> Public</> : <><Lock className="h-3 w-3 mr-1" /> Private</>}
@@ -102,7 +103,7 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
             )}
             {tribe.isNsfw && (
               <div className="absolute top-2 right-3">
-                <NsfwBadge icon className="text-[10px]" />
+                <NsfwBadge icon label="NSFW" className="text-[10px]" />
               </div>
             )}
           </div>
@@ -116,7 +117,7 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
           >
             {!tribe.brandColor && <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5" />}
             <Tent className={cn("h-12 w-12 relative z-[1]", tribe.brandColor ? 'text-white/60' : 'text-primary/40')} />
-            {tribe.isPublic !== undefined && (
+            {tribe.isPublic !== undefined && !tribe.isNsfw && (
               <div className="absolute bottom-2 left-3">
                 <Badge variant="secondary" className="text-[10px]">
                   {tribe.isPublic ? 'Public' : 'Private'}
@@ -125,7 +126,7 @@ export function TribeCard({ tribe, view, className }: TribeCardProps) {
             )}
             {tribe.isNsfw && (
               <div className="absolute top-2 right-3">
-                <NsfwBadge icon className="text-[10px]" />
+                <NsfwBadge icon label="NSFW" className="text-[10px]" />
               </div>
             )}
           </div>

@@ -4,15 +4,32 @@
  */
 
 import { db } from '@/db';
-import { plans, subscriptions, bonds, tribes } from '@/db/schema';
-import { eq, and, count } from 'drizzle-orm';
+import { plans, subscriptions, bonds, tribes, users } from '@/db/schema';
+import { eq, and, count, asc } from 'drizzle-orm';
 
 // ============================================================
 // PLAN RESOLUTION
 // ============================================================
 
 /**
- * Gets the effective plan for a user (checks subscription, falls back to free).
+ * Resolves the base plan a role maps to — the lowest-tier plan whose `targetRole` matches.
+ * Used as a fallback when a user has been granted a paid role WITHOUT a subscription
+ * (e.g. an admin role edit). Returns null if no plan targets that role.
+ *
+ * Because role→plan is not 1:1 (individual_coop and creator both target Human_Paid), this
+ * can only recover the BASE tier for a role — precise tiers require a real subscription.
+ */
+export async function resolvePlanForRole(role: string): Promise<typeof plans.$inferSelect | null> {
+  const [plan] = await db.select().from(plans)
+    .where(eq(plans.targetRole, role))
+    .orderBy(asc(plans.sortOrder), asc(plans.priceMonthly))
+    .limit(1);
+  return plan ?? null;
+}
+
+/**
+ * Gets the effective plan for a user.
+ * Resolution order: active subscription → role-derived base plan → free.
  */
 export async function getUserPlan(userId: string): Promise<typeof plans.$inferSelect> {
   // Check for active subscription
@@ -23,6 +40,13 @@ export async function getUserPlan(userId: string): Promise<typeof plans.$inferSe
   if (sub) {
     const [plan] = await db.select().from(plans).where(eq(plans.id, sub.planId)).limit(1);
     if (plan) return plan;
+  }
+
+  // Fallback: a paid role set without a subscription still grants its base plan's limits.
+  const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+  if (user) {
+    const rolePlan = await resolvePlanForRole(user.role);
+    if (rolePlan) return rolePlan;
   }
 
   // Default to free plan

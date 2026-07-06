@@ -33,6 +33,8 @@ const mockTx = {
         limit: vi.fn(() => {
           const tableName = table?._name;
           if (tableName === 'subscriptions') return Promise.resolve(mockSubscriptionRows);
+          // grantPlanToUser re-reads the plan on the tx executor
+          if (tableName === 'plans') return Promise.resolve(mockPlanRows);
           if (tableName === 'invite_codes') {
             // For the used_count read inside the transaction
             return Promise.resolve(mockInviteCodeRows.map(r => ({ usedCount: r.usedCount ?? r.used_count ?? 0 })));
