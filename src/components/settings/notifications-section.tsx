@@ -61,8 +61,10 @@ export function NotificationsSection({ notifPrefs, setNotifPrefs, isSaving, onSa
       await unsubscribe();
       setNotifPrefs(p => ({ ...p, pushEnabled: false }));
     } else {
-      await subscribe();
-      setNotifPrefs(p => ({ ...p, pushEnabled: true }));
+      // Only flip the preference on when a subscription was actually established —
+      // otherwise a failed/timed-out registration would leave the pref lying "on".
+      const ok = await subscribe();
+      if (ok) setNotifPrefs(p => ({ ...p, pushEnabled: true }));
     }
   }
 

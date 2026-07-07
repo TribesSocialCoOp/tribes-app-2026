@@ -100,18 +100,44 @@ export function usePushNotifications() {
           return false;
         }
 
-        return new Promise<boolean>(async (resolve) => {
+        // ⚠️ AWAIT the registration promise here — do NOT `return` it directly.
+        // This function's outer `finally { setIsLoading(false) }` runs the moment a value
+        // is returned; returning the pending promise reset the loading state (and the UI
+        // toggle) *before* the native `registration` event fired — the "flash then nothing"
+        // symptom — and left the toggle stuck if the token never arrived. Awaiting keeps
+        // isLoading true until registration truly settles.
+        const registered = await new Promise<boolean>(async (resolve) => {
           let tokenListener: any;
           let errorListener: any;
+          let settled = false;
 
           const cleanup = () => {
             if (tokenListener) tokenListener.remove();
             if (errorListener) errorListener.remove();
           };
+          const finish = (value: boolean) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            cleanup();
+            resolve(value);
+          };
+
+          // Safety net: if APNs/FCM never fires `registration` OR `registrationError`
+          // (e.g. missing Push capability, no network, provisioning mismatch), don't hang
+          // the toggle forever — surface an actionable failure after 30s.
+          const timeout = setTimeout(() => {
+            console.error('[push] Native registration timed out after 30s — no token or error event fired');
+            toast({
+              title: 'Registration Timed Out',
+              description: 'The device never returned a push token. Check notification permissions and try again.',
+              variant: 'destructive',
+            });
+            finish(false);
+          }, 30_000);
 
           try {
             tokenListener = await PushNotifications.addListener('registration', async (token) => {
-              cleanup();
               const truncated = token.value.length > 12 ? token.value.slice(0, 8) + '…' + token.value.slice(-4) : token.value;
               console.log('[push] Native registration successful, token:', truncated);
               try {
@@ -119,8 +145,8 @@ export function usePushNotifications() {
                 await registerPushSubscriptionAction({
                   endpoint: token.value,
                   platform: platform,
-                  // ⚠️ APNs sandbox routing — TestFlight/dev builds use sandbox gateway.
-                  // On Android this is ignored (null). On iOS it routes to the correct APNs host.
+                  // APNs gateway hint only — the server self-corrects on BadDeviceToken and
+                  // persists the right value, so a wrong first guess no longer loses the token.
                   apnsSandbox: platform === 'ios' ? IS_DEV : undefined,
                 });
                 setIsSubscribed(true);
@@ -130,31 +156,36 @@ export function usePushNotifications() {
                   title: 'Notifications Enabled! 🎉',
                   description: 'You will now receive native push notifications on this device.',
                 });
-                resolve(true);
+                finish(true);
               } catch (err) {
                 console.error('[push] Failed to save native token to server:', err);
-                resolve(false);
+                toast({
+                  title: 'Could Not Save Token',
+                  description: 'Push registered on-device but the server did not accept it. Please try again.',
+                  variant: 'destructive',
+                });
+                finish(false);
               }
             });
 
             errorListener = await PushNotifications.addListener('registrationError', (err) => {
-              cleanup();
               console.error('[push] Native registration error event:', err);
               toast({
                 title: 'Registration Failed',
                 description: 'Could not register for push notifications.',
                 variant: 'destructive',
               });
-              resolve(false);
+              finish(false);
             });
 
+            console.log('[push] Calling PushNotifications.register()…');
             await PushNotifications.register();
           } catch (err) {
-            cleanup();
             console.error('[push] Native register exception:', err);
-            resolve(false);
+            finish(false);
           }
         });
+        return registered;
       }
 
       const perm = await requestPermission();
