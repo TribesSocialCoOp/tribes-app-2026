@@ -52,7 +52,7 @@
     "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "@capgo/capacitor-nfc": "^8.0.25",
-    "@capgo/capacitor-passkey": "^8.0.0",
+    "@capgo/capacitor-passkey": "https://codeload.github.com/TribesSocialCoOp/capacitor-passkey/tar.gz/e04eee839b736420851804ac29da6111bce6f99c",
     "@hookform/resolvers": "^4.1.3",
     "@marsidev/react-turnstile": "^1.5.0",
     "@maxmind/geoip2-node": "^6.3.4",
