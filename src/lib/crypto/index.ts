@@ -82,6 +82,7 @@ export {
 // Passkey PRF vault (Phase 3)
 export {
   isPrfSupported,
+  markPrfProven,
   getPrfSaltBytes,
   derivePrfWrappingKey,
   normalizePrfOutput,
