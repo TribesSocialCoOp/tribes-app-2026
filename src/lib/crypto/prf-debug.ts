@@ -34,6 +34,22 @@ export function prfDebug(event: string, data?: Record<string, unknown>): void {
   }
   // eslint-disable-next-line no-console
   console.log(`[prf-debug] ${event}`, data ?? '');
+
+  // Best-effort server mirror. The endpoint is a cheap 204 no-op unless a debug
+  // credential prefix is configured server-side, so this is safe to always fire.
+  // Lets us recover native-WebView (Capacitor) traces where DevTools can't attach
+  // and window.__prfDebug is unreachable. keepalive survives the login→feed nav.
+  try {
+    const cid = typeof data?.credentialIdPrefix === 'string' ? data.credentialIdPrefix : undefined;
+    void fetch('/api/prf-diag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ t: entry.t, event, data, cid }),
+      keepalive: true,
+    }).catch(() => { /* diagnostics only — never surface */ });
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Returns the current debug buffer (for programmatic collection). */

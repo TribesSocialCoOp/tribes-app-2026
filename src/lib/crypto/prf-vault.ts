@@ -43,10 +43,33 @@ const HKDF_INFO = 'tribes.app/prf-vault-wrapping-key/v1';
 // ============================================================
 
 /**
+ * localStorage flag: set once a PRF ceremony has actually derived a wrapping
+ * key on this device (see markPrfProven, called from the login flow). This is
+ * ground truth — a device where PRF demonstrably worked supports PRF, full stop.
+ */
+const PRF_PROVEN_KEY = 'tribes:prf-proven-v1';
+
+/**
+ * Records that the PRF extension successfully produced a usable output on this
+ * device/origin. Called from the login flow right after the wrapping key is
+ * derived. Persisted so isPrfSupported() reports the truth even when the
+ * platform's capability probe lies (see the iOS note in isPrfSupported).
+ */
+export function markPrfProven(): void {
+  try { localStorage.setItem(PRF_PROVEN_KEY, '1'); } catch { /* private mode / unavailable */ }
+}
+
+function isPrfProven(): boolean {
+  try { return localStorage.getItem(PRF_PROVEN_KEY) === '1'; } catch { return false; }
+}
+
+/**
  * Checks if the browser/platform supports the WebAuthn PRF extension.
  *
- * Detection strategy:
- * 1. Standard: PublicKeyCredential.getClientCapabilities() (WebAuthn L3)
+ * Detection strategy (first match wins):
+ * 0. Proven: a PRF ceremony has already derived a wrapping key on this device.
+ * 1. Standard: PublicKeyCredential.getClientCapabilities() (WebAuthn L3) —
+ *    trusted ONLY for a positive result (see the iOS caveat below).
  * 2. Native iOS (Capacitor): PRF is supported via the system authenticator
  *    (iCloud Keychain / Face ID). The login flow already uses this successfully.
  * 3. Fallback: If navigator.credentials is available and we're on a platform
@@ -58,7 +81,14 @@ export async function isPrfSupported(): Promise<boolean> {
     console.log('[prf] No window or PublicKeyCredential');
     return false;
   }
-  
+
+  // 0. Ground truth: if PRF has ever derived a wrapping key here, it's supported
+  // — regardless of what any capability probe claims.
+  if (isPrfProven()) {
+    console.log('[prf] PRF previously proven on this device — supported');
+    return true;
+  }
+
   // 1. Check getClientCapabilities (Standard way, WebAuthn L3)
   // This API is new and not yet in all TypeScript lib definitions — use safe dynamic access.
   const pkc = PublicKeyCredential as unknown as Record<string, unknown>;
@@ -66,8 +96,12 @@ export async function isPrfSupported(): Promise<boolean> {
     try {
       const caps = await (pkc.getClientCapabilities as () => Promise<Record<string, boolean>>)();
       console.log('[prf] getClientCapabilities:', caps);
-      // Chrome reports PRF as 'extension:prf', Safari/standard as 'prf'
-      return !!(caps.prf || caps['extension:prf']);
+      // Chrome reports PRF as 'extension:prf', Safari/standard as 'prf'.
+      // Trust this ONLY for a positive: iOS 18 WebKit supports PRF at ceremony
+      // time but OMITS `prf` from this map, so a missing key is INCONCLUSIVE —
+      // fall through to the platform heuristics below instead of returning false.
+      if (caps.prf || caps['extension:prf']) return true;
+      console.log('[prf] getClientCapabilities did not advertise prf — inconclusive, continuing');
     } catch (err) {
       console.log('[prf] getClientCapabilities threw:', err);
       // Fall through — capability check failed (e.g., browser throws on unknown caps)
