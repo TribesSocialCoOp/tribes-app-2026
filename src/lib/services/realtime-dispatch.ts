@@ -99,7 +99,7 @@ export async function notifyMention(
 ): Promise<void> {
   // Resolve the deep-link URL.
   // For posts, sourceId IS the postId. For comments, we need to look up the parent post.
-  let url = '/your-comms';
+  let url = '/activity';
   if (sourceType === 'post') {
     url = `/post/${sourceId}`;
   } else if (sourceType === 'comment') {
@@ -112,7 +112,7 @@ export async function notifyMention(
       if (comment) url = `/post/${comment.postId}?commentId=${sourceId}`;
     } catch (err) {
       console.warn('[realtime-dispatch] Failed to resolve comment deep link for mention', { sourceType, sourceId }, err);
-      // Fallback to /your-comms if lookup fails
+      // Fallback to /activity if lookup fails
     }
   } else if (sourceType === 'story_comment') {
     try {
@@ -124,7 +124,7 @@ export async function notifyMention(
       if (comment) url = `/our-story/${comment.storyId}?commentId=${sourceId}`;
     } catch (err) {
       console.warn('[realtime-dispatch] Failed to resolve comment deep link for mention', { sourceType, sourceId }, err);
-      // Fallback to /your-comms if lookup fails
+      // Fallback to /activity if lookup fails
     }
   }
 
@@ -439,7 +439,7 @@ export async function notifyVibe(
     ? `/post/${postId}`
     : tribeId
       ? `/tribes/${tribeId}`
-      : '/your-comms';
+      : '/activity';
 
   await notifyUser(targetAuthorId, {
     title: 'New Reaction',

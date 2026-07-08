@@ -223,7 +223,7 @@ function ManageMembersContent() {
       // If from activity and no more pending, auto-return
       if (from === 'activity' && reloadResult?.pendingCount === 0) {
         sessionStorage.removeItem('manage-members-origin');
-        setTimeout(() => router.replace('/your-comms'), 600);
+        setTimeout(() => router.replace('/activity'), 600);
       }
     } catch (err) {
       handleError(err, 'Failed to approve member');
@@ -243,7 +243,7 @@ function ManageMembersContent() {
       // If from activity and no more pending, auto-return
       if (from === 'activity' && reloadResult?.pendingCount === 0) {
         sessionStorage.removeItem('manage-members-origin');
-        setTimeout(() => router.replace('/your-comms'), 600);
+        setTimeout(() => router.replace('/activity'), 600);
       }
     } catch (err) {
       handleError(err, 'Failed to deny request');

@@ -269,7 +269,7 @@ async function sendApnsPushNotification(
           },
           sound: 'default',
         },
-        url: payload.url || '/your-comms',
+        url: payload.url || '/activity',
       };
 
       const req = client.request({
@@ -374,7 +374,7 @@ async function sendFcmPushNotification(
           body: payload.body,
         },
         data: {
-          url: payload.url || '/your-comms',
+          url: payload.url || '/activity',
         },
         android: {
           priority: 'high',

@@ -12,6 +12,7 @@ import { AgeGateProvider } from "@/components/providers/age-gate-provider";
 import { KeySyncBanner } from "@/components/providers/key-sync-banner";
 import { EmailVerificationBanner } from "@/components/providers/email-verification-banner";
 import { VersionGuard } from "@/components/providers/version-guard";
+import { ActivityProvider } from "@/components/providers/activity-provider";
 
 import { MobileTabBar } from "@/components/layout/mobile-tab-bar";
 import { JumpToTop } from "@/components/layout/jump-to-top";
@@ -120,6 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <KeySyncProvider>
           <WebSocketProvider>
             <AgeGateProvider>
+            <ActivityProvider>
             <SidebarProvider>
               <AppSidebar />
               <SidebarRail />
@@ -155,6 +157,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <MobileTabBar />
               <JumpToTop />
             </SidebarProvider>
+            </ActivityProvider>
             </AgeGateProvider>
           </WebSocketProvider>
         </KeySyncProvider>

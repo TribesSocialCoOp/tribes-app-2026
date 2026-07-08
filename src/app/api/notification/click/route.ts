@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { buildUrl } from '@/lib/url';
 
 export async function GET(req: NextRequest) {
-  const targetPath = req.nextUrl.searchParams.get('to') || '/your-comms';
+  const targetPath = req.nextUrl.searchParams.get('to') || '/activity';
 
   // Build the full redirect URL (relative to origin)
   const redirectUrl = buildUrl(targetPath, req);
