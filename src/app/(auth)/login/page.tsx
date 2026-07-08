@@ -124,7 +124,7 @@ function LoginForm() {
       const loggedInUserId = loginResult?.userId;
 
       try {
-        const { hasAnyKeys, derivePrfWrappingKey, decryptAndRestoreVault, sessionVaultKey, normalizePrfOutput, prfDebug, describeShape } = await import('@/lib/crypto');
+        const { hasAnyKeys, derivePrfWrappingKey, decryptAndRestoreVault, sessionVaultKey, normalizePrfOutput, prfDebug, describeShape, markPrfProven } = await import('@/lib/crypto');
         const { getPrfVaultAction } = await import('@/lib/actions/key-vault-actions');
 
         // ── PRF ceremony trace (browser-vs-native, FF-vs-Chrome) ──
@@ -162,6 +162,10 @@ function LoginForm() {
           // Stored in memory AND persisted to IndexedDB so background vault
           // sync keeps working across reloads without a new passkey ceremony.
           sessionVaultKey.set(authResponse.id, wrappingKey, loggedInUserId);
+          // PRF just produced a usable output on this device — record it so
+          // isPrfSupported() reports the truth even on platforms whose capability
+          // probe omits `prf` (notably iOS 18 WebKit / the Capacitor WebView).
+          markPrfProven();
           prfDebug('login.prf.keyDerived', { credentialIdPrefix: authResponse.id?.slice(0, 10) });
 
           const hadKeys = await hasAnyKeys();
