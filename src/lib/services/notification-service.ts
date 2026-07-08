@@ -203,6 +203,7 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
 
       const [unread] = await db.select({
         count: sql<number>`count(*)`,
+        latestSentAt: sql<string | null>`max(${messages.sentAt})`,
       }).from(messages)
         .where(and(
           bondIdCondition,
@@ -217,7 +218,9 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
           type: 'unread_message',
           title: `${count} unread message${count > 1 ? 's' : ''}`,
           description: `from ${bond.targetName}`,
-          timestamp: new Date(), // approximate
+          // Latest unread message time — a fetch-time timestamp would always
+          // postdate lastActivityViewedAt, making "Mark all read" a no-op here
+          timestamp: unread?.latestSentAt ? new Date(unread.latestSentAt) : new Date(),
           actionUrl: `/chat/${bond.id}`,
           read: false,
         });
