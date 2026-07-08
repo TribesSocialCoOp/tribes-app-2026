@@ -110,14 +110,24 @@ export async function isPrfSupported(): Promise<boolean> {
     console.log('[prf] getClientCapabilities not available');
   }
 
-  // 2. Native iOS (Capacitor): PRF works via the system authenticator.
-  // The login flow already successfully evaluates PRF extensions through
-  // @simplewebauthn/browser → ASAuthorizationController, so we know it's available.
+  // 2. Native (Capacitor): ask the passkey plugin whether THIS binary's native
+  // bridge supports PRF. Older plugin builds dropped WebAuthn extensions
+  // entirely (hardcoded empty clientExtensionResults), so "iOS supports PRF"
+  // was never enough — the bridge itself has to forward it. Our patched plugin
+  // reports `prf: true` from isSupported() (iOS 18+); older builds omit the
+  // field and correctly resolve to false, steering users to passphrase restore.
   const cap = (window as unknown as Record<string, any>).Capacitor;
   console.log('[prf] Capacitor global:', !!cap, 'isNative:', cap?.isNativePlatform?.(), 'platform:', cap?.getPlatform?.());
-  if (cap?.isNativePlatform?.() && cap?.getPlatform?.() === 'ios') {
-    console.log('[prf] Capacitor iOS detected — returning true');
-    return true;
+  if (cap?.isNativePlatform?.()) {
+    try {
+      const { CapacitorPasskey } = await import('@capgo/capacitor-passkey');
+      const support = await CapacitorPasskey.isSupported();
+      console.log('[prf] native plugin isSupported:', support);
+      return (support as { prf?: boolean }).prf === true;
+    } catch (err) {
+      console.log('[prf] native plugin isSupported threw:', err);
+      return false;
+    }
   }
 
   // 3. Web fallback: check if we're on a modern platform with credentials support.
