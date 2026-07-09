@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Bell, HeartHandshake, MessageSquareText, Users, ChevronRight, Loader2, FileText, MessageCircle, CheckCheck, AtSign, Landmark } from "lucide-react";
 import { format } from 'date-fns';
-import { useIntercom } from './intercom-context';
+import { useActivity } from '@/components/providers/activity-provider';
 import { RecentChats } from '@/components/circles/recent-chats';
 
 interface ActivityItemCardProps {
@@ -26,20 +26,18 @@ const ActivityItemCard: React.FC<ActivityItemCardProps> = ({ item, icon, badgeSl
     onRead(item.id);
     // Small delay to let the fire-and-forget server call dispatch
     await new Promise(resolve => setTimeout(resolve, 50));
-    
+
     const url = item.actionUrl || '/bonds';
     // Use sessionStorage instead of query params — Android adblockers strip ?from= as tracking
     if (item.type === 'tribe_join_request') {
       sessionStorage.setItem('manage-members-origin', 'activity');
     }
-    // Preserve tab context so back navigation restores Activity tab, not Feed
-    sessionStorage.setItem('intercom_return_tab', 'activity');
 
     // Next.js router.push() called after `await` (outside a synchronous React event)
     // behaves as replaceState in Next.js 16 / React 19 concurrent mode, clobbering
-    // the /your-comms entry so back() skips past the feed to wherever you came from.
-    // Inject /your-comms first so back always lands here regardless of push vs. replace.
-    History.prototype.pushState.call(window.history, null, '', '/your-comms');
+    // the /activity entry so back() skips past it to wherever you came from.
+    // Inject /activity first so back always lands here regardless of push vs. replace.
+    History.prototype.pushState.call(window.history, null, '', '/activity');
     router.push(url);
   };
 
@@ -77,11 +75,10 @@ const ActivityItemCard: React.FC<ActivityItemCardProps> = ({ item, icon, badgeSl
   );
 };
 
-export function IntercomActivityTab() {
-  const { state, activityCount, markAllRead, markItemRead } = useIntercom();
-  const { activityItems, isLoadingActivity } = state;
+export function ActivityList() {
+  const { items: activityItems, isLoading, unreadCount, markAllRead, markItemRead } = useActivity();
 
-  if (isLoadingActivity) {
+  if (isLoading && activityItems.length === 0) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
@@ -94,7 +91,7 @@ export function IntercomActivityTab() {
       <>
         {/* Recent Chats — quick access to active conversations */}
         <RecentChats />
-        
+
         <Card className="text-center py-12 shadow-none border border-dashed">
           <CardContent className="p-6">
             <Bell className="mx-auto h-12 w-12 text-muted-foreground opacity-50 mb-4" />
@@ -122,10 +119,10 @@ export function IntercomActivityTab() {
       <RecentChats />
 
       {/* Mark all read header */}
-      {activityCount > 0 && (
+      {unreadCount > 0 && (
         <div className="flex items-center justify-between mb-2">
           <p className="text-sm text-muted-foreground">
-            {activityCount} unread
+            {unreadCount} unread
           </p>
           <Button
             variant="ghost"

@@ -6,12 +6,19 @@ import { UserNav } from "@/components/layout/user-nav";
 // AppLogo and Link are no longer needed here as the logo is only in the sidebar.
 // import { AppLogo } from "@/components/icons/app-logo";
 import Link from "next/link";
-import { Compass, Settings, Search } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { Compass, Settings, Search, Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useActivity } from "@/components/providers/activity-provider";
+import { useUser } from "@/hooks/use-user";
 
 export function AppHeader() {
   // const { isMobile } = useSidebar(); // No longer needed to conditionally render trigger
   const [hidden, setHidden] = useState(false);
+  const pathname = usePathname();
+  const { unreadCount } = useActivity();
+  const { role } = useUser();
+  const isGuest = !role;
   const lastScrollTop = useRef(0);
   const THRESHOLD = 10; // Scroll difference threshold to trigger hide/show
 
@@ -52,6 +59,23 @@ export function AppHeader() {
 
         <div className="flex items-center space-x-2 sm:space-x-4">
           <div className="flex items-center space-x-1 mr-1">
+             {!isGuest && (
+               <Link
+                 href="/activity"
+                 className={cn(
+                   "relative p-2 hover:text-foreground rounded-full hover:bg-muted transition-colors",
+                   pathname.startsWith('/activity') ? "text-foreground" : "text-muted-foreground"
+                 )}
+                 aria-label="Activity"
+               >
+                  <Inbox className="h-5 w-5" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-0.5 right-0.5 h-4 min-w-[16px] rounded-full bg-red-500 px-1 text-[10px] font-bold text-white flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+               </Link>
+             )}
              <Link href="/search" className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors">
                 <Search className="h-5 w-5" />
              </Link>
