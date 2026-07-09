@@ -273,11 +273,11 @@ export function NativeInitializer() {
         // Validate the redirect is a known Tribes app path — prevents open
         // redirect if a crafted push payload contains an external URL.
         // Covers all route groups: (app), (auth), (legal), (onboarding)
-        const SAFE_PATH_RE = /^\/(?:your-comms|bonds?|tribes?|t\/|u\/|e\/|p\/|events?|settings|login|signup|forgot-password|recover|reset-password|account-recovery|admin|billing|creator-analytics|dashboard|discover|invite|moods?|my-wall|our-story|post|profile|search|vote|voting|family|event|terms|privacy|cookies|community-guidelines|report-ncii|ncii-status|create-tribe)/;
+        const SAFE_PATH_RE = /^\/(?:your-comms|activity|bonds?|tribes?|t\/|u\/|e\/|p\/|events?|settings|login|signup|forgot-password|recover|reset-password|account-recovery|admin|billing|creator-analytics|dashboard|discover|invite|moods?|my-wall|our-story|post|profile|search|vote|voting|family|event|terms|privacy|cookies|community-guidelines|report-ncii|ncii-status|create-tribe)/;
         const redirectUrl =
           typeof rawUrl === 'string' && rawUrl.startsWith('/') && SAFE_PATH_RE.test(rawUrl)
             ? rawUrl
-            : '/your-comms';
+            : '/activity';
         
         console.log('[push] Navigating to push action URL:', redirectUrl);
         // Use hard navigation — router.push() fails silently in Capacitor WebView

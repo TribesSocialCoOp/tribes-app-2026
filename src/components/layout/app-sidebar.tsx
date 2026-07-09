@@ -78,8 +78,8 @@ export function AppSidebar() {
     }
   };
 
-  // Notification badge — event-driven via WS + custom events, no polling
-  const [unreadCount, setUnreadCount] = useState(0);
+  // Notification badges — event-driven via WS + custom events, no polling.
+  // Activity unread moved to the header inbox icon (ActivityProvider).
   const [activeProposalCount, setActiveProposalCount] = useState(0);
   const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const [favorites, setFavorites] = useState<Array<{
@@ -145,54 +145,6 @@ export function AppSidebar() {
       window.removeEventListener('favorites-changed', handleFavoritesChanged);
     };
   }, [isGuest, pathname]);
-
-  // Initial fetch + focus reconciliation (no interval)
-  useEffect(() => {
-    if (isGuest) return;
-    async function fetchUnread() {
-      try {
-        const { getUnreadActivityCount } = await import('@/lib/actions/content-actions');
-        const count = await getUnreadActivityCount();
-        setUnreadCount(count);
-      } catch { } // silent fail
-    }
-    fetchUnread();
-
-    // Reconcile on tab regain focus (catches any drift from offline/background)
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') fetchUnread();
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-
-    // Instant update when user marks activity items as read (same-client event)
-    const handleReadChange = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (typeof detail?.unreadCount === 'number') {
-        setUnreadCount(detail.unreadCount);
-      }
-    };
-    window.addEventListener('activity-read-change', handleReadChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('activity-read-change', handleReadChange);
-    };
-  }, [isGuest, pathname]);
-
-  // Live WS unread bump — increment badge instantly on incoming activity
-  useEffect(() => {
-    if (isGuest || typeof window === 'undefined') return;
-    if (!process.env.NEXT_PUBLIC_WS_RELAY_URL) return;
-
-    const { TribesWebSocket } = require('@/lib/ws-client');
-    const ws = TribesWebSocket.getInstance();
-
-    const unsub = ws.subscribe('message', () => {
-      setUnreadCount(prev => prev + 1);
-    });
-
-    return unsub;
-  }, [isGuest]);
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" side="left" className="border-r">
@@ -384,11 +336,6 @@ export function AppSidebar() {
                 <Link href={item.href}>
                   <item.icon className="h-5 w-5 mr-2 group-data-[collapsible=icon]:mr-0" />
                   <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
-                  {item.href === '/your-comms' && unreadCount > 0 && (
-                    <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-0 group-data-[collapsible=icon]:right-0 group-data-[collapsible=icon]:h-3 group-data-[collapsible=icon]:min-w-[12px] group-data-[collapsible=icon]:text-[10px]">
-                      {unreadCount > 9 ? '9+' : unreadCount}
-                    </span>
-                  )}
                   {item.href === '/chat' && chatUnreadCount > 0 && (
                     <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-0 group-data-[collapsible=icon]:right-0 group-data-[collapsible=icon]:h-3 group-data-[collapsible=icon]:min-w-[12px] group-data-[collapsible=icon]:text-[10px]">
                       {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
