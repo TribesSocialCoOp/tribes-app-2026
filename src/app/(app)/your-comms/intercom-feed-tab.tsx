@@ -19,19 +19,19 @@ export function IntercomFeedTab() {
   const { orphanedBondCount } = useKeySync();
 
   // Decrypt encrypted posts client-side (E2E)
-  const { getContent, isDecrypting } = usePostDecryption(feedItems);
-  
+  const { getContent, getTitle, isDecrypting } = usePostDecryption(feedItems);
+
   // Deep-link: scroll to a specific post when ?postId=<id> or ?post=<id> is present
   useScrollToPost([feedItems.length]);
 
-  // Merge decrypted content into feed items
+  // Merge decrypted content + title into feed items so all downstream
+  // `item.title` / `item.content` usages render the decrypted values.
   const decryptedFeedItems = useMemo(() =>
     feedItems.map(item => {
       if (!item.isEncrypted) return item;
-      const content = getContent(item);
-      return { ...item, content };
+      return { ...item, content: getContent(item), title: getTitle(item) };
     }),
-    [feedItems, getContent],
+    [feedItems, getContent, getTitle],
   );
 
 

@@ -60,16 +60,17 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
   useEffect(() => {
     if (open && post) {
       if (post.isEncrypted) {
+        // Decrypts the body AND (if present) the encrypted title
         handleDecryptPost(post);
       } else {
         setContent(post.content || '');
         setDecryptionError(null);
         setPostKey(null);
+        // Plaintext title lives on the row for unencrypted posts
+        setTitle(post.title || '');
+        setShowTitle(!!post.title);
       }
 
-      // Populate metadata from existing post
-      setTitle(post.title || '');
-      setShowTitle(!!post.title);
       setMoodTag(post.moodTag || null);
 
       // Populate existing images
@@ -108,6 +109,14 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
         setPostKey(decryptionKey);
         const plaintext = await decryptWithTribeKey(ciphertext, encryptedPost.encryptionIv!, decryptionKey);
         setContent(plaintext);
+        if (encryptedPost.titleCiphertextBase64 && encryptedPost.titleIv) {
+          const titlePlain = await decryptWithTribeKey(fromBase64(encryptedPost.titleCiphertextBase64), encryptedPost.titleIv, decryptionKey);
+          setTitle(titlePlain);
+          setShowTitle(!!titlePlain);
+        } else {
+          setTitle('');
+          setShowTitle(false);
+        }
         return;
       }
 
@@ -138,6 +147,14 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
       setPostKey(decryptionKey);
       const plaintext = await decryptWithPostKey(ciphertext, encryptedPost.encryptionIv!, decryptionKey);
       setContent(plaintext);
+      if (encryptedPost.titleCiphertextBase64 && encryptedPost.titleIv) {
+        const titlePlain = await decryptWithPostKey(fromBase64(encryptedPost.titleCiphertextBase64), encryptedPost.titleIv, decryptionKey);
+        setTitle(titlePlain);
+        setShowTitle(!!titlePlain);
+      } else {
+        setTitle('');
+        setShowTitle(false);
+      }
     } catch (err: any) {
       console.error('[EditPostDialog] Decryption failed:', err);
       setDecryptionError(err.message || 'Failed to decrypt post content.');
@@ -209,9 +226,8 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
       // Combine existing + newly uploaded
       const allImageUrls = [...existingImageUrls, ...uploadedUrls];
 
-      // Build metadata
-      const metadata = {
-        title: showTitle && title.trim() ? title.trim() : null,
+      const trimmedTitle = showTitle && title.trim() ? title.trim() : null;
+      const baseMetadata = {
         imageUrl: allImageUrls.length > 0 ? allImageUrls[0] : null,
         imageUrls: allImageUrls.length > 0 ? allImageUrls : null,
         moodTag: moodTag,
@@ -219,17 +235,31 @@ export function EditPostDialog({ open, onOpenChange, post, onSuccess }: EditPost
 
       if (post.isEncrypted) {
         if (!postKey) throw new Error('Encryption key missing.');
-        
+
         // Re-encrypt content locally
         const { ciphertextBase64, iv } = await reEncryptPost(content, postKey);
-        
-        // Submit encrypted content + unencrypted metadata
-        await editEncryptedPost(post.id, ciphertextBase64, iv, metadata);
+
+        // Encrypt the title with the same post key (its own IV); null clears it
+        let titleCiphertextBase64: string | null = null;
+        let titleIv: string | null = null;
+        if (trimmedTitle) {
+          const enc = await reEncryptPost(trimmedTitle, postKey);
+          titleCiphertextBase64 = enc.ciphertextBase64;
+          titleIv = enc.iv;
+        }
+
+        // Submit encrypted content + unencrypted metadata + encrypted title
+        await editEncryptedPost(post.id, ciphertextBase64, iv, {
+          ...baseMetadata,
+          titleCiphertextBase64,
+          titleIv,
+        });
       } else {
-        // Plaintext edit with full payload
+        // Plaintext edit with full payload (title stays plaintext for public posts)
         const payload: EditPostPayload = {
           content,
-          ...metadata,
+          ...baseMetadata,
+          title: trimmedTitle,
         };
         await editPost(post.id, payload);
       }
