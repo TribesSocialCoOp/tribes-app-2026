@@ -5,6 +5,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { RingSelector } from './ring-selector';
 import { MoodTagSelector } from './mood-tag-selector';
@@ -12,7 +13,7 @@ import { useUser } from '@/hooks/use-user';
 import { useToast } from '@/hooks/use-toast';
 import { createRingPost, type CreateRingPostPayload } from '@/lib/actions/content-actions';
 import type { Ring, LinkPreviewData } from '@/lib/types';
-import { ImagePlus, Send, Loader2, X, Lock, Globe, Link2 } from 'lucide-react';
+import { ImagePlus, Send, Loader2, X, Lock, Globe, Link2, Type } from 'lucide-react';
 import { MentionAutocomplete } from './mention-autocomplete';
 import { useMentionAutocomplete } from '@/hooks/use-mention-autocomplete';
 import { EmojiAutocomplete } from './emoji-autocomplete';
@@ -112,6 +113,13 @@ export function ComposeBox({
   // Content state
   const [content, setContent] = useState('');
 
+  // Optional title (collapsible, like EditPostDialog). Only offered for posts
+  // that won't be encrypted — createRingPost strips titles on encrypted posts
+  // (a plaintext title would leak into the URL slug), so hiding the field
+  // prevents silently dropping user input.
+  const [title, setTitle] = useState('');
+  const [showTitle, setShowTitle] = useState(false);
+
   const { mentionQuery, mentionRef, checkMention, handleSelectMention, handleMentionKeyDown } =
     useMentionAutocomplete(textareaRef, content, setContent);
   const { emojiQuery, emojiRef, checkEmoji, handleSelectEmoji, handleEmojiKeyDown } =
@@ -130,9 +138,13 @@ export function ComposeBox({
   const [linkDismissed, setLinkDismissed] = useState(false);
   const lastUnfurledUrl = useRef<string | null>(null);
 
-  const activeTribe = ring === 'tribes' && selectedTribeIds.length > 0 
-    ? loadedTribes.find(t => t.id === selectedTribeIds[0]) 
+  const activeTribe = ring === 'tribes' && selectedTribeIds.length > 0
+    ? loadedTribes.find(t => t.id === selectedTribeIds[0])
     : null;
+
+  // Same predicate the submit path uses to decide encryption: only public-tribe
+  // posts stay plaintext and can carry a title
+  const canTitle = ring === 'tribes' && !!activeTribe?.isPublic;
 
   const defaultIdentity = {
     name: activeTribe?.joinedAsAlias || user?.name || "Unknown",
@@ -388,6 +400,7 @@ export function ComposeBox({
 
         const result = await createRingPost({
           content: content.trim(),
+          title: canTitle && showTitle && title.trim() ? title.trim().slice(0, 150) : undefined,
           ring,
           moodTag: moodTag ?? undefined,
           imageUrls: finalImageUrls.length > 0 ? finalImageUrls : undefined,
@@ -410,6 +423,8 @@ export function ComposeBox({
 
         // Reset
         setContent('');
+        setTitle('');
+        setShowTitle(false);
         setMoodTag(null);
         setImageFiles([]);
         setPreviewUrls([]);
@@ -565,6 +580,39 @@ export function ComposeBox({
             ) : (
               /* Expanded state — full compose form */
               <div className="space-y-2.5">
+                {/* Optional title — only for unencrypted (public-tribe) posts */}
+                {canTitle && (
+                  !showTitle ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1.5 text-xs text-muted-foreground h-7 -ml-2"
+                      onClick={() => setShowTitle(true)}
+                    >
+                      <Type className="h-3.5 w-3.5" />
+                      Add title
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        placeholder="Post title (optional)"
+                        value={title}
+                        onChange={e => setTitle(e.target.value)}
+                        maxLength={150}
+                        disabled={isPending}
+                        className="h-9 text-sm font-semibold"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => { setShowTitle(false); setTitle(''); }}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )
+                )}
                 <div className="relative z-10">
                   <Textarea
                     ref={textareaRef}
@@ -737,6 +785,8 @@ export function ComposeBox({
                       onClick={() => {
                         setIsExpanded(false);
                         setContent('');
+                        setTitle('');
+                        setShowTitle(false);
                         setMoodTag(null);
                         previewUrls.forEach(url => URL.revokeObjectURL(url));
                         setImageFiles([]);

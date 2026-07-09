@@ -795,6 +795,11 @@ export const createRingPost = withPublicErrors(async (payload: CreateRingPostPay
 
   if (!payload.content.trim()) throw new Error('Post content cannot be empty.');
 
+  // Server-side title bound (client Input caps at 150, but guard API-level callers)
+  if (payload.title) {
+    payload.title = payload.title.trim().slice(0, 150) || undefined;
+  }
+
   const { db } = await import('@/db');
   const { posts, users: usersTable, tribeMembers } = await import('@/db/schema');
   const { eq, and } = await import('drizzle-orm');
