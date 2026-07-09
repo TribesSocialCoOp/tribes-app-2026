@@ -176,6 +176,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
   // ── Encrypted post text decryption ──────────────────────────
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
+  const [decryptedTitle, setDecryptedTitle] = useState<string | null>(null);
   const [decryptionStatus, setDecryptionStatus] = useState<'decrypting' | 'success' | 'missing_key' | 'key_mismatch' | 'failed' | 'idle'>(post.isEncrypted ? 'decrypting' : 'idle');
 
   useEffect(() => {
@@ -201,8 +202,13 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
               post.encryptionIv!,
               cachedTribeKey.key,
             );
+            let titlePlain: string | null = null;
+            if (post.titleCiphertextBase64 && post.titleIv) {
+              titlePlain = await decryptWithTribeKey(fromBase64(post.titleCiphertextBase64), post.titleIv, cachedTribeKey.key);
+            }
             if (active) {
               setDecryptedContent(plaintext);
+              if (titlePlain !== null) setDecryptedTitle(titlePlain);
               setDecryptionStatus('success');
             }
             return;
@@ -219,7 +225,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
           return;
         }
 
-        const { decryptPost } = await import('@/lib/crypto/post-encryption');
+        const { unwrapPostKey, decryptWithPostKey } = await import('@/lib/crypto/post-encryption');
         const { fromBase64 } = await import('@/lib/crypto/encoding');
         const { getSharedSecret } = await import('@/lib/crypto/key-store');
 
@@ -246,15 +252,16 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
         }
 
         const ciphertextBuffer = fromBase64(post.ciphertextBase64!);
-        const plaintext = await decryptPost(
-          ciphertextBuffer,
-          post.encryptionIv!,
-          grant.wrappedKey,
-          grant.wrapIv,
-          unwrapSecret,
-        );
+        // Unwrap the per-post key once, then decrypt body + title with it
+        const postKey = await unwrapPostKey(grant.wrappedKey, grant.wrapIv, unwrapSecret);
+        const plaintext = await decryptWithPostKey(ciphertextBuffer, post.encryptionIv!, postKey);
+        let titlePlain: string | null = null;
+        if (post.titleCiphertextBase64 && post.titleIv) {
+          titlePlain = await decryptWithPostKey(fromBase64(post.titleCiphertextBase64), post.titleIv, postKey);
+        }
         if (active) {
           setDecryptedContent(plaintext);
+          if (titlePlain !== null) setDecryptedTitle(titlePlain);
           setDecryptionStatus('success');
         }
       } catch (err) {
@@ -271,10 +278,12 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
 
     decryptText();
     return () => { active = false; };
-  }, [post.id, post.isEncrypted, post.ciphertextBase64, post.encryptionIv, post.tribeId, tribeId, user?.id]);
+  }, [post.id, post.isEncrypted, post.ciphertextBase64, post.encryptionIv, post.titleCiphertextBase64, post.titleIv, post.tribeId, tribeId, user?.id]);
 
   // Display content: decrypted text for encrypted posts, raw content for public
   const displayContent = post.isEncrypted ? (decryptedContent ?? '') : post.content;
+  // Display title: decrypted for encrypted posts (undefined until decrypted / none), plaintext otherwise
+  const displayTitle = post.isEncrypted ? (decryptedTitle || undefined) : post.title;
 
   return (
     <Card className={cn(
@@ -515,9 +524,9 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
           </div>
         </CardHeader>
         <CardContent className="p-3 sm:p-4 pt-2 sm:pt-3 relative">
-          {post.title && (
+          {displayTitle && (
             <Link href={buildPostPath(post.id, post.slug, state.tribe?.slug)} className="hover:underline decoration-primary/30 decoration-2">
-              <h3 className="text-lg font-semibold mb-1.5 text-foreground tracking-tight">{post.title}</h3>
+              <h3 className="text-lg font-semibold mb-1.5 text-foreground tracking-tight">{displayTitle}</h3>
             </Link>
           )}
           {!isBodyCollapsed && (<>
@@ -716,7 +725,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                 triggerHaptic(ImpactStyle.Light);
                 if (isMobile) {
                   // On mobile, use the bottom-sheet comment dialog to avoid keyboard overlap
-                  handleOpenCommentDialog({ postId: post.id, postTitle: post.title });
+                  handleOpenCommentDialog({ postId: post.id, postTitle: displayTitle });
                 } else {
                   setShowInlineReply(!showInlineReply);
                 }
@@ -730,7 +739,7 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
             onClick={() => {
               triggerHaptic(ImpactStyle.Medium);
               shareContent({
-                title: post.title || 'Check out this post on Tribes',
+                title: displayTitle || 'Check out this post on Tribes',
                 text: post.content.substring(0, 100),
                 url: `${typeof window !== 'undefined' ? window.location.origin : ''}${buildPostPath(post.id, post.slug, state.tribe?.slug)}`
               });

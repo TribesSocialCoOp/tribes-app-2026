@@ -388,6 +388,11 @@ export const posts = pgTable('posts', {
   ciphertext: bytea('ciphertext'),                                         // Encrypted post body (AES-256-GCM)
   isEncrypted: boolean('is_encrypted').default(false), // True if content is encrypted
   encryptionIv: text('encryption_iv'),                                     // Base64-encoded IV
+  // Encrypted title — same per-post key as the body, its own IV. Plaintext
+  // `title` stays NULL for encrypted posts so no ciphertext leaks to the slug
+  // or to server-derived surfaces that can't decrypt.
+  titleCiphertext: bytea('title_ciphertext'),                              // Encrypted post title (AES-256-GCM)
+  titleIv: text('title_iv'),                                               // Base64-encoded title IV
 
   // Link preview metadata (unfurled at compose time)
   linkUrl: text('link_url'),                 // The canonical URL being previewed

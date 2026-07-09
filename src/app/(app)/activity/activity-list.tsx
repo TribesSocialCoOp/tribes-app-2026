@@ -138,8 +138,9 @@ function ActivitySection({ section, items, onRead }: ActivitySectionProps) {
         {unread > 0 && <Badge variant="secondary" className="text-xs">{unread}</Badge>}
       </header>
       <div className="relative">
-        {/* Height cap + internal scroll on desktop only; mobile keeps the natural stack */}
-        <div className="space-y-1 p-2 pt-0 lg:max-h-96 lg:overflow-y-auto overscroll-contain">
+        {/* Height cap + internal scroll on desktop only (lg+); on mobile the panel
+            is full height with no nested scroll, so swiping scrolls the page. */}
+        <div className="space-y-1 p-2 pt-0 lg:max-h-96 lg:overflow-y-auto lg:overscroll-contain">
           {items.map(item => (
             <ActivityItemCard
               key={item.id}

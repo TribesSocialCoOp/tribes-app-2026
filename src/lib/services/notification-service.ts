@@ -522,7 +522,8 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
         const tribeName = tribeMetaMap.get(post.tribeId!)?.name;
         items.push({
           id: `activity-tribepost-${post.id}`,
-          // posts.title is plaintext even when the body is encrypted — safe to show
+          // Encrypted posts keep plaintext `title` NULL (the title is in the
+          // title_ciphertext column, undecryptable server-side) → falls back to 'New post'.
           type: 'new_tribe_post',
           title: post.title ?? 'New post',
           description: `${post.authorName ?? 'Someone'} posted in ${tribeName ?? 'your tribe'}`,
