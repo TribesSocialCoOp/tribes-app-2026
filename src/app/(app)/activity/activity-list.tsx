@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { useActivity } from '@/components/providers/activity-provider';
 import { useTimeSince } from '@/hooks/use-time-since';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { RecentChats } from '@/components/circles/recent-chats';
+import { useMediaQuery } from '@/hooks/use-media-query';
 import type { ActivityItem } from '@/lib/services/notification-service';
 
 interface SectionConfig {
@@ -160,8 +161,46 @@ function ActivitySection({ section, items, onRead }: ActivitySectionProps) {
   );
 }
 
+interface VisibleSection {
+  section: SectionConfig;
+  items: ActivityItem[];
+}
+
+/**
+ * Masonry-style packing that preserves priority order. Each section (in SECTIONS
+ * order) drops into the currently-shortest column, so the highest-priority
+ * sections land at the top of the columns and the rest fill underneath with no
+ * row-alignment gaps. Height is estimated by visible rows, capped at 6 since tall
+ * panels scroll internally (lg:max-h-96 ≈ 6 rows) rather than growing unbounded.
+ */
+function packColumns(visible: VisibleSection[], columnCount: number): VisibleSection[][] {
+  const columns: VisibleSection[][] = Array.from({ length: columnCount }, () => []);
+  const weights = new Array(columnCount).fill(0);
+  for (const v of visible) {
+    let target = 0;
+    for (let i = 1; i < columnCount; i++) {
+      if (weights[i] < weights[target]) target = i;
+    }
+    columns[target].push(v);
+    weights[target] += 1 + Math.min(v.items.length, 6); // header + capped rows
+  }
+  return columns;
+}
+
 export function ActivityList() {
   const { items: activityItems, isLoading, unreadCount, markAllRead, markItemRead } = useActivity();
+
+  // Column count by breakpoint (md skipped — too narrow beside the 16rem sidebar).
+  const isLg = useMediaQuery('(min-width: 1024px)');
+  const is2xl = useMediaQuery('(min-width: 1536px)');
+  const columnCount = is2xl ? 3 : isLg ? 2 : 1;
+
+  const columns = useMemo(() => {
+    const visible: VisibleSection[] = SECTIONS
+      .map(section => ({ section, items: activityItems.filter(i => i.type === section.type) }))
+      .filter(v => v.items.length > 0);
+    return packColumns(visible, columnCount);
+  }, [activityItems, columnCount]);
 
   if (isLoading && activityItems.length === 0) {
     return (
@@ -213,22 +252,23 @@ export function ActivityList() {
         </div>
       )}
 
-      {/* Single column on mobile; section panels pack into 2 (lg) / 3 (2xl) columns
-          on desktop. `md` is skipped — beside the 16rem sidebar the content area
-          is too narrow for two readable columns until lg. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 lg:gap-6 items-start min-w-0">
-        {SECTIONS.map(section => {
-          const sectionItems = activityItems.filter(i => i.type === section.type);
-          if (sectionItems.length === 0) return null;
-          return (
-            <ActivitySection
-              key={section.type}
-              section={section}
-              items={sectionItems}
-              onRead={markItemRead}
-            />
-          );
-        })}
+      {/* Single column on mobile; balanced masonry columns on desktop (2 at lg,
+          3 at 2xl). Panels are packed shortest-column-first so priority sections
+          stay near the top and shorter panels fill dead space with no row gaps.
+          `md` is skipped — too narrow beside the 16rem sidebar until lg. */}
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start min-w-0">
+        {columns.map((col, ci) => (
+          <div key={ci} className="flex flex-col gap-4 lg:gap-6 w-full lg:flex-1 min-w-0">
+            {col.map(({ section, items }) => (
+              <ActivitySection
+                key={section.type}
+                section={section}
+                items={items}
+                onRead={markItemRead}
+              />
+            ))}
+          </div>
+        ))}
       </div>
     </>
   );
