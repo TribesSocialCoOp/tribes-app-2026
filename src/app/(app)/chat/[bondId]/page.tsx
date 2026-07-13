@@ -977,7 +977,6 @@ function BondChatContent() {
                   }
                 }}
                 placeholder={editing ? "Edit message..." : pendingFile ? "Add a message (optional)..." : "Type a message... (Shift+Enter for newline)"}
-                disabled={isSending}
                 className="w-full min-h-0 resize-none max-h-40 py-2"
               />
             </div>
