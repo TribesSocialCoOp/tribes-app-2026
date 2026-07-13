@@ -10,6 +10,15 @@ import { isNative } from '@/lib/capacitor/platform';
 const DISMISS_KEY = 'tribes:push-nudge-dismissed';
 
 /**
+ * Rollout flag: the nudge stays off until push delivery (especially iOS/APNs)
+ * has been validated in the target environment. Enable with
+ * NEXT_PUBLIC_PUSH_NUDGE_ENABLED=true + redeploy — no code change needed.
+ * The manual toggle in Settings → Notifications works regardless of this flag.
+ */
+export const isPushNudgeEnabled = (): boolean =>
+  process.env.NEXT_PUBLIC_PUSH_NUDGE_ENABLED === 'true';
+
+/**
  * Post-login nudge prompting users to enable push notifications.
  *
  * Why this exists: enabling push was buried behind a manual toggle in Settings that
@@ -49,6 +58,7 @@ export function PushNotificationNudge() {
     if (!ok && permission === 'denied') handleDismiss();
   };
 
+  if (!isPushNudgeEnabled()) return null;
   if (!mounted || dismissed) return null;
   // Only for authenticated users on a platform that supports push, not yet subscribed,
   // and not already blocked at the OS/browser level (nudging can't fix a hard denial).
