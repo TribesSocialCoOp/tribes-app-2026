@@ -177,20 +177,3 @@ export async function decryptWithPostKey(
   );
   return new TextDecoder().decode(plaintext);
 }
-
-/**
- * Decrypts a post using a wrapped key grant and the recipient's shared secret.
- */
-export async function decryptPost(
-  ciphertext: ArrayBuffer,
-  iv: string,
-  wrappedKey: string,
-  wrapIv: string,
-  sharedSecret: CryptoKey,
-): Promise<string> {
-  // Step 1 & 2: Unwrap and import the post key
-  const postKey = await unwrapPostKey(wrappedKey, wrapIv, sharedSecret);
-  
-  // Step 3: Decrypt the content
-  return decryptWithPostKey(ciphertext, iv, postKey);
-}

@@ -113,10 +113,11 @@ export function ComposeBox({
   // Content state
   const [content, setContent] = useState('');
 
-  // Optional title (collapsible, like EditPostDialog). Only offered for posts
-  // that won't be encrypted — createRingPost strips titles on encrypted posts
-  // (a plaintext title would leak into the URL slug), so hiding the field
-  // prevents silently dropping user input.
+  // Optional title (collapsible, like EditPostDialog), offered on every ring.
+  // For encrypted posts the title is E2E-encrypted client-side with the same
+  // per-post key as the body (own IV) and sent via encryption.titleCiphertext*;
+  // plaintext `title` travels only for unencrypted posts, so no title-derived
+  // slug or plaintext ever reaches the server for encrypted content.
   const [title, setTitle] = useState('');
   const [showTitle, setShowTitle] = useState(false);
 
