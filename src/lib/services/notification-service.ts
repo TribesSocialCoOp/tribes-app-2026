@@ -27,21 +27,22 @@ import { buildPostPath } from '@/lib/utils/slugify';
 interface TribeMeta {
   slug: string | undefined;
   name: string;
+  isPublic: boolean;
 }
 
 /**
- * Batch-fetches tribe slugs + names for a set of tribe IDs.
- * Returns a Map<tribeId, { slug, name }>.
+ * Batch-fetches tribe slugs + names + visibility for a set of tribe IDs.
+ * Returns a Map<tribeId, { slug, name, isPublic }>.
  */
 async function buildTribeMetaMap(tribeIds: string[]): Promise<Map<string, TribeMeta>> {
   const metaMap = new Map<string, TribeMeta>();
   if (tribeIds.length === 0) return metaMap;
   const uniqueIds = [...new Set(tribeIds)];
-  const rows = await db.select({ id: tribes.id, slug: tribes.slug, name: tribes.name })
+  const rows = await db.select({ id: tribes.id, slug: tribes.slug, name: tribes.name, isPublic: tribes.isPublic })
     .from(tribes)
     .where(inArray(tribes.id, uniqueIds));
   for (const row of rows) {
-    metaMap.set(row.id, { slug: row.slug ?? undefined, name: row.name });
+    metaMap.set(row.id, { slug: row.slug ?? undefined, name: row.name, isPublic: row.isPublic ?? false });
   }
   return metaMap;
 }
@@ -423,6 +424,27 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
       }
       const tribeMetaMap = await buildTribeMetaMap(tribeIds);
 
+      // 4b. Mentions resolve platform-wide (processMentions does no membership
+      // check), so the mentioned user may not have access to the source tribe.
+      // Snippets/context must only surface content they can actually see:
+      // membership (one batched query) or a public tribe. Encrypted content is
+      // already suppressed by makeSnippet, but plaintext rows in a private
+      // tribe (legacy/non-UI writes) must not leak either.
+      const uniqueMentionTribeIds = [...new Set(tribeIds)];
+      const memberTribeIds = new Set<string>();
+      if (uniqueMentionTribeIds.length > 0) {
+        const membershipRows = await db.select({ tribeId: tribeMembers.tribeId })
+          .from(tribeMembers)
+          .where(and(
+            eq(tribeMembers.userId, userId),
+            inArray(tribeMembers.tribeId, uniqueMentionTribeIds),
+          ));
+        for (const r of membershipRows) memberTribeIds.add(r.tribeId);
+      }
+      // No tribe (journal/bond/public-ring source) → not tribe-gated
+      const canViewTribeContent = (tribeId: string | null): boolean =>
+        !tribeId || memberTribeIds.has(tribeId) || (tribeMetaMap.get(tribeId)?.isPublic ?? false);
+
       // 5. Batch query mentioner display names + avatars
       const mentionerIds = [...new Set(mentionRows.map(m => m.mentionerUserId).filter(Boolean) as string[])];
       const mentionerMap = new Map<string, { name: string; avatar: string | null }>();
@@ -445,16 +467,20 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
           const p = postMap.get(m.sourceId);
           if (p) {
             actionUrl = buildPostPath(m.sourceId, p.slug, p.tribeId ? tribeMetaMap.get(p.tribeId)?.slug : undefined);
-            snippet = makeSnippet(p.content, p.isEncrypted);
-            contextName = p.title ?? (p.tribeId ? tribeMetaMap.get(p.tribeId)?.name : undefined);
+            if (canViewTribeContent(p.tribeId)) {
+              snippet = makeSnippet(p.content, p.isEncrypted);
+              contextName = p.title ?? (p.tribeId ? tribeMetaMap.get(p.tribeId)?.name : undefined);
+            }
           }
         } else if (m.sourceType === 'comment') {
           const c = commentMap.get(m.sourceId);
           if (c) {
             const p = commentPostMap.get(c.postId);
             actionUrl = `${buildPostPath(c.postId, p?.slug, p?.tribeId ? tribeMetaMap.get(p.tribeId)?.slug : undefined)}?commentId=${m.sourceId}`;
-            snippet = makeSnippet(c.content, c.isEncrypted);
-            contextName = p?.title ?? (p?.tribeId ? tribeMetaMap.get(p.tribeId)?.name : undefined);
+            if (canViewTribeContent(p?.tribeId ?? null)) {
+              snippet = makeSnippet(c.content, c.isEncrypted);
+              contextName = p?.title ?? (p?.tribeId ? tribeMetaMap.get(p.tribeId)?.name : undefined);
+            }
           }
         } else if (m.sourceType === 'story_comment') {
           const sc = storyCommentMap.get(m.sourceId);
