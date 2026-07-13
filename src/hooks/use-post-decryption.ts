@@ -22,8 +22,10 @@ interface DecryptionCache {
  */
 export function usePostDecryption(items: CommunicationItem[]) {
   const [decryptedContent, setDecryptedContent] = useState<DecryptionCache>({});
+  const [decryptedTitles, setDecryptedTitles] = useState<DecryptionCache>({});
   const [isDecrypting, setIsDecrypting] = useState(false);
   const cacheRef = useRef<DecryptionCache>({});
+  const titleCacheRef = useRef<DecryptionCache>({});
   const pendingRef = useRef<Set<string>>(new Set());
   const { user } = useUser();
 
@@ -55,6 +57,8 @@ export function usePostDecryption(items: CommunicationItem[]) {
       }
 
       const newDecrypted: DecryptionCache = {};
+      // Titles are encrypted with the same per-post key as the body (own IV).
+      const newDecryptedTitles: DecryptionCache = {};
 
       // Split into journal posts (personal key) vs ring posts (key grants)
       const journalItems = needsDecryption.filter(item => item.ring === 'journal');
@@ -74,6 +78,9 @@ export function usePostDecryption(items: CommunicationItem[]) {
                 journalKey,
               );
               newDecrypted[item.id] = plaintext;
+              if (item.titleCiphertextBase64 && item.titleIv) {
+                newDecryptedTitles[item.id] = await decryptJournalEntry(item.titleCiphertextBase64, item.titleIv, journalKey);
+              }
             } catch (err) {
               console.error(`[usePostDecryption] Journal decrypt failed for ${item.id}:`, err);
               newDecrypted[item.id] = '🔒 Journal key missing (Sync keys in settings)';
@@ -111,6 +118,9 @@ export function usePostDecryption(items: CommunicationItem[]) {
                   cachedTribeKey.key,
                 );
                 newDecrypted[item.id] = plaintext;
+                if (item.titleCiphertextBase64 && item.titleIv) {
+                  newDecryptedTitles[item.id] = await decryptWithTribeKey(fromBase64(item.titleCiphertextBase64), item.titleIv, cachedTribeKey.key);
+                }
               } else {
                 // No tribe key — fall through to grant-based decryption
                 grantItems.push(item);
@@ -138,34 +148,31 @@ export function usePostDecryption(items: CommunicationItem[]) {
 
             try {
               const { fromBase64 } = await import('@/lib/crypto/encoding');
+              const { decryptWithPostKey } = await import('@/lib/crypto/post-encryption');
               const ciphertextBuffer = fromBase64(item.ciphertextBase64!);
-              let plaintext: string;
 
+              // Unwrap the per-post key once, then decrypt body + title with it
+              let postKey: CryptoKey;
               if (!grant.bondId) {
                 // Self-grant: wrapped with the author's personal journal key
                 const { getOrCreateJournalKey } = await import('@/lib/crypto/journal-encryption');
-                const { decryptPost } = await import('@/lib/crypto/post-encryption');
+                const { unwrapPostKey } = await import('@/lib/crypto/post-encryption');
                 const journalKey = await getOrCreateJournalKey();
-                plaintext = await decryptPost(
-                  ciphertextBuffer,
-                  item.encryptionIv!,
-                  grant.wrappedKey,
-                  grant.wrapIv,
-                  journalKey,
-                );
+                postKey = await unwrapPostKey(grant.wrappedKey, grant.wrapIv, journalKey);
               } else {
                 // Bond grant: use rotation-aware resolver
                 const { resolvePostKeyForGrant } = await import('@/lib/crypto/key-rotation');
-                const { decryptWithPostKey } = await import('@/lib/crypto/post-encryption');
-                
-                const postKey = await resolvePostKeyForGrant(grant.bondId, grant.wrappedKey, grant.wrapIv);
-                if (!postKey) {
-                   throw new Error('Key mismatch or access denied');
+                const resolved = await resolvePostKeyForGrant(grant.bondId, grant.wrappedKey, grant.wrapIv);
+                if (!resolved) {
+                  throw new Error('Key mismatch or access denied');
                 }
-                plaintext = await decryptWithPostKey(ciphertextBuffer, item.encryptionIv!, postKey);
+                postKey = resolved;
               }
 
-              newDecrypted[item.id] = plaintext;
+              newDecrypted[item.id] = await decryptWithPostKey(ciphertextBuffer, item.encryptionIv!, postKey);
+              if (item.titleCiphertextBase64 && item.titleIv) {
+                newDecryptedTitles[item.id] = await decryptWithPostKey(fromBase64(item.titleCiphertextBase64), item.titleIv, postKey);
+              }
             } catch (err) {
               console.error(`[usePostDecryption] Failed to decrypt post ${item.id}:`, err);
               if (err instanceof DOMException && err.name === 'OperationError') {
@@ -181,6 +188,10 @@ export function usePostDecryption(items: CommunicationItem[]) {
       // Update cache
       cacheRef.current = { ...cacheRef.current, ...newDecrypted };
       setDecryptedContent(prev => ({ ...prev, ...newDecrypted }));
+      if (Object.keys(newDecryptedTitles).length > 0) {
+        titleCacheRef.current = { ...titleCacheRef.current, ...newDecryptedTitles };
+        setDecryptedTitles(prev => ({ ...prev, ...newDecryptedTitles }));
+      }
     } catch (err) {
       console.error('[usePostDecryption] Batch decryption error:', err);
     } finally {
@@ -208,9 +219,21 @@ export function usePostDecryption(items: CommunicationItem[]) {
     return decryptedContent[item.id] ?? '🔒 Decrypting...';
   }, [decryptedContent]);
 
+  /**
+   * Returns the decrypted title for an encrypted post, the plaintext title for
+   * an unencrypted post, or undefined while decrypting / when there is no title.
+   */
+  const getTitle = useCallback((item: CommunicationItem): string | undefined => {
+    if (!item.isEncrypted) return item.title || undefined;
+    if (!item.titleCiphertextBase64) return undefined; // encrypted post with no title
+    return decryptedTitles[item.id] || undefined;
+  }, [decryptedTitles]);
+
   return {
     getContent,
+    getTitle,
     isDecrypting,
     decryptedContent,
+    decryptedTitles,
   };
 }

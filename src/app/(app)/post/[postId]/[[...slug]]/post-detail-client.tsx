@@ -146,6 +146,7 @@ export function PostDetailClient({
 
   // ── Encrypted post text decryption ──────────────────────────
   const [decryptedContent, setDecryptedContent] = useState<string | null>(null);
+  const [decryptedTitle, setDecryptedTitle] = useState<string | null>(null);
   const [decryptionStatus, setDecryptionStatus] = useState<'decrypting' | 'success' | 'missing_key' | 'key_mismatch' | 'failed' | 'idle'>(post.isEncrypted ? 'decrypting' : 'idle');
 
   useEffect(() => {
@@ -170,8 +171,13 @@ export function PostDetailClient({
               post.encryptionIv!,
               cachedTribeKey.key,
             );
+            let titlePlain: string | null = null;
+            if (post.titleCiphertextBase64 && post.titleIv) {
+              titlePlain = await decryptWithTribeKey(fromBase64(post.titleCiphertextBase64), post.titleIv, cachedTribeKey.key);
+            }
             if (active) {
               setDecryptedContent(plaintext);
+              if (titlePlain !== null) setDecryptedTitle(titlePlain);
               setDecryptionStatus('success');
             }
             return;
@@ -187,7 +193,7 @@ export function PostDetailClient({
           return;
         }
 
-        const { decryptPost } = await import('@/lib/crypto/post-encryption');
+        const { unwrapPostKey, decryptWithPostKey } = await import('@/lib/crypto/post-encryption');
         const { fromBase64 } = await import('@/lib/crypto/encoding');
         const { getSharedSecret } = await import('@/lib/crypto/key-store');
 
@@ -214,15 +220,16 @@ export function PostDetailClient({
         }
 
         const ciphertextBuffer = fromBase64(post.ciphertextBase64!);
-        const plaintext = await decryptPost(
-          ciphertextBuffer,
-          post.encryptionIv!,
-          grant.wrappedKey,
-          grant.wrapIv,
-          unwrapSecret,
-        );
+        // Unwrap the per-post key once, then decrypt body + title with it
+        const postKey = await unwrapPostKey(grant.wrappedKey, grant.wrapIv, unwrapSecret);
+        const plaintext = await decryptWithPostKey(ciphertextBuffer, post.encryptionIv!, postKey);
+        let titlePlain: string | null = null;
+        if (post.titleCiphertextBase64 && post.titleIv) {
+          titlePlain = await decryptWithPostKey(fromBase64(post.titleCiphertextBase64), post.titleIv, postKey);
+        }
         if (active) {
           setDecryptedContent(plaintext);
+          if (titlePlain !== null) setDecryptedTitle(titlePlain);
           setDecryptionStatus('success');
         }
       } catch (err) {
@@ -239,7 +246,10 @@ export function PostDetailClient({
 
     decryptText();
     return () => { active = false; };
-  }, [post.id, post.isEncrypted, post.ciphertextBase64, post.encryptionIv, post.tribeId, tribeId]);
+  }, [post.id, post.isEncrypted, post.ciphertextBase64, post.encryptionIv, post.titleCiphertextBase64, post.titleIv, post.tribeId, tribeId]);
+
+  // Display title: decrypted for encrypted posts (undefined until decrypted / none), plaintext otherwise
+  const displayTitle = post.isEncrypted ? (decryptedTitle || undefined) : post.title;
 
   // Display content: decrypted text for encrypted posts, raw content for public
   const displayContent = post.isEncrypted ? (decryptedContent ?? '') : post.content;
@@ -513,7 +523,7 @@ export function PostDetailClient({
 
         {/* ── Content ── */}
         <CardContent className="p-3 sm:p-4 pt-2 sm:pt-3">
-          {post.title && <h3 className="text-lg font-semibold mb-1.5 text-foreground tracking-tight">{post.title}</h3>}
+          {displayTitle && <h3 className="text-lg font-semibold mb-1.5 text-foreground tracking-tight">{displayTitle}</h3>}
 
           {/* Multi-image grid */}
           {headerImages.length > 0 && (() => {
@@ -718,8 +728,8 @@ export function PostDetailClient({
             open={pinDialogOpen}
             onOpenChange={setPinDialogOpen}
             postId={post.id}
-            decryptedContent={post.content}
-            decryptedTitle={post.title || undefined}
+            decryptedContent={post.isEncrypted ? (decryptedContent ?? post.content) : post.content}
+            decryptedTitle={displayTitle}
             onSuccess={() => setIsPinned(true)}
           />
         </CardFooter>
@@ -788,7 +798,7 @@ export function PostDetailClient({
               toast({ title: 'Error', description: message, variant: 'destructive' });
             }
           }}
-          postTitle={post.title}
+          postTitle={displayTitle}
         />
 
         {/* ── Lightbox ── */}

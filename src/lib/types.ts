@@ -189,6 +189,8 @@ export interface TribePost {
   isEncrypted?: boolean;
   ciphertextBase64?: string;  // Base64 encoded ciphertext for client-side decryption
   encryptionIv?: string;      // Base64 IV for decryption
+  titleCiphertextBase64?: string;  // Base64 encrypted title (same per-post key, own IV)
+  titleIv?: string;                // Base64 IV for title decryption
 
   // Link preview (unfurled at compose time)
   linkUrl?: string;
@@ -387,6 +389,8 @@ export interface CommunicationItem {
   isEncrypted?: boolean;
   ciphertextBase64?: string;  // Base64-encoded ciphertext for client-side decryption
   encryptionIv?: string;       // Base64-encoded IV
+  titleCiphertextBase64?: string;  // Base64 encrypted title (same per-post key, own IV)
+  titleIv?: string;                // Base64 IV for title decryption
 
   // Link preview
   linkUrl?: string;

@@ -604,7 +604,9 @@ export async function editEncryptedPost(
   ciphertextBase64: string,
   iv: string,
   metadata?: {
-    title?: string | null;
+    /** Encrypted title (same per-post key as the body, its own IV). null clears it. */
+    titleCiphertextBase64?: string | null;
+    titleIv?: string | null;
     imageUrl?: string | null;
     imageUrls?: string[] | null;
     moodTag?: string | null;
@@ -636,16 +638,18 @@ export async function editEncryptedPost(
 
   // Apply unencrypted metadata updates if provided
   if (metadata) {
-    if (metadata.title !== undefined) {
-      updateSet.title = metadata.title;
-      const newSlug = slugify(metadata.title || 'Encrypted post');
-      updateSet.slug = newSlug;
-
-      // Preserve the old URL: create a redirect so the previous slug doesn't 404
-      if (post.slug && newSlug && post.slug !== newSlug) {
-        const { createPostSlugRedirect } = await import('@/lib/slugify');
-        await createPostSlugRedirect(post.slug, postId, post.tribeId);
+    // Encrypted title — store ciphertext only. Encrypted posts must never carry
+    // a plaintext title or a title-derived slug (URL-visible metadata leak).
+    if (metadata.titleCiphertextBase64 !== undefined) {
+      if (metadata.titleCiphertextBase64 && metadata.titleIv) {
+        updateSet.titleCiphertext = Buffer.from(metadata.titleCiphertextBase64, 'base64');
+        updateSet.titleIv = metadata.titleIv;
+      } else {
+        updateSet.titleCiphertext = null;
+        updateSet.titleIv = null;
       }
+      updateSet.title = null;
+      updateSet.slug = null;
     }
     if (metadata.imageUrl !== undefined) updateSet.imageUrl = metadata.imageUrl;
     if (metadata.imageUrls !== undefined) updateSet.imageUrls = metadata.imageUrls;
@@ -773,6 +777,9 @@ export interface CreateRingPostPayload {
       wrappedKey: string;
       wrapIv: string;
     }>;
+    /** Encrypted title — same per-post key as the body, its own IV (optional) */
+    titleCiphertextBase64?: string;
+    titleIv?: string;
   };
 
   // Link preview metadata (unfurled at compose time)
@@ -794,6 +801,11 @@ export const createRingPost = withPublicErrors(async (payload: CreateRingPostPay
   await postLimiter.check(userId);
 
   if (!payload.content.trim()) throw new Error('Post content cannot be empty.');
+
+  // Server-side title bound (client Input caps at 150, but guard API-level callers)
+  if (payload.title) {
+    payload.title = payload.title.trim().slice(0, 150) || undefined;
+  }
 
   const { db } = await import('@/db');
   const { posts, users: usersTable, tribeMembers } = await import('@/db/schema');
@@ -860,6 +872,11 @@ export const createRingPost = withPublicErrors(async (payload: CreateRingPostPay
       // Encrypted posts must never have URL-visible metadata derived from plaintext.
       updateData.slug = null;
       updateData.title = null;
+      // Encrypted title (same per-post key as the body, its own IV)
+      if (payload.encryption.titleCiphertextBase64 && payload.encryption.titleIv) {
+        updateData.titleCiphertext = Buffer.from(payload.encryption.titleCiphertextBase64, 'base64');
+        updateData.titleIv = payload.encryption.titleIv;
+      }
     }
     // Link preview metadata
     if (payload.linkPreview) {
@@ -924,6 +941,10 @@ export const createRingPost = withPublicErrors(async (payload: CreateRingPostPay
     ciphertext: isEncrypted ? Buffer.from(payload.encryption!.ciphertextBase64, 'base64') : null,
     isEncrypted,
     encryptionIv: isEncrypted ? payload.encryption!.iv : null,
+    // Encrypted title (same per-post key as the body, its own IV)
+    titleCiphertext: isEncrypted && payload.encryption!.titleCiphertextBase64
+      ? Buffer.from(payload.encryption!.titleCiphertextBase64, 'base64') : null,
+    titleIv: isEncrypted ? (payload.encryption!.titleIv ?? null) : null,
     // Link preview metadata
     linkUrl: payload.linkPreview?.url ?? null,
     linkTitle: payload.linkPreview?.title ?? null,

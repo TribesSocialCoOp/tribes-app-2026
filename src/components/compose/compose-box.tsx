@@ -5,6 +5,7 @@ import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { RingSelector } from './ring-selector';
 import { MoodTagSelector } from './mood-tag-selector';
@@ -12,7 +13,7 @@ import { useUser } from '@/hooks/use-user';
 import { useToast } from '@/hooks/use-toast';
 import { createRingPost, type CreateRingPostPayload } from '@/lib/actions/content-actions';
 import type { Ring, LinkPreviewData } from '@/lib/types';
-import { ImagePlus, Send, Loader2, X, Lock, Globe, Link2 } from 'lucide-react';
+import { ImagePlus, Send, Loader2, X, Lock, Globe, Link2, Type } from 'lucide-react';
 import { MentionAutocomplete } from './mention-autocomplete';
 import { useMentionAutocomplete } from '@/hooks/use-mention-autocomplete';
 import { EmojiAutocomplete } from './emoji-autocomplete';
@@ -112,6 +113,14 @@ export function ComposeBox({
   // Content state
   const [content, setContent] = useState('');
 
+  // Optional title (collapsible, like EditPostDialog), offered on every ring.
+  // For encrypted posts the title is E2E-encrypted client-side with the same
+  // per-post key as the body (own IV) and sent via encryption.titleCiphertext*;
+  // plaintext `title` travels only for unencrypted posts, so no title-derived
+  // slug or plaintext ever reaches the server for encrypted content.
+  const [title, setTitle] = useState('');
+  const [showTitle, setShowTitle] = useState(false);
+
   const { mentionQuery, mentionRef, checkMention, handleSelectMention, handleMentionKeyDown } =
     useMentionAutocomplete(textareaRef, content, setContent);
   const { emojiQuery, emojiRef, checkEmoji, handleSelectEmoji, handleEmojiKeyDown } =
@@ -130,8 +139,8 @@ export function ComposeBox({
   const [linkDismissed, setLinkDismissed] = useState(false);
   const lastUnfurledUrl = useRef<string | null>(null);
 
-  const activeTribe = ring === 'tribes' && selectedTribeIds.length > 0 
-    ? loadedTribes.find(t => t.id === selectedTribeIds[0]) 
+  const activeTribe = ring === 'tribes' && selectedTribeIds.length > 0
+    ? loadedTribes.find(t => t.id === selectedTribeIds[0])
     : null;
 
   const defaultIdentity = {
@@ -363,6 +372,22 @@ export function ComposeBox({
           }
         }
 
+        // Optional title. For encrypted posts, encrypt it with the same per-post
+        // key as the body (its own IV) so it never travels or persists in plaintext.
+        // `imageEncryptionKey` holds that key in every encrypted branch.
+        const trimmedTitle = showTitle && title.trim() ? title.trim().slice(0, 150) : '';
+        if (encryption && imageEncryptionKey && trimmedTitle) {
+          try {
+            const { reEncryptPost } = await import('@/lib/crypto/post-encryption');
+            const titleEnc = await reEncryptPost(trimmedTitle, imageEncryptionKey);
+            encryption.titleCiphertextBase64 = titleEnc.ciphertextBase64;
+            encryption.titleIv = titleEnc.iv;
+          } catch (titleErr) {
+            console.error('[ComposeBox] Title encryption failed:', titleErr);
+            // Non-fatal: post proceeds without a title rather than leaking plaintext
+          }
+        }
+
         // Upload images — encrypt if we have an encryption key
         let finalImageUrls: string[] = [];
         if (imageFiles.length > 0) {
@@ -388,6 +413,9 @@ export function ComposeBox({
 
         const result = await createRingPost({
           content: content.trim(),
+          // Plaintext title only for unencrypted posts; encrypted posts carry
+          // the title in encryption.titleCiphertextBase64 instead.
+          title: !encryption && trimmedTitle ? trimmedTitle : undefined,
           ring,
           moodTag: moodTag ?? undefined,
           imageUrls: finalImageUrls.length > 0 ? finalImageUrls : undefined,
@@ -410,6 +438,8 @@ export function ComposeBox({
 
         // Reset
         setContent('');
+        setTitle('');
+        setShowTitle(false);
         setMoodTag(null);
         setImageFiles([]);
         setPreviewUrls([]);
@@ -565,6 +595,38 @@ export function ComposeBox({
             ) : (
               /* Expanded state — full compose form */
               <div className="space-y-2.5">
+                {/* Optional title — available on every ring. For encrypted rings
+                    the title is E2E-encrypted client-side alongside the body. */}
+                {!showTitle ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1.5 text-xs text-muted-foreground h-7 -ml-2"
+                    onClick={() => setShowTitle(true)}
+                  >
+                    <Type className="h-3.5 w-3.5" />
+                    Add title
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      placeholder="Post title (optional)"
+                      value={title}
+                      onChange={e => setTitle(e.target.value)}
+                      maxLength={150}
+                      disabled={isPending}
+                      className="h-9 text-sm font-semibold"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => { setShowTitle(false); setTitle(''); }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
                 <div className="relative z-10">
                   <Textarea
                     ref={textareaRef}
@@ -737,6 +799,8 @@ export function ComposeBox({
                       onClick={() => {
                         setIsExpanded(false);
                         setContent('');
+                        setTitle('');
+                        setShowTitle(false);
                         setMoodTag(null);
                         previewUrls.forEach(url => URL.revokeObjectURL(url));
                         setImageFiles([]);

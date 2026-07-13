@@ -32,9 +32,15 @@ export function ActivityProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const prevUnreadCountRef = useRef(0);
+  const inFlightRef = useRef(false);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchActivity = useCallback(async () => {
     if (isGuest) return;
+    // Skip if a fetch is already in flight — prevents a slow earlier response
+    // from clobbering a newer one, and collapses redundant refreshes
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setIsLoading(true);
     try {
       const fetched = await getActivityFeed();
@@ -55,9 +61,22 @@ export function ActivityProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // silent
     } finally {
+      inFlightRef.current = false;
       setIsLoading(false);
     }
   }, [isGuest, toast]);
+
+  // Debounced variant for WebSocket-driven refreshes: getActivityFeed() is an
+  // expensive multi-query aggregation and every incoming chat message fires a
+  // 'message' event to every online recipient — a burst of messages must
+  // collapse into a single trailing fetch, not one fetch per message.
+  const fetchActivityDebounced = useCallback(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      fetchActivity();
+    }, 4000);
+  }, [fetchActivity]);
 
   // Initial load + WS refresh + focus reconciliation
   useEffect(() => {
@@ -66,10 +85,11 @@ export function ActivityProvider({ children }: { children: React.ReactNode }) {
     fetchActivity();
 
     const ws = TribesWebSocket.getInstance();
-    const unsubscribeActivity = ws.subscribe('activity', () => fetchActivity());
+    const unsubscribeActivity = ws.subscribe('activity', () => fetchActivityDebounced());
     // Incoming chat messages also surface as activity (unread_message items)
-    const unsubscribeMessage = ws.subscribe('message', () => fetchActivity());
+    const unsubscribeMessage = ws.subscribe('message', () => fetchActivityDebounced());
 
+    // User is actively looking — fetch immediately, not debounced
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') fetchActivity();
     };
@@ -79,8 +99,9 @@ export function ActivityProvider({ children }: { children: React.ReactNode }) {
       unsubscribeActivity();
       unsubscribeMessage();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     };
-  }, [isGuest, fetchActivity]);
+  }, [isGuest, fetchActivity, fetchActivityDebounced]);
 
   // Mark all read: update client state immediately + persist to server + refetch
   const markAllRead = useCallback(async () => {

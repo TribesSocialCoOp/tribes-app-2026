@@ -650,6 +650,8 @@ function postRowToFeedItem(
     isEncrypted: row.isEncrypted ?? false,
     ciphertextBase64: row.ciphertext ? Buffer.from(row.ciphertext as Buffer).toString('base64') : undefined,
     encryptionIv: row.encryptionIv ?? undefined,
+    titleCiphertextBase64: row.titleCiphertext ? Buffer.from(row.titleCiphertext as Buffer).toString('base64') : undefined,
+    titleIv: row.titleIv ?? undefined,
     editedAt: row.editedAt ?? undefined,
     // Link preview
     linkUrl: row.linkUrl ?? undefined,

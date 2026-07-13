@@ -38,6 +38,16 @@ let _fcmJwtClient: any = null;
  */
 type DeliveryResult = 'delivered' | 'stale' | 'error';
 
+/**
+ * APNs-specific outcome. Carries the gateway's `reason` string so the broadcaster can
+ * distinguish an environment mismatch (BadDeviceToken → retry the other gateway) from a
+ * genuinely dead token (Unregistered → prune) or a config error (BadTopic, etc. → keep).
+ */
+interface ApnsOutcome {
+  result: DeliveryResult;
+  reason?: string;
+}
+
 // ============================================================
 // VAPID CONFIGURATION
 // ============================================================
@@ -220,15 +230,15 @@ async function sendApnsPushNotification(
   deviceToken: string,
   payload: PushPayload,
   useSandbox: boolean,
-): Promise<DeliveryResult> {
+): Promise<ApnsOutcome> {
   const p12Path = path.join(process.cwd(), 'keys/apns-push.p12');
   if (!fs.existsSync(p12Path)) {
     if (process.env.NODE_ENV === 'production') {
       console.error('[push-apns] ⚠️ APNs certificate MISSING in production at keys/apns-push.p12 — iOS push will NOT work! Re-upload the .p12 file to the server.');
-      return 'error';
+      return { result: 'error' };
     }
     console.log(`[push-apns] [MOCK SEND] Token: ${truncateToken(deviceToken)}, Title: ${payload.title}`);
-    return 'delivered'; // Graceful mock success for dev environments
+    return { result: 'delivered' }; // Graceful mock success for dev environments
   }
 
   // ⚠️ Route to correct APNs gateway based on per-device flag (NOT NODE_ENV).
@@ -239,9 +249,9 @@ async function sendApnsPushNotification(
   const topic = 'app.tribes.TribesApp'; // iOS Bundle ID
   // APNS_PASSPHRASE env var: set to the .p12 export password (empty string if none)
 
-  return new Promise<DeliveryResult>((resolve) => {
+  return new Promise<ApnsOutcome>((resolve) => {
     let resolved = false;
-    const safeResolve = (val: DeliveryResult) => {
+    const safeResolve = (val: ApnsOutcome) => {
       if (!resolved) { resolved = true; resolve(val); }
     };
 
@@ -258,7 +268,7 @@ async function sendApnsPushNotification(
       client.on('error', (err) => {
         console.error(`[push-apns] APNs HTTP/2 connection error (${useSandbox ? 'sandbox' : 'production'}):`, err);
         client.close();
-        safeResolve('error');
+        safeResolve({ result: 'error' });
       });
 
       const body = {
@@ -295,14 +305,21 @@ async function sendApnsPushNotification(
         client.close();
         if (responseStatus === 200) {
           console.log(`[push-apns] APNs push sent to ${truncateToken(deviceToken)} (${useSandbox ? 'sandbox' : 'production'})`);
-          safeResolve('delivered');
+          safeResolve({ result: 'delivered' });
         } else {
-          console.error(`[push-apns] APNs delivery failed (${responseStatus}): ${responseData}`);
-          // 410 (Unregistered) or 400 (BadDeviceToken) indicates stale token
-          if (responseStatus === 410 || responseStatus === 404 || responseStatus === 400) {
-            safeResolve('stale');
+          // APNs error bodies are JSON: { "reason": "BadDeviceToken" | "Unregistered" | ... }
+          let reason: string | undefined;
+          try { reason = JSON.parse(responseData)?.reason; } catch { /* non-JSON body */ }
+          console.error(`[push-apns] APNs delivery failed (${responseStatus}${reason ? ` ${reason}` : ''}) on ${useSandbox ? 'sandbox' : 'production'}: ${responseData}`);
+          // Classify:
+          //  - BadDeviceToken (usually a 400): token was minted for the OTHER APNs environment.
+          //    Report 'stale' + reason so the broadcaster can retry the opposite gateway before pruning.
+          //  - Unregistered (410) / 404: token is truly dead → prune.
+          //  - Anything else (BadTopic, PayloadTooLarge, 5xx, …): config/transient → keep registration.
+          if (reason === 'BadDeviceToken' || responseStatus === 410 || responseStatus === 404) {
+            safeResolve({ result: 'stale', reason });
           } else {
-            safeResolve('error'); // Temporary failure, keep registration
+            safeResolve({ result: 'error', reason });
           }
         }
       });
@@ -310,14 +327,14 @@ async function sendApnsPushNotification(
       req.on('error', (err) => {
         console.error('[push-apns] APNs HTTP/2 stream error:', err);
         client.close();
-        safeResolve('error');
+        safeResolve({ result: 'error' });
       });
 
       req.write(JSON.stringify(body));
       req.end();
     } catch (err) {
       console.error('[push-apns] APNs direct push execution error:', err);
-      safeResolve('error');
+      safeResolve({ result: 'error' });
     }
   });
 }
@@ -456,10 +473,28 @@ export async function sendPushNotification(
 
     try {
       if (platform === 'ios') {
-        // ⚠️ Route to the correct APNs gateway based on per-device flag.
-        // Default to sandbox (true) for safety — TestFlight builds use sandbox.
+        // First try the gateway hinted by the per-device flag (default sandbox).
         const useSandbox = sub.apnsSandbox ?? true;
-        result = await sendApnsPushNotification(sub.endpoint, payload, useSandbox);
+        let apns = await sendApnsPushNotification(sub.endpoint, payload, useSandbox);
+
+        // Self-correcting gateway routing: a BadDeviceToken means the token was minted for
+        // the OTHER APNs environment (the client's sandbox/prod hint can be wrong — e.g. the
+        // native WebView loads the production site so its NODE_ENV heuristic always says prod).
+        // Retry the opposite gateway before pruning, and persist the corrected flag so future
+        // sends go direct.
+        if (apns.result === 'stale' && apns.reason === 'BadDeviceToken') {
+          console.log(`[push-apns] BadDeviceToken on ${useSandbox ? 'sandbox' : 'production'} — retrying ${useSandbox ? 'production' : 'sandbox'} gateway for user ${userId}`);
+          const retry = await sendApnsPushNotification(sub.endpoint, payload, !useSandbox);
+          if (retry.result === 'delivered') {
+            await db.update(pushSubscriptions)
+              .set({ apnsSandbox: !useSandbox })
+              .where(eq(pushSubscriptions.id, sub.id));
+            console.log(`[push-apns] Corrected apnsSandbox=${!useSandbox} for user ${userId} — token recovered`);
+          }
+          // Only treat as truly stale (prune) when BOTH gateways reject the token.
+          apns = retry;
+        }
+        result = apns.result;
       } else if (platform === 'android') {
         result = await sendFcmPushNotification(sub.endpoint, payload);
       } else {

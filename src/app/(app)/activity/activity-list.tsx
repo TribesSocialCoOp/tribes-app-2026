@@ -1,24 +1,50 @@
 "use client";
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Bell, HeartHandshake, MessageSquareText, Users, ChevronRight, Loader2, FileText, MessageCircle, CheckCheck, AtSign, Landmark } from "lucide-react";
-import { format } from 'date-fns';
+import type { LucideIcon } from 'lucide-react';
 import { useActivity } from '@/components/providers/activity-provider';
+import { useTimeSince } from '@/hooks/use-time-since';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { RecentChats } from '@/components/circles/recent-chats';
+import { useMediaQuery } from '@/hooks/use-media-query';
+import type { ActivityItem } from '@/lib/services/notification-service';
+
+interface SectionConfig {
+  type: ActivityItem['type'];
+  label: string;
+  Icon: LucideIcon;
+  iconCls: string;
+  circleCls: string;
+}
+
+// Action-required sections first. Tailwind classes must be full literals
+// (template strings like `bg-${color}-100` get purged by the JIT compiler).
+const SECTIONS: readonly SectionConfig[] = [
+  { type: 'bond_request', label: 'Bond Requests', Icon: HeartHandshake, iconCls: 'text-pink-500', circleCls: 'bg-pink-100' },
+  { type: 'tribe_join_request', label: 'Tribe Join Requests', Icon: Users, iconCls: 'text-emerald-500', circleCls: 'bg-emerald-100' },
+  { type: 'unread_message', label: 'Unread Messages', Icon: MessageSquareText, iconCls: 'text-blue-500', circleCls: 'bg-blue-100' },
+  { type: 'mention', label: 'Mentions', Icon: AtSign, iconCls: 'text-violet-500', circleCls: 'bg-violet-100' },
+  { type: 'new_comment', label: 'New Comments', Icon: MessageCircle, iconCls: 'text-amber-500', circleCls: 'bg-amber-100' },
+  { type: 'new_tribe_post', label: 'New Tribe Posts', Icon: FileText, iconCls: 'text-indigo-500', circleCls: 'bg-indigo-100' },
+  { type: 'governance', label: 'Governance', Icon: Landmark, iconCls: 'text-teal-500', circleCls: 'bg-teal-100' },
+];
 
 interface ActivityItemCardProps {
-  item: any;
-  icon: React.ReactNode;
-  badgeSlot?: React.ReactNode;
+  item: ActivityItem;
+  Icon: LucideIcon;
+  iconCls: string;
+  circleCls: string;
   onRead: (itemId: string) => void;
 }
 
-const ActivityItemCard: React.FC<ActivityItemCardProps> = ({ item, icon, badgeSlot, onRead }) => {
+const ActivityItemCard: React.FC<ActivityItemCardProps> = ({ item, Icon, iconCls, circleCls, onRead }) => {
   const router = useRouter();
+  const timeAgo = useTimeSince(item.timestamp);
 
   const handleClick = async () => {
     // Mark as read FIRST, then navigate — prevents the race condition
@@ -41,42 +67,140 @@ const ActivityItemCard: React.FC<ActivityItemCardProps> = ({ item, icon, badgeSl
     router.push(url);
   };
 
+  // Skip the context suffix when the description already names it
+  // (e.g. "posted in <tribe>", "wants to form a <bondType> bond")
+  const showContext = item.contextName && !item.description.includes(item.contextName);
+
   return (
-    <div onClick={handleClick} className="cursor-pointer">
-      <Card className={`transition-colors ${
+    <div
+      onClick={handleClick}
+      className={`cursor-pointer rounded-lg px-3 py-2.5 transition-colors ${
         item.read
           ? 'opacity-60 hover:opacity-80 hover:bg-accent/30'
           : 'hover:bg-accent/50 border-l-2 border-l-primary'
-      }`}>
-        <CardContent className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-full flex items-center justify-center shrink-0 relative">
-              {icon}
-              {!item.read && (
-                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-primary rounded-full border-2 border-background" />
-              )}
-            </div>
-            <div>
-              <p className={`text-sm ${item.read ? 'font-normal' : 'font-semibold'}`}>{item.title}</p>
-              <p className="text-xs text-muted-foreground">{item.description}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {badgeSlot || (
-              <span className="text-xs text-muted-foreground">
-                {format(item.timestamp, 'MMM d')}
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <div className="relative shrink-0">
+          {item.actorName ? (
+            <>
+              <UserAvatar
+                user={{ name: item.actorName, avatar: item.actorAvatar }}
+                fallback={item.actorAvatarFallback}
+                className="h-10 w-10"
+              />
+              <span className={`absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full flex items-center justify-center ring-1 ring-border ${circleCls}`}>
+                <Icon className={`h-3 w-3 ${iconCls}`} />
               </span>
-            )}
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </>
+          ) : (
+            <div className={`h-10 w-10 rounded-full flex items-center justify-center ${circleCls}`}>
+              <Icon className={`h-5 w-5 ${iconCls}`} />
+            </div>
+          )}
+          {!item.read && (
+            <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-primary rounded-full border-2 border-background" />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className={`text-sm truncate ${item.read ? 'font-normal' : 'font-semibold'}`}>{item.title}</p>
+            <span className="text-xs text-muted-foreground shrink-0">{timeAgo}</span>
           </div>
-        </CardContent>
-      </Card>
+          <p className="text-xs text-muted-foreground truncate">
+            {item.description}
+            {showContext ? ` · ${item.contextName}` : ''}
+          </p>
+          {item.snippet && (
+            <p className="text-xs text-muted-foreground/80 line-clamp-2 mt-1">&ldquo;{item.snippet}&rdquo;</p>
+          )}
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 self-center" />
+      </div>
     </div>
   );
 };
 
+interface ActivitySectionProps {
+  section: SectionConfig;
+  items: ActivityItem[];
+  onRead: (itemId: string) => void;
+}
+
+function ActivitySection({ section, items, onRead }: ActivitySectionProps) {
+  const { label, Icon, iconCls, circleCls } = section;
+  const unread = items.filter(i => !i.read).length;
+
+  return (
+    <section className="min-w-0 rounded-xl border bg-card">
+      <header className="flex items-center gap-2 p-4 pb-2">
+        <Icon className={`h-5 w-5 ${iconCls}`} />
+        <h3 className="text-base font-semibold text-foreground flex-1 truncate">{label}</h3>
+        {unread > 0 && <Badge variant="secondary" className="text-xs">{unread}</Badge>}
+      </header>
+      <div className="relative">
+        {/* Height cap + internal scroll on desktop only (lg+); on mobile the panel
+            is full height with no nested scroll, so swiping scrolls the page. */}
+        <div className="space-y-1 p-2 pt-0 lg:max-h-96 lg:overflow-y-auto lg:overscroll-contain">
+          {items.map(item => (
+            <ActivityItemCard
+              key={item.id}
+              item={item}
+              Icon={Icon}
+              iconCls={iconCls}
+              circleCls={circleCls}
+              onRead={onRead}
+            />
+          ))}
+        </div>
+        {items.length > 5 && (
+          <div className="hidden lg:block pointer-events-none absolute bottom-0 inset-x-0 h-8 rounded-b-xl bg-gradient-to-t from-card to-transparent" />
+        )}
+      </div>
+    </section>
+  );
+}
+
+interface VisibleSection {
+  section: SectionConfig;
+  items: ActivityItem[];
+}
+
+/**
+ * Masonry-style packing that preserves priority order. Each section (in SECTIONS
+ * order) drops into the currently-shortest column, so the highest-priority
+ * sections land at the top of the columns and the rest fill underneath with no
+ * row-alignment gaps. Height is estimated by visible rows, capped at 6 since tall
+ * panels scroll internally (lg:max-h-96 ≈ 6 rows) rather than growing unbounded.
+ */
+function packColumns(visible: VisibleSection[], columnCount: number): VisibleSection[][] {
+  const columns: VisibleSection[][] = Array.from({ length: columnCount }, () => []);
+  const weights = new Array(columnCount).fill(0);
+  for (const v of visible) {
+    let target = 0;
+    for (let i = 1; i < columnCount; i++) {
+      if (weights[i] < weights[target]) target = i;
+    }
+    columns[target].push(v);
+    weights[target] += 1 + Math.min(v.items.length, 6); // header + capped rows
+  }
+  return columns;
+}
+
 export function ActivityList() {
   const { items: activityItems, isLoading, unreadCount, markAllRead, markItemRead } = useActivity();
+
+  // Column count by breakpoint (md skipped — too narrow beside the 16rem sidebar).
+  const isLg = useMediaQuery('(min-width: 1024px)');
+  const is2xl = useMediaQuery('(min-width: 1536px)');
+  const columnCount = is2xl ? 3 : isLg ? 2 : 1;
+
+  const columns = useMemo(() => {
+    const visible: VisibleSection[] = SECTIONS
+      .map(section => ({ section, items: activityItems.filter(i => i.type === section.type) }))
+      .filter(v => v.items.length > 0);
+    return packColumns(visible, columnCount);
+  }, [activityItems, columnCount]);
 
   if (isLoading && activityItems.length === 0) {
     return (
@@ -105,14 +229,6 @@ export function ActivityList() {
     );
   }
 
-  const bondRequests = activityItems.filter((a: any) => a.type === 'bond_request');
-  const unreadMessages = activityItems.filter((a: any) => a.type === 'unread_message');
-  const tribeJoinRequests = activityItems.filter((a: any) => a.type === 'tribe_join_request');
-  const tribePosts = activityItems.filter((a: any) => a.type === 'new_tribe_post');
-  const newComments = activityItems.filter((a: any) => a.type === 'new_comment');
-  const mentionItems = activityItems.filter((a: any) => a.type === 'mention');
-  const governanceItems = activityItems.filter((a: any) => a.type === 'governance');
-
   return (
     <>
       {/* Recent Chats — quick access to active conversations */}
@@ -136,126 +252,24 @@ export function ActivityList() {
         </div>
       )}
 
-      {bondRequests.length > 0 && (
-        <section>
-          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center">
-            <HeartHandshake className="mr-2 h-5 w-5 text-pink-500" /> Bond Requests
-          </h3>
-          <div className="space-y-2">
-            {bondRequests.map((item: any) => (
-              <ActivityItemCard
-                key={item.id}
-                item={item}
-                icon={<div className="h-10 w-10 rounded-full bg-pink-100 flex items-center justify-center"><HeartHandshake className="h-5 w-5 text-pink-500" /></div>}
+      {/* Single column on mobile; balanced masonry columns on desktop (2 at lg,
+          3 at 2xl). Panels are packed shortest-column-first so priority sections
+          stay near the top and shorter panels fill dead space with no row gaps.
+          `md` is skipped — too narrow beside the 16rem sidebar until lg. */}
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 items-start min-w-0">
+        {columns.map((col, ci) => (
+          <div key={ci} className="flex flex-col gap-4 lg:gap-6 w-full lg:flex-1 min-w-0">
+            {col.map(({ section, items }) => (
+              <ActivitySection
+                key={section.type}
+                section={section}
+                items={items}
                 onRead={markItemRead}
               />
             ))}
           </div>
-        </section>
-      )}
-      {unreadMessages.length > 0 && (
-        <section>
-          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center">
-            <MessageSquareText className="mr-2 h-5 w-5 text-blue-500" /> Unread Messages
-          </h3>
-          <div className="space-y-2">
-            {unreadMessages.map((item: any) => (
-              <ActivityItemCard
-                key={item.id}
-                item={item}
-                icon={<div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center"><MessageSquareText className="h-5 w-5 text-blue-500" /></div>}
-                badgeSlot={<Badge variant="secondary" className="text-xs">New</Badge>}
-                onRead={markItemRead}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-      {tribeJoinRequests.length > 0 && (
-        <section>
-          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center">
-            <Users className="mr-2 h-5 w-5 text-emerald-500" /> Tribe Join Requests
-          </h3>
-          <div className="space-y-2">
-            {tribeJoinRequests.map((item: any) => (
-              <ActivityItemCard
-                key={item.id}
-                item={item}
-                icon={<div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center"><Users className="h-5 w-5 text-emerald-500" /></div>}
-                onRead={markItemRead}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-      {tribePosts.length > 0 && (
-        <section>
-          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center">
-            <FileText className="mr-2 h-5 w-5 text-indigo-500" /> New Tribe Posts
-          </h3>
-          <div className="space-y-2">
-            {tribePosts.map((item: any) => (
-              <ActivityItemCard
-                key={item.id}
-                item={item}
-                icon={<div className="h-10 w-10 rounded-full bg-indigo-100 flex items-center justify-center"><FileText className="h-5 w-5 text-indigo-500" /></div>}
-                onRead={markItemRead}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-      {newComments.length > 0 && (
-        <section>
-          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center">
-            <MessageCircle className="mr-2 h-5 w-5 text-amber-500" /> New Comments
-          </h3>
-          <div className="space-y-2">
-            {newComments.map((item: any) => (
-              <ActivityItemCard
-                key={item.id}
-                item={item}
-                icon={<div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center"><MessageCircle className="h-5 w-5 text-amber-500" /></div>}
-                onRead={markItemRead}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-      {mentionItems.length > 0 && (
-        <section>
-          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center">
-            <AtSign className="mr-2 h-5 w-5 text-violet-500" /> Mentions
-          </h3>
-          <div className="space-y-2">
-            {mentionItems.map((item: any) => (
-              <ActivityItemCard
-                key={item.id}
-                item={item}
-                icon={<div className="h-10 w-10 rounded-full bg-violet-100 flex items-center justify-center"><AtSign className="h-5 w-5 text-violet-500" /></div>}
-                onRead={markItemRead}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-      {governanceItems.length > 0 && (
-        <section>
-          <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center">
-            <Landmark className="mr-2 h-5 w-5 text-teal-500" /> Governance
-          </h3>
-          <div className="space-y-2">
-            {governanceItems.map((item: any) => (
-              <ActivityItemCard
-                key={item.id}
-                item={item}
-                icon={<div className="h-10 w-10 rounded-full bg-teal-100 flex items-center justify-center"><Landmark className="h-5 w-5 text-teal-500" /></div>}
-                onRead={markItemRead}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+        ))}
+      </div>
     </>
   );
 }

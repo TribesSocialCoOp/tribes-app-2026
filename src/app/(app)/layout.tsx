@@ -11,6 +11,7 @@ import { KeySyncProvider } from "@/components/providers/key-sync-provider";
 import { AgeGateProvider } from "@/components/providers/age-gate-provider";
 import { KeySyncBanner } from "@/components/providers/key-sync-banner";
 import { EmailVerificationBanner } from "@/components/providers/email-verification-banner";
+import { PushNotificationNudge } from "@/components/providers/push-notification-nudge";
 import { VersionGuard } from "@/components/providers/version-guard";
 import { ActivityProvider } from "@/components/providers/activity-provider";
 
@@ -146,6 +147,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <div className="flex-1 px-2 pt-3 pb-4 sm:p-6 lg:p-8 md:pb-8">
                   <EmailVerificationBanner />
                   <KeySyncBanner />
+                  <PushNotificationNudge />
                   {children}
                 </div>
                     <PlatformFooter />

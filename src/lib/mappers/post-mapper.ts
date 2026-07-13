@@ -53,6 +53,11 @@ export function rowToTribePost(
       ? Buffer.from(row.ciphertext as Buffer).toString('base64')
       : undefined,
     encryptionIv: row.encryptionIv ?? undefined,
+    // Encrypted title — decrypted client-side with the same per-post key
+    titleCiphertextBase64: row.titleCiphertext
+      ? Buffer.from(row.titleCiphertext as Buffer).toString('base64')
+      : undefined,
+    titleIv: row.titleIv ?? undefined,
     // Link preview metadata
     linkUrl: row.linkUrl ?? undefined,
     linkTitle: row.linkTitle ?? undefined,

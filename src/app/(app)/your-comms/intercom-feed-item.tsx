@@ -344,7 +344,8 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
                            const { reportPost } = await import('@/lib/actions/content-actions');
                            await reportPost({
                              postId: item.id,
-                             postTitle: item.title,
+                             // Don't disclose a decrypted title to moderators for E2E posts
+                             postTitle: item.isEncrypted ? undefined : item.title,
                              reporterName: user?.name || 'Anonymous',
                              reason: 'Reported from feed',
                            });
