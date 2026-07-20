@@ -226,6 +226,26 @@ export async function checkPendingMembership(tribeId: string): Promise<boolean> 
   return fn(userId, tribeId);
 }
 
+// ======== IN-APP TRIBE INVITES (issue #58) ========
+export async function searchUsersForTribeInvite(tribeId: string, query: string): Promise<Array<{
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  status: 'none' | 'member' | 'invited';
+}>> {
+  const userId = await requireAuth();
+  const { searchUsersForTribeInvite: fn } = await import('@/lib/services/tribe-invite-service');
+  return fn(userId, tribeId, query);
+}
+
+export async function sendTribeInvite(tribeId: string, toUserId: string): Promise<void> {
+  const userId = await requireAuth();
+  const { tribeInviteLimiter } = await import('@/lib/auth/rate-limit');
+  await tribeInviteLimiter.check(userId);
+  const { sendTribeInvite: fn } = await import('@/lib/services/tribe-invite-service');
+  return fn(userId, tribeId, toUserId);
+}
+
 export async function updateTribeMemberIdentity(tribeId: string, aliasName?: string, aliasAvatar?: string): Promise<void> {
   const userId = await requireAuth();
   const { updateTribeMemberIdentity: fn } = await import('@/lib/services/tribe-service');
