@@ -8,6 +8,7 @@ import { syncStatusBarStyle } from '@/lib/capacitor/status-bar';
 import { setSurfaceCookie } from '@/lib/capacitor/surface-cookie';
 import { App } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { Browser } from '@capacitor/browser';
 
 /**
  * The canonical hostnames that should be treated as internal navigation.
@@ -72,11 +73,6 @@ export function NativeInitializer() {
       const href = anchor.getAttribute('href');
       if (!href) return;
 
-      // Never intercept links that explicitly request a new tab/window.
-      // e.g. target="_blank" links to /terms, /privacy — let the browser
-      // handle those natively so the new tab actually opens.
-      if (anchor.target === '_blank') return;
-
       try {
         const url = new URL(href, window.location.origin);
 
@@ -84,6 +80,23 @@ export function NativeInitializer() {
         const isInternal =
           INTERNAL_HOSTS.has(url.hostname) ||
           url.hostname === window.location.hostname;
+
+        // External links inside the native shell: open in an in-app browser
+        // sheet (Safari View Controller / Chrome Custom Tab) instead of
+        // bouncing the user out to the system browser. This must run before
+        // the target="_blank" bail-out below, since external content links
+        // (e.g. markdown-content.tsx) render with target="_blank".
+        if (!isInternal && isNative && (url.protocol === 'http:' || url.protocol === 'https:')) {
+          e.preventDefault();
+          e.stopPropagation();
+          Browser.open({ url: url.href });
+          return;
+        }
+
+        // Never intercept links that explicitly request a new tab/window.
+        // e.g. target="_blank" links to /terms, /privacy — let the browser
+        // handle those natively so the new tab actually opens.
+        if (anchor.target === '_blank') return;
 
         if (!isInternal) return;
 
