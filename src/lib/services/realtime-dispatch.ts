@@ -361,6 +361,37 @@ export async function notifyCommentReply(
 }
 
 /**
+ * Notify a user that a tribe member has invited them to join a specific tribe
+ * (issue #58 — in-app invites). Respects the invitee's tribeActivityEnabled +
+ * pushEnabled preferences, same gating as notifyTribeJoinRequest below.
+ */
+export async function notifyTribeInvite(
+  toUserId: string,
+  inviterName: string,
+  tribeName: string,
+  inviteToken: string,
+): Promise<void> {
+  try {
+    const { getPreferences } = await import('./notification-service');
+    const { sendPushNotification } = await import('./push-service');
+
+    const prefs = await getPreferences(toUserId);
+    if (!prefs.tribeActivityEnabled || !prefs.pushEnabled) return;
+
+    // Route through the same token-gated landing page used for external share
+    // links — private tribes aren't otherwise viewable by non-members.
+    await sendPushNotification(toUserId, {
+      title: 'Tribe Invitation',
+      body: `${inviterName} invited you to join ${tribeName}`,
+      url: `/invite/${inviteToken}`,
+      tag: `tribe-invite-${inviteToken}`,
+    }).catch(() => {});
+  } catch (err) {
+    console.warn('[realtime-dispatch] notifyTribeInvite failed:', err);
+  }
+}
+
+/**
  * Notify tribe admins/founders when someone requests to join their tribe.
  * Checks each admin's tribeActivityEnabled preference.
  */

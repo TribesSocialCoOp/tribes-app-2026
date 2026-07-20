@@ -21,6 +21,7 @@ import { VerifiedBadge } from '@/components/ui/verified-badge';
 import { ShareLinkCard } from '@/components/ui/share-link-card';
 import { getOrCreatePersonalInviteCode } from '@/lib/actions/profile-actions';
 import { useToast } from '@/hooks/use-toast';
+import { TribeInviteDialog } from '@/components/dialogs/tribe-invite-dialog';
 
 /** Shift a hex color's hue by `deg` degrees to create a gradient companion. */
 function shiftHue(hex: string, deg: number): string {
@@ -62,6 +63,7 @@ export function TribeHeroBanner() {
 
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isGeneratingShare, setIsGeneratingShare] = useState(false);
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
 
   if (!tribe) return null;
 
@@ -104,6 +106,10 @@ export function TribeHeroBanner() {
                 </Button>
               </ResponsiveMenuTrigger>
               <ResponsiveMenuContent align="end">
+                <ResponsiveMenuItem onClick={() => setIsInviteDialogOpen(true)}>
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  Invite Member
+                </ResponsiveMenuItem>
                 <ResponsiveMenuItem onClick={handleShareTribe} disabled={isGeneratingShare}>
                   {isGeneratingShare ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Share2 className="mr-2 h-4 w-4" />}
                   Share Tribe
@@ -218,6 +224,13 @@ export function TribeHeroBanner() {
           onDismiss={() => setShareLink(null)}
         />
       )}
+
+      <TribeInviteDialog
+        isOpen={isInviteDialogOpen}
+        onOpenChange={setIsInviteDialogOpen}
+        tribeId={tribeId}
+        tribeName={tribe.name}
+      />
     </div>
   );
 }

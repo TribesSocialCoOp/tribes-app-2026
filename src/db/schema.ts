@@ -351,6 +351,26 @@ export const pendingMembers = pgTable('pending_members', {
   requestedAt: timestamp('requested_at', { withTimezone: true }),
 });
 
+// In-app invites (issue #58): a tribe member deliberately invites a specific
+// existing Tribes user to a tribe (as opposed to sharing an anonymous link).
+// Delivery is just a targeted pointer to the tribe's existing inviteToken —
+// accepting still goes through the normal requestToJoinTribe() gates
+// (approval/instant join mechanism, NSFW gate, etc.) exactly like the public
+// share-link flow. This table exists only so we can: dedupe repeat invites,
+// show "already invited" in the search picker, and surface a pending item in
+// the activity feed — not to grant any new permission.
+export const tribeInvites = pgTable('tribe_invites', {
+  id: text('id').primaryKey(),
+  tribeId: text('tribe_id').notNull().references(() => tribes.id, { onDelete: 'cascade' }),
+  fromUserId: text('from_user_id').notNull().references(() => users.id),
+  toUserId: text('to_user_id').notNull().references(() => users.id),
+  status: text('status').default('pending'), // 'pending' | 'accepted' | 'expired'
+  createdAt: timestamp('created_at', { withTimezone: true }).default(sql`NOW()`),
+}, (table) => [
+  index('idx_tribe_invites_to_user').on(table.toUserId, table.status),
+  index('idx_tribe_invites_tribe_to').on(table.tribeId, table.toUserId),
+]);
+
 // ============================================================
 // CONTENT
 // ============================================================

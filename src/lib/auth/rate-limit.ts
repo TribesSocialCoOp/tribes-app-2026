@@ -275,6 +275,14 @@ export const bondLimiter = new RateLimiter({
   maxRequests: 20,
 });
 
+// In-app tribe invites (issue #58) — capped per-user per-day across all
+// tribes to deter invite spam while allowing normal founder onboarding bursts.
+export const tribeInviteLimiter = new RateLimiter({
+  prefix: 'tribe-invite',
+  windowMs: 24 * 60 * 60 * 1000, // 24 hours
+  maxRequests: 30,
+});
+
 // Payment surfaces — keyed by userId
 export const checkoutLimiter = new RateLimiter({
   prefix: 'checkout',
