@@ -12,6 +12,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Lock, Send, Loader2, AlertTriangle, RefreshCw, Search, X, ChevronUp, ChevronDown, User as UserIcon, Paperclip, FileIcon, ImageIcon, Pencil } from "lucide-react";
@@ -112,11 +113,21 @@ function BondChatContent() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const messageInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
 
   // ::shortcode:: emoji autocomplete in the composer
   const { emojiQuery, emojiRef, checkEmoji, handleSelectEmoji, handleEmojiKeyDown } =
     useEmojiAutocomplete(messageInputRef, newMessage, setNewMessage);
+
+  // Auto-grow the composer as newlines are added, and shrink it back when the
+  // message is cleared (e.g. after sending). Keyed on newMessage so it also
+  // reacts to programmatic changes like emoji insertion and post-send resets.
+  useEffect(() => {
+    const el = messageInputRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [newMessage]);
 
   // Bond crypto hook — handles ECDH key exchange automatically
   const { sharedSecret, isExchangeComplete, isLoading: cryptoLoading, error: cryptoError } = useBondCrypto(bondId);
@@ -616,6 +627,9 @@ function BondChatContent() {
     } finally {
       setIsSending(false);
       setIsUploading(false);
+      // Keep the composer focused after sending so the user can keep chatting.
+      // Deferred so it fires after the disabled textarea is re-enabled on re-render.
+      setTimeout(() => messageInputRef.current?.focus(), 0);
     }
   }, [newMessage, pendingFile, sharedSecret, bondId, user?.id, toast, isSending, wsConnected, replyTo, editing]);
 
@@ -941,18 +955,29 @@ function BondChatContent() {
                   onSelect={handleSelectEmoji}
                 />
               </div>
-              <Input
+              <Textarea
                 ref={messageInputRef}
                 value={newMessage}
+                rows={1}
                 onChange={(e) => {
                   setNewMessage(e.target.value);
                   checkEmoji(e.target.value, e.target.selectionStart ?? e.target.value.length);
                   handleTyping();
                 }}
-                onKeyDown={handleEmojiKeyDown}
-                placeholder={editing ? "Edit message..." : pendingFile ? "Add a message (optional)..." : "Type a message..."}
-                disabled={isSending}
-                className="w-full"
+                onKeyDown={(e) => {
+                  // Let the emoji autocomplete claim keys first (Enter/Tab select,
+                  // arrows navigate). It calls preventDefault when it handles one.
+                  handleEmojiKeyDown(e);
+                  if (e.defaultPrevented) return;
+                  // Enter sends, Shift+Enter inserts a newline. Ignore Enter while
+                  // an IME composition is active so it doesn't send mid-word.
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={editing ? "Edit message..." : pendingFile ? "Add a message (optional)..." : "Type a message... (Shift+Enter for newline)"}
+                className="w-full min-h-0 resize-none max-h-40 py-2"
               />
             </div>
             <Button

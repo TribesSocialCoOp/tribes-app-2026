@@ -1,6 +1,6 @@
 {
   "name": "tribes-app",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "private": true,
   "scripts": {
     "dev": "concurrently -k -n next,relay -c cyan,magenta \"npm:dev:next\" \"npm:dev:relay\"",
