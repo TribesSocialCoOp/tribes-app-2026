@@ -9,6 +9,7 @@ import { setSurfaceCookie } from '@/lib/capacitor/surface-cookie';
 import { App } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { Browser } from '@capacitor/browser';
+import { AppLauncher } from '@capacitor/app-launcher';
 
 /**
  * The canonical hostnames that should be treated as internal navigation.
@@ -95,12 +96,12 @@ export function NativeInitializer() {
 
         // Non-http(s) schemes (tel:, mailto:, sms:) inside the native shell:
         // WKWebView's target="_blank" popup path punts these to Safari instead
-        // of the OS handler. Re-drive them through the main-frame navigation
-        // delegate, which Capacitor forwards to the OS (dial prompt, Mail).
+        // of the OS handler (and re-driving via location.href proved unreliable
+        // on-device). Hand them to the OS explicitly (dial prompt, Mail).
         if (!isInternal && isNative && url.protocol !== 'http:' && url.protocol !== 'https:') {
           e.preventDefault();
           e.stopPropagation();
-          window.location.href = url.href;
+          AppLauncher.openUrl({ url: url.href });
           return;
         }
 
