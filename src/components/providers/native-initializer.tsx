@@ -93,10 +93,25 @@ export function NativeInitializer() {
           return;
         }
 
+        // Non-http(s) schemes (tel:, mailto:, sms:) inside the native shell:
+        // WKWebView's target="_blank" popup path punts these to Safari instead
+        // of the OS handler. Re-drive them through the main-frame navigation
+        // delegate, which Capacitor forwards to the OS (dial prompt, Mail).
+        if (!isInternal && isNative && url.protocol !== 'http:' && url.protocol !== 'https:') {
+          e.preventDefault();
+          e.stopPropagation();
+          window.location.href = url.href;
+          return;
+        }
+
         // Never intercept links that explicitly request a new tab/window.
         // e.g. target="_blank" links to /terms, /privacy — let the browser
-        // handle those natively so the new tab actually opens.
-        if (anchor.target === '_blank') return;
+        // handle those natively so the new tab actually opens. In the native
+        // shell there are no tabs and _blank internal links (markdown content
+        // renders all links with target="_blank") would otherwise fall through
+        // to WKWebView's popup handler, which opens Safari — so on native,
+        // internal links skip this bail-out and get SPA-routed below.
+        if (anchor.target === '_blank' && !isNative) return;
 
         if (!isInternal) return;
 
