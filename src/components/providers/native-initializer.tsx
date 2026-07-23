@@ -10,6 +10,7 @@ import { App } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { Browser } from '@capacitor/browser';
 import { AppLauncher } from '@capacitor/app-launcher';
+import { Capacitor } from '@capacitor/core';
 
 /**
  * The canonical hostnames that should be treated as internal navigation.
@@ -99,9 +100,18 @@ export function NativeInitializer() {
         // of the OS handler (and re-driving via location.href proved unreliable
         // on-device). Hand them to the OS explicitly (dial prompt, Mail).
         if (!isInternal && isNative && url.protocol !== 'http:' && url.protocol !== 'https:') {
-          e.preventDefault();
-          e.stopPropagation();
-          AppLauncher.openUrl({ url: url.href });
+          // The web bundle is served remotely (server.url), so it can be newer
+          // than the installed binary — only take over the click if the native
+          // plugin actually exists in this build; otherwise leave the WebView's
+          // default handling intact rather than eating the tap.
+          if (Capacitor.isPluginAvailable('AppLauncher')) {
+            e.preventDefault();
+            e.stopPropagation();
+            AppLauncher.openUrl({ url: url.href }).catch((err) => {
+              console.warn('[link-intercept] AppLauncher failed, falling back:', err);
+              window.location.href = url.href;
+            });
+          }
           return;
         }
 
