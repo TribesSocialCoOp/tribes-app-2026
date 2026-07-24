@@ -89,10 +89,15 @@ export function NativeInitializer() {
         // the target="_blank" bail-out below, since external content links
         // (e.g. markdown-content.tsx) render with target="_blank".
         if (!isInternal && isNative && (url.protocol === 'http:' || url.protocol === 'https:')) {
-          e.preventDefault();
-          e.stopPropagation();
-          Browser.open({ url: url.href });
-          return;
+          // Skew guard: the remote bundle can be newer than the installed
+          // binary — only take over the tap when the Browser plugin exists in
+          // this build, else keep the old default (system browser) behavior.
+          if (Capacitor.isPluginAvailable('Browser')) {
+            e.preventDefault();
+            e.stopPropagation();
+            Browser.open({ url: url.href });
+            return;
+          }
         }
 
         // Non-http(s) schemes (tel:, mailto:, sms:) inside the native shell:
