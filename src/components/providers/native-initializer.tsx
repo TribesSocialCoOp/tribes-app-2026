@@ -8,6 +8,9 @@ import { syncStatusBarStyle } from '@/lib/capacitor/status-bar';
 import { setSurfaceCookie } from '@/lib/capacitor/surface-cookie';
 import { App } from '@capacitor/app';
 import { SplashScreen } from '@capacitor/splash-screen';
+import { Browser } from '@capacitor/browser';
+import { AppLauncher } from '@capacitor/app-launcher';
+import { Capacitor } from '@capacitor/core';
 
 /**
  * The canonical hostnames that should be treated as internal navigation.
@@ -72,11 +75,6 @@ export function NativeInitializer() {
       const href = anchor.getAttribute('href');
       if (!href) return;
 
-      // Never intercept links that explicitly request a new tab/window.
-      // e.g. target="_blank" links to /terms, /privacy — let the browser
-      // handle those natively so the new tab actually opens.
-      if (anchor.target === '_blank') return;
-
       try {
         const url = new URL(href, window.location.origin);
 
@@ -84,6 +82,52 @@ export function NativeInitializer() {
         const isInternal =
           INTERNAL_HOSTS.has(url.hostname) ||
           url.hostname === window.location.hostname;
+
+        // External links inside the native shell: open in an in-app browser
+        // sheet (Safari View Controller / Chrome Custom Tab) instead of
+        // bouncing the user out to the system browser. This must run before
+        // the target="_blank" bail-out below, since external content links
+        // (e.g. markdown-content.tsx) render with target="_blank".
+        if (!isInternal && isNative && (url.protocol === 'http:' || url.protocol === 'https:')) {
+          // Skew guard: the remote bundle can be newer than the installed
+          // binary — only take over the tap when the Browser plugin exists in
+          // this build, else keep the old default (system browser) behavior.
+          if (Capacitor.isPluginAvailable('Browser')) {
+            e.preventDefault();
+            e.stopPropagation();
+            Browser.open({ url: url.href });
+            return;
+          }
+        }
+
+        // Non-http(s) schemes (tel:, mailto:, sms:) inside the native shell:
+        // WKWebView's target="_blank" popup path punts these to Safari instead
+        // of the OS handler (and re-driving via location.href proved unreliable
+        // on-device). Hand them to the OS explicitly (dial prompt, Mail).
+        if (!isInternal && isNative && url.protocol !== 'http:' && url.protocol !== 'https:') {
+          // The web bundle is served remotely (server.url), so it can be newer
+          // than the installed binary — only take over the click if the native
+          // plugin actually exists in this build; otherwise leave the WebView's
+          // default handling intact rather than eating the tap.
+          if (Capacitor.isPluginAvailable('AppLauncher')) {
+            e.preventDefault();
+            e.stopPropagation();
+            AppLauncher.openUrl({ url: url.href }).catch((err) => {
+              console.warn('[link-intercept] AppLauncher failed, falling back:', err);
+              window.location.href = url.href;
+            });
+          }
+          return;
+        }
+
+        // Never intercept links that explicitly request a new tab/window.
+        // e.g. target="_blank" links to /terms, /privacy — let the browser
+        // handle those natively so the new tab actually opens. In the native
+        // shell there are no tabs and _blank internal links (markdown content
+        // renders all links with target="_blank") would otherwise fall through
+        // to WKWebView's popup handler, which opens Safari — so on native,
+        // internal links skip this bail-out and get SPA-routed below.
+        if (anchor.target === '_blank' && !isNative) return;
 
         if (!isInternal) return;
 

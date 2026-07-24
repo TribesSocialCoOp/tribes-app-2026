@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useEffect, useRef, useState, useId, useMemo } from 'react';
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
+
+// react-markdown's default sanitizer allowlists http/https/mailto (and a few
+// IRC schemes) but strips tel: and sms:, leaving dead links with empty hrefs.
+// Permit those two explicitly; everything else keeps the default sanitization.
+const urlTransform = (url: string) =>
+  /^(tel|sms):/i.test(url) ? url : defaultUrlTransform(url);
 import remarkGfm from 'remark-gfm';
 import DOMPurify from 'isomorphic-dompurify';
 import { cn } from '@/lib/utils';
@@ -247,6 +253,7 @@ export function MarkdownContent({
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={components}
+        urlTransform={urlTransform}
       >
         {processedContent}
       </ReactMarkdown>

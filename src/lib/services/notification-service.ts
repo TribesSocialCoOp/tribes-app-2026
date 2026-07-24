@@ -70,7 +70,7 @@ function initials(name?: string | null): string | undefined {
 
 export interface ActivityItem {
   id: string;
-  type: 'bond_request' | 'unread_message' | 'tribe_join_request' | 'mention' | 'new_tribe_post' | 'new_comment' | 'governance' | 'system';
+  type: 'bond_request' | 'unread_message' | 'tribe_join_request' | 'tribe_invite' | 'mention' | 'new_tribe_post' | 'new_comment' | 'governance' | 'system';
   title: string;
   description: string;
   timestamp: Date;
@@ -350,6 +350,28 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
           contextName: tribeName,
         });
       }
+    }
+  }
+
+  // 3b. In-app tribe invites addressed to this user (issue #58)
+  if (prefs.tribeActivityEnabled) {
+    const { getPendingTribeInvites } = await import('./tribe-invite-service');
+    const pendingInvites = await getPendingTribeInvites(userId);
+
+    for (const invite of pendingInvites) {
+      items.push({
+        id: `activity-tribeinvite-${invite.id}`,
+        type: 'tribe_invite',
+        title: 'Tribe Invitation',
+        description: `${invite.fromUserName} invited you to join ${invite.tribeName}`,
+        timestamp: invite.createdAt,
+        actionUrl: invite.inviteToken ? `/invite/${invite.inviteToken}` : `/t/${invite.tribeSlug ?? invite.tribeId}`,
+        read: false,
+        actorName: invite.fromUserName,
+        actorAvatar: invite.fromUserAvatar,
+        actorAvatarFallback: initials(invite.fromUserName),
+        contextName: invite.tribeName,
+      });
     }
   }
 
@@ -737,7 +759,7 @@ export async function getActivityFeed(userId: string): Promise<ActivityItem[]> {
   // Bond requests and join requests are always unread (require action), other types use timestamp
   const result = items.slice(0, 30);
   for (const item of result) {
-    if (item.type === 'bond_request' || item.type === 'tribe_join_request') {
+    if (item.type === 'bond_request' || item.type === 'tribe_join_request' || item.type === 'tribe_invite') {
       // Actionable items stay unread until resolved
       item.read = false;
     } else if (readIds.has(item.id)) {
