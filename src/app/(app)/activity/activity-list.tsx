@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Bell, HeartHandshake, MessageSquareText, Users, ChevronRight, Loader2, FileText, MessageCircle, CheckCheck, AtSign, Landmark } from "lucide-react";
+import { Bell, HeartHandshake, MessageSquareText, Users, ChevronRight, Loader2, FileText, MessageCircle, CheckCheck, AtSign, Landmark, UserPlus } from "lucide-react";
 import type { LucideIcon } from 'lucide-react';
 import { useActivity } from '@/components/providers/activity-provider';
 import { useTimeSince } from '@/hooks/use-time-since';
@@ -27,6 +27,7 @@ interface SectionConfig {
 const SECTIONS: readonly SectionConfig[] = [
   { type: 'bond_request', label: 'Bond Requests', Icon: HeartHandshake, iconCls: 'text-pink-500', circleCls: 'bg-pink-100' },
   { type: 'tribe_join_request', label: 'Tribe Join Requests', Icon: Users, iconCls: 'text-emerald-500', circleCls: 'bg-emerald-100' },
+  { type: 'tribe_invite', label: 'Tribe Invitations', Icon: UserPlus, iconCls: 'text-cyan-500', circleCls: 'bg-cyan-100' },
   { type: 'unread_message', label: 'Unread Messages', Icon: MessageSquareText, iconCls: 'text-blue-500', circleCls: 'bg-blue-100' },
   { type: 'mention', label: 'Mentions', Icon: AtSign, iconCls: 'text-violet-500', circleCls: 'bg-violet-100' },
   { type: 'new_comment', label: 'New Comments', Icon: MessageCircle, iconCls: 'text-amber-500', circleCls: 'bg-amber-100' },
