@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useOptimisticVibes } from '@/hooks/use-optimistic-vibes';
+import { useCollapsedState } from '@/hooks/use-collapsed-state';
 import Link from 'next/link';
 import { profilePath } from '@/lib/utils/paths';
 import { useRouter } from 'next/navigation';
@@ -109,7 +110,10 @@ export function PostDetailClient({
   });
 
   // ── Comments ──
-  const [showComments, setShowComments] = useState(true); // show by default on post page
+  // Comments section defaults to expanded here, so persist relative to that default.
+  const [commentsCollapsed, setCommentsCollapsed] = useCollapsedState('comments-section', post.id, false);
+  const showComments = !commentsCollapsed;
+  const setShowComments = useCallback((value: boolean) => setCommentsCollapsed(!value), [setCommentsCollapsed]);
   const [loadedComments, setLoadedComments] = useState<DiscussionComment[]>(post.commentsData || []);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [commentCount, setCommentCount] = useState(post.comments ?? 0);

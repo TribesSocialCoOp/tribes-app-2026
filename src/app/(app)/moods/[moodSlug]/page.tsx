@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useOptimisticVibes } from '@/hooks/use-optimistic-vibes';
+import { useCollapsedState } from '@/hooks/use-collapsed-state';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { profilePath } from '@/lib/utils/paths';
@@ -103,11 +104,14 @@ const MoodStreamPostCard: React.FC<{ post: MoodStreamPost }> = ({ post }) => {
   const [isSendingReply, setIsSendingReply] = useState(false);
   const isMobile = useIsMobile();
   const [replyDialogOpen, setReplyDialogOpen] = useState(false);
-  const [showComments, setShowComments] = useState(false);
+  // Comments section defaults to collapsed here, so persist relative to that default.
+  const [commentsCollapsed, setCommentsCollapsed] = useCollapsedState('comments-section', post.id, true);
+  const showComments = !commentsCollapsed;
+  const setShowComments = useCallback((value: boolean) => setCommentsCollapsed(!value), [setCommentsCollapsed]);
   const [loadedComments, setLoadedComments] = useState<DiscussionComment[]>([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [commentCount, setCommentCount] = useState(post.comments ?? 0);
-  const [isBodyCollapsed, setIsBodyCollapsed] = useState(false);
+  const [isBodyCollapsed, setIsBodyCollapsed] = useCollapsedState('post-body', post.id, false);
 
   // Double-tap hook is not used here as collapse button is always visible
 

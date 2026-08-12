@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useOptimisticVibes } from '@/hooks/use-optimistic-vibes';
 import { useUser } from '@/hooks/use-user';
+import { useCollapsedState } from '@/hooks/use-collapsed-state';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDoubleTap } from '@/hooks/use-double-tap';
 import { useRouter } from 'next/navigation';
@@ -115,8 +116,11 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
   const [isSendingInlineReply, setIsSendingInlineReply] = useState(false);
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [showComments, setShowComments] = useState(true);
-  const [isBodyCollapsed, setIsBodyCollapsed] = useState(false);
+  // Comments section defaults to expanded here, so persist relative to that default.
+  const [commentsCollapsed, setCommentsCollapsed] = useCollapsedState('comments-section', post.id, false);
+  const showComments = !commentsCollapsed;
+  const setShowComments = useCallback((value: boolean) => setCommentsCollapsed(!value), [setCommentsCollapsed]);
+  const [isBodyCollapsed, setIsBodyCollapsed] = useCollapsedState('post-body', post.id, false);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
