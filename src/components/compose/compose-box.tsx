@@ -692,6 +692,7 @@ export function ComposeBox({
                         <button
                           onClick={() => removeImage(idx)}
                           className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full h-5 w-5 flex items-center justify-center text-[10px] shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-label="Remove image"
                         >
                           <X className="h-3 w-3" />
                         </button>

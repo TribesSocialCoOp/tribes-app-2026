@@ -145,11 +145,12 @@ export function VibePicker({
   };
 
   // ── Trigger button (shared between all modes) ──
-  const triggerButton = (
+  const renderTriggerButton = (onClick?: () => void) => (
     <Button
       variant="ghost"
       size="sm"
       disabled={disabled}
+      onClick={onClick}
       className={cn(
         "text-muted-foreground hover:text-primary transition-all",
         hasVibed && "bg-primary/10 text-primary",
@@ -172,6 +173,7 @@ export function VibePicker({
       {vibeCount}
     </Button>
   );
+  const triggerButton = renderTriggerButton();
 
   // ── Author mode: mobile opens drawer, desktop shows tooltip ──
   if (isAuthor && recentVibes.length > 0) {
@@ -179,12 +181,10 @@ export function VibePicker({
       <>
         {isMobile ? (
           // Mobile: tap opens author drawer
-          <div onClick={() => {
+          renderTriggerButton(() => {
             setDrawerContentMode('details');
             setDrawerOpen(true);
-          }}>
-            {triggerButton}
-          </div>
+          })
         ) : (
           // Desktop: tap/click opens premium popover
           <Popover open={popoverOpen} onOpenChange={(isOpen) => {

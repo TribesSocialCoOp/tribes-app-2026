@@ -11,11 +11,17 @@
  */
 
 import React, { useRef, useState, useCallback } from 'react';
-import { Check, CheckCheck, Reply, SmilePlus, Pencil, Trash2, Ban } from 'lucide-react';
+import { Check, CheckCheck, Reply, SmilePlus, Pencil, Trash2, Ban, MoreHorizontal } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ReactionPicker } from './reaction-picker';
 import { QuoteBlock } from './reply-preview';
 import { BondAttachment } from './bond-attachment';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import type { MessageReactionSummary } from '@/lib/actions/message-reaction-actions';
 
 export interface ChatMessage {
@@ -166,13 +172,22 @@ export function MessageBubble({
     >
       {/* Hover actions (left side for own messages) */}
       {msg.isMine && isPersisted && (
-        <HoverActions
-          isMine
-          onReact={() => setPickerOpen(true)}
-          onReply={() => onReply(msg)}
-          onEdit={() => onEdit(msg)}
-          onDelete={() => onDelete(msg)}
-        />
+        <>
+          <HoverActions
+            isMine
+            onReact={() => setPickerOpen(true)}
+            onReply={() => onReply(msg)}
+            onEdit={() => onEdit(msg)}
+            onDelete={() => onDelete(msg)}
+          />
+          <MessageActionsMenu
+            isMine
+            onReact={() => setPickerOpen(true)}
+            onReply={() => onReply(msg)}
+            onEdit={() => onEdit(msg)}
+            onDelete={() => onDelete(msg)}
+          />
+        </>
       )}
 
       <ReactionPicker
@@ -262,7 +277,10 @@ export function MessageBubble({
 
       {/* Hover actions (right side for peer messages) */}
       {!msg.isMine && isPersisted && (
-        <HoverActions onReact={() => setPickerOpen(true)} onReply={() => onReply(msg)} />
+        <>
+          <HoverActions onReact={() => setPickerOpen(true)} onReply={() => onReply(msg)} />
+          <MessageActionsMenu onReact={() => setPickerOpen(true)} onReply={() => onReply(msg)} />
+        </>
       )}
     </div>
   );
@@ -298,6 +316,48 @@ function HoverActions({ isMine, onReact, onReply, onEdit, onDelete }: {
         </button>
       )}
     </div>
+  );
+}
+
+function MessageActionsMenu({ isMine, onReact, onReply, onEdit, onDelete }: {
+  isMine?: boolean;
+  onReact: () => void;
+  onReply: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
+  // Always-visible fallback for touch devices, where hover-only actions
+  // and long-press/swipe gestures aren't reachable by screen readers.
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="p-1.5 rounded-full text-muted-foreground/60 hover:text-foreground hover:bg-muted shrink-0 md:hidden"
+          aria-label="Message actions"
+        >
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align={isMine ? 'end' : 'start'}>
+        <DropdownMenuItem onClick={onReact}>
+          <SmilePlus className="h-4 w-4" /> React
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={onReply}>
+          <Reply className="h-4 w-4" /> Reply
+        </DropdownMenuItem>
+        {isMine && onEdit && (
+          <DropdownMenuItem onClick={onEdit}>
+            <Pencil className="h-4 w-4" /> Edit
+          </DropdownMenuItem>
+        )}
+        {isMine && onDelete && (
+          <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+            <Trash2 className="h-4 w-4" /> Delete
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
