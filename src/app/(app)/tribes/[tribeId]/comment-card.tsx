@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useOptimisticVibes } from '@/hooks/use-optimistic-vibes';
 import { useUser } from '@/hooks/use-user';
+import { useCollapsedState } from '@/hooks/use-collapsed-state';
 import { format } from 'date-fns';
 import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -103,7 +104,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // ── Collapsible thread state ──
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useCollapsedState('comment', comment.id, false);
 
   // ── Comment decryption ──
   const [displayContent, setDisplayContent] = useState(comment.content);
