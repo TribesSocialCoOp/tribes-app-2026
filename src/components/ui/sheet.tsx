@@ -6,6 +6,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { focusContentOnOpen, mergeRefs } from "@/lib/a11y"
 
 const Sheet = SheetPrimitive.Root
 
@@ -56,15 +57,18 @@ interface SheetContentProps
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, ...props }, ref) => (
+>(({ side = "right", className, children, ...props }, ref) => {
+  const contentRef = React.useRef<React.ElementRef<typeof SheetPrimitive.Content>>(null)
+  return (
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content
-      ref={ref}
+      ref={mergeRefs(ref, contentRef)}
+      tabIndex={-1}
       className={cn(sheetVariants({ side }), className)}
       // Prevent Radix from calling scrollIntoView on the first focusable
       // element — this causes the underlying page to jump in mobile WebViews.
-      onOpenAutoFocus={(e) => e.preventDefault()}
+      onOpenAutoFocus={focusContentOnOpen(contentRef)}
       {...props}
     >
       {children}
@@ -74,7 +78,8 @@ const SheetContent = React.forwardRef<
       </SheetPrimitive.Close>
     </SheetPrimitive.Content>
   </SheetPortal>
-))
+  )
+})
 SheetContent.displayName = SheetPrimitive.Content.displayName
 
 const SheetHeader = ({

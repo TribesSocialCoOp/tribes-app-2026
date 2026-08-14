@@ -333,16 +333,25 @@ export function AppSidebar() {
                   "group-data-[collapsible=icon]:justify-center"
                 )}
               >
-                <Link href={item.href}>
+                <Link
+                  href={item.href}
+                  aria-label={
+                    item.href === '/chat' && chatUnreadCount > 0
+                      ? `${item.label}, ${chatUnreadCount} unread`
+                      : item.href === '/voting' && activeProposalCount > 0
+                        ? `${item.label}, ${activeProposalCount} active`
+                        : undefined
+                  }
+                >
                   <item.icon className="h-5 w-5 mr-2 group-data-[collapsible=icon]:mr-0" />
                   <span className="group-data-[collapsible=icon]:hidden">{item.label}</span>
                   {item.href === '/chat' && chatUnreadCount > 0 && (
-                    <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-0 group-data-[collapsible=icon]:right-0 group-data-[collapsible=icon]:h-3 group-data-[collapsible=icon]:min-w-[12px] group-data-[collapsible=icon]:text-[10px]">
+                    <span aria-hidden="true" className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-0 group-data-[collapsible=icon]:right-0 group-data-[collapsible=icon]:h-3 group-data-[collapsible=icon]:min-w-[12px] group-data-[collapsible=icon]:text-[10px]">
                       {chatUnreadCount > 9 ? '9+' : chatUnreadCount}
                     </span>
                   )}
                   {item.href === '/voting' && activeProposalCount > 0 && (
-                    <span className="ml-auto bg-emerald-500 text-white text-[10px] font-bold rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 animate-pulse group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:h-2 group-data-[collapsible=icon]:w-2 group-data-[collapsible=icon]:min-w-[8px] group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:text-[0px]">
+                    <span aria-hidden="true" className="ml-auto bg-emerald-500 text-white text-[10px] font-bold rounded-full h-5 min-w-[20px] flex items-center justify-center px-1 animate-pulse group-data-[collapsible=icon]:absolute group-data-[collapsible=icon]:top-1 group-data-[collapsible=icon]:right-1 group-data-[collapsible=icon]:h-2 group-data-[collapsible=icon]:w-2 group-data-[collapsible=icon]:min-w-[8px] group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:text-[0px]">
                       {activeProposalCount}
                     </span>
                   )}

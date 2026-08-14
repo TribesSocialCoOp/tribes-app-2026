@@ -364,26 +364,26 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                 </CardDescription>
                 {post.isEncrypted ? (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
-                    <button type="button" className="flex items-center text-xs text-green-600 bg-transparent border-none p-0 cursor-default"><Lock className="h-3 w-3" /></button>
+                    <button type="button" aria-label="End-to-end encrypted" className="flex items-center text-xs text-green-600 bg-transparent border-none p-0 cursor-default"><Lock className="h-3 w-3" /></button>
                   </TooltipTrigger><TooltipContent><p>End-to-end encrypted</p></TooltipContent></Tooltip></TooltipProvider>
                 ) : (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
-                    <button type="button" className="flex items-center text-xs text-muted-foreground/50 bg-transparent border-none p-0 cursor-default"><Globe className="h-3 w-3" /></button>
+                    <button type="button" aria-label="Public post" className="flex items-center text-xs text-muted-foreground/50 bg-transparent border-none p-0 cursor-default"><Globe className="h-3 w-3" /></button>
                   </TooltipTrigger><TooltipContent><p>Public post</p></TooltipContent></Tooltip></TooltipProvider>
                 )}
                 {post.isPinned && (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
-                    <button type="button" className="flex items-center text-xs text-primary bg-transparent border-none p-0 cursor-default"><Pin className="h-3.5 w-3.5" /></button>
+                    <button type="button" aria-label="Pinned post" className="flex items-center text-xs text-primary bg-transparent border-none p-0 cursor-default"><Pin className="h-3.5 w-3.5" /></button>
                   </TooltipTrigger><TooltipContent><p>Pinned Post</p></TooltipContent></Tooltip></TooltipProvider>
                 )}
                 {isMember && isPromoted && !post.isRemoved && (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
-                    <button type="button" className="flex items-center text-xs text-accent bg-transparent border-none p-0 cursor-default"><Rss className="h-3.5 w-3.5" /></button>
+                    <button type="button" aria-label="Promoted to Mood Stream" className="flex items-center text-xs text-accent bg-transparent border-none p-0 cursor-default"><Rss className="h-3.5 w-3.5" /></button>
                   </TooltipTrigger><TooltipContent><p>Promoted to Mood Stream</p></TooltipContent></Tooltip></TooltipProvider>
                 )}
                 {isReported && !post.isRemoved && (
                   <TooltipProvider delayDuration={100}><Tooltip><TooltipTrigger asChild>
-                    <button type="button" className="flex items-center text-xs text-destructive bg-transparent border-none p-0 cursor-default"><Flag className="h-3.5 w-3.5" /></button>
+                    <button type="button" aria-label="Reported" className="flex items-center text-xs text-destructive bg-transparent border-none p-0 cursor-default"><Flag className="h-3.5 w-3.5" /></button>
                   </TooltipTrigger><TooltipContent><p>This post has been reported and is under review.</p></TooltipContent></Tooltip></TooltipProvider>
                 )}
               </div>
@@ -399,11 +399,12 @@ export const TribePostCard: React.FC<TribePostCardProps> = ({
                 </Link>
                 <ResponsiveMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
                 <ResponsiveMenuTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     className="h-8 w-8 touch-target-44 text-muted-foreground"
                     onClick={isMobile ? handleMenuDoubleTap : undefined}
+                    aria-label="Post actions"
                   >
                     <MoreVertical className="h-4 w-4" />
                   </Button>

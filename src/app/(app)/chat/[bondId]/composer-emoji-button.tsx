@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer';
 import { Smile } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { focusContentOnOpen } from '@/lib/a11y';
 
 interface ComposerEmojiButtonProps {
   onSelect: (emoji: string) => void;
@@ -24,6 +25,7 @@ export function ComposerEmojiButton({ onSelect, disabled }: ComposerEmojiButtonP
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const isMobile = useIsMobile();
+  const contentRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (popoverOpen || drawerOpen) {
@@ -48,6 +50,7 @@ export function ComposerEmojiButton({ onSelect, disabled }: ComposerEmojiButtonP
       className="shrink-0"
       disabled={disabled}
       title="Insert emoji"
+      aria-label="Insert emoji"
       onClick={isMobile ? () => setDrawerOpen(true) : undefined}
     >
       <Smile className="h-4 w-4" />
@@ -84,10 +87,12 @@ export function ComposerEmojiButton({ onSelect, disabled }: ComposerEmojiButtonP
     <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
+        ref={contentRef}
+        tabIndex={-1}
         className="w-auto p-1"
         side="top"
         align="start"
-        onOpenAutoFocus={(e) => e.preventDefault()}
+        onOpenAutoFocus={focusContentOnOpen(contentRef)}
       >
         <EmojiPicker
           onEmojiClick={handleSelect}
