@@ -30,6 +30,13 @@ export function PullToRefresh({ children }: PullToRefreshProps) {
     if (!scrollContainer) return;
 
     const handleTouchStart = (e: TouchEvent) => {
+      // Multi-touch (pinch-zoom) must never arm pull-to-refresh — a non-passive
+      // preventDefault below would cancel WKWebView's native zoom gesture.
+      if (e.touches.length > 1) {
+        setStartY(0);
+        setPullHeight(0);
+        return;
+      }
       // Only allow pull-to-refresh if we are at the very top of the scroll container
       if (scrollContainer.scrollTop <= 0) {
         setStartY(e.touches[0].clientY);
@@ -39,6 +46,13 @@ export function PullToRefresh({ children }: PullToRefreshProps) {
     };
 
     const handleTouchMove = (e: TouchEvent) => {
+      // A second finger arriving mid-pull means the user is pinching — disarm
+      // and let the native gesture through untouched.
+      if (e.touches.length > 1) {
+        setStartY(0);
+        setPullHeight(0);
+        return;
+      }
       if (startY === 0 || isRefreshing) return;
 
       const currentY = e.touches[0].clientY;
