@@ -232,13 +232,27 @@ export function NativeInitializer() {
     //     auto-zoom is unrecoverable in-app. maximum-scale=1 suppresses the
     //     focus auto-zoom in WKWebView. Browsers never see this code path,
     //     so the web keeps full pinch-zoom.
-    const viewportMeta = document.querySelector('meta[name="viewport"]');
-    if (viewportMeta) {
-      const viewportContent = viewportMeta.getAttribute('content') ?? '';
-      if (!viewportContent.includes('maximum-scale')) {
-        viewportMeta.setAttribute('content', `${viewportContent}, maximum-scale=1`);
+    //     Next.js owns the viewport <meta> and re-renders it on client
+    //     navigation (wiping runtime edits), so assert the lock against the
+    //     LAST viewport meta (WebKit honors the last one) and keep
+    //     re-asserting via a <head> observer whenever Next touches it.
+    const lockViewportZoom = () => {
+      const metas = document.querySelectorAll('meta[name="viewport"]');
+      const meta = metas[metas.length - 1];
+      if (!meta) return;
+      const content = meta.getAttribute('content') ?? '';
+      if (!content.includes('maximum-scale')) {
+        meta.setAttribute('content', `${content}, maximum-scale=1`);
       }
-    }
+    };
+    lockViewportZoom();
+    const viewportObserver = new MutationObserver(lockViewportZoom);
+    viewportObserver.observe(document.head, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['content'],
+    });
 
     // 5. Wire up keyboard events to set a CSS variable for keyboard height.
     //    The Capacitor `resize: 'body'` mode only resizes document.body, but
@@ -357,6 +371,7 @@ export function NativeInitializer() {
       pushCleanup?.();
       window.removeEventListener('statusTap', handleStatusTap);
       themeObserver.disconnect();
+      viewportObserver.disconnect();
     };
   }, [router]);
 
