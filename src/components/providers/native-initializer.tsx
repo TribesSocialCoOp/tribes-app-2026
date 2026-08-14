@@ -226,6 +226,20 @@ export function NativeInitializer() {
       document.body.classList.add('capacitor-ios');
     }
 
+    // 4c. Native-only viewport zoom re-lock (#146). iOS auto-zooms the
+    //     WebView when focusing inputs rendered under 16px, and pinch-zoom
+    //     is inert in the native shell (fixed-body scroll model), so that
+    //     auto-zoom is unrecoverable in-app. maximum-scale=1 suppresses the
+    //     focus auto-zoom in WKWebView. Browsers never see this code path,
+    //     so the web keeps full pinch-zoom.
+    const viewportMeta = document.querySelector('meta[name="viewport"]');
+    if (viewportMeta) {
+      const viewportContent = viewportMeta.getAttribute('content') ?? '';
+      if (!viewportContent.includes('maximum-scale')) {
+        viewportMeta.setAttribute('content', `${viewportContent}, maximum-scale=1`);
+      }
+    }
+
     // 5. Wire up keyboard events to set a CSS variable for keyboard height.
     //    The Capacitor `resize: 'body'` mode only resizes document.body, but
     //    position:fixed elements (Sheets, Dialogs) reference the viewport.
