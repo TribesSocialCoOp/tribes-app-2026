@@ -105,6 +105,11 @@ function BondChatContent() {
   // cause a double WebSocket connection when bond loads after initial connect).
   const bondTargetIdRef = useRef<string | null | undefined>(null);
   bondTargetIdRef.current = bond?.targetId;
+  const bondTargetNameRef = useRef<string | undefined>(undefined);
+  bondTargetNameRef.current = bond?.targetName;
+
+  // sr-only live region for incoming messages only (not the user's own sends)
+  const [incomingAnnouncement, setIncomingAnnouncement] = useState('');
 
   // Typing throttle — ref tracks last send time to avoid N WS sends per keystroke
   const lastTypingSentRef = useRef<number>(0);
@@ -302,6 +307,9 @@ function BondChatContent() {
                 replyToId: data.replyToId ?? null,
               }];
             });
+            const senderName = bondTargetNameRef.current ?? 'them';
+            const shortText = plaintext.length > 140 ? `${plaintext.slice(0, 140)}…` : plaintext;
+            setIncomingAnnouncement(`New message from ${senderName}: ${shortText}`);
             // We're viewing the chat, so the message is read immediately.
             // Always persist (clears our badge); only push the live receipt to
             // the peer when read receipts are enabled.
@@ -686,11 +694,17 @@ function BondChatContent() {
           </div>
         </div>
         {bond.targetId && (
-          <Button variant="ghost" size="icon" onClick={() => router.push(profilePath(bond.targetId!, bond.targetSlug))} title="View Wall">
+          <Button variant="ghost" size="icon" onClick={() => router.push(profilePath(bond.targetId!, bond.targetSlug))} title="View Wall" aria-label="View Wall">
             <UserIcon className="h-4 w-4" />
           </Button>
         )}
-        <Button variant="ghost" size="icon" onClick={() => messageSearch.setIsOpen(!messageSearch.isOpen)}>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => messageSearch.setIsOpen(!messageSearch.isOpen)}
+          aria-label="Search messages"
+          aria-expanded={messageSearch.isOpen}
+        >
           <Search className="h-4 w-4" />
         </Button>
       </div>
@@ -721,27 +735,28 @@ function BondChatContent() {
               <SelectItem value="all">All time</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => messageSearch.search(messageSearch.query)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => messageSearch.search(messageSearch.query)} aria-label="Search">
             <Search className="h-3.5 w-3.5" />
           </Button>
           {messageSearch.totalResults > 0 && (
             <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
               <span>{messageSearch.currentIndex + 1}/{messageSearch.totalResults}</span>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => messageSearch.navigateResult('prev')}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => messageSearch.navigateResult('prev')} aria-label="Previous result">
                 <ChevronUp className="h-3 w-3" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => messageSearch.navigateResult('next')}>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => messageSearch.navigateResult('next')} aria-label="Next result">
                 <ChevronDown className="h-3 w-3" />
               </Button>
             </div>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={messageSearch.clearSearch}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={messageSearch.clearSearch} aria-label="Clear search">
             <X className="h-3.5 w-3.5" />
           </Button>
         </div>
       )}
 
       {/* Messages Area */}
+      <div aria-live="polite" className="sr-only">{incomingAnnouncement}</div>
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl p-4 space-y-3">
         {/* Load More button — only when older messages actually remain */}
@@ -834,11 +849,12 @@ function BondChatContent() {
         {peerTyping && (
           <div className="flex justify-start">
             <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
-              <span className="flex gap-1">
+              <span className="flex gap-1" aria-hidden="true">
                 <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
                 <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
                 <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
               </span>
+              <span className="sr-only" role="status">{bond.targetName} is typing</span>
             </div>
           </div>
         )}
@@ -929,6 +945,7 @@ function BondChatContent() {
               onClick={() => fileInputRef.current?.click()}
               disabled={isSending}
               title="Attach a file (encrypted)"
+              aria-label="Attach a file (encrypted)"
             >
               <Paperclip className="h-4 w-4" />
             </Button>

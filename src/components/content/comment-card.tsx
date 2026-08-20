@@ -411,10 +411,12 @@ export const CommentCard: React.FC<CommentCardProps> = ({
                 <p className="text-[10px] text-muted-foreground whitespace-nowrap">{format(comment.timestamp, "MMM d, h:mm a")}</p>
               )}
               {comment.replies && comment.replies.length > 0 && (
-                <button 
-                  onClick={() => setIsCollapsed(true)} 
+                <button
+                  onClick={() => setIsCollapsed(true)}
                   className="text-muted-foreground/60 hover:text-primary transition-colors cursor-pointer select-none rounded hover:bg-muted/50 p-0.5 flex items-center justify-center"
                   title="Collapse thread"
+                  aria-label="Collapse thread"
+                  aria-expanded={!isCollapsed}
                 >
                   <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                 </button>
@@ -427,7 +429,7 @@ export const CommentCard: React.FC<CommentCardProps> = ({
               {currentUserId && (
                 <ResponsiveMenu>
                   <ResponsiveMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-6 w-6 touch-target-44 text-muted-foreground">
+                    <Button variant="ghost" size="icon" className="h-6 w-6 touch-target-44 text-muted-foreground" aria-label="Comment actions">
                       <MoreVertical className="h-3.5 w-3.5" />
                     </Button>
                   </ResponsiveMenuTrigger>

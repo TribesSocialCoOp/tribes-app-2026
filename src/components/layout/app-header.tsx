@@ -66,23 +66,23 @@ export function AppHeader() {
                    "relative p-2 hover:text-foreground rounded-full hover:bg-muted transition-colors",
                    pathname.startsWith('/activity') ? "text-foreground" : "text-muted-foreground"
                  )}
-                 aria-label="Activity"
+                 aria-label={unreadCount > 0 ? `Activity, ${unreadCount} unread` : "Activity"}
                >
                   <Inbox className="h-5 w-5" />
                   {unreadCount > 0 && (
-                    <span className="absolute top-0.5 right-0.5 h-4 min-w-[16px] rounded-full bg-red-500 px-1 text-[10px] font-bold text-white flex items-center justify-center">
+                    <span aria-hidden="true" className="absolute top-0.5 right-0.5 h-4 min-w-[16px] rounded-full bg-red-500 px-1 text-[10px] font-bold text-white flex items-center justify-center">
                       {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
                   )}
                </Link>
              )}
-             <Link href="/search" className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors">
+             <Link href="/search" className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors" aria-label="Search">
                 <Search className="h-5 w-5" />
              </Link>
-             <Link href="/discover" className="md:hidden p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors">
+             <Link href="/discover" className="md:hidden p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors" aria-label="Discover">
                 <Compass className="h-5 w-5" />
              </Link>
-             <Link href="/settings" className="md:hidden p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors">
+             <Link href="/settings" className="md:hidden p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-muted transition-colors" aria-label="Settings">
                 <Settings className="h-5 w-5" />
              </Link>
           </div>
