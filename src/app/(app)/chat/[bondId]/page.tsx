@@ -662,7 +662,7 @@ function BondChatContent() {
     <div className="flex flex-col flex-1 w-full min-h-0">
       {/* Header */}
       <div className="flex items-center gap-3 p-4 border-b bg-background/95 backdrop-blur-sm">
-        <Button variant="ghost" size="icon" onClick={goBack}>
+        <Button variant="ghost" size="icon" onClick={goBack} aria-label="Back">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <Avatar className="h-10 w-10">
@@ -985,6 +985,7 @@ function BondChatContent() {
               disabled={(!newMessage.trim() && !pendingFile) || isSending}
               size="icon"
               className="shrink-0"
+              aria-label={isSending ? "Sending..." : "Send message"}
             >
               {isSending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

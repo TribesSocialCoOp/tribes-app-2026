@@ -288,31 +288,32 @@ export function AppSidebar() {
                         : pathname === `/tribes/${fav.targetId}`
                     }
                     tooltip={fav.targetName}
-                    className="justify-start group-data-[collapsible=icon]:justify-center"
+                    className="justify-start group-data-[collapsible=icon]:justify-center pr-7 group-data-[collapsible=icon]:pr-2"
                   >
                     <Link href={fav.targetType === 'bond' ? `/chat/${fav.targetId}` : `/tribes/${fav.targetId}`}>
                       <span className="h-5 w-5 mr-2 group-data-[collapsible=icon]:mr-0 inline-flex items-center justify-center rounded-full bg-muted text-[10px] font-semibold shrink-0">
                         {fav.targetName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                       </span>
                       <span className="group-data-[collapsible=icon]:hidden truncate">{fav.targetName}</span>
-                      <button
-                        onClick={async (e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          try {
-                            const { removeFavorite } = await import('@/lib/actions/favorite-actions');
-                            await removeFavorite(fav.id);
-                            setFavorites(prev => prev.filter(f => f.id !== fav.id));
-                            window.dispatchEvent(new CustomEvent('favorites-changed'));
-                          } catch { }
-                        }}
-                        className="ml-auto opacity-0 group-hover/menu-button:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted group-data-[collapsible=icon]:hidden"
-                        title="Unpin"
-                      >
-                        <PinOff className="h-3 w-3 text-muted-foreground" />
-                      </button>
                     </Link>
                   </SidebarMenuButton>
+                  <button
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      try {
+                        const { removeFavorite } = await import('@/lib/actions/favorite-actions');
+                        await removeFavorite(fav.id);
+                        setFavorites(prev => prev.filter(f => f.id !== fav.id));
+                        window.dispatchEvent(new CustomEvent('favorites-changed'));
+                      } catch { }
+                    }}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 opacity-0 group-hover/menu-item:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted group-data-[collapsible=icon]:hidden"
+                    aria-label={`Remove ${fav.targetName} from favorites`}
+                    title="Unpin"
+                  >
+                    <PinOff className="h-3 w-3 text-muted-foreground" />
+                  </button>
                 </SidebarMenuItem>
               ))}
               <li className="px-2 py-1">

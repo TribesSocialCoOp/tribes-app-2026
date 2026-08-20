@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useCallback } from 'react';
 import { useOptimisticVibes } from '@/hooks/use-optimistic-vibes';
+import { useCollapsedState } from '@/hooks/use-collapsed-state';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useDoubleTap } from '@/hooks/use-double-tap';
 import { useRouter } from 'next/navigation';
@@ -88,7 +89,10 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const [showReply, setShowReply] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
-  const [showComments, setShowComments] = useState(false);
+  // Comments section defaults to collapsed here, so persist relative to that default.
+  const [commentsCollapsed, setCommentsCollapsed] = useCollapsedState('comments-section', item.id, true);
+  const showComments = !commentsCollapsed;
+  const setShowComments = useCallback((value: boolean) => setCommentsCollapsed(!value), [setCommentsCollapsed]);
   const [loadedComments, setLoadedComments] = useState<DiscussionComment[]>([]);
   const [isLoadingComments, setIsLoadingComments] = useState(false);
   const [commentCount, setCommentCount] = useState(item.comments ?? 0);
@@ -109,7 +113,7 @@ export const IntercomFeedItem: React.FC<{ item: CommunicationItem }> = ({ item }
   const [pinDialogOpen, setPinDialogOpen] = useState(false);
   const [modRemoveOpen, setModRemoveOpen] = useState(false);
   const [isAdminDeleteDialogOpen, setIsAdminDeleteDialogOpen] = useState(false);
-  const [isBodyCollapsed, setIsBodyCollapsed] = useState(false);
+  const [isBodyCollapsed, setIsBodyCollapsed] = useCollapsedState('post-body', item.id, false);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
