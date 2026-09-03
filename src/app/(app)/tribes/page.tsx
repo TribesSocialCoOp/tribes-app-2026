@@ -449,12 +449,20 @@ export default function TribesPage() {
               </Button>
             </Link>
           ) : (
-            <Link href="/signup" passHref>
-              <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                <UserPlus className="mr-2 h-5 w-5" />
-                Sign Up to Join
-              </Button>
-            </Link>
+            <div className="flex items-center gap-2">
+              <Link href="/login" passHref>
+                <Button variant="outline">
+                  <HeartHandshake className="mr-2 h-5 w-5" />
+                  Log In
+                </Button>
+              </Link>
+              <Link href="/signup" passHref>
+                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                  <UserPlus className="mr-2 h-5 w-5" />
+                  Sign Up to Join
+                </Button>
+              </Link>
+            </div>
           )}
         </header>
 
