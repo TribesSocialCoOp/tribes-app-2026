@@ -764,6 +764,7 @@ export function ComposeBox({
                       )}>
                         <ImagePlus className="h-4 w-4 text-muted-foreground" />
                       </div>
+                      <span className="sr-only">Add image</span>
                     </label>
                     {previewUrls.length > 0 && (
                       <span className="text-[10px] text-muted-foreground font-medium">

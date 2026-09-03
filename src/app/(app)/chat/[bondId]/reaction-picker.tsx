@@ -9,13 +9,14 @@
  * keyboard focus-theft).
  */
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import EmojiPicker, { EmojiClickData, Theme, EmojiStyle } from 'emoji-picker-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverAnchor } from '@/components/ui/popover';
 import { Drawer, DrawerContent, DrawerTitle } from '@/components/ui/drawer';
 import { Plus } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { focusContentOnOpen } from '@/lib/a11y';
 
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '🤔', '😢', '🔥'];
 
@@ -34,6 +35,7 @@ export function ReactionPicker({ open, onOpenChange, onSelect, align = 'start', 
   const [showFullPicker, setShowFullPicker] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const isMobile = useIsMobile();
+  const contentRef = useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (open || drawerOpen) {
@@ -71,10 +73,12 @@ export function ReactionPicker({ open, onOpenChange, onSelect, align = 'start', 
           {children}
         </PopoverAnchor>
         <PopoverContent
+          ref={contentRef}
+          tabIndex={-1}
           className="w-auto p-2"
           side="top"
           align={align}
-          onOpenAutoFocus={(e) => e.preventDefault()}
+          onOpenAutoFocus={focusContentOnOpen(contentRef)}
         >
           {showFullPicker && !isMobile ? (
             <EmojiPicker

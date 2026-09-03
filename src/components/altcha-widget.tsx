@@ -31,6 +31,7 @@ export interface AltchaWidgetRef {
 export const AltchaWidget = forwardRef<AltchaWidgetRef, AltchaWidgetProps>(
   function AltchaWidget({ onVerified, onError, onExpired, className }, ref) {
     const [mounted, setMounted] = useState(false);
+    const [forceMainThread, setForceMainThread] = useState(false);
     const widgetRef = useRef<any>(null);
 
     useImperativeHandle(ref, () => ({
@@ -43,6 +44,19 @@ export const AltchaWidget = forwardRef<AltchaWidgetRef, AltchaWidgetProps>(
 
     useEffect(() => {
       setMounted(true);
+      // Both block crypto.subtle inside Web Workers, which gets the widget stuck on
+      // "Verifying": Brave Shield's fingerprinting protection, and Samsung Internet.
+      // Everyone else keeps the (much faster, unthrottled-in-background-tabs) worker path.
+      const isSamsungInternet = /SamsungBrowser/i.test(navigator.userAgent);
+      if (isSamsungInternet) {
+        setForceMainThread(true);
+      } else {
+        (navigator as any).brave?.isBrave?.()
+          .then((result: boolean) => {
+            if (result) setForceMainThread(true);
+          })
+          .catch(() => {});
+      }
     }, []);
 
     // Web Crypto API (crypto.subtle) is disabled in insecure HTTP contexts (e.g. local network IP)
@@ -129,7 +143,7 @@ export const AltchaWidget = forwardRef<AltchaWidgetRef, AltchaWidgetProps>(
           auto="onload"
           hidelogo="true"
           hidelink="true"
-          workerize="false"
+          {...(forceMainThread ? { workerize: 'false' } : {})}
           class="w-full block"
         />
       </div>

@@ -50,6 +50,7 @@ export function CardFooterButton({
       className={cn("text-muted-foreground hover:text-primary", className)}
       onClick={onClick}
       disabled={disabled}
+      aria-label={label}
     >
       {loading ? (
         <Loader2 className={cn(iconMargin, "h-4 w-4 animate-spin")} />

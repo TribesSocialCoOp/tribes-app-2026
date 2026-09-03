@@ -18,6 +18,7 @@ export const ThreadCollapseHeader: React.FC<ThreadCollapseHeaderProps> = ({
   return (
     <button
       onClick={onToggle}
+      aria-expanded={isExpanded}
       className={cn(
         "flex items-center gap-1.5 py-1.5 px-1 text-xs font-semibold text-muted-foreground/85 hover:text-primary transition-colors w-full text-left select-none border-b border-border/10 mb-2 cursor-pointer touch-target-44"
       )}

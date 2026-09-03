@@ -390,6 +390,8 @@ const Sidebar = React.forwardRef<
             ref={sidebarRef}
             data-sidebar="sidebar"
             data-mobile="true"
+            role="navigation"
+            aria-label="Main"
             data-state={openMobile ? "expanded" : "collapsed"}
             className={cn(
               "fixed inset-y-0 z-30 h-full bg-sidebar text-sidebar-foreground p-0",
@@ -432,6 +434,8 @@ const Sidebar = React.forwardRef<
             className
           )}
           ref={ref}
+          role="navigation"
+          aria-label="Main"
           {...props}
         >
           {children}
@@ -475,6 +479,8 @@ const Sidebar = React.forwardRef<
         >
           <div
             data-sidebar="sidebar"
+            role="navigation"
+            aria-label="Main"
             className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow"
           >
             {children}

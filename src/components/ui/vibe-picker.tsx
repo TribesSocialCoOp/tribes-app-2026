@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import EmojiPicker, { EmojiClickData, Theme, EmojiStyle } from 'emoji-picker-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -15,6 +15,7 @@ import { Smile, MoreVertical } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VIBE_EMOTICONS } from '@/lib/constants';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { focusContentOnOpen } from '@/lib/a11y';
 
 interface VibePickerProps {
   /** Current vibe count to display */
@@ -64,6 +65,8 @@ export function VibePicker({
   const [pickerHeight, setPickerHeight] = useState(420);
   const [drawerContentMode, setDrawerContentMode] = useState<'details' | 'picker'>('details');
   const isMobile = useIsMobile();
+  const authorPopoverContentRef = useRef<HTMLDivElement>(null);
+  const quickPopoverContentRef = useRef<HTMLDivElement>(null);
 
   // Track visual viewport height to dynamically size the emoji picker
   // when the iOS virtual keyboard appears. On iOS Safari, the visual
@@ -195,10 +198,12 @@ export function VibePicker({
               {triggerButton}
             </PopoverTrigger>
             <PopoverContent
+              ref={authorPopoverContentRef}
+              tabIndex={-1}
               className="w-80 p-0"
               side="top"
               align="start"
-              onOpenAutoFocus={(e) => e.preventDefault()}
+              onOpenAutoFocus={focusContentOnOpen(authorPopoverContentRef)}
             >
               <div className="flex flex-col">
                 <div className="text-center font-semibold text-sm py-2.5 border-b">
@@ -383,10 +388,12 @@ export function VibePicker({
           {triggerButton}
         </PopoverTrigger>
         <PopoverContent
+          ref={quickPopoverContentRef}
+          tabIndex={-1}
           className="w-auto p-2"
           side="top"
           align="start"
-          onOpenAutoFocus={(e) => e.preventDefault()}
+          onOpenAutoFocus={focusContentOnOpen(quickPopoverContentRef)}
         >
           {showFullPicker && !isMobile ? (
             <EmojiPicker
