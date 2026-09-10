@@ -118,9 +118,12 @@ keys/*.p8
 **/GoogleService-Info.plist
 .ios-build-floor
 
-# Local dev posts and associated draft assets
+# Local dev posts and associated draft assets (community/dev articles — never committed)
 docs/dev-post-*
 docs/post-*
+docs/community-post-*
+docs/welcome-post-*
+docs/founding-members-*
 docs/images/
 
 # Local IDE and environment metadata
