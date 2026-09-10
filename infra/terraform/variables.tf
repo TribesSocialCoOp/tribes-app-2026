@@ -17,9 +17,15 @@ variable "server_type" {
 }
 
 variable "staging_server_type" {
-  description = "Hetzner server type for the staging box. hil offers cpx (AMD shared) / ccx (dedicated) only. cpx31=4CPU/8GB, cpx21=3CPU/4GB."
+  description = "Hetzner server type for the staging box. cx (Intel shared) is EU-only and the cheapest 8GB option. cx33=4CPU/8GB ($9.99/mo fsn1), cpx31=4CPU/8GB ($20.49/mo fsn1 vs $73.49/mo hil after the 2026-06-15 US price hike)."
   type        = string
-  default     = "cpx31"
+  default     = "cx33"
+}
+
+variable "staging_location" {
+  description = "Hetzner location for the staging box. EU (fsn1/nbg1/hel1) is ~3.5x cheaper than US (hil/ash) for shared vCPU types since 2026-06-15. Staging latency is not user-facing."
+  type        = string
+  default     = "fsn1"
 }
 
 variable "admin_ips" {

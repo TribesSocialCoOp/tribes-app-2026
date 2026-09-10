@@ -165,15 +165,16 @@ resource "hcloud_firewall" "tribes_staging" {
 # Runs the full stack as a single disposable box. NOT destruction-protected
 # and NO prevent_destroy — staging is meant to be rebuilt freely.
 #
-# Region note: hil (US) offers only cpx (shared AMD) and ccx (dedicated)
-# server types — the cx (shared Intel) line is EU-only. The deploy pipeline
-# runs `docker build` ON the box (remote_deploy.sh), and Next.js builds are
-# memory-hungry, so default to an 8GB type to avoid OOM. Downsize via
-# var.staging_server_type if builds prove light enough.
+# Region note: staging lives in the EU (fsn1) because the 2026-06-15 Hetzner
+# price adjustment made US shared-vCPU types ~3.5x the EU price (cpx31:
+# $73.49/mo hil vs cx33: $9.99/mo fsn1). The cx (shared Intel) line is
+# EU-only. The deploy pipeline runs `docker build` ON the box
+# (remote_deploy.sh), and Next.js builds are memory-hungry, so keep an 8GB
+# type to avoid OOM.
 resource "hcloud_server" "tribes_staging" {
   name         = "tribes-staging"
-  server_type  = var.staging_server_type # Default: cpx31 (4 vCPU AMD, 8GB)
-  location     = "hil"
+  server_type  = var.staging_server_type # Default: cx33 (4 vCPU Intel, 8GB)
+  location     = var.staging_location    # Default: fsn1 (Falkenstein, EU)
   image        = "ubuntu-24.04"
   ssh_keys     = [hcloud_ssh_key.tribes.id]
   firewall_ids = [hcloud_firewall.tribes_staging.id]
