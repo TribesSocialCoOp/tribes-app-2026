@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "audit": "npm audit --audit-level=high",
     "test": "vitest run",
+    "postinstall": "patch-package",
     "test:watch": "vitest",
     "db:push": "drizzle-kit push --force",
     "db:seed": "tsx --env-file=.env.local src/db/seed.ts",
