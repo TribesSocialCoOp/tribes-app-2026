@@ -4,7 +4,7 @@ on:
   push:
     branches: [master, main, staging]
   pull_request:
-    branches: [master, main]
+    branches: [master, main, staging]
   # Run the supply chain audit on a daily schedule even without code changes
   # so newly disclosed CVEs are caught quickly.
   schedule:
