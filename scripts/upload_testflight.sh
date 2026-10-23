@@ -7,6 +7,10 @@
 #
 # Prerequisites:
 #   1. Run ./scripts/build_ios.sh first to produce the .ipa
+#      NOTE: with ExportOptions.plist destination=upload (the default), build_ios.sh
+#      already uploads to App Store Connect and writes no .ipa; this script is only
+#      for destination=export builds. It refuses any IPA whose CFBundleVersion
+#      doesn't match ios/App/App/Info.plist.
 #   2. Store your App Store Connect credentials:
 #      xcrun notarytool store-credentials "AC_PASSWORD" \
 #        --apple-id "your@email.com" --team-id "ABXVW6PWCW" --password "app-specific-password"
@@ -30,17 +34,56 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 IPA_DIR="build/ios/ipa"
-IPA_FILE=$(find "$IPA_DIR" -name "*.ipa" -type f -newer "$IPA_DIR" 2>/dev/null | head -1)
+INFO_PLIST="ios/App/App/Info.plist"
 
-# Fallback: find any IPA in the directory
-if [ -z "$IPA_FILE" ]; then
-    IPA_FILE=$(find "$IPA_DIR" -name "*.ipa" -type f 2>/dev/null | head -1)
+no_matching_ipa() {
+    echo -e "${RED}❌ $1${NC}"
+    echo ""
+    echo -e "   ${YELLOW}Note:${NC} with scripts/ExportOptions.plist destination=upload (the default),"
+    echo "   build_ios.sh uploads straight to App Store Connect and writes NO .ipa,"
+    echo "   so there is nothing left to upload here. Check App Store Connect / TestFlight."
+    echo ""
+    echo "   To upload with this script instead, set destination=export in"
+    echo "   ExportOptions.plist and re-run ./scripts/build_ios.sh."
+    exit 1
+}
+
+EXPECTED_BUILD=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$INFO_PLIST" 2>/dev/null || echo "")
+if [ -z "$EXPECTED_BUILD" ]; then
+    echo -e "${RED}❌ Could not read CFBundleVersion from $INFO_PLIST${NC}"
+    exit 1
 fi
 
+# Only accept an IPA whose CFBundleVersion matches the current Info.plist, so a
+# stale IPA from an earlier build can never be uploaded by accident.
+IPA_TMP=$(mktemp -d)
+trap 'rm -rf "$IPA_TMP"' EXIT
+
+IPA_FILE=""
+IPA_BUILD=""
+FOUND_ANY="false"
+while IFS= read -r candidate; do
+    [ -z "$candidate" ] && continue
+    FOUND_ANY="true"
+    rm -rf "$IPA_TMP/x" && mkdir -p "$IPA_TMP/x"
+    unzip -q -o "$candidate" 'Payload/*.app/Info.plist' -d "$IPA_TMP/x" 2>/dev/null || continue
+    candidate_plist=$(find "$IPA_TMP/x/Payload" -maxdepth 2 -name Info.plist -path '*.app/*' | head -1)
+    [ -z "$candidate_plist" ] && continue
+    candidate_build=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$candidate_plist" 2>/dev/null || echo "")
+    if [ "$candidate_build" = "$EXPECTED_BUILD" ]; then
+        IPA_FILE="$candidate"
+        IPA_BUILD="$candidate_build"
+        break
+    fi
+    echo -e "   ${YELLOW}⚠️  Skipping $candidate (build ${candidate_build:-unknown}, expected $EXPECTED_BUILD)${NC}"
+done < <(find "$IPA_DIR" -name "*.ipa" -type f 2>/dev/null)
+
 if [ -z "$IPA_FILE" ]; then
-    echo -e "${RED}❌ No IPA found in $IPA_DIR${NC}"
-    echo "   Run ./scripts/build_ios.sh first."
-    exit 1
+    if [ "$FOUND_ANY" = "true" ]; then
+        no_matching_ipa "No IPA in $IPA_DIR matches the current build ($EXPECTED_BUILD from $INFO_PLIST)"
+    else
+        no_matching_ipa "No IPA found in $IPA_DIR"
+    fi
 fi
 
 echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
@@ -49,6 +92,7 @@ echo -e "${CYAN}╚════════════════════�
 echo ""
 echo "   IPA: $IPA_FILE"
 echo "   Size: $(du -h "$IPA_FILE" | cut -f1)"
+echo "   Build: $IPA_BUILD"
 # Surface which app this IPA targets (staging vs prod) so uploads aren't mixed up.
 # App Store Connect routes the upload by the bundle id baked into the IPA, so this
 # script is flavor-agnostic — it uploads whatever build_ios.sh / build_ios.sh
