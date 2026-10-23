@@ -6,7 +6,9 @@
 #
 # The iOS flow is fundamentally different from macOS Dioxus:
 #   macOS: cargo build → patch plist → codesign → productbuild → .pkg → Transporter
-#   iOS:   cap sync → xcodebuild archive → xcodebuild -exportArchive → .ipa → Transporter
+#   iOS:   cap sync → xcodebuild archive → xcodebuild -exportArchive → App Store Connect
+#          (ExportOptions destination=upload uploads directly, no .ipa;
+#           destination=export writes an .ipa for npm run ios:upload)
 #
 # Usage:
 #   ./scripts/build_ios.sh                  # Archive for App Store / TestFlight
@@ -270,9 +272,12 @@ if [ ! -d "$ARCHIVE_PATH" ]; then
 fi
 echo -e "   ${GREEN}✅ Archive created: $ARCHIVE_PATH${NC}"
 
-# ── Step 4: Export IPA ───────────────────────────────────────────────────────
+# ── Step 4: Export / Upload ──────────────────────────────────────────────────
 echo ""
-echo "=== Step 4: Export IPA ==="
+echo "=== Step 4: Export / Upload ==="
+# Clear the export dir so a stale .ipa from an earlier build can never be
+# mistaken for this one (destination=upload writes no .ipa at all).
+rm -rf "$IPA_DIR"
 mkdir -p "$IPA_DIR"
 
 # Generate ExportOptions.plist if it doesn't exist
@@ -300,28 +305,25 @@ if [ ! -f "$EXPORT_PLIST" ]; then
 EOF
 fi
 
+# Capture the full export output so the outcome is detected from what xcodebuild
+# actually did, never from whatever .ipa happens to be lying around.
+EXPORT_LOG="$ARCHIVE_DIR/export.log"
 xcodebuild -exportArchive \
     -archivePath "$ARCHIVE_PATH" \
     -exportPath "$IPA_DIR" \
     -exportOptionsPlist "$EXPORT_PLIST" \
     -allowProvisioningUpdates \
-    2>&1 | tail -10
+    2>&1 | tee "$EXPORT_LOG" | tail -10
 
 EXPORT_EXIT=${PIPESTATUS[0]}
 
-IPA_FILE=$(find "$IPA_DIR" -name "*.ipa" -type f | head -1)
-if [ -n "$IPA_FILE" ]; then
-    echo -e "   ${GREEN}✅ IPA exported: $IPA_FILE${NC}"
-    echo "   Upload it with: npm run ios:upload"
-elif [ $EXPORT_EXIT -eq 0 ]; then
-    # destination=upload mode: no local IPA, but upload succeeded.
-    # Staging and production use this identical path — the build uploads straight
-    # to App Store Connect for whichever bundle id was archived.
-    echo -e "   ${GREEN}✅ Build uploaded directly to App Store Connect (${BUNDLE_ID})${NC}"
-    IPA_FILE="(uploaded directly)"
-else
-    echo -e "${RED}❌ Export/upload failed for ${BUNDLE_ID}${NC}"
-    echo "   Check the archive in Xcode: open $ARCHIVE_PATH"
+# shellcheck source=scripts/ios_export_report.sh
+source "$SCRIPT_DIR/ios_export_report.sh"
+EXPORT_OUTCOME=$(ios_export_outcome "$EXPORT_LOG" "$EXPORT_EXIT" "$IPA_DIR")
+
+# ── Step 5: Verification / summary ──────────────────────────────────────────
+if ! ios_export_report "$EXPORT_OUTCOME" "$EXPORT_LOG" "$IPA_DIR" "$BUNDLE_ID" \
+        "$VERSION" "$BUILD_NUMBER" "$TEAM_ID" "$ARCHIVE_PATH" "$EXPORT_EXIT"; then
     if [ "$IS_STAGING" = "true" ]; then
         echo ""
         echo -e "   ${YELLOW}Staging uploads use the same mechanism as production (destination=upload).${NC}"
@@ -333,25 +335,3 @@ else
     fi
     exit 1
 fi
-
-# ── Step 5: Verification ────────────────────────────────────────────────────
-echo ""
-echo "=== Step 5: Verification ==="
-IPA_SIZE=$(du -h "$IPA_FILE" | cut -f1)
-echo "   📱 IPA Size: $IPA_SIZE"
-echo "   📦 Bundle ID: $BUNDLE_ID"
-echo "   🏷️  Version: $VERSION ($BUILD_NUMBER)"
-echo "   👤 Team: $TEAM_ID"
-
-echo ""
-echo -e "${CYAN}╔══════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║   ✅ Build Complete!                      ║${NC}"
-echo -e "${CYAN}╚══════════════════════════════════════════╝${NC}"
-echo ""
-echo "   Upload to TestFlight:"
-echo "     Option A: open $IPA_FILE   (opens Transporter)"
-echo "     Option B: xcrun altool --upload-app -f $IPA_FILE -t ios -u YOUR_APPLE_ID -p @keychain:AC_PASSWORD"
-echo "     Option C: xcodebuild -exportArchive with 'destination=upload' (already attempted above)"
-echo ""
-echo "   Or open the archive in Xcode to manually upload:"
-echo "     open $ARCHIVE_PATH"
