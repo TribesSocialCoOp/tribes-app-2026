@@ -1,3 +1,16 @@
+diff --git a/node_modules/@squareetlabs/capacitor-nearby-multipeer/Package.swift b/node_modules/@squareetlabs/capacitor-nearby-multipeer/Package.swift
+index 57686bf..a3a1899 100644
+--- a/node_modules/@squareetlabs/capacitor-nearby-multipeer/Package.swift
++++ b/node_modules/@squareetlabs/capacitor-nearby-multipeer/Package.swift
+@@ -10,7 +10,7 @@ let package = Package(
+             targets: ["NearbyMultipeerPlugin"])
+     ],
+     dependencies: [
+-        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", branch: "main")
++        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", from: "8.0.0")
+     ],
+     targets: [
+         .target(
 diff --git a/node_modules/@squareetlabs/capacitor-nearby-multipeer/ios/Sources/NearbyMultipeerPlugin/NearbyMultipeer.swift b/node_modules/@squareetlabs/capacitor-nearby-multipeer/ios/Sources/NearbyMultipeerPlugin/NearbyMultipeer.swift
 index 96aba6d..df7fb56 100644
 --- a/node_modules/@squareetlabs/capacitor-nearby-multipeer/ios/Sources/NearbyMultipeerPlugin/NearbyMultipeer.swift

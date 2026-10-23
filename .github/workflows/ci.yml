@@ -38,16 +38,17 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Run security audit (high + critical only)
-        # Exit code 1 = vulnerabilities at or above --audit-level found.
+        # Fails on any HIGH/CRITICAL advisory not in audit-allowlist.json.
         # We gate on HIGH so moderate findings (mostly dev tooling) don't
         # block shipping while still catching exploitable production CVEs.
-        run: npm audit --audit-level=high
+        # Allowlist entries need a reason and expire, forcing re-review.
+        run: node scripts/audit-gate.mjs
 
       - name: Run full audit report (informational)
         # Always run the full report so moderates are visible in the log,
         # even when the build is green.
         if: always()
-        run: npm audit --json | npx --yes better-npm-audit --audit-level=moderate || true
+        run: npm audit || true
 
   # ──────────────────────────────────────────────────────────────
   # 2. Type Checking

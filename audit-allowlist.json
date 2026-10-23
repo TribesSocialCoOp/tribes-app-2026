@@ -1,0 +1,7 @@
+{
+  "GHSA-vfj7-8cjw-p6xm": {
+    "package": "braces",
+    "reason": "No patched release exists (braces <=3.0.3 is latest). Stack-exhaustion DoS only reachable by feeding braces attacker-controlled glob patterns; here braces is only reached via build/install tooling (tailwindcss 3 -> chokidar/micromatch/fast-glob, patch-package) operating on our own fixed patterns, never on user input.",
+    "expires": "2026-12-31"
+  }
+}
