@@ -2,7 +2,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import * as z from "zod";
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
@@ -34,14 +34,14 @@ const eventCreateFormSchema = z.object({
   name: z.string().min(3, { message: "Event name must be at least 3 characters." }).max(100, { message: "Event name must not exceed 100 characters." }),
   keywords: z.string().min(3, { message: "Please provide some keywords for your event (e.g., Live Music, Tech Workshop)."}),
   description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(1000, { message: "Description must not exceed 1000 characters." }),
-  eventDate: z.date({ required_error: "An event date is required." }),
+  eventDate: z.date({ error: (issue) => issue.input === undefined ? "An event date is required." : undefined }),
   eventTime: z.string().default("12:00"),
   associatedTribe: z.string().min(1, { message: "Please select an organizing tribe."}),
   locationName: z.string().min(1, {message: "Please provide a venue name or general location (e.g., Downtown Park, Online)."}),
   locationCityRegion: z.string().min(1, {message: "Please provide the city and region (e.g., San Francisco, CA)."}),
   coverImage: z.instanceof(File).optional().refine(file => !file || file.size <= 5 * 1024 * 1024, `Max file size is 5MB.`),
   isPublic: z.boolean().default(true),
-  rsvpPointsReward: z.coerce.number().min(0).max(50).default(0),
+  rsvpPointsReward: z.coerce.number({ error: "Expected number, received nan" }).min(0, { message: "Number must be greater than or equal to 0" }).max(50, { message: "Number must be less than or equal to 50" }).default(0),
 });
 
 type EventCreateFormValues = z.infer<typeof eventCreateFormSchema>;
@@ -68,7 +68,7 @@ function CreateEventContent() {
   const { handleError } = useActionError();
 
   const form = useForm<EventCreateFormValues>({
-    resolver: zodResolver(eventCreateFormSchema),
+    resolver: zodResolver(eventCreateFormSchema) as Resolver<EventCreateFormValues>,
     defaultValues: {
       name: "",
       keywords: "",

@@ -6,7 +6,7 @@ import { useGoBack } from '@/hooks/use-go-back';
 import Link from 'next/link';
 import Image from 'next/image';
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 
@@ -38,9 +38,9 @@ import { AuthGuard } from "@/components/providers/auth-guard";
 const reputationLevels = REPUTATION_GATE_OPTIONS;
 
 const tribeSettingsFormSchema = z.object({
-  name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
-  slug: z.string().min(3, { message: "URL slug must be at least 3 characters." }).max(80).regex(/^[a-zA-Z0-9_-]+$/, { message: "URL slug can only contain letters, numbers, hyphens, and underscores." }).optional(),
-  description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
+  name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50, { message: "String must contain at most 50 character(s)" }),
+  slug: z.string().min(3, { message: "URL slug must be at least 3 characters." }).max(80, { message: "String must contain at most 80 character(s)" }).regex(/^[a-zA-Z0-9_-]+$/, { message: "URL slug can only contain letters, numbers, hyphens, and underscores." }).optional(),
+  description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500, { message: "String must contain at most 500 character(s)" }),
   homepageUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   isPublic: z.boolean().default(true),
   isNsfw: z.boolean().optional(),
@@ -125,7 +125,7 @@ function TribeSettingsContent() {
   }, [slugParam, tribeIdParam]);
 
   const form = useForm<TribeSettingsFormValues>({
-    resolver: zodResolver(tribeSettingsFormSchema),
+    resolver: zodResolver(tribeSettingsFormSchema) as Resolver<TribeSettingsFormValues>,
     defaultValues: {
       name: "",
       slug: "",

@@ -2,7 +2,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,12 +29,12 @@ import { useAgeGate } from "@/components/providers/age-gate-provider";
 import { isAgeGateError, isNsfwBlockedError, isNsfwOptInError } from "@/lib/age-gate";
 
 const createTribeFormSchema = z.object({
-  name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50),
+  name: z.string().min(3, { message: "Tribe name must be at least 3 characters." }).max(50, { message: "String must contain at most 50 character(s)" }),
   homepageUrl: z.string().url({ message: "Please enter a valid URL." }).optional().or(z.literal('')),
   moods: z.array(z.string())
     .min(1, { message: "Please select at least one mood." })
     .max(3, { message: "You can select a maximum of 3 moods." }),
-  description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500),
+  description: z.string().min(10, { message: "Description must be at least 10 characters." }).max(500, { message: "String must contain at most 500 character(s)" }),
   isPublic: z.boolean().default(true),
   isNsfw: z.boolean().default(false),
   isListed: z.boolean().default(true),
@@ -62,7 +62,7 @@ function CreateTribeContent() {
   const { openAgeGate } = useAgeGate();
 
   const form = useForm<CreateTribeFormValues>({
-    resolver: zodResolver(createTribeFormSchema),
+    resolver: zodResolver(createTribeFormSchema) as Resolver<CreateTribeFormValues>,
     defaultValues: {
       name: "",
       homepageUrl: "",

@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import Image from "next/image";
@@ -42,7 +42,7 @@ export function CreatePostDialog({
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
 
   const form = useForm<PostFormValues>({
-    resolver: zodResolver(postFormSchema),
+    resolver: zodResolver(postFormSchema) as Resolver<PostFormValues>,
     defaultValues: {
       title: "",
       content: "",
