@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Link from 'next/link';
@@ -24,14 +24,14 @@ const submitSchema = z.object({
   requesterSignature: z.string().min(1, 'Digital signature is required'),
   isDepictedPerson: z.boolean().default(true),
   contentType: z.enum(['authentic_ncii', 'deepfake', 'minor'], {
-    required_error: 'Please select a content category',
+    error: (issue) => (issue.input === undefined ? 'Please select a content category' : undefined),
   }),
   contentDescription: z.string().min(10, 'Please provide a detailed description (at least 10 characters)'),
   contentUrls: z.string().optional(), // We'll parse this as comma-separated or newline-separated on submit
   posterUsername: z.string().optional(),
   searchTerms: z.string().optional(),
   nonConsentStatement: z.literal(true, {
-    errorMap: () => ({ message: 'You must affirm the statement of non-consent to proceed' }),
+    error: 'You must affirm the statement of non-consent to proceed',
   }),
 }).refine(
   (data) => {
@@ -57,7 +57,7 @@ export default function ReportNciiPage() {
   const altchaRef = useRef<AltchaWidgetRef | null>(null);
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(submitSchema),
+    resolver: zodResolver(submitSchema) as Resolver<FormValues>,
     defaultValues: {
       requesterName: '',
       requesterEmail: '',

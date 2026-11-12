@@ -20,11 +20,11 @@ const submitSchema = z.discriminatedUnion('encrypted', [
     // Unencrypted metadata
     requesterEmail: z.string().email('Invalid email address').max(320, 'Email is too long'),
     contentType: z.enum(['authentic_ncii', 'deepfake', 'minor']),
-    contentUrls: z.array(z.string().max(2000)).max(20).optional(),
-    posterUsername: z.string().max(100).optional(),
-    searchTerms: z.string().max(500).optional(),
+    contentUrls: z.array(z.string().max(2000, 'String must contain at most 2000 character(s)')).max(20, 'Array must contain at most 20 element(s)').optional(),
+    posterUsername: z.string().max(100, 'String must contain at most 100 character(s)').optional(),
+    searchTerms: z.string().max(500, 'String must contain at most 500 character(s)').optional(),
     nonConsentStatement: z.literal(true, {
-      errorMap: () => ({ message: 'You must affirm the statement of non-consent' }),
+      error: 'You must affirm the statement of non-consent',
     }),
     isDepictedPerson: z.boolean(),
     turnstileToken: z.string().optional(),
@@ -39,11 +39,11 @@ const submitSchema = z.discriminatedUnion('encrypted', [
     isDepictedPerson: z.boolean(),
     contentType: z.enum(['authentic_ncii', 'deepfake', 'minor']),
     contentDescription: z.string().min(10, 'Please provide a detailed description (at least 10 characters)').max(10000, 'Description is too long'),
-    contentUrls: z.array(z.string().max(2000)).max(20).optional(),
-    posterUsername: z.string().max(100).optional(),
-    searchTerms: z.string().max(500).optional(),
+    contentUrls: z.array(z.string().max(2000, 'String must contain at most 2000 character(s)')).max(20, 'Array must contain at most 20 element(s)').optional(),
+    posterUsername: z.string().max(100, 'String must contain at most 100 character(s)').optional(),
+    searchTerms: z.string().max(500, 'String must contain at most 500 character(s)').optional(),
     nonConsentStatement: z.literal(true, {
-      errorMap: () => ({ message: 'You must affirm the statement of non-consent' }),
+      error: 'You must affirm the statement of non-consent',
     }),
     turnstileToken: z.string().optional(),
     altchaPayload: z.string().optional(),
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const parsed = submitSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.errors[0]?.message ?? 'Invalid input';
+      const firstError = parsed.error.issues[0]?.message ?? 'Invalid input';
       return NextResponse.json({ error: firstError, details: parsed.error.format() }, { status: 400 });
     }
 
